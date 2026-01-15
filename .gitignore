@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-*.pkl
-rag_data/**/*.pdf
-rag_data/all_chunks.pkl
-sample_review.txt
-.env
-venv/
