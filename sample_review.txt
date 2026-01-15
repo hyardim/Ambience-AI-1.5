@@ -1,0 +1,153 @@
+=== SAMPLE AUDIT (POLISHED): 50 CHUNKS ===
+Total Noise Blocked: 1612
+
+SOURCE: NICE RA QS.pdf | CHUNK: 56
+. Adults with rheumatoid arthritis should be offered information about planning a pregnancy, pregnancy and breastfeeding at the time of diagnosis and throughout the course of their disease. The information should be appropriate to their age and circumstances
+----------------------------------------
+SOURCE: BSR Sjogrens 2025.pdf | CHUNK: 199
+. All of the recent RCTs in SD rely on ESSDAI for their pri  mary endpoint. There are significant limitations to ESSDAI and in light of this two new outcome measure, CRESS [238] and STAR [239], have been developed and proposed for fu  ture use. Reanalysis of some of the studies shown below using CRESS has shown a statistical response to treatment inter  vention
+----------------------------------------
+SOURCE: NG217.pdf | CHUNK: 386
+. The committee agreed that treatment with antiseizure medication after a first unprovoked seizure should not be offered routinely. However, they agreed that some clinical features should prompt early treatment after a first unprovoked seizure, such as if an examination shows the person has a neurological deficit or the EEG shows unequivocal epileptic activity, which may indicate that the risk of recurrence is high
+----------------------------------------
+SOURCE: NICE gout 2022.pdf | CHUNK: 125
+. The committee agreed not to make a recommendation because any decision to refer for consideration for surgery would be made on an individual basis. Doing research in this area would be difficult because of the limited number of people that have tophi removed. The committee concluded that research is not feasible and is also low priority given the few people who have this surgical procedure
+----------------------------------------
+SOURCE: NG236.pdf | CHUNK: 188
+. However, the committee also stressed that telerehabilitation should only be used if it is the person's preferred option. The relationship between the therapist and the person after stroke should also be maintained, with the option of using in-person therapy instead if needed. As with face-to-face therapy, telerehabilitation should aim to meet the goals the person has agreed with their therapist
+----------------------------------------
+SOURCE: NG252.pdf | CHUNK: 425
+. They also recognised that physical activity has longer-term benefits in terms of general health. The committee discussed the difference between energy-conservation strategies for children and young people compared to adults
+----------------------------------------
+SOURCE: NG252.pdf | CHUNK: 228
+. 1.23.4 When planning return to work follow recommendation 1.16.4 in NICE's guideline on stroke rehabilitation in adults, which is applicable to people with other forms of chronic neurological disorder. 1.23.5 For an employer carrying out a workplace assessment with the person, identify potential barriers to effective working and develop solutions and strategies to overcome them
+----------------------------------------
+SOURCE: NOGG-Guideline-2024.pdf | CHUNK: 479
+& MA Jepsen et al 2017 SR & MA Medium Kahwati et al 2018 SR & MA Medium Kelley et al 2000 SR & MA Medium Kemmler et al 2020 SR & MA Kunutsor et al 2018 SR & MA Medium Min et al 2017 SR & MA Shen et al 2015 SR & MA Medium Sherrington et al 2017 SR & MA Sherrington et al 2019 SR & MA Yao et al 2019 SR & MA Medium Zhao et al 2019 SR & MA Appendix NOGG 2024: Clinical guideline for the prevention and treatment of osteoporosis Appendix 4: AMSTAR2
+----------------------------------------
+SOURCE: NICE AS 2017.pdf | CHUNK: 111
+. NICE has produced tools and resources to help you put this guideline into practice. For general help and advice on putting our guidelines into practice, see resources to help you put NICE guidance into practice. Spondyloarthritis in over 16s: diagnosis and management (NG65) Update information May 2017: Recommendation 1.2.7 was amended to clarify the advice on what imaging should be done
+----------------------------------------
+SOURCE: BSR ANCA vasculitis management 2025.pdf | CHUNK: 116
+. However, medical therapy alone is generally insufficient, with local endoscopic therapy frequently required in the majority of patients despite use of GC and immunosuppressants [79]
+----------------------------------------
+SOURCE: BSR pregnancy DMARD 2 2022.pdf | CHUNK: 14
+. In all decisions regarding medication choices and changes, it is also important to consider the potential for deterioration in the mother’s wellbeing through side effects or reduced disease control (and its adverse impact on the baby)
+----------------------------------------
+SOURCE: NICE RA QS.pdf | CHUNK: 2
+. [2013, updated 2020] Statement 2 Adults with active rheumatoid arthritis start conventional disease-modifying anti-rheumatic drug (cDMARD) monotherapy within 6 weeks of referral, with monthly monitoring until their treatment target is met. [2013, updated 2020] Statement 3 Adults with rheumatoid arthritis are given opportunities throughout the course of their disease to take part in educational activities that support self- management
+----------------------------------------
+SOURCE: NOGG-Guideline-2024.pdf | CHUNK: 192
+. However, two recent large randomised controlled trials have not demonstrated an effect of multi-disciplinary interventions, targeted at falls, on fracture reduction, when combined with screening for falls risk in primary care 173,174; (Evidence level Ib), a recent Cochrane review of falls prevention exercise programmes, and two previous meta-analysis demonstrated, albeit with low certainty, evidence of a reduction in fall-related fractures (or
+----------------------------------------
+SOURCE: NG217.pdf | CHUNK: 197
+. If second-line treatment is unsuccessful, consider the following as third-line add- on treatment options for people with Lennox–Gastaut syndrome: Epilepsies in children, young people and adults (NG217) • cannabidiol with clobazam if the child is aged 2 years or over, in line with NICE's technology appraisal guidance on cannabidiol with clobazam for treating seizures associated with Lennox–Gastaut syndrome (TA615, 2019) • clobazam • fenfluramine
+----------------------------------------
+SOURCE: NG127.pdf | CHUNK: 43
+. they might affect practice, see the rationale section on limb or facial weakness in adults
+----------------------------------------
+SOURCE: BSR 2024 systemic sclerosis.pdf | CHUNK: 36
+. Classification criteria for SRC are being developed that will also assist with earlier diagnosis of SSc in these cases [20]. Current approach to classification and risk stratification Subset and stage of SSc is relevant for management. Differentiation of limited or diffuse cutaneous subsets based upon extent of skin involvement has been central to manage  ment historically
+----------------------------------------
+SOURCE: BSR Behcets 2025.pdf | CHUNK: 115
+. R90 (GPP) Provide general emotional support and consider focused interventions, if psychological distress is identified, to support self-management and coping. Consider ‘Motivational Interviewing’ and ‘Solution-Focused Therapy’ approaches to better understand and improve medication adherence based on individual presentation and patient preference
+----------------------------------------
+SOURCE: BSR drugs in pregnancy and breastfeeding 2022.pdf | CHUNK: 412
+. Arthritis Rheumatol 2016;68. in-patients-with-rheumatoid-arthritis-treated-with-abatacept-review- of-a-safety-database/. maternal serum and breast milk during breastfeeding and an in- fant safety assessment: a case study. Rheumatology 2019;58: 1692–1694. nancy outcomes: an update and review of the literature. Curr Opin Rheumatol 2014;26:118–23
+----------------------------------------
+SOURCE: BSR gout 2017.pdf | CHUNK: 43
+. In the absence of further trial evidence for the efficacy and safety of this proposed regimen, the BSR working group recommends treating acute gout with colchicine in doses of 500 mg bd qds when there are no contraindications to doing so. The maximum dose of 500 mg qds is, however, often limited by gastrointestinal side effects, most fre- quently diarrhoea
+----------------------------------------
+SOURCE: BSR DMARD guidelines 2025.pdf | CHUNK: 72
+. Individuals at increased risk of tuberculosis include those with close contact with people who have active TB, those liv  ing in or originating from high-prevalence regions (such as sub-Saharan Africa, South and Southeast Asia, Eastern Europe and parts of Latin America), those residing or work  ing in high-risk settings, and those with a history of injected drugs or alcohol misuse
+----------------------------------------
+SOURCE: NG252.pdf | CHUNK: 437
+. Rehabilitation for chronic neurological disorders including acquired brain injury (NG252) However, this will help ensure the delivery of appropriate care and may reduce risks and potential harms, which can incur substantial costs to the healthcare system. Physical activity programmes are often not optimised in frequency, duration, and intensity. Therefore, there may be potential resource implications where practices are sub-optimal
+----------------------------------------
+SOURCE: NG236.pdf | CHUNK: 115
+. [2023] 1.13.31 If provided, start mirror therapy within the first 6 months after a stroke. Sessions should be: • around 30 minutes long, held at least 5 times per week over 4 weeks and Stroke rehabilitation in adults (NG236) • supervised initially and, if necessary, for longer. [2023] how they might affect practice, see the rationale and impact section on mirror therapy for the upper or lower limb. mirror therapy
+----------------------------------------
+SOURCE: BSR idiopathic myopathy 2022.pdf | CHUNK: 1
+. The term began on 27 February 2012 and the current renewed accreditation is valid until 28 January 2023. More informa- ation
+----------------------------------------
+SOURCE: BSR SLE 2018.pdf | CHUNK: 515
+. Gordon C, Smolen J, eds. Systemic lupus erythemato- sus: a companion to rheumatology, 1st edn. Elsevier Science and Technology Journals, 2007: 525. lupus erythematosus activity during pregnancy. Lupus 2004;13:679 82. Pregnancy index is reliable for assessment of disease activity in pregnant SLE patients. Rheumatology 2012;51:1877 80
+----------------------------------------
+SOURCE: BSR AS DMARDS 2025.pdf | CHUNK: 120
+. 6) Management of difficult-to-treat axSpA. 7) Role of imaging in assessing treatment response. 8) Effective use of patient-initiated follow-up. 9) Comparative safety of targeted therapies in axSpA populations. 10) Safety and efficacy of combining targeted therapies in axSpA with EMMs. A suggested audit tool is available via the BSR website and in The GWG encourages engagement with the BSR New Early Inflammatory Arthritis Audit
+----------------------------------------
+SOURCE: BSR drugs in pregnancy and breastfeeding 2022.pdf | CHUNK: 109
+. The dose of MTX was not reported, but indications included a neoplasm of endocrine glands and so was presumably of high dose in at least one case. Of the 16 cases with major birth defects, 15 were ex- posed from three months pre-conception to the end of the first trimester. A cohort study of 240 SLE pregnancies in whom 36.8% were exposed to MTX before and during the first trimester reported an increased risk of foetal complications [182]
+----------------------------------------
+SOURCE: NG220.pdf | CHUNK: 162
+. As none of the recommendations represent a change in current practice these recommendations are not expected to have a resource impact. Pharmacological management of fatigue Recommendations 1.5.12 and 1.5.16 The evidence for treating fatigue with amantadine, modafinil or selective serotonin reuptake inhibitors (SSRIs) in people with MS was limited but showed some benefit for each medicine
+----------------------------------------
+SOURCE: BSR DMARD guidelines 2025.pdf | CHUNK: 463
+. Arthritis Rheum 2010;62:1583–91. Methotrexate use and risk of lung disease in psoriasis, psoriatic arthri  tis, and inflammatory bowel disease: systematic literature review and meta-analysis of randomised controlled trials. BMJ 2015;350:h1269. Methotrexate and lung disease in rheumatoid arthritis: a meta- analysis of randomized controlled trials. Arthritis Rheumatol. 2014;66:803–12
+----------------------------------------
+SOURCE: BSR gout 2017.pdf | CHUNK: 113
+. Unfortunately subse- quent observational studies showed that dose adjustment according to CrCl seldom resulted in adequate reduction of sUA in patients with gout and renal insufficiency [135], and a case control study showed no evidence of a reduc- tion in frequency of allopurinol hypersensitivity in patients dosed according to CrCl [136]. More recently, studies by Stamp et al
+----------------------------------------
+SOURCE: BSR Enhanced Triage and Specialist Advice.pdf | CHUNK: 27
+. Patients with low trauma fractures aged over the age of 75 do not necessarily require a DXA scan and can be treated empirically. However, DXA scan may be useful to inform treatment options (including injectable/ anabolic options), particularly in high-risk patients e.g. those with vertebral fractures. Indications for DXA include low trauma fracture in a patient aged 50+. In patients with risk factors, a fracture risk assessment, e.g
+----------------------------------------
+SOURCE: NICE AS 2017.pdf | CHUNK: 17
+. [2017] 1.1.10 Refer people with enthesitis without apparent mechanical cause to a rheumatologist for a spondyloarthritis assessment if: • it is persistent or • it is in multiple sites or • any of the following are also present: － back pain without apparent mechanical cause － current or past uveitis (see recommendation 1.1.12 for guidance on immediate [same-day] ophthalmological assessment for people with acute anterior uveitis) － current or
+----------------------------------------
+SOURCE: BSR Sjogrens 2025.pdf | CHUNK: 228
+. Rituximab An initial open label study of rituximab in a small cohort of those with early SD confirmed effective B-cell depletion and appeared to demonstrate clinical improvement, especially in those with residual glandular function [275]
+----------------------------------------
+SOURCE: BSR 2024 systemic sclerosis.pdf | CHUNK: 155
+. Such treatments may exert benefits on other aspects of SSc. Registry evidence has suggested treatments for RP such as CCBs may reduce the likelihood of developing PAH and left ventricular dysfunction in SSc [70]. Several complementary treatments including low-level light therapy, antioxidants, gingko biloba, acupuncture, L-argi  nine and essential fatty acids have been studied, but their im  pact on RP severity has been modest at best [71]
+----------------------------------------
+SOURCE: NOGG-Guideline-2024.pdf | CHUNK: 146
+. This complexity is being addressed by the development of optional post- FRAX algorithms to allow clinicians to explore the potential impact of fracture recency on the calculated probability of MOF and hip fracture (see Table 2) 52
+----------------------------------------
+SOURCE: BSR gout 2017.pdf | CHUNK: 69
+. Fruit consumption has been found benefi- cial and this may be related to consumption of vitamin C (see recommendation VIII for the optimal use of urate-low- ering therapies). The urate-lowering effect of cherry was previously re- ported in healthy women [84]
+----------------------------------------
+SOURCE: NG252.pdf | CHUNK: 362
+. This is often when the practitioner becomes aware of other areas of impairment or symptoms that also need addressing. The committee agreed that holistic needs assessment should be the default position. They discussed and agreed the criteria for deciding when holistic assessment is not needed. The committee noted that people can present with multiple chronic neurological disorders
+----------------------------------------
+SOURCE: NICE AS 2017.pdf | CHUNK: 71
+. These should cover: • prescribing NSAIDs and DMARDs • monitoring NSAIDs and DMARDs Spondyloarthritis in over 16s: diagnosis and management (NG65) • managing flares • ensuring prompt access to specialist rheumatology care when needed • ensuring prompt access to other specialist services to manage comorbidities and extra-articular symptoms
+----------------------------------------
+SOURCE: BSR pregnancy DMARD 2 2022.pdf | CHUNK: 23
+. This audience includes rheumatologists, rheumatology nurses/allied health professionals, rheumatology speciality trainees and pharmacists, as well as the patients themselves. The guideline will also be useful to obstetricians, obstetric physicians, renal physicians, dermatologists and general prac- titioners who may prescribe these medications to patients in pregnancy. This guideline uses the terms ‘woman’, ‘maternal’ or ‘mother’ throughout
+----------------------------------------
+SOURCE: BSR Behcets 2025.pdf | CHUNK: 38
+. They can be advised to start taking folic acid and that their condition is unlikely to affect the baby. Most people have an improvement of their symptoms during pregnancy, while only 15–30% will experience a flare,10 notably oral or genital ulceration. Such ulceration can be treated symptomatically and, usually, topical therapies will suffice. Oral or parenteral CS are also safe
+----------------------------------------
+SOURCE: NG220.pdf | CHUNK: 109
+. [2014] Medical, therapy and social care needs at time of relapse or exacerbation 1.7.15 Identify whether the person having a relapse of MS or their family members or carers have social care needs and if so refer them to social services for assessment. [2014] 1.7.16 Offer inpatient treatment to the person having a relapse of MS if their relapse is severe or if it is difficult to meet their medical and social care needs at home
+----------------------------------------
+SOURCE: BSR Behcets 2025.pdf | CHUNK: 175
+. 5.8 Paediatrics Around 20% of people with Beh ets will present in childhood.34 The mucocutaneous phenotype is the most common, whereas vascular and neurological involvement are rare.12 The performance of classification and diagnostic criteria for Beh ets may not be as good in children, and further classification criteria for paediatric disease have been developed, known as PEDBD.28 Features such as musculoskeletal and GI involvement appear more
+----------------------------------------
+SOURCE: NOGG-Guideline-2024.pdf | CHUNK: 320
+. Section NOGG 2024: Clinical guideline for the prevention and treatment of osteoporosis Section 7: Strategies for management of osteoporosis and fracture risk c.	 Withdrawal of bisphosphonate treatment is associated with decreases in BMD and increased bone turnover after 2-3 years for alendronate 260,261; (Evidence level Ib), and 1-2 years for ibandronate and risedronate 262,263; (Evidence level Ib)
+----------------------------------------
+SOURCE: BSR GCA 2020.pdf | CHUNK: 64
+. In the absence of clinical features of cranial GCA, temporal artery biopsy can still be positive, but imaging of the extracranial large vessels may be considered instead of, or in addition to, temporal artery biopsy
+----------------------------------------
+SOURCE: BSR AS DMARDS 2025.pdf | CHUNK: 130
+. BMJ 2008;336:924–6. pipeline of disease-modifying antirheumatic drugs (DMARDs) in clinical development for spondyloarthritis (including psoriatic ar  thritis): a systematic review of trials. RMD Open 2023;9:e003279. months reduces disease activity in axial spondyloarthritis (axSpA): a multicentre randomised trial of 100 patients. Br J Sports Med 2020;54:292–7
+----------------------------------------
+SOURCE: BSR SLE 2018.pdf | CHUNK: 184
+. Conclusions The lowest possible dose/amount of CSs should be used due to their side effects, including the risk of contributing to chronic damage and infection. Prednisolone treatment at a low dose of 47.5 mg/day may be required for main- tenance therapy and has less risk of side effects than higher doses (2+/C)
+----------------------------------------
+SOURCE: Bisphosphonate AFF  Bone 2022.pdf | CHUNK: 52
+. Femoral bowing and other biomechanical factors could be one explanation for the higher AFF risk observed in women of Asian ancestry. There are several lines of evidence supporting this view. Asian populations have been shown to have increased femoral bowing [30]
+----------------------------------------
+SOURCE: NG252.pdf | CHUNK: 224
+. These recommendations apply to paid, including self-employment, and voluntary work. 1.23.1 When assessing the person's ability to remain in, or return to work, take into account: • their retained skills, strengths and motivations • whether their rehabilitation needs are likely to increase or decrease
+----------------------------------------
+SOURCE: BSR 2024 systemic sclerosis.pdf | CHUNK: 227
+. Transition should be devel  opmentally appropriate and follow a person-centred ap  proach. Point of transfer to adult services should ideally occur when disease is relatively stable and the young person is ready rather than at a specific age. Transition from paediat  ric to adult services should be carefully planned and in line ance/ng43]. The NCEPOD report of transition from child to org.uk/2023transition.html]
+----------------------------------------
+SOURCE: Bisphosphonate AFF  Bone 2022.pdf | CHUNK: 92
+. Whether changes in BMD or BTMs are useful for clinical decision making remains uncertain. The FIT and HORIZON extension studies have been evaluated from the perspective of drug holiday by using the last significant change concept
+----------------------------------------
+SOURCE: NOGG-Guideline-2024.pdf | CHUNK: 411
+. FLS should provide a coordinated programme with an integrated approach for falls and fracture prevention; all individuals with a fracture should be fully assessed for falls risk and appropriate interventions to reduce falls should be undertaken 315
+----------------------------------------
