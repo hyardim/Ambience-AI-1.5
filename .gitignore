@@ -35,6 +35,7 @@ Thumbs.db
 
 # Large model/data artifacts
 med42/
+data/*
 rag_data/*
 !rag_data/*.py
 *.safetensors
