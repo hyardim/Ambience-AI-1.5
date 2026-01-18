@@ -141,3 +141,35 @@ def delete_chunks_for_doc(doc_id: str) -> None:
     with conn.cursor() as cur:
         cur.execute("DELETE FROM chunks WHERE doc_id = %s;", (doc_id,))
     conn.close()
+
+def insert_chunks(chunks: List[Dict[str, Any]]) -> None:
+    """
+    Bulk-inserts chunk rows.
+    """
+    if not chunks:
+        return
+
+    conn = get_conn()
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(
+            cur,
+            """
+            INSERT INTO chunks (doc_id, chunk_index, page_start, page_end, section_path, text, text_hash, embedding)
+            VALUES %s
+            """,
+            [
+                (
+                    c["doc_id"],
+                    c["chunk_index"],
+                    c["page_start"],
+                    c["page_end"],
+                    c.get("section_path"),
+                    c["text"],
+                    c["text_hash"],
+                    c["embedding"],
+                )
+                for c in chunks
+            ],
+            page_size=500,
+        )
+    conn.close()
