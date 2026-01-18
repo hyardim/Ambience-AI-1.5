@@ -1,27 +1,33 @@
 # src/config.py
 
-# We import "os" to read environment variables like DATABASE_URL.
+# Import os so we can read environment variables.
 import os
 
-# We import "dotenv" so we can load variables from a .env file automatically.
+# Import dotenv so we can load .env automatically.
 from dotenv import load_dotenv
 
-# Load variables from .env into the process environment.
+# Load environment variables from .env into os.environ.
 load_dotenv()
 
-# Read the database connection string from the environment.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ragdb")
+# Database URL for Postgres + pgvector (from .env).
+# Example:
+#   postgresql://admin:team20_password@localhost:5432/ambience_knowledge
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://admin:team20_password@localhost:5432/ambience_knowledge",
+)
 
-# The folder where your PDFs live (rag_data/...).
+# Root directory containing PDFs arranged like:
+#   rag_data/<specialty>/<publisher>/*.pdf
 RAG_DATA_DIR = os.getenv("RAG_DATA_DIR", "rag_data")
 
-# The embedding model to use (SentenceTransformers model name).
+# SentenceTransformers model name.
 MODEL_NAME = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
 
-# Chunking settings.
+# Chunking parameters.
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "450"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 
-# HNSW index parameters (pgvector).
+# HNSW index parameters for pgvector.
 HNSW_M = int(os.getenv("HNSW_M", "16"))
 HNSW_EF_CONSTRUCTION = int(os.getenv("HNSW_EF_CONSTRUCTION", "64"))
