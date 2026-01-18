@@ -45,6 +45,7 @@ rag_data/*
 *.ckpt
 .cache/
 .cache/huggingface/
+postgres_data/
 
 # Editor settings
 .vscode/
