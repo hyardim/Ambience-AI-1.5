@@ -99,3 +99,36 @@ def init_db(vector_dim: int) -> None:
 
     # Close the connection.
     conn.close()
+
+
+def upsert_document(doc: Dict[str, Any]) -> None:
+    """
+    Inserts a document row if missing; if present, updates metadata.
+    """
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO documents (doc_id, filename, source_path, specialty, publisher, title, published_date, file_sha256)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (doc_id) DO UPDATE
+            SET filename = EXCLUDED.filename,
+                source_path = EXCLUDED.source_path,
+                specialty = EXCLUDED.specialty,
+                publisher = EXCLUDED.publisher,
+                title = EXCLUDED.title,
+                published_date = EXCLUDED.published_date,
+                file_sha256 = EXCLUDED.file_sha256;
+            """,
+            (
+                doc["doc_id"],
+                doc["filename"],
+                doc["source_path"],
+                doc["specialty"],
+                doc["publisher"],
+                doc.get("title"),
+                doc.get("published_date"),
+                doc["file_sha256"],
+            ),
+        )
+    conn.close()
