@@ -132,3 +132,12 @@ def upsert_document(doc: Dict[str, Any]) -> None:
             ),
         )
     conn.close()
+
+def delete_chunks_for_doc(doc_id: str) -> None:
+    """
+    Deletes all chunks for a given document (used for clean re-ingestion).
+    """
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM chunks WHERE doc_id = %s;", (doc_id,))
+    conn.close()
