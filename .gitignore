@@ -16,6 +16,7 @@ venv/
 ENV/
 env/
 my_env/
+.env
 
 # Local Python dependency dump (vendored site-packages)
 pydeps/
