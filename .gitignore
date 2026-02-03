@@ -16,6 +16,7 @@ venv/
 ENV/
 env/
 my_env/
+.env
 
 # Local Python dependency dump (vendored site-packages)
 pydeps/
@@ -35,6 +36,7 @@ Thumbs.db
 
 # Large model/data artifacts
 med42/
+data/*
 rag_data/*
 !rag_data/*.py
 *.safetensors
@@ -43,6 +45,7 @@ rag_data/*
 *.ckpt
 .cache/
 .cache/huggingface/
+postgres_data/
 
 # Editor settings
 .vscode/
