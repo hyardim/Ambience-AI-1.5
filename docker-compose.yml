@@ -1,5 +1,5 @@
 services:
-  # The Vector Database for the Data Team
+  # The Vector Database (Works on Mac/Windows/Linux)
   db_vector:
     image: pgvector/pgvector:pg16
     container_name: ambience_db
@@ -15,27 +15,6 @@ services:
     networks:
       - ambience_net
 
-  # The LLM Engine (TGI) for the Infrastructure Team
-  llm_tgi:
-    image: ghcr.io/huggingface/tgi-gaudi:latest
-    container_name: ambience_llm
-    runtime: habana               # REQUIRED for Gaudi 2 [cite: 130, 131]
-    cap_add:
-      - SYS_NICE
-    ipc: host
-    environment:
-      - HABANA_VISIBLE_DEVICES=all
-      - MODEL_ID=/data            # Points to the internal mount
-      - MAX_INPUT_LENGTH=2048
-      - MAX_TOTAL_TOKENS=4096
-    ports:
-      - "8080:80"
-    volumes:
-      - ./med42:/data
-    networks:
-      - ambience_net
-             # Maps your local med42 folder to the container [cite: 158]
 networks:
   ambience_net:
     driver: bridge
-
