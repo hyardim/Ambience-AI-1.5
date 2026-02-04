@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../src"))
 
 try:
-    from src.db import get_conn
+    from app.db import get_conn
 except ImportError:
     # This prevents the app from crashing if the DB isn't running yet
     print("Warning: Could not import get_conn from src.db")

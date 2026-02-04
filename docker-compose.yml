@@ -1,5 +1,5 @@
 services:
-  # The Vector Database (Works on Mac/Windows/Linux)
+  # 1. The Vector Database
   db_vector:
     image: pgvector/pgvector:pg16
     container_name: ambience_db
@@ -12,6 +12,23 @@ services:
       - "5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      - ambience_net
+
+  # 2. The Python Application (API + Ingestion)
+  app:
+    build: .
+    container_name: ambience_app
+    depends_on:
+      - db_vector
+    ports:
+      - "8000:8000"
+    volumes:
+      # Syncs your local folder to the container so you can edit code live
+      - .:/app
+    environment:
+      # OVERRIDE: Tells the app to find the DB at 'db_vector', not 'localhost'
+      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
     networks:
       - ambience_net
 

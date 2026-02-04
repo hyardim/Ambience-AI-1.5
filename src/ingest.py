@@ -16,7 +16,7 @@ from .clean import clean_lines_iterative, fix_stuttering_headers
 from .chunk import chunk_pages
 from .embed import load_embedder, embed_chunks, get_vector_dim
 from .metadata import sha256_file, parse_specialty_publisher_from_path, guess_title_from_filename, extract_published_date_from_frontmatter
-from .db import init_db, upsert_document, delete_chunks_for_doc, insert_chunks
+from app.db.utils import init_db, upsert_document, delete_chunks_for_doc, insert_chunks
 
 def find_pdfs(root_dir: str) -> List[str]:
     """
