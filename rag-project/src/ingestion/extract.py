@@ -2,6 +2,17 @@ from pydoc import doc
 import fitz  # PyMuPDF
 from typing import Dict, List, Any, Tuple
 
+class PDFExtractionError(Exception):
+    """
+    Raised when PDF extraction fails.
+    
+    This includes cases where:
+    - PDF file cannot be opened (corrupted, missing, permission denied)
+    - PDF is encrypted and we cannot access content
+    - Internal PyMuPDF errors during text extraction
+    """
+    pass
+
 def extract_raw_document(pdf_path: str) -> Dict[str, Any]:
     """
     Extract text blocks from a PDF in reading order with font metadata.
