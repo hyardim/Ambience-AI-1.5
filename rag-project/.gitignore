@@ -50,3 +50,6 @@ postgres_data/
 # Editor settings
 .vscode/
 .idea/
+
+# Old code
+old_code/
