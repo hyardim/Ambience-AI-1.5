@@ -1,0 +1,24 @@
+# --- Backend (Your Work) ---
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+python-multipart
+requests
+pydantic
+
+# --- RAG & Ingestion (Teammate's Work) ---
+pymupdf==1.24.10
+sentence-transformers==3.0.1
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.1
+langchain-text-splitters>=0.2.2
+faiss-cpu>=1.7.4
+pgvector
+
+# --- Shared AI Core ---
+torch>=2.1.0
+numpy>=1.26.0
+transformers
+huggingface-hub
+tqdm>=4.66.0
+boto3
