@@ -1,36 +1,25 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import List, Optional
-from sentence_transformers import SentenceTransformer
-
-# ---------------------------------------------------------
-# IMPORT FIX: We use 'app.' because your folder is named 'app'
-# ---------------------------------------------------------
-from app.db.utils import search_similar_chunks 
-
+import httpx
+from fastapi import APIRouter, Depends
+from core.security import get_current_user
+import os 
 router = APIRouter()
 
-# Load the AI Model (Matches your database's 768 dimensions)
-print("Loading Embedding Model...")
-model = SentenceTransformer('all-mpnet-base-v2')
-print("Model Loaded!")
-
-# Define the request shape
-class QueryRequest(BaseModel):
-    query: str
-    k: Optional[int] = 3
+# This URL comes from our docker-compose.yml environment variables
+RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 
 @router.post("/search")
-async def search_documents(request: QueryRequest):
-    try:
-        # 1. Convert text -> vector
-        query_vector = model.encode(request.query).tolist()
-
-        # 2. Search database
-        results = search_similar_chunks(query_vector, limit=request.k)
-
-        return {"count": len(results), "results": results}
-
-    except Exception as e:
-        print(f"Search Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+async def search_clinical_guidelines(query: str, current_user=Depends(get_current_user)):
+    """
+    Backend acts as the Secure Gateway. It verifies the GP user, 
+    then requests evidence from the isolated RAG service.
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{RAG_SERVICE_URL}/query",
+            json={"query": query, "top_k": 3}
+        )
+    
+    if response.status_code != 200:
+        return {"error": "RAG Service Unavailable", "details": response.text}
+        
+    return response.json()

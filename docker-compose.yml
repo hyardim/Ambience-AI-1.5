@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # 1. The Vector Database
   db_vector:
@@ -15,20 +17,47 @@ services:
     networks:
       - ambience_net
 
-  # 2. The Python Application (API + Ingestion)
-  app:
-    build: .
-    container_name: ambience_app
+  # 2. Backend API: Handles Auth, Chats, and Notifications
+  backend:
+    build:
+      context: ./backend
+      dockerfile: app/Dockerfile
+    container_name: ambience_backend
+    # CHANGE THIS LINE: 
+    # We map the local 'app' content directly to the container's '/app' 
+    volumes:
+      - ./backend/app:/app 
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+    ports:
+      - "8000:8000"
+    networks:
+      - ambience_net
+
+  # 3. RAG Service: OpenVINO Med42 Inference Engine
+  rag_service:
+    build:
+      context: ./rag_service
+      dockerfile: src/Dockerfile  # Points to the nested Dockerfile
+    container_name: ambience_rag
     depends_on:
       - db_vector
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
-      # Syncs your local folder to the container so you can edit code live
-      - .:/app
+      - ./rag_service:/app  # Live code reloading
     environment:
-      # OVERRIDE: Tells the app to find the DB at 'db_vector', not 'localhost'
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+    networks:
+      - ambience_net
+
+  # 4. Frontend: The React UI
+  frontend:
+    build: ./frontend
+    container_name: ambience_frontend
+    ports:
+      - "3000:3000"
     networks:
       - ambience_net
 

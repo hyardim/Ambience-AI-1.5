@@ -1,0 +1,7 @@
+venv/
+.git/
+__pycache__/
+*.pdf
+.DS_Store
+*.pyc
+models/
