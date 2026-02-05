@@ -61,3 +61,43 @@ def extract_raw_document(pdf_path: str) -> Dict[str, Any]:
         - This function does NOT implement OCR (only detects need for it)
         - Table cells may not be in perfect reading order (Issue #6 will handle)
     """
+    # Step 1: Open PDF and validate
+    doc = _open_pdf(pdf_path)
+
+
+
+def _open_pdf(pdf_path: str) -> fitz.Document:
+    """
+    Open a PDF file and validate it's readable.
+    
+    This handles common failure modes:
+    - File not found
+    - File is not a valid PDF
+    - File is corrupted
+    - Insufficient permissions
+    
+    Args:
+        pdf_path (str): Path to PDF file
+    
+    Returns:
+        fitz.Document: Opened PyMuPDF document object
+    
+    Raises:
+        PDFExtractionError: If PDF cannot be opened for any reason
+    """
+    try:
+        # fitz.open() can handle file paths, file-like objects, or bytes
+        doc = fitz.open(pdf_path)
+        return doc
+    except FileNotFoundError:
+        # File doesn't exist at the specified path
+        raise PDFExtractionError(f"PDF file not found: {pdf_path}")
+    except fitz.fitz.FileDataError as e:
+        # File exists but is corrupted or not a valid PDF
+        raise PDFExtractionError(f"Invalid or corrupted PDF: {pdf_path} - {e}")
+    except PermissionError as e:
+        # File exists but we don't have permission to read it
+        raise PDFExtractionError(f"Permission denied reading PDF: {pdf_path} - {e}")
+    except Exception as e:
+        # Catch-all for any other unexpected errors
+        raise PDFExtractionError(f"Failed to open PDF {pdf_path}: {e}")
