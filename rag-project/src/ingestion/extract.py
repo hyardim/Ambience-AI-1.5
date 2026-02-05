@@ -61,8 +61,18 @@ def extract_raw_document(pdf_path: str) -> Dict[str, Any]:
         - This function does NOT implement OCR (only detects need for it)
         - Table cells may not be in perfect reading order (Issue #6 will handle)
     """
+    
     # Step 1: Open PDF and validate
     doc = _open_pdf(pdf_path)
+
+    # Handle empty PDFs gracefully
+    if doc.page_count == 0:
+        return {
+            "source_path": pdf_path,
+            "num_pages": 0,
+            "needs_ocr": False,
+            "pages": []
+        }
 
 
 
