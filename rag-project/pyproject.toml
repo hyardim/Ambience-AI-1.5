@@ -5,36 +5,47 @@ description = "RAG application with pgvector and sentence-transformers"
 requires-python = ">=3.10"
 dependencies = [
     # Document Loading
-    "pypdf>=4.0.0",
-    "python-docx>=1.1.0",
-    "python-pptx>=0.6.23",
-    "openpyxl>=3.1.0",
-    "markdown>=3.5",
+    "pymupdf==1.24.10",          # PDF extraction
+    "python-docx>=1.1.0",        # Word documents
+    "python-pptx>=0.6.23",       # PowerPoint
+    "openpyxl>=3.1.0",           # Excel files
+    "markdown>=3.5",             # Markdown files
     
-    # Text Processing
-    "tiktoken>=0.5.0",
+    # Text Processing & Chunking
+    "langchain-text-splitters>=0.2.2",  # Text chunking
+    "tiktoken>=0.5.0",                  # Token counting
     
-    # Embeddings
-    "sentence-transformers>=2.3.0",
-    "torch>=2.0.0",
+    # Embeddings & ML
+    "sentence-transformers==3.0.1",     # Embeddings
+    "torch>=2.1.0",                     # PyTorch
+    "numpy>=1.26.0",                    # Numpy
+    
+    # Vector Stores
+    "faiss-cpu>=1.7.4",                 # FAISS
+    "pgvector>=0.2.4",                  # pgvector support
     
     # Database
-    "psycopg2-binary>=2.9.9",
-    "pgvector>=0.2.4",
+    "psycopg2-binary>=2.9.9",           # PostgreSQL
     
     # Utilities
-    "python-dotenv>=1.0.0",
-    "tqdm>=4.66.0",
+    "python-dotenv>=1.0.1",             # .env files
+    "tqdm>=4.66.0",                     # Progress bars
 ]
 
 [project.optional-dependencies]
 dev = [
+    # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
+    
+    # Code Quality
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.7.0",
     "pre-commit>=3.5.0",
+    
+    # Type stubs
+    "types-tqdm>=4.66.0",
 ]
 
 [build-system]
@@ -46,11 +57,28 @@ build-backend = "setuptools.build_meta"
 line-length = 88
 target-version = ['py310']
 include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | build
+  | dist
+)/
+'''
 
 # Ruff - linter
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+]
 
 [tool.ruff.lint]
 select = [
@@ -64,12 +92,16 @@ select = [
 ]
 ignore = []
 
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
 # MyPy - type checking
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false  # Set to true once you add type hints
+disallow_untyped_defs = false
+ignore_missing_imports = true
 
 # Pytest
 [tool.pytest.ini_options]
