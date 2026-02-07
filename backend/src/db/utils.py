@@ -7,9 +7,9 @@ from typing import List, Dict, Any, Optional
 # DB Connection Import
 # ---------------------------------------------------------
 try:
-    from app.db import get_conn
+    from src.db import get_conn
 except ImportError:
-    print("Warning: Could not import get_conn from app.db")
+    print("Warning: Could not import get_conn from src.db")
     get_conn = None
 
 # ---------------------------------------------------------
