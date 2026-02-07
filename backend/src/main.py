@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api import rag, auth
 from src.core import security
 
+from src.db.base import Base
+from src.db.session import engine
+from src.db import models  
+Base.metadata.create_all(bind=engine)
+
 # Initialize the application
 app = FastAPI(
     title="Ambience-AI-1.5 API",
