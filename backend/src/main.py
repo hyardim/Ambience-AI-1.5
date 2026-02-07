@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import rag, auth
-from core import security
+from src.api import rag, auth
+from src.core import security
 
 # Initialize the application
 app = FastAPI(

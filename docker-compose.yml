@@ -17,38 +17,42 @@ services:
     networks:
       - ambience_net
 
-  # 2. Backend API: Handles Auth, Chats, and Notifications
+  # 2. Backend API: Handles Auth, Chats
   backend:
     build:
       context: ./backend
-      dockerfile: app/Dockerfile
+      dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
     container_name: ambience_backend
-    # CHANGE THIS LINE: 
-    # We map the local 'app' content directly to the container's '/app' 
     volumes:
-      - ./backend/app:/app 
+      # ✅ Fixed: Maps local 'src' to container's '/app/src' for hot-reloading
+      - ./backend/src:/app/src
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
     ports:
       - "8000:8000"
+    depends_on:
+      - db_vector
     networks:
       - ambience_net
 
-  # 3. RAG Service: OpenVINO Med42 Inference Engine
+  # 3. RAG Service: AI Engine (Ollama/Med42)
   rag_service:
     build:
       context: ./rag_service
-      dockerfile: src/Dockerfile  # Points to the nested Dockerfile
+      dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
     container_name: ambience_rag
     depends_on:
       - db_vector
     ports:
       - "8001:8001"
     volumes:
-      - ./rag_service:/app  # Live code reloading
+      # ✅ Fixed: Maps local 'src' to container's '/app/src'
+      - ./rag_service/src:/app/src
     environment:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      # Allow connection to host Ollama (Mac)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     networks:
       - ambience_net
 
@@ -57,7 +61,9 @@ services:
     build: ./frontend
     container_name: ambience_frontend
     ports:
-      - "3000:3000"
+      - "3000:5173"  # ✅ Fixed: Maps Host 3000 -> Container 5173 (Vite default)
+    volumes:
+      - ./frontend/src:/app/src  # Hot reload for React
     networks:
       - ambience_net
 

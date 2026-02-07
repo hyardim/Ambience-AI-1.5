@@ -13,7 +13,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 # Import config model name.
-from .config import MODEL_NAME
+from src.config import MODEL_NAME
 
 def load_embedder() -> SentenceTransformer:
     """

@@ -5,6 +5,7 @@ python-jose[cryptography]
 python-multipart
 requests
 pydantic
+httpx
 
 # --- RAG & Ingestion (Teammate's Work) ---
 pymupdf==1.24.10

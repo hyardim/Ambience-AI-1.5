@@ -1,17 +1,22 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 import os
 
-# Import your friend's logic (Ensure these are in the same src folder)
-from .embed import load_embedder, embed_chunks
-from .db import search_similar_chunks
+# ✅ FIX 1: Import embed_chunks explicitly
+from src.ingestion.embed import load_embedder, embed_chunks
+
+# ✅ FIX 2: Import search logic from the new 'retrieval' folder
+# (We renamed db.py to vector_store.py in the migration)
+from src.retrieval.vector_store import search_similar_chunks
 
 app = FastAPI(title="Ambience Med42 RAG Service")
 
-# 1. Load the model once at startup to keep the service fast
-# OpenVINO optimization happens inside your friend's load_embedder()
+# Load model at startup
+# (Ensure your embed.py has a 'load_embedder' function!)
+print("🏥 Loading Embedding Model...")
 model = load_embedder()
+print("✅ Model Loaded!")
 
 class QueryRequest(BaseModel):
     query: str
@@ -29,26 +34,28 @@ async def health_check():
 @app.post("/query", response_model=List[SearchResult])
 async def clinical_query(request: QueryRequest):
     """
-    1. Embeds the GP's question using OpenVINO.
-    2. Searches the Guideline Database using pgvector.
-    3. Returns the most relevant clinical evidence.
+    1. Embeds the GP's question.
+    2. Searches the Guideline Database.
+    3. Returns relevant evidence.
     """
     try:
         # Step 1: Vectorize the question
         # We wrap the query in a list because embed_chunks expects a batch
-        query_embedding = embed_chunks(model, [{"text": request.query}])[0]["embedding"]
+        embeddings_result = embed_chunks(model, [{"text": request.query}])
+        query_embedding = embeddings_result[0]["embedding"]
 
-        # Step 2: Search the database (The logic we fixed in app/db/utils.py)
-        # In a multi-service setup, this RAG service calls its own db.py
+        # Step 2: Search the database
         raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
 
         # Step 3: Format for the Backend API
         return [
             SearchResult(
                 text=res["text"],
-                source=res.get("filename", "Unknown Source"),
+                # Use .get() to avoid crashing if filename is missing
+                source=res.get("metadata", {}).get("filename", "Unknown Source"),
                 score=res["score"]
             ) for res in raw_results
         ]
     except Exception as e:
+        print(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"RAG Inference Error: {str(e)}")

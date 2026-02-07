@@ -8,7 +8,7 @@ import psycopg2
 import psycopg2.extras
 
 # Import our DATABASE_URL from config.
-from .config import DATABASE_URL, HNSW_M, HNSW_EF_CONSTRUCTION
+from src.config import DATABASE_URL, HNSW_M, HNSW_EF_CONSTRUCTION
 
 def get_conn():
     """
@@ -173,3 +173,41 @@ def insert_chunks(chunks: List[Dict[str, Any]]) -> None:
             page_size=500,
         )
     conn.close()
+
+def search_similar_chunks(query_embedding: List[float], limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Performs a vector similarity search (Cosine Distance) to find relevant chunks.
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            # We join 'chunks' with 'documents' to get the filename/metadata
+            # The <=> operator is Cosine Distance (0 = identical, 1 = opposite)
+            # We sort ASC because lower distance = better match.
+            cur.execute(
+                """
+                SELECT 
+                    c.text,
+                    d.filename,
+                    d.specialty,
+                    (1 - (c.embedding <=> %s::vector)) as score
+                FROM chunks c
+                JOIN documents d ON c.doc_id = d.doc_id
+                ORDER BY c.embedding <=> %s::vector ASC
+                LIMIT %s;
+                """,
+                (query_embedding, query_embedding, limit),
+            )
+            results = cur.fetchall()
+
+        # Format the results as a list of dictionaries
+        return [
+            {
+                "text": row[0],
+                "metadata": {"filename": row[1], "specialty": row[2]},
+                "score": float(row[3])
+            }
+            for row in results
+        ]
+    finally:
+        conn.close()

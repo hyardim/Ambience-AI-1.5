@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* NHS Brand Colors */
+:root {
+  --nhs-blue: #005eb8;
+  --nhs-dark-blue: #003087;
+  --nhs-bright-blue: #0072ce;
+  --nhs-light-blue: #41b6e6;
+  --nhs-aqua-blue: #00a9ce;
+  --nhs-black: #231f20;
+  --nhs-dark-grey: #425563;
+  --nhs-mid-grey: #768692;
+  --nhs-pale-grey: #e8edee;
+  --nhs-white: #ffffff;
+  --nhs-green: #007f3b;
+  --nhs-red: #da291c;
+  --nhs-warm-yellow: #ffb81c;
+  --nhs-orange: #ed8b00;
+  --nhs-pink: #ae2573;
+  --nhs-purple: #330072;
+}
+
+/* Keep just box-sizing which is always useful */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Arial', 'Helvetica Neue', sans-serif;
+  background-color: #f0f4f5;
+  color: var(--nhs-black);
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--nhs-pale-grey);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--nhs-mid-grey);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nhs-dark-grey);
+}

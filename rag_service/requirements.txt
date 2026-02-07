@@ -16,3 +16,4 @@ numpy
 # Document Processing
 tqdm
 PyMuPDF
+

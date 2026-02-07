@@ -1,6 +1,6 @@
 import httpx
 from fastapi import APIRouter, Depends
-from core.security import get_current_user
+from src.core.security import get_current_user
 import os 
 router = APIRouter()
 
