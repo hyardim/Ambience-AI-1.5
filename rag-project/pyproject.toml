@@ -26,6 +26,9 @@ dependencies = [
     
     # Database
     "psycopg2-binary>=2.9.9",           # PostgreSQL
+    "sqlalchemy>=2.0.0",                # SQLAlchemy ORM
+    "alembic>=1.13.0",                  # Database migrations
+    
 
     # Configuration & Validation
     "pydantic>=2.0.0",
