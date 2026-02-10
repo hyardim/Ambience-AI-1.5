@@ -1,5 +1,7 @@
+version: '3.8'
+
 services:
-  # The Vector Database for the Data Team
+  # 1. The Vector Database
   db_vector:
     image: pgvector/pgvector:pg16
     container_name: ambience_db
@@ -15,27 +17,56 @@ services:
     networks:
       - ambience_net
 
-  # The LLM Engine (TGI) for the Infrastructure Team
-  llm_tgi:
-    image: ghcr.io/huggingface/tgi-gaudi:latest
-    container_name: ambience_llm
-    runtime: habana               # REQUIRED for Gaudi 2 [cite: 130, 131]
-    cap_add:
-      - SYS_NICE
-    ipc: host
-    environment:
-      - HABANA_VISIBLE_DEVICES=all
-      - MODEL_ID=/data            # Points to the internal mount
-      - MAX_INPUT_LENGTH=2048
-      - MAX_TOTAL_TOKENS=4096
-    ports:
-      - "8080:80"
+  # 2. Backend API: Handles Auth, Chats
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
+    container_name: ambience_backend
     volumes:
-      - ./med42:/data
+      # ✅ Fixed: Maps local 'src' to container's '/app/src' for hot-reloading
+      - ./backend/src:/app/src
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db_vector
     networks:
       - ambience_net
-             # Maps your local med42 folder to the container [cite: 158]
+
+  # 3. RAG Service: AI Engine (Ollama/Med42)
+  rag_service:
+    build:
+      context: ./rag_service
+      dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
+    container_name: ambience_rag
+    depends_on:
+      - db_vector
+    ports:
+      - "8001:8001"
+    volumes:
+      # ✅ Fixed: Maps local 'src' to container's '/app/src'
+      - ./rag_service/src:/app/src
+    environment:
+      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      # Allow connection to host Ollama (Mac)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    networks:
+      - ambience_net
+
+  # 4. Frontend: The React UI
+  frontend:
+    build: ./frontend
+    container_name: ambience_frontend
+    ports:
+      - "3000:5173"  # ✅ Fixed: Maps Host 3000 -> Container 5173 (Vite default)
+    volumes:
+      - ./frontend/src:/app/src  # Hot reload for React
+    networks:
+      - ambience_net
+
 networks:
   ambience_net:
     driver: bridge
-
