@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional, Any
 from pydantic import BaseModel
-# from datetime import datetime # Removing this to avoid validation headaches for now
-
 from src.db.session import get_db
-from src.db.models import Chat, Message, User, ChatStatus
+from src.db.models import Chat, Message, User, ChatStatus, AuditLog
 from src.core import security
 
 router = APIRouter()
@@ -21,7 +19,8 @@ class MessageResponse(BaseModel):
     id: int
     content: str
     sender: str
-    created_at: str  # We will cast this to string manually
+    created_at: str
+    citations: Optional[List[Any]] = None
 
 class ChatResponse(BaseModel):
     id: int
@@ -56,6 +55,15 @@ def create_chat(
         status=ChatStatus.OPEN
     )
     db.add(new_chat)
+    
+    # Audit Log
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="CREATE_CHAT",
+        details=f"Created chat: {new_chat.title}"
+    )
+    db.add(audit)
+    
     db.commit()
     db.refresh(new_chat)
     
@@ -87,7 +95,6 @@ def get_chat_details(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj)
 ):
-    # 1. Fetch Chat
     chat = db.query(Chat).filter(
         Chat.id == chat_id, 
         Chat.user_id == current_user.id
@@ -96,23 +103,34 @@ def get_chat_details(
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     
-    # 2. Fetch Messages Explicitly (Avoids relationship errors)
+    # Audit Log (Viewing)
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="VIEW_CHAT",
+        details=f"Viewed chat ID: {chat_id}"
+    )
+    db.add(audit)
+    db.commit()
+
     messages = db.query(Message).filter(Message.chat_id == chat.id).all()
 
-    # 3. Manual Construction (Bulletproof)
+    safe_messages = []
+    for m in messages:
+        created_str = m.created_at.isoformat() if m.created_at else ""
+        safe_messages.append(MessageResponse(
+            id=m.id,
+            content=m.content,
+            sender=m.sender,
+            created_at=created_str,
+            citations=m.citations
+        ))
+
     return ChatWithMessages(
         id=chat.id,
         title=chat.title,
         status=chat.status,
-        created_at=chat.created_at.isoformat(),
-        messages=[
-            MessageResponse(
-                id=m.id,
-                content=m.content,
-                sender=m.sender,
-                created_at=m.created_at.isoformat()
-            ) for m in messages
-        ]
+        created_at=chat.created_at.isoformat() if chat.created_at else "",
+        messages=safe_messages
     )
 
 @router.post("/{chat_id}/message")
@@ -133,7 +151,13 @@ def send_message(
     user_msg = Message(content=message.content, sender="user", chat_id=chat.id)
     db.add(user_msg)
     
-    ai_msg = Message(content=f"I received: {message.content}", sender="ai", chat_id=chat.id)
+    # Placeholder for RAG citations (Empty list for now)
+    ai_msg = Message(
+        content=f"I received: {message.content}", 
+        sender="ai", 
+        chat_id=chat.id,
+        citations=[] 
+    )
     db.add(ai_msg)
     
     db.commit()
