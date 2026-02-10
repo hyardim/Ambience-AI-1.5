@@ -2,6 +2,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 python-dotenv
 
 # --- Networking ---
@@ -13,7 +14,8 @@ sqlalchemy
 psycopg2-binary
 
 # --- Authentication & Security ---
-passlib[bcrypt]
+passlib
+bcrypt==4.0.1        # <--- CRITICAL FIX: Version 4.1+ crashes passlib
 pyjwt                
 python-multipart
 email-validator
