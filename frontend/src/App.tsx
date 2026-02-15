@@ -1,4 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Auth pages
 import { LoginPage } from './pages/auth/LoginPage';
@@ -19,31 +21,33 @@ import { SpecialistQueryDetailPage } from './pages/specialist/SpecialistQueryDet
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Landing page */}
-        <Route path="/" element={<LandingPage />} />
+    <AuthProvider>
+      <Router>
+        <Routes>
+          {/* Landing page */}
+          <Route path="/" element={<LandingPage />} />
 
-        {/* Auth routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* Auth routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        {/* GP routes */}
-        <Route path="/gp" element={<Navigate to="/gp/queries" replace />} />
-        <Route path="/gp/queries" element={<GPQueriesPage />} />
-        <Route path="/gp/queries/new" element={<GPNewQueryPage />} />
-        <Route path="/gp/query/:queryId" element={<GPQueryDetailPage />} />
+          {/* GP routes (protected) */}
+          <Route path="/gp" element={<Navigate to="/gp/queries" replace />} />
+          <Route path="/gp/queries" element={<ProtectedRoute><GPQueriesPage /></ProtectedRoute>} />
+          <Route path="/gp/queries/new" element={<ProtectedRoute><GPNewQueryPage /></ProtectedRoute>} />
+          <Route path="/gp/query/:queryId" element={<ProtectedRoute><GPQueryDetailPage /></ProtectedRoute>} />
 
-        {/* Specialist routes */}
-        <Route path="/specialist" element={<Navigate to="/specialist/queries" replace />} />
-        <Route path="/specialist/queries" element={<SpecialistQueriesPage />} />
-        <Route path="/specialist/query/:queryId" element={<SpecialistQueryDetailPage />} />
+          {/* Specialist routes (demo — mock data) */}
+          <Route path="/specialist" element={<Navigate to="/specialist/queries" replace />} />
+          <Route path="/specialist/queries" element={<SpecialistQueriesPage />} />
+          <Route path="/specialist/query/:queryId" element={<SpecialistQueryDetailPage />} />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 
