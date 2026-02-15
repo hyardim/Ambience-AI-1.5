@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Clock } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { QueryCard } from '../../components/QueryCard';
@@ -7,7 +6,6 @@ import { mockQueries, mockSpecialistNotifications } from '../../data/mockData';
 import type { QueryStatus, Severity } from '../../types';
 
 export function SpecialistQueriesPage() {
-  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<QueryStatus | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<Severity | 'all'>('all');

@@ -23,8 +23,19 @@ async function handleResponse<T>(res: Response): Promise<T> {
     throw new Error('Session expired');
   }
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(body || `Request failed (${res.status})`);
+    const rawBody = await res.text();
+    let errorMessage = rawBody || `Request failed (${res.status})`;
+
+    try {
+      const parsed = JSON.parse(rawBody) as { detail?: string };
+      if (parsed?.detail) {
+        errorMessage = parsed.detail;
+      }
+    } catch {
+      // Keep raw text fallback when body is not JSON.
+    }
+
+    throw new Error(errorMessage);
   }
   // 204 No Content
   if (res.status === 204) return undefined as unknown as T;
@@ -55,6 +66,13 @@ export async function getChats(skip = 0, limit = 100): Promise<BackendChat[]> {
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
+}
+
+export async function getChat(chatId: number): Promise<BackendChat> {
+  const res = await fetch(`${API_BASE}/chats/${chatId}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<BackendChat>(res);
 }
 
 export async function createChat(data: ChatCreateRequest): Promise<BackendChat> {

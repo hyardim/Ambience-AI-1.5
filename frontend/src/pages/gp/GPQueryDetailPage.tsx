@@ -5,7 +5,7 @@ import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
-import { getChats, sendMessage as apiSendMessage } from '../../services/api';
+import { getChat, sendMessage as apiSendMessage } from '../../services/api';
 import type { BackendChat, BackendMessage } from '../../types/api';
 import type { Message } from '../../types';
 
@@ -46,15 +46,11 @@ export function GPQueryDetailPage() {
     setLoading(true);
     setError('');
     try {
-      const chats = await getChats();
-      const found = chats.find(c => c.id === Number(queryId));
-      if (found) {
-        setChat(found);
-        setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
-      } else {
-        setChat(null);
-      }
+      const found = await getChat(Number(queryId));
+      setChat(found);
+      setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
     } catch {
+      setChat(null);
       setError('Failed to load consultation');
     } finally {
       setLoading(false);
