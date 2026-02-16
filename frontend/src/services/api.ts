@@ -2,6 +2,7 @@ import type {
   BackendChat,
   BackendMessage,
   LoginResponse,
+  RegisterRequest,
   ChatCreateRequest,
   MessageCreateRequest,
 } from '../types/api';
@@ -19,6 +20,9 @@ function authHeaders(): Record<string, string> {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_email');
     window.location.href = '/login';
     throw new Error('Session expired');
   }
@@ -53,6 +57,16 @@ export async function login(username: string, password: string): Promise<LoginRe
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+  });
+
+  return handleResponse<LoginResponse>(res);
+}
+
+export async function register(payload: RegisterRequest): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 
   return handleResponse<LoginResponse>(res);

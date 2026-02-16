@@ -21,19 +21,13 @@ def _get_user_by_email_or_404(db: Session, email: str) -> User:
 def create_chat(
     chat_data: ChatCreate, 
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Creates a new conversation for the currently logged-in user.
     """
     # 1. Find the User in the DB (based on the token email)
-    user = db.query(User).filter(User.email == current_user_email).first()
-    if not user:
-        # If "Dr. Test" isn't in the DB, create him on the fly (Dev Convenience)
-        user = User(email=current_user_email, hashed_password="dev_placeholder", full_name="Dr. Test")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+    user = _get_user_by_email_or_404(db, current_user["email"])
 
     # 2. Create the Chat
     new_chat = Chat(
@@ -51,15 +45,13 @@ def get_chats(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Returns a list of all conversations for the current user.
     """
     # 1. Find User
-    user = db.query(User).filter(User.email == current_user_email).first()
-    if not user:
-        return [] # User exists in token but not DB? Return empty list.
+    user = _get_user_by_email_or_404(db, current_user["email"])
 
     # 2. Get their Chats
     chats = db.query(Chat).filter(Chat.user_id == user.id)\
@@ -73,12 +65,12 @@ def get_chats(
 def get_chat(
     chat_id: int,
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Returns a single conversation for the current user.
     """
-    user = _get_user_by_email_or_404(db, current_user_email)
+    user = _get_user_by_email_or_404(db, current_user["email"])
     chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user.id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -88,12 +80,12 @@ def get_chat(
 def delete_chat(
     chat_id: int,
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Deletes a specific conversation.
     """
-    user = _get_user_by_email_or_404(db, current_user_email)
+    user = _get_user_by_email_or_404(db, current_user["email"])
     
     chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user.id).first()
     if not chat:
@@ -108,13 +100,13 @@ def send_message(
     chat_id: int,
     message: MessageCreate,
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Saves user message and returns a Mock AI response.
     """
     # 1. Validate User owns the chat
-    user = _get_user_by_email_or_404(db, current_user_email)
+    user = _get_user_by_email_or_404(db, current_user["email"])
     chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user.id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")

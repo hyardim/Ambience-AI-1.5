@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import os
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -9,9 +10,9 @@ from jwt.exceptions import PyJWTError as JWTError
 # --- Configuration ---
 # Ensure these match what is used in api/auth.py if defined there,
 # or better yet, keep them here and import them in auth.py.
-SECRET_KEY = "NHS_SAFE_SECRET_KEY_CHANGE_THIS"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "NHS_SAFE_SECRET_KEY_CHANGE_THIS")
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 # --- Password Hashing Setup ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -44,7 +45,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 # --- 3. Dependency: Get Current User ---
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     """
-    Verifies the JWT token. If valid, returns the username.
+    Verifies the JWT token. If valid, returns the user identity payload.
     Used by protected routes like /search.
     """
     credentials_exception = HTTPException(
@@ -56,8 +57,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         # PyJWT decode usage
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        role: str = payload.get("role", "gp")
         if username is None:
             raise credentials_exception
-        return username
+        return {"email": username, "role": role}
     except JWTError:
         raise credentials_exception

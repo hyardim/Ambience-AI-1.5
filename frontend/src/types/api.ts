@@ -18,6 +18,20 @@ export interface BackendChat {
 export interface LoginResponse {
   access_token: string;
   token_type: string;
+  user: {
+    email: string;
+    full_name: string | null;
+    role: 'gp' | 'specialist' | 'admin';
+  };
+}
+
+export interface RegisterRequest {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  role: 'gp' | 'specialist' | 'admin';
+  specialty?: string;
 }
 
 export interface ChatCreateRequest {

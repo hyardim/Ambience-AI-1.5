@@ -6,6 +6,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
+import { AccessDeniedPage } from './pages/auth/AccessDeniedPage';
 
 // Landing page
 import { LandingPage } from './pages/LandingPage';
@@ -31,17 +32,18 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/access-denied" element={<AccessDeniedPage />} />
 
           {/* GP routes (protected) */}
           <Route path="/gp" element={<Navigate to="/gp/queries" replace />} />
-          <Route path="/gp/queries" element={<ProtectedRoute><GPQueriesPage /></ProtectedRoute>} />
-          <Route path="/gp/queries/new" element={<ProtectedRoute><GPNewQueryPage /></ProtectedRoute>} />
-          <Route path="/gp/query/:queryId" element={<ProtectedRoute><GPQueryDetailPage /></ProtectedRoute>} />
+          <Route path="/gp/queries" element={<ProtectedRoute allowedRoles={['gp', 'admin']}><GPQueriesPage /></ProtectedRoute>} />
+          <Route path="/gp/queries/new" element={<ProtectedRoute allowedRoles={['gp', 'admin']}><GPNewQueryPage /></ProtectedRoute>} />
+          <Route path="/gp/query/:queryId" element={<ProtectedRoute allowedRoles={['gp', 'admin']}><GPQueryDetailPage /></ProtectedRoute>} />
 
           {/* Specialist routes (demo — mock data) */}
           <Route path="/specialist" element={<Navigate to="/specialist/queries" replace />} />
-          <Route path="/specialist/queries" element={<SpecialistQueriesPage />} />
-          <Route path="/specialist/query/:queryId" element={<SpecialistQueryDetailPage />} />
+          <Route path="/specialist/queries" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueriesPage /></ProtectedRoute>} />
+          <Route path="/specialist/query/:queryId" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueryDetailPage /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

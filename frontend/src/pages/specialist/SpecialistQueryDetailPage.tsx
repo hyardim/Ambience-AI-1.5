@@ -7,8 +7,10 @@ import { ChatInput } from '../../components/ChatInput';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { mockQueries, mockSpecialistNotifications } from '../../data/mockData';
 import type { Message, QueryStatus } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function SpecialistQueryDetailPage() {
+  const { username, logout } = useAuth();
   const { queryId } = useParams<{ queryId: string }>();
   const navigate = useNavigate();
   const query = mockQueries.find(q => q.id === queryId);
@@ -21,7 +23,7 @@ export function SpecialistQueryDetailPage() {
   if (!query) {
     return (
       <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole="specialist" userName="Dr. James Wilson" notifications={mockSpecialistNotifications} />
+        <Header userRole="specialist" userName={username || 'Specialist User'} notifications={mockSpecialistNotifications} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Query not found</h1>
@@ -41,7 +43,7 @@ export function SpecialistQueryDetailPage() {
     const newMessage: Message = {
       id: `msg-${Date.now()}`,
       senderId: 'specialist-1',
-      senderName: 'Dr. James Wilson',
+      senderName: username || 'Specialist User',
       senderType: 'specialist',
       content,
       timestamp: new Date(),
@@ -55,7 +57,7 @@ export function SpecialistQueryDetailPage() {
     const approvalMessage: Message = {
       id: `msg-${Date.now()}`,
       senderId: 'specialist-1',
-      senderName: 'Dr. James Wilson',
+      senderName: username || 'Specialist User',
       senderType: 'specialist',
       content: '✅ I have reviewed the AI response and approve this advice for the GP.',
       timestamp: new Date()
@@ -69,7 +71,7 @@ export function SpecialistQueryDetailPage() {
       const rejectMessage: Message = {
         id: `msg-${Date.now()}`,
         senderId: 'specialist-1',
-        senderName: 'Dr. James Wilson',
+        senderName: username || 'Specialist User',
         senderType: 'specialist',
         content: `❌ The AI response requires modification: ${rejectReason}`,
         timestamp: new Date()
@@ -85,7 +87,7 @@ export function SpecialistQueryDetailPage() {
     const retryMessage: Message = {
       id: `msg-${Date.now()}`,
       senderId: 'specialist-1',
-      senderName: 'Dr. James Wilson',
+      senderName: username || 'Specialist User',
       senderType: 'specialist',
       content: '🔄 Requesting AI to regenerate the response with additional context.',
       timestamp: new Date()
@@ -97,7 +99,7 @@ export function SpecialistQueryDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="specialist" userName="Dr. James Wilson" notifications={mockSpecialistNotifications} />
+      <Header userRole="specialist" userName={username || 'Specialist User'} notifications={mockSpecialistNotifications} onLogout={logout} />
       
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
         {/* Back Button */}

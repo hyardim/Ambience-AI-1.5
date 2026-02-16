@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { useAuth } from '../../contexts/AuthContext';
+import type { UserRole } from '../../types';
+
+function routeForRole(role: UserRole | null): string {
+  if (role === 'specialist') return '/specialist/queries';
+  return '/gp/queries';
+}
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -11,12 +17,13 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, role } = useAuth();
 
-  // If already authenticated, redirect to GP portal
-  if (isAuthenticated) {
-    navigate('/gp/queries', { replace: true });
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(routeForRole(role), { replace: true });
+    }
+  }, [isAuthenticated, navigate, role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,17 +36,17 @@ export function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      await login(email, password);
-      navigate('/gp/queries');
-    } catch {
-      setError('Incorrect username or password');
+      const loggedInRole = await login(email, password);
+      navigate(routeForRole(loggedInRole));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Incorrect username or password');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const fillDemoCredentials = () => {
-    setEmail('gp_user');
+    setEmail('gp@example.com');
     setPassword('password123');
   };
 
@@ -58,7 +65,7 @@ export function LoginPage() {
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials</p>
               <p className="text-sm text-blue-700">
-                Username: <code className="bg-blue-100 px-1 rounded">gp_user</code> &nbsp;
+                Username: <code className="bg-blue-100 px-1 rounded">gp@example.com</code> &nbsp;
                 Password: <code className="bg-blue-100 px-1 rounded">password123</code>
               </p>
               <button
