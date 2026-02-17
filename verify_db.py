@@ -9,18 +9,19 @@ print("--- STARTING DATABASE CHECK ---")
 try:
     # 2. Try to import your utility
     from app.db.utils import search_similar_chunks
+
     print("✅ Import successful: Found app.db.utils")
 
     # 3. Create a fake "query vector" (768 random numbers)
     mock_vector = [0.1] * 768
 
     print("Attempting to search database...")
-    
+
     # 4. Run the function
     results = search_similar_chunks(mock_vector, limit=1)
 
     print("\n------------------------------------------------")
-    print(f"CONNECTION SUCCESSFUL!")
+    print("CONNECTION SUCCESSFUL!")
     print(f"Query returned {len(results)} results.")
     print("------------------------------------------------")
 

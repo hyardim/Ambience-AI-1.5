@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from .base import Base
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -29,9 +30,11 @@ class Chat(Base):
 
     # Relationship: Belongs to one User
     owner = relationship("User", back_populates="chats")
-    
+
     # Relationship: One Chat has Many Messages
-    messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
+    messages = relationship(
+        "Message", back_populates="chat", cascade="all, delete-orphan"
+    )
 
 
 class Message(Base):
@@ -40,7 +43,7 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
     role = Column(String, nullable=False)  # "user" or "assistant"
-    content = Column(Text, nullable=False) # The actual message text
+    content = Column(Text, nullable=False)  # The actual message text
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     # Relationship: Belongs to one Chat

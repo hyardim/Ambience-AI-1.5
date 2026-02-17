@@ -68,7 +68,7 @@ export function RegisterPage() {
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
       <AuthHeader />
-      
+
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-10">

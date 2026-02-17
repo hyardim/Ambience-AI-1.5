@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
 
 // Use 'backend' service name in Docker, fallback to localhost for local dev
-const backendUrl = process.env.DOCKER_ENV === 'true' 
-  ? 'http://backend:8000' 
+const backendUrl = process.env.DOCKER_ENV === 'true'
+  ? 'http://backend:8000'
   : 'http://localhost:8000';
 
 // https://vite.dev/config/

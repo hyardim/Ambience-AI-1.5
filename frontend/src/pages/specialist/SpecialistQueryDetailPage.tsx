@@ -100,7 +100,7 @@ export function SpecialistQueryDetailPage() {
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
       <Header userRole="specialist" userName={username || 'Specialist User'} notifications={mockSpecialistNotifications} onLogout={logout} />
-      
+
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
         {/* Back Button */}
         <button
@@ -188,7 +188,7 @@ export function SpecialistQueryDetailPage() {
               <h2 className="text-xl font-bold">Approve Response</h2>
             </div>
             <p className="text-gray-600 mb-6">
-              By approving, you confirm that the AI-generated response is clinically accurate 
+              By approving, you confirm that the AI-generated response is clinically accurate
               and appropriate to send to the GP.
             </p>
             <div className="flex gap-3 justify-end">

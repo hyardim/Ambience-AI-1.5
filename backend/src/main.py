@@ -7,17 +7,23 @@ import os
 
 from src.db.base import Base
 from src.db.session import engine
-from src.db import models  
 from src.db.models import User
 from src.db.session import SessionLocal
 from src.api import auth, chats
+
 Base.metadata.create_all(bind=engine)
 
 
 def ensure_auth_columns() -> None:
     with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR NOT NULL DEFAULT 'gp'"))
-        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS specialty VARCHAR"))
+        connection.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR NOT NULL DEFAULT 'gp'"
+            )
+        )
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS specialty VARCHAR")
+        )
 
 
 def ensure_default_users() -> None:
@@ -75,7 +81,7 @@ ensure_default_users()
 app = FastAPI(
     title="Ambience-AI-1.5 API",
     description="Clinical RAG Backend for Neurology & Rheumatology Support",
-    version="1.5.0"
+    version="1.5.0",
 )
 
 # CORS: Allow your frontend (running on port 3000) to talk to this backend
@@ -97,7 +103,10 @@ app.add_middleware(
 # Include the Authentication Router (we will fill this file next)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(rag.router, tags=["RAG"])
-app.include_router(chats.router, prefix="/chats", tags=["chats"]) # <--- ✅ ADD THIS LINE
+app.include_router(
+    chats.router, prefix="/chats", tags=["chats"]
+)  # <--- ✅ ADD THIS LINE
+
 
 @app.get("/health")
 def health_check():

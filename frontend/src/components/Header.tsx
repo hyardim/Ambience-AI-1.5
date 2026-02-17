@@ -15,7 +15,7 @@ export function Header({ userRole, userName, notifications = [], onLogout }: Hea
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = userRole === 'gp' ? '/gp' : '/specialist';
-  
+
   const isQueriesActive = location.pathname.includes('/queries') || location.pathname.includes('/query/');
 
   const handleLogout = () => {
