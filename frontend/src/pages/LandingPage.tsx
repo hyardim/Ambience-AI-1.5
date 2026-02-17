@@ -1,8 +1,23 @@
 import { Link } from 'react-router-dom';
 import { NHSLogo } from '../components/NHSLogo';
 import { Stethoscope, Users } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+
+function roleLabel(role: 'gp' | 'specialist' | 'admin' | null): string {
+  if (role === 'gp') return 'GP';
+  if (role === 'specialist') return 'Specialist';
+  if (role === 'admin') return 'Admin';
+  return 'Unknown';
+}
+
+function homeRouteForRole(role: 'gp' | 'specialist' | 'admin' | null): string {
+  if (role === 'specialist') return '/specialist/queries';
+  return '/gp/queries';
+}
 
 export function LandingPage() {
+  const { isAuthenticated, username, role, logout, isLoading } = useAuth();
+
   return (
     <div className="min-h-screen bg-[#f0f4f5]">
       {/* Header */}
@@ -11,18 +26,43 @@ export function LandingPage() {
           <div className="flex items-center justify-between h-16">
             <NHSLogo />
             <nav className="flex items-center gap-4">
-              <Link
-                to="/login"
-                className="text-white font-medium hover:text-white/80 transition-colors"
-              >
-                Login
-              </Link>
-              <Link
-                to="/register"
-                className="text-white font-medium hover:text-white/80 transition-colors"
-              >
-                Register
-              </Link>
+              {isLoading ? (
+                <span className="text-white/80 text-sm">Checking session...</span>
+              ) : isAuthenticated ? (
+                <>
+                  <span className="text-white/90 text-sm">
+                    Signed in as <span className="font-semibold">{username || 'User'}</span> ({roleLabel(role)})
+                  </span>
+                  <Link
+                    to={homeRouteForRole(role)}
+                    className="text-white font-medium hover:text-white/80 transition-colors"
+                  >
+                    Open Portal
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="text-white font-medium hover:text-white/80 transition-colors"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="text-white font-medium hover:text-white/80 transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="text-white font-medium hover:text-white/80 transition-colors"
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
             </nav>
           </div>
         </div>
@@ -54,6 +94,9 @@ export function LandingPage() {
             <p className="text-gray-600 mb-4 leading-relaxed">
               Submit clinical queries, receive AI-powered guidance based on NICE and BSR guidelines, and get specialist input when needed.
             </p>
+            <p className="text-sm text-gray-500 mb-3">
+              Access: GP or Admin accounts
+            </p>
             <span className="text-[#005eb8] font-medium group-hover:underline">
               Enter as GP →
             </span>
@@ -72,6 +115,9 @@ export function LandingPage() {
             </h2>
             <p className="text-gray-600 mb-4 leading-relaxed">
               Review AI-generated responses, provide expert oversight, and ensure accurate clinical guidance for GPs.
+            </p>
+            <p className="text-sm text-gray-500 mb-3">
+              Access: Specialist or Admin accounts
             </p>
             <span className="text-[#005eb8] font-medium group-hover:underline">
               Enter as Specialist →

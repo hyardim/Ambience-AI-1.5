@@ -16,6 +16,11 @@ services:
       - ./postgres_data:/var/lib/postgresql/data
     networks:
       - ambience_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d ambience_knowledge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # 2. Backend API: Handles Auth, Chats
   backend:
@@ -32,7 +37,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db_vector
+      db_vector:
+        condition: service_healthy
     networks:
       - ambience_net
 
@@ -64,6 +70,9 @@ services:
       - "3000:5173"  # ✅ Fixed: Maps Host 3000 -> Container 5173 (Vite default)
     volumes:
       - ./frontend/src:/app/src  # Hot reload for React
+      - ./frontend/vite.config.ts:/app/vite.config.ts  # Include vite config for hot reload
+    environment:
+      - DOCKER_ENV=true
     networks:
       - ambience_net
 
