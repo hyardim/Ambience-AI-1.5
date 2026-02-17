@@ -1,0 +1,20 @@
+# --- Core Framework ---
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+# --- Networking ---
+httpx
+requests
+
+# --- Database ---
+sqlalchemy
+psycopg2-binary
+
+# --- Authentication & Security ---
+passlib[bcrypt]
+bcrypt<4
+pyjwt                
+python-multipart
+email-validator
