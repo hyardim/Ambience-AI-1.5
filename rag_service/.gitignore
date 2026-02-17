@@ -17,6 +17,8 @@ ENV/
 env/
 my_env/
 .env
+.env.*
+!.env.example
 
 # Local Python dependency dump (vendored site-packages)
 pydeps/
@@ -38,7 +40,6 @@ Thumbs.db
 med42/
 data/*
 rag_data/*
-!rag_data/*.py
 *.safetensors
 *.bin
 *.pt
@@ -62,3 +63,4 @@ coverage.xml
 
 .ruff_cache/
 .pytest_cache/
+.mypy_cache/

@@ -26,10 +26,9 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
+      dockerfile: Dockerfile
     container_name: ambience_backend
     volumes:
-      # ✅ Fixed: Maps local 'src' to container's '/app/src' for hot-reloading
       - ./backend/src:/app/src
     environment:
       - PYTHONPATH=/app
@@ -46,14 +45,13 @@ services:
   rag_service:
     build:
       context: ./rag_service
-      dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
+      dockerfile: Dockerfile
     container_name: ambience_rag
     depends_on:
       - db_vector
     ports:
       - "8001:8001"
     volumes:
-      # ✅ Fixed: Maps local 'src' to container's '/app/src'
       - ./rag_service/src:/app/src
     environment:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
@@ -67,7 +65,7 @@ services:
     build: ./frontend
     container_name: ambience_frontend
     ports:
-      - "3000:5173"  # ✅ Fixed: Maps Host 3000 -> Container 5173 (Vite default)
+      - "3000:5173" 
     volumes:
       - ./frontend/src:/app/src  # Hot reload for React
       - ./frontend/vite.config.ts:/app/vite.config.ts  # Include vite config for hot reload

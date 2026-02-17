@@ -10,7 +10,7 @@ help:
 	@echo "  make db-reset      - Reset database"
 	@echo "  make test          - Run tests"
 	@echo "  make lint          - Run linter (ruff)"
-	@echo "  make format        - Format code (black)"
+	@echo "  make format        - Format code (ruff)"
 	@echo "  make type-check    - Run type checker (mypy)"
 	@echo "  make clean         - Clean cache and temp files"
 	@echo "  make run-ingest    - Run ingestion pipeline"
@@ -21,7 +21,6 @@ install:
 
 install-dev:
 	pip install -e ".[dev]"
-	pre-commit install
 
 setup:
 	mkdir -p data/raw data/processed logs
