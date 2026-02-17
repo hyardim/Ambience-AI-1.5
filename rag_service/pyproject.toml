@@ -1,5 +1,5 @@
 [project]
-name = "rag-project"
+name = "rag_service"
 version = "0.1.0"
 description = "RAG application with pgvector and sentence-transformers"
 requires-python = ">=3.10"
@@ -10,20 +10,20 @@ dependencies = [
     "python-pptx>=0.6.23",       # PowerPoint
     "openpyxl>=3.1.0",           # Excel files
     "markdown>=3.5",             # Markdown files
-    
+
     # Text Processing & Chunking
     "langchain-text-splitters>=0.2.2",  # Text chunking
     "tiktoken>=0.5.0",                  # Token counting
-    
+
     # Embeddings & ML
     "sentence-transformers==3.0.1",     # Embeddings
     "torch>=2.1.0",                     # PyTorch
     "numpy>=1.26.0",                    # Numpy
-    
+
     # Vector Stores
     "faiss-cpu>=1.7.4",                 # FAISS
     "pgvector>=0.2.4",                  # pgvector support
-    
+
     # Database
     "psycopg2-binary>=2.9.9",           # PostgreSQL
     "sqlalchemy>=2.0.0",                # SQLAlchemy ORM
@@ -32,7 +32,7 @@ dependencies = [
     # Configuration & Validation
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    
+
     # Utilities
     "python-dotenv>=1.0.1",             # .env files
     "tqdm>=4.66.0",                     # Progress bars
@@ -43,13 +43,12 @@ dev = [
     # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    
+
     # Code Quality
-    "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.7.0",
     "pre-commit>=3.5.0",
-    
+
     # Type stubs
     "types-tqdm>=4.66.0",
 ]
@@ -57,21 +56,6 @@ dev = [
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
-
-# Black - code formatter
-[tool.black]
-line-length = 88
-target-version = ['py310']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.venv
-  | venv
-  | build
-  | dist
-)/
-'''
 
 # Ruff - linter
 [tool.ruff]
@@ -100,6 +84,13 @@ ignore = []
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
+
+# Ruff formatter settings (replaces Black)
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 # MyPy - type checking
 [tool.mypy]

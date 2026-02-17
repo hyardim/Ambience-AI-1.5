@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -26,10 +26,12 @@ class DatabaseManager:
             port=self.config.port,
             database=self.config.database,
             user=self.config.user,
-            password=self.config.password
+            password=self.config.password,
         )
 
-    def execute_query(self, query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
+    def execute_query(
+        self, query: str, params: Optional[tuple] = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return results."""
         with self.get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -38,7 +40,7 @@ class DatabaseManager:
                     return [dict(row) for row in cursor.fetchall()]
                 return []
 
-    def execute_many(self, query: str, params_list: List[tuple]) -> None:
+    def execute_many(self, query: str, params_list: list[tuple]) -> None:
         """Execute a query multiple times with different parameters."""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:

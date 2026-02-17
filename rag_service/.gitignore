@@ -54,3 +54,11 @@ postgres_data/
 # Old code
 old_code/
 setup.md
+
+# coverage
+.coverage
+htmlcov/
+coverage.xml
+
+.ruff_cache/
+.pytest_cache/

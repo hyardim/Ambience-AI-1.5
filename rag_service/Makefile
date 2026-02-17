@@ -46,10 +46,13 @@ test:
 	pytest
 
 lint:
-	ruff check src/ tests/
+	ruff check src/ tests/ scripts/
+	ruff format --check src/ tests/ scripts/
+	mypy src/
 
 format:
-	black src/ tests/
+	ruff format src/ tests/ scripts/
+	ruff check src/ tests/ scripts/ --fix
 
 type-check:
 	mypy src/
