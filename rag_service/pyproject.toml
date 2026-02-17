@@ -47,7 +47,6 @@ dev = [
     # Code Quality
     "ruff>=0.1.0",
     "mypy>=1.7.0",
-    "pre-commit>=3.5.0",
 
     # Type stubs
     "types-tqdm>=4.66.0",
