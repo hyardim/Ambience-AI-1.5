@@ -1,6 +1,11 @@
 from pydoc import doc
 import fitz  # PyMuPDF
 from typing import Dict, List, Any, Tuple
+import logging
+
+
+# Configure logging for this module
+logger = logging.getLogger(__name__)
 
 class PDFExtractionError(Exception):
     """
