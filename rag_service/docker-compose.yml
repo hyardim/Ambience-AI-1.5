@@ -7,17 +7,19 @@ services:
     container_name: ambience_db
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: team20_password
-      POSTGRES_DB: ambience_knowledge
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
     networks:
       - ambience_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d ambience_knowledge"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,9 +32,11 @@ services:
     container_name: ambience_backend
     volumes:
       - ./backend/src:/app/src
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
-      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB}
     ports:
       - "8000:8000"
     depends_on:
@@ -48,14 +52,14 @@ services:
       dockerfile: Dockerfile
     container_name: ambience_rag
     depends_on:
-      - db_vector
+      db_vector:
+        condition: service_healthy
     ports:
       - "8001:8001"
     volumes:
       - ./rag_service/src:/app/src
     environment:
-      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
-      # Allow connection to host Ollama (Mac)
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
     networks:
       - ambience_net
@@ -67,8 +71,8 @@ services:
     ports:
       - "3000:5173" 
     volumes:
-      - ./frontend/src:/app/src  # Hot reload for React
-      - ./frontend/vite.config.ts:/app/vite.config.ts  # Include vite config for hot reload
+      - ./frontend/src:/app/src
+      - ./frontend/vite.config.ts:/app/vite.config.ts
     environment:
       - DOCKER_ENV=true
     networks:
