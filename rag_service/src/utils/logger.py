@@ -1,33 +1,44 @@
 import logging
 import sys
+from pathlib import Path
 
-from ..config import config
+from ..config import logging_config
 
 
 def setup_logger(name: str = __name__) -> logging.Logger:
-    """Set up logger with file and console handlers."""
+    """Get a logger for a given module."""
     logger = logging.getLogger(name)
-    logger.setLevel(config.log_level)
+
 
     # Avoid duplicate handlers
     if logger.handlers:
         return logger
 
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(config.log_level)
+    logger.setLevel(logging_config.log_level)
+
     console_format = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
+    file_format = logging.Formatter(
+        fmt=(
+            "%(asctime)s | %(levelname)-8s | %(name)s | "
+            "%(filename)s:%(lineno)d | %(message)s"
+        ),
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Console handler - uses configured log level
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging_config.log_level)
     console_handler.setFormatter(console_format)
 
-    # File handler
-    config.log_file.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(config.log_file)
+    # File handler - always DEBUG for full verbosity
+    log_path = Path(logging_config.log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(log_path)
     file_handler.setLevel(logging.DEBUG)
-    file_format = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
-    )
+
     file_handler.setFormatter(file_format)
 
     logger.addHandler(console_handler)
