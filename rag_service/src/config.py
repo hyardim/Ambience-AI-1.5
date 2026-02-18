@@ -77,7 +77,6 @@ class PathConfig:
         self.logs: Path = self.root / "logs"
 
 
-# Instantiate once, import anywhere
 db_config = DatabaseConfig()
 embed_config = EmbeddingConfig()
 chunk_config = ChunkingConfig()

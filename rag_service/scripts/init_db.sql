@@ -1,21 +1,44 @@
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Create documents table
+-- Documents table: one row per source PDF
 CREATE TABLE IF NOT EXISTS documents (
-    id SERIAL PRIMARY KEY,
-    content TEXT NOT NULL,
-    embedding vector(1536),
-    metadata JSONB,
-    source VARCHAR(255),
-    section VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id              SERIAL PRIMARY KEY,
+    filename        TEXT NOT NULL,
+    specialty       TEXT NOT NULL,
+    publisher       TEXT NOT NULL,
+    file_path       TEXT NOT NULL UNIQUE,
+    total_pages     INTEGER,
+    total_chunks    INTEGER DEFAULT 0,
+    ingested_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata        JSONB DEFAULT '{}'
 );
 
--- Create index for vector similarity search
-CREATE INDEX IF NOT EXISTS documents_embedding_idx
-ON documents USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
+-- Chunks table: one row per text chunk
+CREATE TABLE IF NOT EXISTS chunks (
+    id              SERIAL PRIMARY KEY,
+    document_id     INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    chunk_index     INTEGER NOT NULL,
+    content         TEXT NOT NULL,
+    embedding       vector(384),
+    page_number     INTEGER,
+    section_title   TEXT,
+    chunk_type      TEXT,
+    token_count     INTEGER,
+    metadata        JSONB DEFAULT '{}',
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- Create index for metadata queries
-CREATE INDEX IF NOT EXISTS documents_metadata_idx ON documents USING GIN (metadata);
+-- HNSW index for fast vector similarity search
+CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw_idx
+    ON chunks
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+-- Index for fast document lookups
+CREATE INDEX IF NOT EXISTS chunks_document_id_idx
+    ON chunks (document_id);
+
+-- GIN index for metadata queries
+CREATE INDEX IF NOT EXISTS chunks_metadata_idx
+    ON chunks USING GIN (metadata);
