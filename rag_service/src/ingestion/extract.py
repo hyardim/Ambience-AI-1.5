@@ -51,7 +51,15 @@ def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
     pdf_path = str(pdf_path)
 
     try:
-        with _open_pdf(pdf_path):
+        with _open_pdf(pdf_path) as doc:
+            if doc.page_count == 0:
+                logger.warning(f"PDF has zero pages: {pdf_path}")
+                return {
+                    "source_path": pdf_path,
+                    "num_pages": 0,
+                    "needs_ocr": False,
+                    "pages": [],
+                }
             pass
 
     except PDFExtractionError:
