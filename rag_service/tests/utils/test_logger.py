@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -55,8 +56,11 @@ class TestSetupLogger:
         logger = setup_logger()
         assert isinstance(logger, logging.Logger)
 
-    def test_log_file_created(self, tmp_path: pytest.TempPathFactory) -> None:
-        logger = setup_logger("test.logfile")
+    def test_log_file_created(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LOG_FILE", str(tmp_path / "test.log"))
+        logger = setup_logger("test.logfile.tmp")
         file_handler = next(
             h for h in logger.handlers if isinstance(h, logging.FileHandler)
         )
