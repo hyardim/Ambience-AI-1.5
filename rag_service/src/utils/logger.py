@@ -9,7 +9,6 @@ def setup_logger(name: str = __name__) -> logging.Logger:
     """Get a logger for a given module."""
     logger = logging.getLogger(name)
 
-
     # Avoid duplicate handlers
     if logger.handlers:
         return logger

@@ -2,9 +2,8 @@ import psycopg2
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from utils.logger import setup_logger
-
 from ..config import db_config
+from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
