@@ -7,4 +7,6 @@ COPY src /app/src
 RUN pip install --no-cache-dir -e .
 
 ENV PYTHONPATH=/app
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["python", "-m", "http.server", "8001"]
+# TODO: update once src/main.py is created with FastAPI app
+# CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
