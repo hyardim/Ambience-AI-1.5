@@ -63,8 +63,8 @@ clean:
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf htmlcov/ .coverage
 
-run-ingest:
-	python scripts/ingest.py
+# run-ingest:
+# 	python scripts/ingest.py
 
-run-query:
-	python scripts/query.py
+# run-query:
+# 	python scripts/query.py
