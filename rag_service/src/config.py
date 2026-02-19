@@ -9,6 +9,7 @@ class DatabaseConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     postgres_host: str = Field(default="localhost")
@@ -30,6 +31,7 @@ class EmbeddingConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     embedding_model: str = Field(default="all-MiniLM-L6-v2")
@@ -41,6 +43,7 @@ class ChunkingConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     chunk_size: int = Field(default=450)
@@ -52,6 +55,7 @@ class VectorIndexConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     hnsw_m: int = Field(default=16)
@@ -63,6 +67,7 @@ class LoggingConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     log_level: str = Field(default="INFO")
