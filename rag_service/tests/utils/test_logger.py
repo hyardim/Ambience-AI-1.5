@@ -26,16 +26,14 @@ class TestSetupLogger:
     def test_console_handler_exists(self) -> None:
         logger = setup_logger("test.console")
         stream_handlers = [
-            h for h in logger.handlers
-            if type(h) is logging.StreamHandler
+            h for h in logger.handlers if type(h) is logging.StreamHandler
         ]
         assert len(stream_handlers) == 1
 
     def test_file_handler_exists(self) -> None:
         logger = setup_logger("test.file")
         file_handlers = [
-            h for h in logger.handlers
-            if isinstance(h, logging.FileHandler)
+            h for h in logger.handlers if isinstance(h, logging.FileHandler)
         ]
         assert len(file_handlers) == 1
 
