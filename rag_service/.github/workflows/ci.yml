@@ -79,4 +79,5 @@ jobs:
           CHUNK_SIZE: 450
           CHUNK_OVERLAP: 100
           LOG_LEVEL: INFO
+          LOG_FILE: logs/rag.log
         run: pytest --cov=src --cov-report=term --cov-fail-under=90
