@@ -47,6 +47,7 @@ rag_data/*
 .cache/huggingface/
 postgres_data/
 .mypy_cache/
+.pytest_cache/
 .coverage
 htmlcov/
 
