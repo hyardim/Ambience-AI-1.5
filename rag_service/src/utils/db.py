@@ -1,5 +1,10 @@
+from __future__ import annotations
+
+from typing import cast
+
 import psycopg2
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import db_config
@@ -16,21 +21,33 @@ class DatabaseManager:
     """
 
     def __init__(self) -> None:
-        self.engine = create_engine(
-            db_config.connection_string,
-            pool_pre_ping=True,
-            pool_size=5,
-            max_overflow=10,
-        )
-        self.SessionLocal = sessionmaker(
-            bind=self.engine,
-            autocommit=False,
-            autoflush=False,
-        )
+        self._engine: Engine | None = None
+        self._session_local: sessionmaker | None = None  # type: ignore[type-arg]
+
+    @property
+    def engine(self) -> Engine:
+        if self._engine is None:
+            self._engine = create_engine(
+                db_config.connection_string,
+                pool_pre_ping=True,
+                pool_size=5,
+                max_overflow=10,
+            )
+        return self._engine
+
+    @property
+    def SessionLocal(self) -> sessionmaker:  # type: ignore[type-arg]
+        if self._session_local is None:
+            self._session_local = sessionmaker(
+                bind=self.engine,
+                autocommit=False,
+                autoflush=False,
+            )
+        return self._session_local
 
     def get_session(self) -> Session:
         """Get a SQLAlchemy session for standard operations."""
-        return self.SessionLocal()
+        return cast(Session, self.SessionLocal())
 
     def get_raw_connection(self) -> psycopg2.extensions.connection:
         """Get a raw psycopg2 connection for vector search queries."""
@@ -54,5 +71,5 @@ class DatabaseManager:
             return False
 
 
-# Global instance - import and use anywhere
+# Global instance - engine is only created when first accessed
 db = DatabaseManager()
