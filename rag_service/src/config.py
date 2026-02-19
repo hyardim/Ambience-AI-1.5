@@ -15,7 +15,7 @@ class DatabaseConfig(BaseSettings):
     postgres_host: str = Field(default="localhost")
     postgres_port: int = Field(default=5432)
     postgres_user: str = Field(default="admin")
-    postgres_password: str = Field(default="")
+    postgres_password: str = Field(default="password")
     postgres_db: str = Field(default="ambience_knowledge")
 
     @property
