@@ -13,8 +13,8 @@ help:
 	@echo "  make format        - Format code (ruff)"
 	@echo "  make type-check    - Run type checker (mypy)"
 	@echo "  make clean         - Clean cache and temp files"
-	@echo "  make run-ingest    - Run ingestion pipeline"
-	@echo "  make run-query     - Run RAG query"
+# 	@echo "  make run-ingest    - Run ingestion pipeline"
+# 	@echo "  make run-query     - Run RAG query"
 
 install:
 	pip install -e .
@@ -24,7 +24,7 @@ install-dev:
 
 setup:
 	mkdir -p data/raw data/processed logs
-	cp .env.example .env
+	[ ! -f .env ] && cp .env.example .env || echo ".env already exists, skipping"
 	@echo "Setup complete! Edit .env with your configuration"
 
 db-up:
