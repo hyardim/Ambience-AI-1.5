@@ -49,6 +49,7 @@ dev = [
 
     # Type stubs
     "types-tqdm>=4.66.0",
+    "types-psycopg2>=2.9.0",
 ]
 
 [build-system]
@@ -97,6 +98,7 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
+mypy_path = "src"
 
 # Pytest
 [tool.pytest.ini_options]
