@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # 1. The Vector Database
+  db_vector:
+    image: pgvector/pgvector:pg16
+    container_name: ambience_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    networks:
+      - ambience_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Backend API: Handles Auth, Chats
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ambience_backend
+    volumes:
+      - ./backend/src:/app/src
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db_vector:
+        condition: service_healthy
+    networks:
+      - ambience_net
+
+  # 3. RAG Service: AI Engine (Ollama/Med42)
+  rag_service:
+    build:
+      context: ./rag_service
+      dockerfile: Dockerfile
+    container_name: ambience_rag
+    depends_on:
+      db_vector:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./rag_service/src:/app/src
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    networks:
+      - ambience_net
+
+  # 4. Frontend: The React UI
+  frontend:
+    build: ./frontend
+    container_name: ambience_frontend
+    ports:
+      - "3000:5173" 
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    environment:
+      - DOCKER_ENV=true
+    networks:
+      - ambience_net
+
+networks:
+  ambience_net:
+    driver: bridge

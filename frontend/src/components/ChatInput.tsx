@@ -45,7 +45,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
           ))}
         </div>
       )}
-      
+
       <div className="flex items-center gap-2 sm:gap-3">
         <input
           type="text"
@@ -55,7 +55,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
           disabled={disabled}
           className="flex-1 px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
         />
-        
+
         <input
           type="file"
           ref={fileInputRef}
@@ -63,7 +63,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
           multiple
           className="hidden"
         />
-        
+
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -72,7 +72,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
         >
           <Paperclip className="w-5 h-5" />
         </button>
-        
+
         <button
           type="submit"
           disabled={disabled || (!message.trim() && files.length === 0)}
@@ -80,7 +80,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
         >
           <Send className="w-5 h-5" />
         </button>
-        
+
         <button
           type="button"
           className="p-3 text-gray-500 hover:text-[#005eb8] hover:bg-gray-100 rounded-lg transition-colors"

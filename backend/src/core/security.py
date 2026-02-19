@@ -20,12 +20,15 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # --- OAuth2 Setup ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+
 # --- 1. Password Functions ---
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password):
     return pwd_context.hash(password)
+
 
 # --- 2. Token Creation ---
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -33,14 +36,17 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+
     # "sub" (subject) is a standard JWT claim for the username/ID
     # PyJWT expects the 'exp' claim to be a standard unix timestamp or datetime
     to_encode.update({"exp": expire})
-    
+
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
 
 # --- 3. Dependency: Get Current User ---
 async def get_current_user(token: str = Depends(oauth2_scheme)):

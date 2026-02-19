@@ -15,6 +15,6 @@ psycopg2-binary
 # --- Authentication & Security ---
 passlib[bcrypt]
 bcrypt<4
-pyjwt                
+pyjwt
 python-multipart
 email-validator

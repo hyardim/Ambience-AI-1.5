@@ -46,6 +46,10 @@ rag_data/*
 .cache/
 .cache/huggingface/
 postgres_data/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Editor settings
 .vscode/

@@ -1,0 +1,119 @@
+[project]
+name = "rag_service"
+version = "0.1.0"
+description = "RAG application with pgvector and sentence-transformers"
+requires-python = ">=3.10"
+dependencies = [
+    # Document Loading
+    "pymupdf==1.24.10",          # PDF extraction
+    "python-docx>=1.1.0",        # Word documents
+    "python-pptx>=0.6.23",       # PowerPoint
+    "openpyxl>=3.1.0",           # Excel files
+    "markdown>=3.5",             # Markdown files
+
+    # Text Processing & Chunking
+    "langchain-text-splitters>=0.2.2",  # Text chunking
+    "tiktoken>=0.5.0",                  # Token counting
+
+    # Embeddings & ML
+    "sentence-transformers==3.0.1",     # Embeddings
+    "torch>=2.1.0",                     # PyTorch
+    "numpy>=1.26.0",                    # Numpy
+
+    # Vector Stores
+    "pgvector>=0.2.4",                  # pgvector support
+
+    # Database
+    "psycopg2-binary>=2.9.9",           # PostgreSQL
+    "sqlalchemy>=2.0.0",                # SQLAlchemy ORM
+    "alembic>=1.13.0",                  # Database migrations
+
+    # Configuration & Validation
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+
+    # Utilities
+    "python-dotenv>=1.0.1",             # .env files
+    "tqdm>=4.66.0",                     # Progress bars
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+
+    # Code Quality
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+
+    # Type stubs
+    "types-tqdm>=4.66.0",
+    "types-psycopg2>=2.9.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+# Ruff - linter
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+# Ruff formatter settings (replaces Black)
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# MyPy - type checking
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+# Pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "--cov=src --cov-report=html --cov-report=term"
+
+# Coverage
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "**/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]

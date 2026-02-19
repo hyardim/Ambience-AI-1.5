@@ -59,7 +59,7 @@ export function GPQueriesPage() {
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
       <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
-      
+
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
