@@ -1,34 +1,225 @@
-# Ambience-AI-1.5
+# RAG Service — Ambience AI 1.5
 
-**A Specialized Clinical Decision Support System for Rheumatology & Neurology.**
+A production-ready Retrieval-Augmented Generation (RAG) service for medical guidelines. Ingests PDFs from sources like NICE and BSR, chunks and embeds them, stores vectors in pgvector, and serves semantically relevant context for AI-generated clinical responses with proper citations.
 
-## 📖 Project Overview
+---
 
-This project implements a **Microservices-based Retrieval-Augmented Generation (RAG)** system designed to assist clinicians with accurate, guideline-backed answers. Unlike generic chatbots, this system functions as a "hyper-tuned" medical specialist. It decouples application logic from high-performance inference to ensure scalability and clinical safety.
+## Architecture
 
-The core logic is orchestrated by **LangChain**, which retrieves context from a curated **Vector Database (Digital Library)** of UK clinical guidelines. This context is processed by **MED-42**, a specialized Large Language Model (LLM) fine-tuned for medical reasoning. The inference engine runs exclusively on the **Intel Gaudi 2 (Habana HPU)** accelerator using the SynapseAI stack, providing high-throughput, low-latency token generation.
+```
+src/
+├── ingestion/      # PDF extraction, chunking, embedding, storage
+├── retrieval/      # Vector similarity search, context ranking
+├── generation/     # LLM integration, response generation, citations
+└── utils/          # Shared database and logging utilities
+```
 
-## 🏗️ Technical Architecture
+The pipeline flows in one direction:
 
-The system follows a decoupled microservices topology:
+```
+PDF → Extract → Clean → Chunk → Embed → Store → Retrieve → Generate
+```
 
-* **Orchestrator (LangChain):** Acts as the central controller (CPU-bound). It handles prompt engineering, tool selection, and conversation memory.
-* **Digital Library (Vector DB):** Stores high-dimensional embeddings of Rheumatology and Neurology clinical guidelines for semantic retrieval.
-* **Neural Engine (Intel Gaudi 2):** A dedicated inference service running **Hugging Face TGI** on the Habana SynapseAI stack. This service executes the **MED-42** model.
-* **Safety Layer:** Implements automated "Red Teaming" and strict output validation to minimize hallucination and ensure clinical disclaimer compliance.
+---
 
-## ⚡ Hardware & Stack
+## Tech Stack
 
-| Component | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Hardware** | **Intel Gaudi 2 (HPU)** | Dedicated ASIC for accelerated tensor operations. |
-| **Driver Stack** | **SynapseAI** | Habana's software stack replacing standard CUDA libraries. |
-| **Model** | **MED-42** | "Hyper-tuned" Llama-based model for clinical reasoning. |
-| **Framework** | **LangChain** | Application orchestration and RAG logic. |
+| Component        | Technology                          |
+|-----------------|-------------------------------------|
+| Vector Database | PostgreSQL + pgvector (HNSW index)  |
+| Embeddings      | sentence-transformers (MiniLM-L6)   |
+| ORM             | SQLAlchemy                          |
+| Raw DB queries  | psycopg2 (vector search)            |
+| Config          | pydantic-settings                   |
+| PDF Extraction  | PyMuPDF                             |
+| Chunking        | langchain-text-splitters            |
 
-## 🎯 Key Features
+---
 
-* **Domain Specific:** Hyper-tuned specifically for **Rheumatology** and **Neurology** queries.
-* **Grounded Generation:** Every response is grounded in retrieved text chunks from verified PDF guidelines (RAG).
-* **HPU Accelerated:** Optimized for the unique memory architecture of the Habana Gaudi 2.
-* **Clinical Safety:** Includes adversarial defense mechanisms and mandatory disclaimer injection.
+## Getting Started
+
+### Prerequisites
+- Python 3.10+
+- Docker + Docker Compose
+
+### Setup
+
+```bash
+# 1. Clone the repo and navigate to rag_service
+cd rag_service
+
+# 2. Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+make install-dev
+
+# 4. Set up environment and directories
+make setup
+# Edit .env with your configuration
+
+# 5. Start the database
+make db-up
+```
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```env
+# Database
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=your_password
+POSTGRES_DB=ambience_knowledge
+
+# Embeddings
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+EMBEDDING_DIMENSION=384
+
+# Chunking
+CHUNK_SIZE=450
+CHUNK_OVERLAP=100
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FILE=logs/rag.log
+```
+
+---
+
+## Development
+
+### Common Commands
+
+```bash
+make install-dev    # Install all dependencies including dev tools
+make db-up          # Start postgres database
+make db-down        # Stop database
+make db-reset       # Wipe and restart database
+make format         # Auto-fix formatting and imports (ruff)
+make lint           # Run ruff + mypy
+make test           # Run tests with coverage report
+make run-ingest     # Run ingestion pipeline
+make run-query      # Run RAG query
+```
+
+### Before Every Commit
+
+```bash
+make format
+make lint
+make test
+```
+
+All three must pass before pushing.
+
+---
+
+## Database Schema
+
+### `documents`
+One row per ingested PDF.
+
+| Column        | Type      | Description                        |
+|--------------|-----------|------------------------------------|
+| id           | SERIAL    | Primary key                        |
+| filename     | TEXT      | Original PDF filename              |
+| specialty    | TEXT      | Medical specialty (e.g. neurology) |
+| publisher    | TEXT      | Source (e.g. NICE, BSR)            |
+| file_path    | TEXT      | Path to source PDF                 |
+| total_pages  | INTEGER   | Page count                         |
+| total_chunks | INTEGER   | Number of chunks generated         |
+| ingested_at  | TIMESTAMP | Ingestion timestamp                |
+| metadata     | JSONB     | Additional document metadata       |
+
+### `chunks`
+One row per text chunk with its embedding.
+
+| Column        | Type        | Description                      |
+|--------------|-------------|----------------------------------|
+| id           | SERIAL      | Primary key                      |
+| document_id  | INTEGER     | Foreign key to documents         |
+| chunk_index  | INTEGER     | Position within document         |
+| content      | TEXT        | Chunk text                       |
+| embedding    | vector(384) | Sentence embedding               |
+| page_number  | INTEGER     | Source page                      |
+| section_title| TEXT        | Section heading                  |
+| chunk_type   | TEXT        | Type of content                  |
+| token_count  | INTEGER     | Token count                      |
+| metadata     | JSONB       | Additional chunk metadata        |
+
+---
+
+## Data Directory Structure
+
+```
+data/
+├── raw/
+│   ├── rheumatology/
+│   │   ├── NICE/
+│   │   └── BSR/
+│   └── neurology/
+│       ├── NICE/
+│       └── BSR/
+└── processed/
+```
+
+---
+
+## Testing
+
+```bash
+make test
+```
+
+Tests are in `tests/` mirroring the `src/` structure. Coverage is enforced at 90% minimum in CI.
+
+```
+tests/
+├── ingestion/
+├── retrieval/
+└── generation/
+```
+
+---
+
+## CI/CD
+
+GitHub Actions runs on every PR and push to `main`:
+
+1. Ruff lint
+2. Ruff format check
+3. MyPy type check
+4. Pytest with coverage
+
+PRs cannot be merged unless all checks pass.
+
+---
+
+## Project Structure
+
+```
+rag_service/
+├── .github/workflows/ci.yml   # CI pipeline
+├── .vscode/settings.json      # VS Code config
+├── data/                      # Raw and processed documents
+├── logs/                      # Runtime logs
+├── scripts/
+│   └── init_db.sql            # Database schema
+├── src/
+│   ├── config.py              # Pydantic settings
+│   ├── generation/            # LLM + response generation
+│   ├── ingestion/             # PDF pipeline
+│   ├── retrieval/             # Vector search
+│   └── utils/
+│       ├── db.py              # Database manager
+│       └── logger.py          # Logging setup
+├── tests/                     # Test suite
+├── docker-compose.yml
+├── Dockerfile
+├── Makefile
+└── pyproject.toml
+```
