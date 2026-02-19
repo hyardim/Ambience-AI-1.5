@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import fitz  # PyMuPDF
@@ -13,6 +14,51 @@ class PDFExtractionError(Exception):
     """Raised when PDF extraction fails."""
 
     pass
+
+def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
+    """
+    Extract text blocks from a PDF in reading order with font metadata.
+
+    Args:
+        pdf_path: Path to the PDF file (str or Path)
+
+    Returns:
+        dict: RawDocument with structure:
+            {
+                "source_path": str,
+                "num_pages": int,
+                "needs_ocr": bool,
+                "pages": [
+                    {
+                        "page_number": int,  # 1-indexed
+                        "blocks": [
+                            {
+                                "block_id": int,
+                                "text": str,
+                                "bbox": [x0, y0, x1, y1],
+                                "font_size": float,
+                                "font_name": str,
+                                "is_bold": bool,
+                            }
+                        ]
+                    }
+                ]
+            }
+
+    Raises:
+        PDFExtractionError: If PDF cannot be opened or is corrupted
+    """
+    pdf_path = str(pdf_path)
+
+    try:
+        with _open_pdf(pdf_path):
+            pass
+
+    except PDFExtractionError:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to extract PDF {pdf_path}: {e}")
+        raise PDFExtractionError(f"Failed to open PDF: {e}") from e
 
 
 def _open_pdf(pdf_path: str) -> fitz.Document:
