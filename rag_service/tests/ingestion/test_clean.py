@@ -261,3 +261,44 @@ class TestIsHeaderFooterBlock:
     def test_empty_patterns_returns_false(self) -> None:
         block = make_block("any text")
         assert _is_header_footer_block(block, set()) is False
+
+
+# -----------------------------------------------------------------------
+# _remove_duplicate_pages
+# -----------------------------------------------------------------------
+
+class TestRemoveDuplicatePages:
+    def test_duplicate_page_removed(self) -> None:
+        page1 = make_page(1, blocks=[make_block("Same content")])
+        page2 = make_page(2, blocks=[make_block("Same content")])
+        unique, removed = _remove_duplicate_pages([page1, page2])
+        assert removed == 1
+        assert len(unique) == 1
+        assert unique[0]["page_number"] == 1
+
+    def test_unique_pages_kept(self) -> None:
+        pages = [
+            make_page(1, blocks=[make_block("Content A")]),
+            make_page(2, blocks=[make_block("Content B")]),
+            make_page(3, blocks=[make_block("Content C")]),
+        ]
+        unique, removed = _remove_duplicate_pages(pages)
+        assert removed == 0
+        assert len(unique) == 3
+
+    def test_three_duplicates_keeps_first(self) -> None:
+        pages = [make_page(i, blocks=[make_block("Same")]) for i in range(1, 4)]
+        unique, removed = _remove_duplicate_pages(pages)
+        assert removed == 2
+        assert unique[0]["page_number"] == 1
+
+    def test_empty_pages(self) -> None:
+        unique, removed = _remove_duplicate_pages([])
+        assert removed == 0
+        assert unique == []
+
+    def test_slightly_different_pages_kept(self) -> None:
+        page1 = make_page(1, blocks=[make_block("Content A")])
+        page2 = make_page(2, blocks=[make_block("Content B")])
+        unique, removed = _remove_duplicate_pages([page1, page2])
+        assert removed == 0
