@@ -242,3 +242,22 @@ class TestRemoveRepeatedHeadersFooters:
         cleaned, removed = _remove_repeated_headers_footers([], num_pages=0)
         assert removed == 0
         assert cleaned == []
+
+# -----------------------------------------------------------------------
+# _is_header_footer_block
+# -----------------------------------------------------------------------
+
+class TestIsHeaderFooterBlock:
+    def test_matching_pattern_returns_true(self) -> None:
+        block = make_block("bsr guidelines", bbox=[10.0, 20.0, 500.0, 40.0])
+        patterns = {("bsr guidelines", 20)}
+        assert _is_header_footer_block(block, patterns) is True
+
+    def test_non_matching_pattern_returns_false(self) -> None:
+        block = make_block("some content", bbox=[10.0, 400.0, 500.0, 420.0])
+        patterns = {("bsr guidelines", 20)}
+        assert _is_header_footer_block(block, patterns) is False
+
+    def test_empty_patterns_returns_false(self) -> None:
+        block = make_block("any text")
+        assert _is_header_footer_block(block, set()) is False
