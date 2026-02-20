@@ -323,3 +323,47 @@ class TestIsPipeTableBlock:
     def test_empty_string_not_table(self) -> None:
         assert _is_pipe_table_block("") is False
 
+# -----------------------------------------------------------------------
+# detect_tables_with_pymupdf
+# -----------------------------------------------------------------------
+
+class TestDetectTablesWithPymupdf:
+    def test_basic_table_detected(self) -> None:
+        cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
+        fitz_table = make_fitz_table(cells)
+        fitz_page = make_fitz_page(tables=[fitz_table])
+        fitz_doc = make_fitz_doc(pages=[fitz_page], page_count=1)
+
+        with patch("src.ingestion.table_detect.fitz.open", return_value=fitz_doc):
+            result = detect_tables_with_pymupdf("test.pdf", page_num=1)
+
+        assert len(result) == 1
+        assert result[0]["cells"] == cells
+        assert result[0]["page_number"] == 1
+
+    def test_no_tables_returns_empty(self) -> None:
+        fitz_page = make_fitz_page(tables=[])
+        fitz_doc = make_fitz_doc(pages=[fitz_page], page_count=1)
+
+        with patch("src.ingestion.table_detect.fitz.open", return_value=fitz_doc):
+            result = detect_tables_with_pymupdf("test.pdf", page_num=1)
+
+        assert result == []
+
+    def test_page_out_of_range_returns_empty(self) -> None:
+        fitz_doc = make_fitz_doc(page_count=1)
+
+        with patch("src.ingestion.table_detect.fitz.open", return_value=fitz_doc):
+            result = detect_tables_with_pymupdf("test.pdf", page_num=99)
+
+        assert result == []
+
+    def test_exception_returns_empty(self) -> None:
+        with patch(
+            "src.ingestion.table_detect.fitz.open",
+            side_effect=Exception("file error"),
+        ):
+            result = detect_tables_with_pymupdf("missing.pdf", page_num=1)
+
+        assert result == []
+
