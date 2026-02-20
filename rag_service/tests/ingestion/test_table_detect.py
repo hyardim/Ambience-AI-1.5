@@ -300,3 +300,26 @@ class TestFindTableCaption:
         result = find_table_caption(table_bbox, blocks)
         assert result is None
 
+# -----------------------------------------------------------------------
+# _is_pipe_table_block
+# -----------------------------------------------------------------------
+
+class TestIsPipeTableBlock:
+    def test_pipe_table_detected(self) -> None:
+        text = "| Drug | Dose | Freq |\n| MTX | 7.5 | Weekly |"
+        assert _is_pipe_table_block(text) is True
+
+    def test_single_pipe_line_not_table(self) -> None:
+        text = "| Drug | Dose | Freq |"
+        assert _is_pipe_table_block(text) is False
+
+    def test_few_pipes_not_table(self) -> None:
+        text = "a | b\nc | d"
+        assert _is_pipe_table_block(text) is False
+
+    def test_normal_text_not_table(self) -> None:
+        assert _is_pipe_table_block("Normal paragraph text here.") is False
+
+    def test_empty_string_not_table(self) -> None:
+        assert _is_pipe_table_block("") is False
+
