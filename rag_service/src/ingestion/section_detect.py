@@ -90,6 +90,50 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
             elif heading_type == "fontsize":
                 n_fontsize += 1
 
+    # Build section paths across all pages in order
+    section_stack: list[str] = []
+    sample_paths: list[list[str]] = []
+
+    for page in pages:
+        for block in page["blocks"]:
+            text = block.get("text", "").strip()
+
+            if not text:
+                block["section_path"] = section_stack.copy() if section_stack else ["Unknown"]
+                block["section_title"] = section_stack[-1] if section_stack else "Unknown"
+                block["include_in_chunks"] = False
+                continue
+
+            if block["is_heading"]:
+                level = block["heading_level"]
+                clean_text = block["_clean_heading_text"] or text
+
+                while len(section_stack) >= level:
+                    section_stack.pop()
+
+                section_stack.append(clean_text)
+                block["section_path"] = section_stack.copy()
+                block["section_title"] = section_stack[-1]
+                block["include_in_chunks"] = False  # headings are structure not content
+
+            else:
+                block["section_path"] = section_stack.copy() if section_stack else ["Unknown"]
+                block["section_title"] = section_stack[-1] if section_stack else "Unknown"
+                excluded = is_excluded_section(block["section_title"])
+                block["include_in_chunks"] = not excluded
+                if excluded:
+                    n_excluded += 1
+
+            if len(sample_paths) < 5 and block["section_path"] != ["Unknown"]:
+                sample_paths.append(block["section_path"])
+
+            # Clean up internal field
+            block.pop("_clean_heading_text", None)
+            block.pop("heading_type", None)
+
+
+
+
 def _detect_heading(
     block: dict[str, Any],
     text: str,
