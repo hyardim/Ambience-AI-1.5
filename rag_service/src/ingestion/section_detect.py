@@ -69,6 +69,18 @@ def _detect_heading(
     """
     pass
 
+def _compute_page_median_font_size(blocks: list[dict[str, Any]]) -> float:
+    """Compute median font size for a page from blocks with font_size > 0.
+
+    Args:
+        blocks: List of block dicts
+
+    Returns:
+        Median font size, or 0.0 if no valid font sizes
+    """
+    sizes = [b["font_size"] for b in blocks if b.get("font_size", 0) > 0]
+    return float(median(sizes)) if sizes else 0.0
+
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
 
