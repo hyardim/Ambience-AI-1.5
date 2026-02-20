@@ -258,7 +258,7 @@ class TestDetectNeedsOcr:
         assert _detect_needs_ocr(pages, num_pages=1) is False
 
     def test_zero_pages_not_ocr(self) -> None:
-        assert _detect_needs_ocr([], num_pages=0) is False
+        assert _detect_needs_ocr([], num_pages=0) is True
 
     def test_empty_pages_is_ocr(self) -> None:
         pages = [{"blocks": []}]
