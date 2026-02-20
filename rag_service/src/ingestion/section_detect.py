@@ -69,7 +69,6 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
             if not text:
                 block["is_heading"] = False
                 block["heading_level"] = None
-                block["heading_type"] = None
                 continue
 
             # Rule priority: numbered > allcaps > bold > fontsize
