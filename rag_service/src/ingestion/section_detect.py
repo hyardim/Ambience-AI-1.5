@@ -29,6 +29,29 @@ EXCLUDED_SECTIONS = {
 BULLET_PATTERN = re.compile(r"^[-•\d]")
 NUMBERED_HEADING_PATTERN = re.compile(r"^(\d+(\.\d+)*\.?)\s+([A-Z][a-zA-Z\s]{2,})$")
 
+def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
+    """
+    Detect headings and assign section metadata to all blocks.
+
+    Args:
+        clean_doc: CleanDocument dict from clean_text.py
+
+    Returns:
+        dict: SectionedDocument with added fields per block:
+            - is_heading: bool
+            - heading_level: int | None
+            - section_path: list[str]
+            - section_title: str
+            - include_in_chunks: bool
+
+    Processing steps:
+        1. Detect heading candidates using priority-ordered rules
+        2. Assign heading levels
+        3. Build section paths using stack algorithm
+        4. Mark excluded sections (authors, references)
+    """
+    pass
+
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
 
