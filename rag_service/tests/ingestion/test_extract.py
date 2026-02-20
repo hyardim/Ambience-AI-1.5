@@ -96,3 +96,40 @@ class TestDetectColumns:
 
     def test_empty_blocks(self) -> None:
         assert _detect_columns([], page_width=595.0) == 1
+
+# -----------------------------------------------------------------------
+# _sort_blocks
+# -----------------------------------------------------------------------
+
+class TestSortBlocks:
+    def test_single_column_top_to_bottom(self) -> None:
+        blocks = [
+            {"bbox": [10, 100, 200, 120]},
+            {"bbox": [10, 20, 200, 40]},
+            {"bbox": [10, 60, 200, 80]},
+        ]
+        sorted_b = _sort_blocks(blocks, page_width=595.0)
+        y_positions = [b["bbox"][1] for b in sorted_b]
+        assert y_positions == sorted(y_positions)
+
+    def test_two_column_left_before_right(self) -> None:
+        blocks = [
+            {"bbox": [310, 10, 500, 30]},
+            {"bbox": [10, 10, 200, 30]},
+            {"bbox": [310, 50, 500, 70]},
+            {"bbox": [10, 50, 200, 70]},
+        ]
+        sorted_b = _sort_blocks(blocks, page_width=595.0)
+        assert sorted_b[0]["bbox"][0] == 10
+        assert sorted_b[1]["bbox"][0] == 10
+        assert sorted_b[2]["bbox"][0] == 310
+        assert sorted_b[3]["bbox"][0] == 310
+
+    def test_left_to_right_same_row(self) -> None:
+        blocks = [
+            {"bbox": [300, 10, 500, 30]},
+            {"bbox": [10, 10, 200, 30]},
+        ]
+        sorted_b = _sort_blocks(blocks, page_width=595.0)
+        assert sorted_b[0]["bbox"][0] == 10
+
