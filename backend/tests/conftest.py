@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from src.db.base import Base
 from src.db.session import get_db
@@ -18,12 +19,15 @@ from src.api import auth, chats
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine (no file, no external service required)
+# StaticPool forces all sessions to reuse the same connection so that
+# tables created by create_all() are visible to every subsequent session.
 # ---------------------------------------------------------------------------
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
