@@ -10,10 +10,12 @@ logger = setup_logger(__name__)
 Y_TOLERANCE = 5
 OCR_CHAR_THRESHOLD = 100
 
+
 class PDFExtractionError(Exception):
     """Raised when PDF extraction fails."""
 
     pass
+
 
 def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
     """
@@ -70,7 +72,8 @@ def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
                     pages.append(page_data)
                 except Exception as e:
                     logger.warning(
-                        f"Failed to extract page {page_num} from {pdf_path}: {e}, skipping"
+                        f"Failed to extract page {page_num} from {pdf_path}: "
+                        f"{e}, skipping"
                     )
                     continue
 
@@ -119,6 +122,7 @@ def _open_pdf(pdf_path: str) -> fitz.Document:
     except Exception as e:
         raise PDFExtractionError(f"Failed to open PDF {pdf_path}: {e}") from e
 
+
 def _extract_page(page: fitz.Page, page_number: int) -> dict[str, Any]:
     """Extract and sort text blocks from a single page.
 
@@ -145,19 +149,22 @@ def _extract_page(page: fitz.Page, page_number: int) -> dict[str, Any]:
 
     final_blocks = []
     for block_id, block in enumerate(sorted_blocks):
-        final_blocks.append({
-            "block_id": block_id,
-            "text": block["text"],
-            "bbox": block["bbox"],
-            "font_size": block["font_size"],
-            "font_name": block["font_name"],
-            "is_bold": block["is_bold"],
-        })
+        final_blocks.append(
+            {
+                "block_id": block_id,
+                "text": block["text"],
+                "bbox": block["bbox"],
+                "font_size": block["font_size"],
+                "font_name": block["font_name"],
+                "is_bold": block["is_bold"],
+            }
+        )
 
     return {
         "page_number": page_number,
         "blocks": final_blocks,
     }
+
 
 def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
     """Extract text and font metadata from a single PyMuPDF block.
@@ -200,9 +207,7 @@ def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
             return None
 
         avg_font_size = sum(font_sizes) / len(font_sizes) if font_sizes else 0.0
-        dominant_font = (
-            max(set(font_names), key=font_names.count) if font_names else ""
-        )
+        dominant_font = max(set(font_names), key=font_names.count) if font_names else ""
         is_bold = (bold_count / total_spans) > 0.5 if total_spans > 0 else False
 
         return {
@@ -217,6 +222,7 @@ def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
         logger.warning(f"Skipping malformed block: {e}")
         return None
 
+
 def _detect_columns(blocks: list[dict[str, Any]], page_width: float) -> int:
     """Detect number of columns by clustering block x-positions.
 
@@ -227,16 +233,14 @@ def _detect_columns(blocks: list[dict[str, Any]], page_width: float) -> int:
     Returns:
         Number of detected columns (1 or 2)
     """
-    midpoints = [
-        b["bbox"][0] + (b["bbox"][2] - b["bbox"][0]) / 2
-        for b in blocks
-    ]
+    midpoints = [b["bbox"][0] + (b["bbox"][2] - b["bbox"][0]) / 2 for b in blocks]
     left = [x for x in midpoints if x < page_width / 2]
     right = [x for x in midpoints if x >= page_width / 2]
 
     if len(left) >= 2 and len(right) >= 2:
         return 2
     return 1
+
 
 def _sort_blocks(
     blocks: list[dict[str, Any]],
@@ -266,10 +270,9 @@ def _sort_blocks(
         )
         return left_blocks + right_blocks
 
-    blocks.sort(
-        key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
-    )
+    blocks.sort(key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0]))
     return blocks
+
 
 def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     """Detect scanned PDFs by checking average characters per page.
