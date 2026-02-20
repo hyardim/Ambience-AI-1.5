@@ -249,3 +249,40 @@ class TestDetectNeedsOcr:
         pages = [{"blocks": []}]
         assert _detect_needs_ocr(pages, num_pages=1) is True
 
+# -----------------------------------------------------------------------
+# _extract_page
+# -----------------------------------------------------------------------
+
+class TestExtractPage:
+    def test_page_number_preserved(self) -> None:
+        page = make_fitz_page()
+        result = _extract_page(page, 3)
+        assert result["page_number"] == 3
+
+    def test_image_blocks_ignored(self) -> None:
+        page = make_fitz_page(blocks=[
+            make_block(block_type=1),
+            make_block(spans=[make_span("Text")], block_type=0),
+        ])
+        result = _extract_page(page, 1)
+        assert len(result["blocks"]) == 1
+        assert result["blocks"][0]["text"] == "Text"
+
+    def test_block_ids_sequential(self) -> None:
+        page = make_fitz_page(blocks=[
+            make_block(spans=[make_span("A")], bbox=(10, 10, 200, 30)),
+            make_block(spans=[make_span("B")], bbox=(10, 50, 200, 70)),
+            make_block(spans=[make_span("C")], bbox=(10, 90, 200, 110)),
+        ])
+        result = _extract_page(page, 1)
+        ids = [b["block_id"] for b in result["blocks"]]
+        assert ids == list(range(len(ids)))
+
+    def test_all_block_fields_present(self) -> None:
+        page = make_fitz_page()
+        result = _extract_page(page, 1)
+        block = result["blocks"][0]
+        assert all(
+            k in block
+            for k in ["block_id", "text", "bbox", "font_size", "font_name", "is_bold"]
+        )
