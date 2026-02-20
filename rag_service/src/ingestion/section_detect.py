@@ -131,6 +131,18 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
             block.pop("_clean_heading_text", None)
             block.pop("heading_type", None)
 
+    logger.info(f"Detected {n_numbered} numbered headings")
+    logger.info(f"Detected {n_allcaps} all-caps headings")
+    logger.info(f"Detected {n_bold} bold headings")
+    logger.info(f"Detected {n_fontsize} font-size headings")
+    logger.info(f"Marked {n_excluded} blocks in excluded sections")
+    logger.debug(f"Sample section paths: {sample_paths}")
+
+    return {
+        **clean_doc,
+        "pages": pages,
+    }
+
 
 
 
