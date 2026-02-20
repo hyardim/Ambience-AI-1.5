@@ -133,3 +133,97 @@ class TestSortBlocks:
         sorted_b = _sort_blocks(blocks, page_width=595.0)
         assert sorted_b[0]["bbox"][0] == 10
 
+# -----------------------------------------------------------------------
+# _extract_text_block
+# -----------------------------------------------------------------------
+
+class TestExtractTextBlock:
+    def test_basic_extraction(self) -> None:
+        block = make_block(spans=[make_span("Hello world", size=12.0, font="Arial")])
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["text"] == "Hello world"
+        assert result["font_size"] == 12.0
+        assert result["font_name"] == "Arial"
+        assert result["is_bold"] is False
+
+    def test_bold_detection(self) -> None:
+        block = make_block(spans=[make_span("Bold", flags=16)])
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["is_bold"] is True
+
+    def test_not_bold_when_minority(self) -> None:
+        block = make_block(spans=[
+            make_span("Normal", flags=0),
+            make_span("Normal", flags=0),
+            make_span("Bold", flags=16),
+        ])
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["is_bold"] is False
+
+    def test_empty_text_returns_none(self) -> None:
+        block = make_block(spans=[make_span("   ")])
+        result = _extract_text_block(block)
+        assert result is None
+
+    def test_no_lines_returns_none(self) -> None:
+        block = {"type": 0, "bbox": (0, 0, 100, 20), "lines": []}
+        result = _extract_text_block(block)
+        assert result is None
+
+    def test_missing_font_metadata_uses_defaults(self) -> None:
+        block = {
+            "type": 0,
+            "bbox": (0, 0, 100, 20),
+            "lines": [{"spans": [{"text": "Hello"}]}],
+        }
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["font_size"] == 0.0
+        assert result["font_name"] == ""
+        assert result["is_bold"] is False
+
+    def test_dominant_font_selected(self) -> None:
+        block = make_block(spans=[
+            make_span("a", font="Arial"),
+            make_span("b", font="Arial"),
+            make_span("c", font="Times"),
+        ])
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["font_name"] == "Arial"
+
+    def test_average_font_size(self) -> None:
+        block = make_block(spans=[
+            make_span("a", size=10.0),
+            make_span("b", size=20.0),
+        ])
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["font_size"] == 15.0
+
+    def test_bbox_preserved(self) -> None:
+        block = make_block(bbox=(10, 20, 300, 40))
+        result = _extract_text_block(block)
+        assert result is not None
+        assert result["bbox"] == [10, 20, 300, 40]
+
+    def test_multiline_preserved(self) -> None:
+        block = {
+            "type": 0,
+            "bbox": (0, 0, 100, 50),
+            "lines": [
+                {"spans": [make_span("Line one")]},
+                {"spans": [make_span("Line two")]},
+            ],
+        }
+        result = _extract_text_block(block)
+        assert result is not None
+        assert "Line one" in result["text"]
+        assert "Line two" in result["text"]
+
+    def test_malformed_block_returns_none(self) -> None:
+        result = _extract_text_block({"type": 0, "bbox": None, "lines": None})
+        assert result is None
