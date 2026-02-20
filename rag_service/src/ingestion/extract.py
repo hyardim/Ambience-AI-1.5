@@ -7,8 +7,8 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+Y_TOLERANCE = 5
 OCR_CHAR_THRESHOLD = 100
-
 
 class PDFExtractionError(Exception):
     """Raised when PDF extraction fails."""
@@ -174,6 +174,27 @@ def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
         logger.warning(f"Skipping malformed block: {e}")
         return None
 
+def _detect_columns(blocks: list[dict[str, Any]], page_width: float) -> int:
+    """Detect number of columns by clustering block x-positions.
+
+    Args:
+        blocks: List of raw block dicts with bbox
+        page_width: Width of the page in points
+
+    Returns:
+        Number of detected columns (1 or 2)
+    """
+    midpoints = [
+        b["bbox"][0] + (b["bbox"][2] - b["bbox"][0]) / 2
+        for b in blocks
+    ]
+    left = [x for x in midpoints if x < page_width / 2]
+    right = [x for x in midpoints if x >= page_width / 2]
+
+    if len(left) >= 2 and len(right) >= 2:
+        return 2
+    return 1
+
 
 def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     """Detect scanned PDFs by checking average characters per page.
@@ -196,24 +217,3 @@ def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
         )
 
     return needs_ocr
-
-def _detect_columns(blocks: list[dict[str, Any]], page_width: float) -> int:
-    """Detect number of columns by clustering block x-positions.
-
-    Args:
-        blocks: List of raw block dicts with bbox
-        page_width: Width of the page in points
-
-    Returns:
-        Number of detected columns (1 or 2)
-    """
-    midpoints = [
-        b["bbox"][0] + (b["bbox"][2] - b["bbox"][0]) / 2
-        for b in blocks
-    ]
-    left = [x for x in midpoints if x < page_width / 2]
-    right = [x for x in midpoints if x >= page_width / 2]
-
-    if len(left) >= 2 and len(right) >= 2:
-        return 2
-    return 1
