@@ -92,6 +92,17 @@ def _open_pdf(pdf_path: str) -> fitz.Document:
     except Exception as e:
         raise PDFExtractionError(f"Failed to open PDF {pdf_path}: {e}") from e
 
+def _extract_page(page: fitz.Page, page_number: int) -> dict[str, Any]:
+    """Extract and sort text blocks from a single page.
+
+    Args:
+        page: PyMuPDF page object
+        page_number: 1-indexed page number
+
+    Returns:
+        Page dict with page_number and sorted blocks
+    """
+    pass
 
 def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     """Detect scanned PDFs by checking average characters per page.
