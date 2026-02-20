@@ -114,7 +114,23 @@ def _extract_page(page: fitz.Page, page_number: int) -> dict[str, Any]:
         if extracted is not None:
             raw_blocks.append(extracted)
 
-    pass
+    sorted_blocks = _sort_blocks(raw_blocks, page_width)
+
+    final_blocks = []
+    for block_id, block in enumerate(sorted_blocks):
+        final_blocks.append({
+            "block_id": block_id,
+            "text": block["text"],
+            "bbox": block["bbox"],
+            "font_size": block["font_size"],
+            "font_name": block["font_name"],
+            "is_bold": block["is_bold"],
+        })
+
+    return {
+        "page_number": page_number,
+        "blocks": final_blocks,
+    }
 
 def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
     """Extract text and font metadata from a single PyMuPDF block.
