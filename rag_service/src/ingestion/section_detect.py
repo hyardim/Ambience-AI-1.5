@@ -52,6 +52,23 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
     """
     pass
 
+def _detect_heading(
+    block: dict[str, Any],
+    text: str,
+    page_median: float,
+) -> tuple[bool, int, str, str | None]:
+    """Apply heading detection rules in priority order.
+
+    Args:
+        block: Block dict with font metadata
+        text: Stripped block text
+        page_median: Median font size for the page
+
+    Returns:
+        (is_heading, level, clean_text, heading_type)
+    """
+    pass
+
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
 
