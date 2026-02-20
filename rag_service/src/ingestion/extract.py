@@ -108,7 +108,7 @@ def _open_pdf(pdf_path: str) -> fitz.Document:
         pdf_path: Path to the PDF file
 
     Returns:
-        Opened fitz.Document (use as context manager)
+        fitz.Document instance to be used as a context manager (in a with statement)
 
     Raises:
         PDFExtractionError: With descriptive message for each failure type
