@@ -12,6 +12,7 @@ from src.ingestion.extract import (
     _detect_needs_ocr,
     _extract_page,
     _extract_text_block,
+    _open_pdf,
     _sort_blocks,
     extract_raw_document,
 )
@@ -308,9 +309,11 @@ class TestExtractPage:
             for k in ["block_id", "text", "bbox", "font_size", "font_name", "is_bold"]
         )
 
+
 # -----------------------------------------------------------------------
 # open_pdf
 # -----------------------------------------------------------------------
+
 
 class TestOpenPdf:
     def test_file_not_found_raises_error(self) -> None:
@@ -319,7 +322,7 @@ class TestOpenPdf:
             side_effect=FileNotFoundError("no such file"),
         ):
             with pytest.raises(PDFExtractionError, match="PDF file not found"):
-                extract_raw_document("missing.pdf")
+                _open_pdf("missing.pdf")
 
     def test_permission_error_raises_error(self) -> None:
         with patch(
@@ -327,7 +330,7 @@ class TestOpenPdf:
             side_effect=PermissionError("access denied"),
         ):
             with pytest.raises(PDFExtractionError, match="Permission denied"):
-                extract_raw_document("locked.pdf")
+                _open_pdf("locked.pdf")
 
     def test_generic_open_error_raises_error(self) -> None:
         with patch(
@@ -335,7 +338,7 @@ class TestOpenPdf:
             side_effect=RuntimeError("unexpected error"),
         ):
             with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
-                extract_raw_document("broken.pdf")
+                _open_pdf("broken.pdf")
 
 
 # -----------------------------------------------------------------------
@@ -449,3 +452,16 @@ class TestExtractRawDocument:
             k in block
             for k in ["block_id", "text", "bbox", "font_size", "font_name", "is_bold"]
         )
+
+    def test_unexpected_error_inside_context_raises_pdf_error(self) -> None:
+        doc = MagicMock()
+        doc.__enter__ = MagicMock(return_value=doc)
+        doc.__exit__ = MagicMock(return_value=False)
+
+        type(doc).page_count = property(
+            lambda self: (_ for _ in ()).throw(RuntimeError("unexpected"))
+        )
+
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
+            with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
+                extract_raw_document("test.pdf")
