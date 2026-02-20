@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 import unicodedata
 from collections import defaultdict
@@ -16,6 +15,7 @@ HEADER_THRESHOLD = 0.15
 FOOTER_THRESHOLD = 0.85
 REPEAT_THRESHOLD = 0.6
 Y_BUCKET_SIZE = 10
+
 
 def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
     """
@@ -40,11 +40,10 @@ def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
     num_pages = len(pages)
     total_blocks = sum(len(p["blocks"]) for p in pages)
 
-    logger.info(
-        f"Before cleaning: {total_blocks} blocks across {num_pages} pages"
-    )
+    logger.info(f"Before cleaning: {total_blocks} blocks across {num_pages} pages")
 
     pass
+
 
 def _normalize_unicode(text: str) -> str:
     """Apply NFKC Unicode normalization.
@@ -59,6 +58,7 @@ def _normalize_unicode(text: str) -> str:
         NFKC normalized text
     """
     return unicodedata.normalize("NFKC", text)
+
 
 def _normalize_whitespace(text: str) -> str:
     """Normalize whitespace in text.
@@ -79,6 +79,7 @@ def _normalize_whitespace(text: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
+
 def _fix_hyphenated_line_breaks(text: str) -> str:
     """Merge words broken across lines by hyphens.
 
@@ -96,6 +97,7 @@ def _fix_hyphenated_line_breaks(text: str) -> str:
         Text with hyphenated line breaks merged
     """
     return re.sub(r"([a-zA-Z]+)-\n([a-z][a-zA-Z]*)", r"\1\2", text)
+
 
 def _normalize_bullets_and_lists(text: str) -> str:
     """Normalize bullet points and list markers.
@@ -123,6 +125,7 @@ def _normalize_bullets_and_lists(text: str) -> str:
 
     return text
 
+
 def _remove_repeated_headers_footers(
     pages: list[dict[str, Any]],
     num_pages: int,
@@ -142,7 +145,47 @@ def _remove_repeated_headers_footers(
     Returns:
         Tuple of (cleaned pages, number of blocks removed)
     """
-    pass
+    if num_pages == 0:
+        return pages, 0
+
+    # Count (normalized_text, y_bucket) pairs across pages
+    pattern_page_counts: dict[tuple[str, int], set[int]] = defaultdict(set)
+
+    for page in pages:
+        page_num = page["page_number"]
+        for block in page["blocks"]:
+            bbox = block["bbox"]
+            y0, y3 = bbox[1], bbox[3]
+
+            is_header = y0 < PAGE_HEIGHT * HEADER_THRESHOLD
+            is_footer = y3 > PAGE_HEIGHT * FOOTER_THRESHOLD
+
+            if not (is_header or is_footer):
+                continue
+
+            normalized = block["text"].lower().strip()
+            y_bucket = round(y0 / Y_BUCKET_SIZE) * Y_BUCKET_SIZE
+            pattern_page_counts[(normalized, y_bucket)].add(page_num)
+
+    # Identify patterns that appear on >= 60% of pages
+    patterns_to_remove: set[tuple[str, int]] = set()
+    for pattern, page_set in pattern_page_counts.items():
+        if len(page_set) / num_pages >= REPEAT_THRESHOLD:
+            patterns_to_remove.add(pattern)
+
+    # Remove matching blocks from all pages
+    removed_count = 0
+    for page in pages:
+        original_count = len(page["blocks"])
+        page["blocks"] = [
+            b
+            for b in page["blocks"]
+            if not _is_header_footer_block(b, patterns_to_remove)
+        ]
+        removed_count += original_count - len(page["blocks"])
+
+    return pages, removed_count
+
 
 def _is_header_footer_block(
     block: dict[str, Any],
