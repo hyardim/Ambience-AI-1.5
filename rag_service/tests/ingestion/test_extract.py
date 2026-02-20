@@ -459,13 +459,14 @@ class TestExtractRawDocument:
         )
 
     def test_unexpected_error_inside_context_raises_pdf_error(self) -> None:
+        def _raise_unexpected(_self: Any) -> int:
+            raise RuntimeError("unexpected internal error")
+
         doc = MagicMock()
         doc.__enter__ = MagicMock(return_value=doc)
         doc.__exit__ = MagicMock(return_value=False)
 
-        type(doc).page_count = property(
-            lambda self: (_ for _ in ()).throw(RuntimeError("unexpected"))
-        )
+        type(doc).page_count = property(_raise_unexpected)
 
         with patch("src.ingestion.extract.fitz.open", return_value=doc):
             with pytest.raises(PDFExtractionError, match="Failed to extract PDF"):
