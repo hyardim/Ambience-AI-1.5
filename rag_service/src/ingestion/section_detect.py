@@ -50,7 +50,45 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
         3. Build section paths using stack algorithm
         4. Mark excluded sections (authors, references)
     """
-    pass
+    pages = clean_doc.get("pages", [])
+
+    n_numbered = 0
+    n_allcaps = 0
+    n_bold = 0
+    n_fontsize = 0
+    n_excluded = 0
+
+    for page in pages:
+        blocks = page["blocks"]
+        page_median = _compute_page_median_font_size(blocks)
+
+        for block in blocks:
+            text = block.get("text", "").strip()
+
+            if not text:
+                block["is_heading"] = False
+                block["heading_level"] = None
+                block["heading_type"] = None
+                continue
+
+            # Rule priority: numbered > allcaps > bold > fontsize
+            matched, level, clean_text, heading_type = _detect_heading(
+                block, text, page_median
+            )
+
+            block["is_heading"] = matched
+            block["heading_level"] = level if matched else None
+            block["_clean_heading_text"] = clean_text if matched else None
+            block["heading_type"] = heading_type if matched else None
+
+            if heading_type == "numbered":
+                n_numbered += 1
+            elif heading_type == "allcaps":
+                n_allcaps += 1
+            elif heading_type == "bold":
+                n_bold += 1
+            elif heading_type == "fontsize":
+                n_fontsize += 1
 
 def _detect_heading(
     block: dict[str, Any],
