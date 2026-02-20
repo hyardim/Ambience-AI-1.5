@@ -308,6 +308,35 @@ class TestExtractPage:
             for k in ["block_id", "text", "bbox", "font_size", "font_name", "is_bold"]
         )
 
+# -----------------------------------------------------------------------
+# open_pdf
+# -----------------------------------------------------------------------
+
+class TestOpenPdf:
+    def test_file_not_found_raises_error(self) -> None:
+        with patch(
+            "src.ingestion.extract.fitz.open",
+            side_effect=FileNotFoundError("no such file"),
+        ):
+            with pytest.raises(PDFExtractionError, match="PDF file not found"):
+                extract_raw_document("missing.pdf")
+
+    def test_permission_error_raises_error(self) -> None:
+        with patch(
+            "src.ingestion.extract.fitz.open",
+            side_effect=PermissionError("access denied"),
+        ):
+            with pytest.raises(PDFExtractionError, match="Permission denied"):
+                extract_raw_document("locked.pdf")
+
+    def test_generic_open_error_raises_error(self) -> None:
+        with patch(
+            "src.ingestion.extract.fitz.open",
+            side_effect=RuntimeError("unexpected error"),
+        ):
+            with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
+                extract_raw_document("broken.pdf")
+
 
 # -----------------------------------------------------------------------
 # extract_raw_document
@@ -350,14 +379,6 @@ class TestExtractRawDocument:
         ):
             with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
                 extract_raw_document("corrupted.pdf")
-
-    def test_file_not_found_raises_error(self) -> None:
-        with patch(
-            "src.ingestion.extract._open_pdf",
-            side_effect=PDFExtractionError("PDF file not found: missing.pdf"),
-        ):
-            with pytest.raises(PDFExtractionError, match="PDF file not found"):
-                extract_raw_document("missing.pdf")
 
     def test_bad_page_skipped_not_crash(self) -> None:
         good_page = make_fitz_page()
