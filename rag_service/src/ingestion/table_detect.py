@@ -41,8 +41,103 @@ def detect_and_convert_tables(
         5. Map tables to document blocks
         6. Tag all blocks with content_type
     """
-    pass
+    pages = sectioned_doc.get("pages", [])
+    total_pymupdf = 0
+    total_heuristic = 0
+    total_captions = 0
 
+    for page in pages:
+        page_num = page["page_number"]
+        blocks = page["blocks"]
+
+        # Step 1: detect tables with PyMuPDF
+        detected_tables = detect_tables_with_pymupdf(pdf_path, page_num)
+        total_pymupdf += len(detected_tables)
+
+        # Steps 2-5: process each detected table
+        for table_info in detected_tables:
+            cells = table_info["cells"]
+            table_bbox = table_info["bbox"]
+
+            # Step 2: find caption
+            table_title = find_table_caption(table_bbox, blocks)
+            if table_title:
+                total_captions += 1
+
+            # Step 3: convert to Markdown
+            markdown = cells_to_markdown(cells, table_title)
+            if not markdown:
+                continue
+
+            # Step 4: map to blocks
+            overlapping = find_overlapping_blocks(table_bbox, blocks)
+            if not overlapping:
+                logger.warning(
+                    f"Page {page_num}: no overlapping blocks for table at {table_bbox}"
+                )
+                continue
+
+            section_path = overlapping[0].get("section_path", ["Unknown"])
+            section_title = overlapping[0].get("section_title", "Unknown")
+            original_position = blocks.index(overlapping[0])
+
+            for block in overlapping:
+                block["is_table_content"] = True
+
+            table_chunk: dict[str, Any] = {
+                "content_type": "table",
+                "text": markdown,
+                "table_title": table_title,
+                "section_path": section_path,
+                "section_title": section_title,
+                "page_number": page_num,
+                "bbox": table_bbox,
+                "is_heading": False,
+                "include_in_chunks": True,
+            }
+
+            # Remove overlapping blocks and insert table chunk
+            page["blocks"] = [b for b in blocks if not b.get("is_table_content")]
+            page["blocks"].insert(original_position, table_chunk)
+            blocks = page["blocks"]
+
+        # Step 5: heuristic fallback for pipe-delimited tables
+        n_heuristic = 0
+        for block in page["blocks"]:
+            if block.get("content_type") != "table" and _is_pipe_table_block(
+                block.get("text", "")
+            ):
+                block["content_type"] = "table"
+                n_heuristic += 1
+        total_heuristic += n_heuristic
+
+        # Step 6: tag all remaining blocks
+        for block in page["blocks"]:
+            if "content_type" not in block:
+                if block.get("is_heading", False):
+                    block["content_type"] = "heading"
+                else:
+                    block["content_type"] = "text"
+
+    logger.info(
+        f"Total: {total_pymupdf} tables via PyMuPDF, "
+        f"{total_heuristic} via heuristic, "
+        f"{total_captions} captions found"
+    )
+
+    sample_tables = [
+        b["text"]
+        for page in pages
+        for b in page["blocks"]
+        if b.get("content_type") == "table"
+    ]
+    if sample_tables:
+        logger.debug(f"Sample Markdown table:\n{sample_tables[0]}")
+
+    return {
+        **sectioned_doc,
+        "pages": pages,
+    }
 
 def detect_tables_with_pymupdf(
     pdf_path: str,
