@@ -13,6 +13,11 @@ class UserRole(enum.Enum):
 
 class ChatStatus(enum.Enum):
     OPEN = "open"
+    SUBMITTED = "submitted"      # GP submitted for specialist review
+    ASSIGNED = "assigned"        # Specialist has been assigned
+    REVIEWING = "reviewing"      # Specialist is actively reviewing
+    APPROVED = "approved"        # Specialist approved the AI response
+    REJECTED = "rejected"        # Specialist rejected / requested changes
     CLOSED = "closed"
     FLAGGED = "flagged"
 
@@ -24,9 +29,11 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String)
     role = Column(SQLEnum(UserRole), default=UserRole.GP)
+    specialty = Column(String, nullable=True)   # e.g. "neurology", "rheumatology"
     is_active = Column(Boolean, default=True)
-    
+
     chats = relationship("Chat", back_populates="owner")
+    assigned_chats = relationship("Chat", back_populates="specialist", foreign_keys="Chat.specialist_id")
     audit_logs = relationship("AuditLog", back_populates="user")
     files = relationship("FileAttachment", back_populates="uploader")
 
@@ -47,16 +54,27 @@ class Chat(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, default="New Chat")
     status = Column(SQLEnum(ChatStatus), default=ChatStatus.OPEN)
-    
-    # Metadata for Patient Context (e.g. {"age": 45, "condition": "diabetes"})
-    patient_context = Column(JSONB, nullable=True) 
-    
+
+    # Clinical context
+    specialty = Column(String, nullable=True)    # e.g. "neurology"
+    severity = Column(String, nullable=True)     # "routine" | "urgent" | "emergency"
+
+    # Patient metadata (free-form JSON, e.g. {"age": 45, "condition": "diabetes"})
+    patient_context = Column(JSONB, nullable=True)
+
+    # Specialist assignment
+    specialist_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_feedback = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     user_id = Column(Integer, ForeignKey("users.id"))
-    owner = relationship("User", back_populates="chats")
-    
+    owner = relationship("User", back_populates="chats", foreign_keys=[user_id])
+    specialist = relationship("User", back_populates="assigned_chats", foreign_keys=[specialist_id])
+
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
     files = relationship("FileAttachment", back_populates="chat", cascade="all, delete-orphan")
 

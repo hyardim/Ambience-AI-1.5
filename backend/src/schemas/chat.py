@@ -2,33 +2,75 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-# --- Message Schemas ---
+
+# ---------------------------------------------------------------------------
+# Message
+# ---------------------------------------------------------------------------
+
 class MessageBase(BaseModel):
-    role: str       # "user" or "assistant"
-    content: str    # "What is diabetes?"
+    content: str
 
 class MessageCreate(MessageBase):
     pass
 
-class MessageResponse(MessageBase):
+class MessageResponse(BaseModel):
     id: int
-    created_at: datetime
-    
+    content: str
+    sender: str
+    created_at: str
+    citations: Optional[List] = None
+
     class Config:
         from_attributes = True
 
-# --- Chat Schemas ---
-class ChatBase(BaseModel):
+
+# ---------------------------------------------------------------------------
+# Chat — request bodies
+# ---------------------------------------------------------------------------
+
+class ChatCreate(BaseModel):
+    title: str = "New Chat"
+    specialty: Optional[str] = None
+    severity: Optional[str] = None
+
+class ChatUpdate(BaseModel):
     title: Optional[str] = None
+    status: Optional[str] = None
+    specialty: Optional[str] = None
+    severity: Optional[str] = None
 
-class ChatCreate(ChatBase):
-    pass
 
-class ChatResponse(ChatBase):
+# ---------------------------------------------------------------------------
+# Chat — responses
+# ---------------------------------------------------------------------------
+
+class ChatResponse(BaseModel):
     id: int
+    title: str
+    status: str
+    specialty: Optional[str] = None
+    severity: Optional[str] = None
+    specialist_id: Optional[int] = None
+    assigned_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    review_feedback: Optional[str] = None
+    created_at: str
     user_id: int
-    created_at: datetime
-    messages: List[MessageResponse] = [] 
 
     class Config:
         from_attributes = True
+
+class ChatWithMessages(ChatResponse):
+    messages: List[MessageResponse] = []
+
+
+# ---------------------------------------------------------------------------
+# Specialist workflow
+# ---------------------------------------------------------------------------
+
+class AssignRequest(BaseModel):
+    specialist_id: int
+
+class ReviewRequest(BaseModel):
+    action: str          # "approve" | "reject"
+    feedback: Optional[str] = None
