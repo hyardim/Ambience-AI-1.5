@@ -131,3 +131,26 @@ def cells_to_markdown(
     pass
 
 
+def detect_header_row(cells: list[list[str]]) -> bool:
+    """Determine if first row should be treated as header.
+
+    Returns True if >50% of first row cells are non-numeric.
+
+    Args:
+        cells: Normalized cell data
+
+    Returns:
+        True if first row is a header
+    """
+    if not cells or len(cells) < 2:
+        return False
+
+    first_row = cells[0]
+    if not first_row:
+        return False
+
+    non_numeric = sum(
+        1 for cell in first_row
+        if cell and not cell.replace(".", "").replace("-", "").isdigit()
+    )
+    return non_numeric / len(first_row) > 0.5
