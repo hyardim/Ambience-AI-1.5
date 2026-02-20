@@ -302,3 +302,124 @@ class TestRemoveDuplicatePages:
         page2 = make_page(2, blocks=[make_block("Content B")])
         unique, removed = _remove_duplicate_pages([page1, page2])
         assert removed == 0
+
+# -----------------------------------------------------------------------
+# clean_document
+# -----------------------------------------------------------------------
+
+class TestCleanDocument:
+    def test_returns_same_structure(self) -> None:
+        raw_doc = make_raw_doc()
+        result = clean_document(raw_doc)
+        assert "source_path" in result
+        assert "num_pages" in result
+        assert "needs_ocr" in result
+        assert "pages" in result
+
+    def test_source_path_preserved(self) -> None:
+        raw_doc = make_raw_doc()
+        result = clean_document(raw_doc)
+        assert result["source_path"] == "test.pdf"
+
+    def test_unicode_normalized(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("ﬁle and ﬂow")])
+        ])
+        result = clean_document(raw_doc)
+        assert result["pages"][0]["blocks"][0]["text"] == "file and flow"
+
+    def test_whitespace_normalized(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("hello   world")])
+        ])
+        result = clean_document(raw_doc)
+        assert result["pages"][0]["blocks"][0]["text"] == "hello world"
+
+    def test_hyphenated_line_break_merged(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("treat-\nment")])
+        ])
+        result = clean_document(raw_doc)
+        assert result["pages"][0]["blocks"][0]["text"] == "treatment"
+
+    def test_bullets_normalized(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("• item one\n• item two")])
+        ])
+        result = clean_document(raw_doc)
+        assert result["pages"][0]["blocks"][0]["text"] == "- item one\n- item two"
+
+    def test_empty_blocks_removed(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[
+                make_block("Real content", block_id=0),
+                make_block("   ", block_id=1),
+            ])
+        ])
+        result = clean_document(raw_doc)
+        assert len(result["pages"][0]["blocks"]) == 1
+        assert result["pages"][0]["blocks"][0]["text"] == "Real content"
+
+    def test_bbox_preserved(self) -> None:
+        bbox = [10.0, 200.0, 500.0, 220.0]
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("Content", bbox=bbox)])
+        ])
+        result = clean_document(raw_doc)
+        assert result["pages"][0]["blocks"][0]["bbox"] == bbox
+
+    def test_block_order_preserved(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[
+                make_block("First", block_id=0),
+                make_block("Second", block_id=1),
+                make_block("Third", block_id=2),
+            ])
+        ])
+        result = clean_document(raw_doc)
+        texts = [b["text"] for b in result["pages"][0]["blocks"]]
+        assert texts == ["First", "Second", "Third"]
+
+    def test_duplicate_pages_removed(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("Same content")]),
+            make_page(2, blocks=[make_block("Same content")]),
+            make_page(3, blocks=[make_block("Different content")]),
+        ])
+        result = clean_document(raw_doc)
+        assert len(result["pages"]) == 2
+
+    def test_repeated_headers_removed(self) -> None:
+        header = make_block("BSR Guidelines", bbox=[10.0, 20.0, 500.0, 40.0])
+        pages = [
+            make_page(i, blocks=[
+                {**header, "block_id": 0},
+                make_block(f"Content {i}", block_id=1),
+            ])
+            for i in range(1, 6)
+        ]
+        raw_doc = make_raw_doc(pages=pages)
+        result = clean_document(raw_doc)
+        for page in result["pages"]:
+            texts = [b["text"] for b in page["blocks"]]
+            assert "BSR Guidelines" not in texts
+
+    def test_deterministic(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("ﬁle treat-\nment • item")])
+        ])
+        result1 = clean_document(raw_doc)
+        result2 = clean_document(raw_doc)
+        assert result1 == result2
+
+    def test_empty_document(self) -> None:
+        raw_doc = make_raw_doc(pages=[])
+        result = clean_document(raw_doc)
+        assert result["pages"] == []
+
+    def test_covid_hyphen_preserved(self) -> None:
+        raw_doc = make_raw_doc(pages=[
+            make_page(1, blocks=[make_block("COVID-19 patients")])
+        ])
+        result = clean_document(raw_doc)
+        assert "COVID-19" in result["pages"][0]["blocks"][0]["text"]
