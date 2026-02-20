@@ -314,3 +314,163 @@ class TestDetectHeading:
         assert matched is False
         assert htype is None
 
+# -----------------------------------------------------------------------
+# add_section_metadata
+# -----------------------------------------------------------------------
+
+class TestAddSectionMetadata:
+    def test_returns_same_structure(self) -> None:
+        doc = make_clean_doc()
+        result = add_section_metadata(doc)
+        assert "source_path" in result
+        assert "pages" in result
+
+    def test_all_blocks_get_section_fields(self) -> None:
+        doc = make_clean_doc()
+        result = add_section_metadata(doc)
+        for page in result["pages"]:
+            for block in page["blocks"]:
+                assert "is_heading" in block
+                assert "heading_level" in block
+                assert "section_path" in block
+                assert "section_title" in block
+                assert "include_in_chunks" in block
+
+    def test_numbered_heading_detected(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Introduction", block_id=0),
+            make_block("Some content", block_id=1),
+        ])])
+        result = add_section_metadata(doc)
+        blocks = result["pages"][0]["blocks"]
+        assert blocks[0]["is_heading"] is True
+        assert blocks[0]["heading_level"] == 1
+        assert blocks[0]["section_path"] == ["Introduction"]
+
+    def test_section_path_inherited_by_content(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Introduction", block_id=0),
+            make_block("Content text", block_id=1),
+        ])])
+        result = add_section_metadata(doc)
+        blocks = result["pages"][0]["blocks"]
+        assert blocks[1]["section_path"] == ["Introduction"]
+        assert blocks[1]["section_title"] == "Introduction"
+
+    def test_nested_section_paths(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Diagnosis", block_id=0),
+            make_block("2.1 Tests", block_id=1),
+            make_block("Test content", block_id=2),
+        ])])
+        result = add_section_metadata(doc)
+        blocks = result["pages"][0]["blocks"]
+        assert blocks[1]["section_path"] == ["Diagnosis", "Tests"]
+        assert blocks[2]["section_path"] == ["Diagnosis", "Tests"]
+
+    def test_section_path_resets_on_new_level1(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Diagnosis", block_id=0),
+            make_block("2.1 Tests", block_id=1),
+            make_block("2 Treatment", block_id=2),
+            make_block("Content", block_id=3),
+        ])])
+        result = add_section_metadata(doc)
+        blocks = result["pages"][0]["blocks"]
+        assert blocks[2]["section_path"] == ["Treatment"]
+        assert blocks[3]["section_path"] == ["Treatment"]
+
+    def test_no_headings_all_unknown(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("Just some text", block_id=0),
+            make_block("More text", block_id=1),
+        ])])
+        result = add_section_metadata(doc)
+        for page in result["pages"]:
+            for block in page["blocks"]:
+                assert block["section_path"] == ["Unknown"]
+
+    def test_heading_include_in_chunks_false(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Introduction", block_id=0),
+        ])])
+        result = add_section_metadata(doc)
+        assert result["pages"][0]["blocks"][0]["include_in_chunks"] is False
+
+    def test_content_include_in_chunks_true(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Introduction", block_id=0),
+            make_block("Content text", block_id=1),
+        ])])
+        result = add_section_metadata(doc)
+        assert result["pages"][1 - 1]["blocks"][1]["include_in_chunks"] is True
+
+    def test_excluded_section_include_in_chunks_false(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 References", block_id=0),
+            make_block("Smith et al 2020", block_id=1),
+        ])])
+        result = add_section_metadata(doc)
+        blocks = result["pages"][0]["blocks"]
+        assert blocks[1]["include_in_chunks"] is False
+
+    def test_allcaps_heading_detected(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("INTRODUCTION", block_id=0),
+        ])])
+        result = add_section_metadata(doc)
+        block = result["pages"][0]["blocks"][0]
+        assert block["is_heading"] is True
+        assert block["heading_level"] == 1
+        assert block["section_path"] == ["INTRODUCTION"]
+
+    def test_bold_heading_detected(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("Clinical Presentation", block_id=0, is_bold=True),
+        ])])
+        result = add_section_metadata(doc)
+        block = result["pages"][0]["blocks"][0]
+        assert block["is_heading"] is True
+        assert block["heading_level"] == 2
+
+    def test_fontsize_heading_detected(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("Big Title", block_id=0, font_size=18.0),
+            make_block("Body text", block_id=1, font_size=12.0),
+            make_block("More body", block_id=2, font_size=12.0),
+        ])])
+        result = add_section_metadata(doc)
+        assert result["pages"][0]["blocks"][0]["is_heading"] is True
+
+    def test_false_positive_dosage_not_heading(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("2.5 mg dose", block_id=0),
+        ])])
+        result = add_section_metadata(doc)
+        assert result["pages"][0]["blocks"][0]["is_heading"] is False
+
+    def test_empty_block_not_heading(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("", block_id=0),
+        ])])
+        result = add_section_metadata(doc)
+        assert result["pages"][0]["blocks"][0]["is_heading"] is False
+
+    def test_deterministic(self) -> None:
+        doc = make_clean_doc(pages=[make_page(1, blocks=[
+            make_block("1 Introduction", block_id=0),
+            make_block("Content", block_id=1),
+        ])])
+        result1 = add_section_metadata(doc)
+        result2 = add_section_metadata(doc)
+        assert result1 == result2
+
+    def test_empty_document(self) -> None:
+        doc = make_clean_doc(pages=[])
+        result = add_section_metadata(doc)
+        assert result["pages"] == []
+
+    def test_source_path_preserved(self) -> None:
+        doc = make_clean_doc()
+        result = add_section_metadata(doc)
+        assert result["source_path"] == "test.pdf"
