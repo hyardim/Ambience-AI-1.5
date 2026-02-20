@@ -155,6 +155,21 @@ def detect_header_row(cells: list[list[str]]) -> bool:
     )
     return non_numeric / len(first_row) > 0.5
 
+def find_overlapping_blocks(
+    table_bbox: list[float],
+    blocks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Find blocks whose bounding box overlaps with the table bbox.
+
+    Args:
+        table_bbox: [x0, y0, x1, y1] bounding box of table
+        blocks: List of block dicts
+
+    Returns:
+        List of overlapping blocks in original order
+    """
+    return [b for b in blocks if bboxes_overlap(table_bbox, b["bbox"])]
+
 def bboxes_overlap(
     bbox1: list[float],
     bbox2: list[float],
