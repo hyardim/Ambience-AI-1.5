@@ -178,3 +178,26 @@ class TestNormalizeCell:
     def test_integer_input(self) -> None:
         assert _normalize_cell(42) == "42"
 
+# -----------------------------------------------------------------------
+# detect_header_row
+# -----------------------------------------------------------------------
+
+class TestDetectHeaderRow:
+    def test_text_header_detected(self) -> None:
+        cells = [["Drug", "Dose", "Frequency"], ["MTX", "7.5", "Weekly"]]
+        assert detect_header_row(cells) is True
+
+    def test_numeric_first_row_not_header(self) -> None:
+        cells = [["1.0", "2.0", "3.0"], ["4.0", "5.0", "6.0"]]
+        assert detect_header_row(cells) is False
+
+    def test_single_row_not_header(self) -> None:
+        cells = [["Drug", "Dose"]]
+        assert detect_header_row(cells) is False
+
+    def test_empty_cells_not_header(self) -> None:
+        assert detect_header_row([]) is False
+
+    def test_mixed_first_row_majority_text(self) -> None:
+        cells = [["Drug", "Dose", "Note"], ["1.0", "2.0", "3.0"]]
+        assert detect_header_row(cells) is True
