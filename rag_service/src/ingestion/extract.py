@@ -257,20 +257,20 @@ def _sort_blocks(
     Returns:
         Sorted list of blocks
     """
+
+    def sort_key(b: dict[str, Any]) -> tuple[int, float]:
+        return (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
+
     num_columns = _detect_columns(blocks, page_width)
 
     if num_columns == 2:
         left_blocks = [b for b in blocks if b["bbox"][0] < page_width / 2]
         right_blocks = [b for b in blocks if b["bbox"][0] >= page_width / 2]
-        left_blocks.sort(
-            key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
-        )
-        right_blocks.sort(
-            key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
-        )
+        left_blocks.sort(key=sort_key)
+        right_blocks.sort(key=sort_key)
         return left_blocks + right_blocks
 
-    blocks.sort(key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0]))
+    blocks.sort(key=sort_key)
     return blocks
 
 
