@@ -54,3 +54,25 @@ def make_raw_doc(
         "needs_ocr": False,
         "pages": pages,
     }
+
+# -----------------------------------------------------------------------
+# _normalize_unicode
+# -----------------------------------------------------------------------
+
+class TestNormalizeUnicode:
+    def test_ligature_fi_normalized(self) -> None:
+        assert _normalize_unicode("ﬁle") == "file"
+
+    def test_ligature_fl_normalized(self) -> None:
+        assert _normalize_unicode("ﬂow") == "flow"
+
+    def test_normal_text_unchanged(self) -> None:
+        assert _normalize_unicode("hello world") == "hello world"
+
+    def test_empty_string(self) -> None:
+        assert _normalize_unicode("") == ""
+
+    def test_medical_symbols_preserved(self) -> None:
+        text = "≥ 10 mg/dl"
+        result = _normalize_unicode(text)
+        assert "≥" in result
