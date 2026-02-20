@@ -118,3 +118,30 @@ class TestBboxesOverlap:
     def test_identical_boxes(self) -> None:
         assert bboxes_overlap([0, 0, 100, 100], [0, 0, 100, 100]) is True
 
+# -----------------------------------------------------------------------
+# find_overlapping_blocks
+# -----------------------------------------------------------------------
+
+class TestFindOverlappingBlocks:
+    def test_finds_overlapping_block(self) -> None:
+        blocks = [make_block("text", bbox=[50.0, 200.0, 400.0, 220.0])]
+        result = find_overlapping_blocks([40.0, 190.0, 410.0, 360.0], blocks)
+        assert len(result) == 1
+
+    def test_non_overlapping_block_excluded(self) -> None:
+        blocks = [make_block("text", bbox=[10.0, 10.0, 100.0, 30.0])]
+        result = find_overlapping_blocks([200.0, 200.0, 400.0, 400.0], blocks)
+        assert len(result) == 0
+
+    def test_multiple_overlapping_blocks(self) -> None:
+        blocks = [
+            make_block("a", block_id=0, bbox=[50.0, 200.0, 400.0, 220.0]),
+            make_block("b", block_id=1, bbox=[50.0, 230.0, 400.0, 250.0]),
+            make_block("c", block_id=2, bbox=[10.0, 10.0, 100.0, 30.0]),
+        ]
+        result = find_overlapping_blocks([40.0, 190.0, 410.0, 360.0], blocks)
+        assert len(result) == 2
+
+    def test_empty_blocks(self) -> None:
+        assert find_overlapping_blocks([0.0, 0.0, 100.0, 100.0], []) == []
+
