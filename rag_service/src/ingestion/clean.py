@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from collections import defaultdict
@@ -204,3 +205,30 @@ def _is_header_footer_block(
     y0 = block["bbox"][1]
     y_bucket = round(y0 / Y_BUCKET_SIZE) * Y_BUCKET_SIZE
     return (normalized, y_bucket) in patterns_to_remove
+
+def _remove_duplicate_pages(
+    pages: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Remove duplicate pages using MD5 hash of concatenated block text.
+
+    Keeps first occurrence, removes subsequent duplicates.
+
+    Args:
+        pages: List of page dicts
+
+    Returns:
+        Tuple of (deduplicated pages, number of pages removed)
+    """
+    seen_hashes: set[str] = set()
+    unique_pages: list[dict[str, Any]] = []
+
+    for page in pages:
+        page_text = "\n".join(block["text"] for block in page["blocks"])
+        page_hash = hashlib.md5(page_text.encode("utf-8")).hexdigest()
+
+        if page_hash not in seen_hashes:
+            seen_hashes.add(page_hash)
+            unique_pages.append(page)
+
+    removed = len(pages) - len(unique_pages)
+    return unique_pages, removed
