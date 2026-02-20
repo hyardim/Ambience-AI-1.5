@@ -227,3 +227,25 @@ class TestExtractTextBlock:
     def test_malformed_block_returns_none(self) -> None:
         result = _extract_text_block({"type": 0, "bbox": None, "lines": None})
         assert result is None
+
+# -----------------------------------------------------------------------
+# _detect_needs_ocr
+# -----------------------------------------------------------------------
+
+class TestDetectNeedsOcr:
+    def test_low_text_density_is_ocr(self) -> None:
+        pages = [{"blocks": [{"text": "Hi"}]}]
+        assert _detect_needs_ocr(pages, num_pages=1) is True
+
+    def test_high_text_density_not_ocr(self) -> None:
+        long_text = "word " * 200
+        pages = [{"blocks": [{"text": long_text}]}]
+        assert _detect_needs_ocr(pages, num_pages=1) is False
+
+    def test_zero_pages_not_ocr(self) -> None:
+        assert _detect_needs_ocr([], num_pages=0) is False
+
+    def test_empty_pages_is_ocr(self) -> None:
+        pages = [{"blocks": []}]
+        assert _detect_needs_ocr(pages, num_pages=1) is True
+
