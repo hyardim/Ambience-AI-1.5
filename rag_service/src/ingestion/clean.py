@@ -110,4 +110,7 @@ def _normalize_bullets_and_lists(text: str) -> str:
     Returns:
         Text with normalized list markers
     """
-    pass
+    # Normalize bullet characters to '- '
+    text = re.sub(r"^[•◦▪▸➢✓–]\s*", "- ", text, flags=re.MULTILINE)
+
+    return text
