@@ -139,6 +139,7 @@ def detect_and_convert_tables(
         "pages": pages,
     }
 
+
 def detect_tables_with_pymupdf(
     pdf_path: str,
     page_num: int,
@@ -181,6 +182,7 @@ def detect_tables_with_pymupdf(
 
     return results
 
+
 def find_table_caption(
     table_bbox: list[float],
     page_blocks: list[dict[str, Any]],
@@ -204,11 +206,12 @@ def find_table_caption(
         if block_bottom < table_top and table_top - block_bottom < CAPTION_PROXIMITY_PX:
             text = block.get("text", "").strip()
             if CAPTION_PATTERN.match(text):
-                return text
+                return str(text)
             if block.get("is_bold", False):
-                return text
+                return str(text)
 
     return None
+
 
 def cells_to_markdown(
     cells: list[list[str]],
@@ -294,10 +297,12 @@ def detect_header_row(cells: list[list[str]]) -> bool:
         return False
 
     non_numeric = sum(
-        1 for cell in first_row
+        1
+        for cell in first_row
         if cell and not cell.replace(".", "").replace("-", "").isdigit()
     )
     return non_numeric / len(first_row) > 0.5
+
 
 def find_overlapping_blocks(
     table_bbox: list[float],
@@ -313,6 +318,7 @@ def find_overlapping_blocks(
         List of overlapping blocks in original order
     """
     return [b for b in blocks if bboxes_overlap(table_bbox, b["bbox"])]
+
 
 def bboxes_overlap(
     bbox1: list[float],
@@ -333,6 +339,7 @@ def bboxes_overlap(
         or bbox1[3] <= bbox2[1]
         or bbox2[3] <= bbox1[1]
     )
+
 
 def _normalize_cell(cell: Any) -> str:
     """Normalize a table cell value.
@@ -357,6 +364,7 @@ def _normalize_cell(cell: Any) -> str:
     if len(text) > CELL_MAX_LENGTH:
         text = text[: CELL_MAX_LENGTH - 3] + "..."
     return text
+
 
 def _is_pipe_table_block(text: str) -> bool:
     """Check if block text looks like a pipe-delimited table.
