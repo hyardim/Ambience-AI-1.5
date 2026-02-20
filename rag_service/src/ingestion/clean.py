@@ -122,3 +122,24 @@ def _normalize_bullets_and_lists(text: str) -> str:
     text = re.sub(r"^\(([a-z])\)\s*", r"\1. ", text, flags=re.MULTILINE)
 
     return text
+
+def _remove_repeated_headers_footers(
+    pages: list[dict[str, Any]],
+    num_pages: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Remove blocks that appear repeatedly in header/footer positions.
+
+    Uses position + frequency heuristic:
+    - Top blocks: bbox[1] < page_height * 0.15
+    - Bottom blocks: bbox[3] > page_height * 0.85
+    - Groups by (normalized_text, y_bucket)
+    - Removes if appears on >= 60% of pages
+
+    Args:
+        pages: List of page dicts
+        num_pages: Total number of pages for frequency calculation
+
+    Returns:
+        Tuple of (cleaned pages, number of blocks removed)
+    """
+    pass
