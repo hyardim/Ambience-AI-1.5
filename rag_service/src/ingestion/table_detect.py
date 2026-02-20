@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import fitz  # PyMuPDF
@@ -8,6 +7,7 @@ import fitz  # PyMuPDF
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
 
 def detect_and_convert_tables(
     sectioned_doc: dict[str, Any],
@@ -36,3 +36,45 @@ def detect_and_convert_tables(
     """
     pass
 
+
+def detect_tables_with_pymupdf(
+    pdf_path: str,
+    page_num: int,
+) -> list[dict[str, Any]]:
+    """Use PyMuPDF to detect tables on a page.
+
+    Args:
+        pdf_path: Path to the PDF file
+        page_num: 1-indexed page number
+
+    Returns:
+        List of dicts with keys: cells, bbox, page_number
+    """
+    results: list[dict[str, Any]] = []
+
+    try:
+        with fitz.open(pdf_path) as doc:
+            if page_num < 1 or page_num > doc.page_count:
+                logger.warning(f"Page {page_num} out of range for {pdf_path}")
+                return results
+
+            page = doc[page_num - 1]
+            tables = page.find_tables()
+
+            for table in tables:
+                cells = table.extract()
+                bbox = list(table.bbox)
+                results.append(
+                    {
+                        "cells": cells,
+                        "bbox": bbox,
+                        "page_number": page_num,
+                    }
+                )
+
+    except Exception as e:
+        logger.warning(
+            f"PyMuPDF table detection failed for {pdf_path} page {page_num}: {e}"
+        )
+
+    return results
