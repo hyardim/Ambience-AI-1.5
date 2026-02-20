@@ -217,3 +217,33 @@ class TestIsFontsizeHeading:
         matched, level = is_fontsize_heading(block, median_font_size=12.0)
         assert matched is True
         assert level == 1
+
+
+# -----------------------------------------------------------------------
+# is_excluded_section
+# -----------------------------------------------------------------------
+
+class TestIsExcludedSection:
+    def test_references_excluded(self) -> None:
+        assert is_excluded_section("References") is True
+
+    def test_authors_excluded(self) -> None:
+        assert is_excluded_section("Authors") is True
+
+    def test_acknowledgments_excluded(self) -> None:
+        assert is_excluded_section("Acknowledgments") is True
+
+    def test_bibliography_excluded(self) -> None:
+        assert is_excluded_section("Bibliography") is True
+
+    def test_conflicts_excluded(self) -> None:
+        assert is_excluded_section("Conflicts of Interest") is True
+
+    def test_normal_section_not_excluded(self) -> None:
+        assert is_excluded_section("Diagnosis") is False
+
+    def test_case_insensitive(self) -> None:
+        assert is_excluded_section("REFERENCES") is True
+
+    def test_unknown_not_excluded(self) -> None:
+        assert is_excluded_section("Unknown") is False
