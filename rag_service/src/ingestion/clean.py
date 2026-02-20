@@ -96,3 +96,18 @@ def _fix_hyphenated_line_breaks(text: str) -> str:
         Text with hyphenated line breaks merged
     """
     return re.sub(r"([a-zA-Z]+)-\n([a-z][a-zA-Z]*)", r"\1\2", text)
+
+def _normalize_bullets_and_lists(text: str) -> str:
+    """Normalize bullet points and list markers.
+
+    Bullet conversions: •, ◦, ▪, ▸, ➢, ✓, – → '- '
+    Numbered list: '1)' → '1.', '(1)' → '1.'
+    Lettered list: 'a)' → 'a.', '(a)' → 'a.'
+
+    Args:
+        text: Block text
+
+    Returns:
+        Text with normalized list markers
+    """
+    pass
