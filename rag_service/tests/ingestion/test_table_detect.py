@@ -201,3 +201,58 @@ class TestDetectHeaderRow:
     def test_mixed_first_row_majority_text(self) -> None:
         cells = [["Drug", "Dose", "Note"], ["1.0", "2.0", "3.0"]]
         assert detect_header_row(cells) is True
+
+# -----------------------------------------------------------------------
+# cells_to_markdown
+# -----------------------------------------------------------------------
+
+class TestCellsToMarkdown:
+    def test_basic_table(self) -> None:
+        cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
+        result = cells_to_markdown(cells)
+        assert "| Drug | Dose |" in result
+        assert "| MTX | 7.5mg |" in result
+        assert "|---|---|" in result
+
+    def test_table_with_title(self) -> None:
+        cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
+        result = cells_to_markdown(cells, table_title="Table 1: Dosing")
+        assert "<!-- Table 1: Dosing -->" in result
+
+    def test_no_header_generates_column_names(self) -> None:
+        cells = [["1.0", "2.0"], ["3.0", "4.0"]]
+        result = cells_to_markdown(cells)
+        assert "Column 1" in result
+        assert "Column 2" in result
+
+    def test_single_column_bullet_list(self) -> None:
+        cells = [["Item A"], ["Item B"], ["Item C"]]
+        result = cells_to_markdown(cells)
+        assert "- Item A" in result
+        assert "- Item B" in result
+        assert "|" not in result
+
+    def test_single_column_with_title(self) -> None:
+        cells = [["Item A"], ["Item B"]]
+        result = cells_to_markdown(cells, table_title="Table 1")
+        assert "<!-- Table 1 -->" in result
+        assert "- Item A" in result
+
+    def test_empty_cells_returns_empty(self) -> None:
+        assert cells_to_markdown([]) == ""
+
+    def test_pipe_in_cell_escaped(self) -> None:
+        cells = [["A", "B"], ["x | y", "z"]]
+        result = cells_to_markdown(cells)
+        assert r"\|" in result
+
+    def test_rows_padded_to_max_cols(self) -> None:
+        cells = [["A", "B", "C"], ["X", "Y"]]
+        result = cells_to_markdown(cells)
+        assert result.count("|") > 0
+
+    def test_empty_data_rows_returns_empty(self) -> None:
+        # Only header, no data rows, no header detection (numeric)
+        cells = [["1.0", "2.0"]]
+        result = cells_to_markdown(cells)
+        assert result == ""
