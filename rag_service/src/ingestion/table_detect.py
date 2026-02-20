@@ -154,3 +154,23 @@ def detect_header_row(cells: list[list[str]]) -> bool:
         if cell and not cell.replace(".", "").replace("-", "").isdigit()
     )
     return non_numeric / len(first_row) > 0.5
+
+def bboxes_overlap(
+    bbox1: list[float],
+    bbox2: list[float],
+) -> bool:
+    """Check if two bounding boxes overlap.
+
+    Args:
+        bbox1: [x0, y0, x1, y1]
+        bbox2: [x0, y0, x1, y1]
+
+    Returns:
+        True if boxes overlap
+    """
+    return not (
+        bbox1[2] <= bbox2[0]
+        or bbox2[2] <= bbox1[0]
+        or bbox1[3] <= bbox2[1]
+        or bbox2[3] <= bbox1[1]
+    )
