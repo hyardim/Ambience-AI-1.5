@@ -102,6 +102,18 @@ def _extract_page(page: fitz.Page, page_number: int) -> dict[str, Any]:
     Returns:
         Page dict with page_number and sorted blocks
     """
+    page_dict = page.get_text("dict")
+    page_width = float(page.rect.width)
+
+    raw_blocks: list[dict[str, Any]] = []
+    for block in page_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+
+        extracted = _extract_text_block(block)
+        if extracted is not None:
+            raw_blocks.append(extracted)
+
     pass
 
 def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
