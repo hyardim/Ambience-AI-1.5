@@ -76,3 +76,32 @@ class TestNormalizeUnicode:
         text = "≥ 10 mg/dl"
         result = _normalize_unicode(text)
         assert "≥" in result
+
+# -----------------------------------------------------------------------
+# _normalize_whitespace
+# -----------------------------------------------------------------------
+
+class TestNormalizeWhitespace:
+    def test_multiple_spaces_collapsed(self) -> None:
+        assert _normalize_whitespace("hello   world") == "hello world"
+
+    def test_crlf_normalized(self) -> None:
+        assert _normalize_whitespace("line1\r\nline2") == "line1\nline2"
+
+    def test_three_newlines_collapsed_to_two(self) -> None:
+        assert _normalize_whitespace("a\n\n\nb") == "a\n\nb"
+
+    def test_four_newlines_collapsed_to_two(self) -> None:
+        assert _normalize_whitespace("a\n\n\n\nb") == "a\n\nb"
+
+    def test_single_newline_preserved(self) -> None:
+        assert _normalize_whitespace("a\nb") == "a\nb"
+
+    def test_leading_trailing_whitespace_trimmed(self) -> None:
+        assert _normalize_whitespace("  hello  ") == "hello"
+
+    def test_empty_string(self) -> None:
+        assert _normalize_whitespace("") == ""
+
+    def test_two_newlines_preserved(self) -> None:
+        assert _normalize_whitespace("a\n\nb") == "a\n\nb"
