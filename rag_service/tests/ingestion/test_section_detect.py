@@ -275,3 +275,42 @@ class TestComputePageMedianFontSize:
 
     def test_empty_blocks_returns_zero(self) -> None:
         assert _compute_page_median_font_size([]) == 0.0
+
+
+
+# -----------------------------------------------------------------------
+# _detect_heading (priority ordering)
+# -----------------------------------------------------------------------
+
+class TestDetectHeading:
+    def test_numbered_wins_over_bold(self) -> None:
+        block = make_block("1 Introduction", is_bold=True, font_size=18.0)
+        matched, level, clean, htype = _detect_heading(block, "1 Introduction", 12.0)
+        assert matched is True
+        assert htype == "numbered"
+        assert clean == "Introduction"
+
+    def test_allcaps_wins_over_bold(self) -> None:
+        block = make_block("INTRODUCTION", is_bold=True)
+        matched, level, clean, htype = _detect_heading(block, "INTRODUCTION", 12.0)
+        assert matched is True
+        assert htype == "allcaps"
+
+    def test_bold_wins_over_fontsize(self) -> None:
+        block = make_block("Clinical Presentation", is_bold=True, font_size=16.0)
+        matched, level, clean, htype = _detect_heading(block, "Clinical Presentation", 12.0)
+        assert matched is True
+        assert htype == "bold"
+
+    def test_fontsize_matched_when_no_other_rule(self) -> None:
+        block = make_block("Some heading", is_bold=False, font_size=18.0)
+        matched, level, clean, htype = _detect_heading(block, "Some heading", 12.0)
+        assert matched is True
+        assert htype == "fontsize"
+
+    def test_no_match_returns_false(self) -> None:
+        block = make_block("Normal body text", is_bold=False, font_size=12.0)
+        matched, _, _, htype = _detect_heading(block, "Normal body text", 12.0)
+        assert matched is False
+        assert htype is None
+
