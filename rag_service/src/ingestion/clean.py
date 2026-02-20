@@ -41,9 +41,7 @@ def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
     num_pages = len(pages)
     total_blocks = sum(len(p["blocks"]) for p in pages)
 
-    logger.info(
-        f"Before cleaning: {total_blocks} blocks across {num_pages} pages"
-    )
+    logger.info(f"Before cleaning: {total_blocks} blocks across {num_pages} pages")
 
     # Steps 1-4: clean each block's text
     for page in pages:
@@ -70,9 +68,7 @@ def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
 
     logger.info(f"Removed {removed_headers} header/footer blocks")
     logger.info(f"Removed {removed_pages} duplicate pages")
-    logger.info(
-        f"After cleaning: {final_blocks} blocks across {final_pages} pages"
-    )
+    logger.info(f"After cleaning: {final_blocks} blocks across {final_pages} pages")
 
     return {
         **raw_doc,
@@ -239,6 +235,7 @@ def _is_header_footer_block(
     y0 = block["bbox"][1]
     y_bucket = round(y0 / Y_BUCKET_SIZE) * Y_BUCKET_SIZE
     return (normalized, y_bucket) in patterns_to_remove
+
 
 def _remove_duplicate_pages(
     pages: list[dict[str, Any]],
