@@ -213,3 +213,18 @@ def _normalize_cell(cell: Any) -> str:
     if len(text) > CELL_MAX_LENGTH:
         text = text[: CELL_MAX_LENGTH - 3] + "..."
     return text
+
+def _is_pipe_table_block(text: str) -> bool:
+    """Check if block text looks like a pipe-delimited table.
+
+    Requires 2+ lines each containing 3+ pipe characters.
+
+    Args:
+        text: Block text
+
+    Returns:
+        True if block appears to be a pipe-delimited table
+    """
+    lines = text.split("\n")
+    pipe_lines = [line for line in lines if line.count("|") >= MIN_PIPE_COUNT]
+    return len(pipe_lines) >= MIN_PIPE_LINES
