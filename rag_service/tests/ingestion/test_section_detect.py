@@ -174,3 +174,46 @@ class TestIsBoldHeading:
         block = make_block("", is_bold=True)
         assert is_bold_heading(block) is False
 
+# -----------------------------------------------------------------------
+# is_fontsize_heading
+# -----------------------------------------------------------------------
+
+class TestIsFontsizeHeading:
+    def test_level_1_large_font(self) -> None:
+        block = make_block("Title", font_size=18.0)
+        matched, level = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is True
+        assert level == 1
+
+    def test_level_2_medium_font(self) -> None:
+        block = make_block("Subtitle", font_size=14.5)
+        matched, level = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is True
+        assert level == 2
+
+    def test_body_font_not_heading(self) -> None:
+        block = make_block("Body text", font_size=12.0)
+        matched, _ = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is False
+
+    def test_zero_font_size_not_heading(self) -> None:
+        block = make_block("Text", font_size=0.0)
+        matched, _ = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is False
+
+    def test_zero_median_not_heading(self) -> None:
+        block = make_block("Text", font_size=18.0)
+        matched, _ = is_fontsize_heading(block, median_font_size=0.0)
+        assert matched is False
+
+    def test_exactly_threshold_level_2(self) -> None:
+        block = make_block("Text", font_size=14.0)
+        matched, level = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is True
+        assert level == 2
+
+    def test_exactly_threshold_level_1(self) -> None:
+        block = make_block("Text", font_size=16.0)
+        matched, level = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is True
+        assert level == 1
