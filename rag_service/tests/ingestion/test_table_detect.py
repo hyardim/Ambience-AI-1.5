@@ -94,3 +94,27 @@ def make_fitz_doc(
     doc.__enter__ = MagicMock(return_value=doc)
     doc.__exit__ = MagicMock(return_value=False)
     return doc
+
+# -----------------------------------------------------------------------
+# bboxes_overlap
+# -----------------------------------------------------------------------
+
+class TestBboxesOverlap:
+    def test_overlapping_boxes(self) -> None:
+        assert bboxes_overlap([0, 0, 100, 100], [50, 50, 150, 150]) is True
+
+    def test_non_overlapping_horizontal(self) -> None:
+        assert bboxes_overlap([0, 0, 100, 100], [200, 0, 300, 100]) is False
+
+    def test_non_overlapping_vertical(self) -> None:
+        assert bboxes_overlap([0, 0, 100, 100], [0, 200, 100, 300]) is False
+
+    def test_touching_edge_not_overlap(self) -> None:
+        assert bboxes_overlap([0, 0, 100, 100], [100, 0, 200, 100]) is False
+
+    def test_one_inside_other(self) -> None:
+        assert bboxes_overlap([0, 0, 200, 200], [50, 50, 150, 150]) is True
+
+    def test_identical_boxes(self) -> None:
+        assert bboxes_overlap([0, 0, 100, 100], [0, 0, 100, 100]) is True
+
