@@ -105,3 +105,36 @@ class TestIsNumberedHeading:
     def test_empty_string(self) -> None:
         match, _, _ = is_numbered_heading("")
         assert match is False
+
+# -----------------------------------------------------------------------
+# is_allcaps_heading
+# -----------------------------------------------------------------------
+
+class TestIsAllcapsHeading:
+    def test_basic_allcaps(self) -> None:
+        assert is_allcaps_heading("INTRODUCTION") is True
+
+    def test_multiword_allcaps(self) -> None:
+        assert is_allcaps_heading("LABORATORY PROCEDURES") is True
+
+    def test_too_many_words(self) -> None:
+        assert is_allcaps_heading("ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN") is False
+
+    def test_too_long(self) -> None:
+        assert is_allcaps_heading("A" * 81) is False
+
+    def test_starts_with_bullet(self) -> None:
+        assert is_allcaps_heading("- IMPORTANT NOTE") is False
+
+    def test_mixed_case_not_allcaps(self) -> None:
+        assert is_allcaps_heading("Introduction") is False
+
+    def test_empty_string(self) -> None:
+        assert is_allcaps_heading("") is False
+
+    def test_allcaps_with_numbers(self) -> None:
+        # Numbers are non-alpha so only alpha chars checked
+        assert is_allcaps_heading("COVID-19") is True
+
+    def test_no_alpha_chars(self) -> None:
+        assert is_allcaps_heading("123") is False
