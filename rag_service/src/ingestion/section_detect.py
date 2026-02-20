@@ -29,6 +29,7 @@ EXCLUDED_SECTIONS = {
 BULLET_PATTERN = re.compile(r"^[-•\d]")
 NUMBERED_HEADING_PATTERN = re.compile(r"^(\d+(\.\d+)*\.?)\s+([A-Z][a-zA-Z\s]{2,})$")
 
+
 def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
     """
     Detect headings and assign section metadata to all blocks.
@@ -99,8 +100,12 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
             text = block.get("text", "").strip()
 
             if not text:
-                block["section_path"] = section_stack.copy() if section_stack else ["Unknown"]
-                block["section_title"] = section_stack[-1] if section_stack else "Unknown"
+                block["section_path"] = (
+                    section_stack.copy() if section_stack else ["Unknown"]
+                )
+                block["section_title"] = (
+                    section_stack[-1] if section_stack else "Unknown"
+                )
                 block["include_in_chunks"] = False
                 continue
 
@@ -117,8 +122,12 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
                 block["include_in_chunks"] = False  # headings are structure not content
 
             else:
-                block["section_path"] = section_stack.copy() if section_stack else ["Unknown"]
-                block["section_title"] = section_stack[-1] if section_stack else "Unknown"
+                block["section_path"] = (
+                    section_stack.copy() if section_stack else ["Unknown"]
+                )
+                block["section_title"] = (
+                    section_stack[-1] if section_stack else "Unknown"
+                )
                 excluded = is_excluded_section(block["section_title"])
                 block["include_in_chunks"] = not excluded
                 if excluded:
@@ -142,8 +151,6 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
         **clean_doc,
         "pages": pages,
     }
-
-
 
 
 def _detect_heading(
@@ -182,6 +189,7 @@ def _detect_heading(
 
     return False, 0, text, None
 
+
 def _compute_page_median_font_size(blocks: list[dict[str, Any]]) -> float:
     """Compute median font size for a page from blocks with font_size > 0.
 
@@ -193,6 +201,7 @@ def _compute_page_median_font_size(blocks: list[dict[str, Any]]) -> float:
     """
     sizes = [b["font_size"] for b in blocks if b.get("font_size", 0) > 0]
     return float(median(sizes)) if sizes else 0.0
+
 
 def is_numbered_heading(text: str) -> tuple[bool, int, str]:
     """Check if text matches numbered heading pattern.
@@ -212,13 +221,14 @@ def is_numbered_heading(text: str) -> tuple[bool, int, str]:
         return False, 0, text
 
     number_part = match.group(1)  # e.g. "2.1" or "2.1."
-    clean_text = match.group(3)   # e.g. "Monitoring"
+    clean_text = match.group(3)  # e.g. "Monitoring"
 
     # Level = number of dots + 1 (strip trailing dot first)
     stripped = number_part.rstrip(".")
     level = stripped.count(".") + 1
 
     return True, level, clean_text
+
 
 def is_allcaps_heading(text: str) -> bool:
     """Check if text is an all-caps heading.
@@ -257,39 +267,6 @@ def is_allcaps_heading(text: str) -> bool:
 
     return all(c.isupper() for c in alpha_chars)
 
-def is_fontsize_heading(
-    block: dict[str, Any],
-    median_font_size: float,
-) -> tuple[bool, int]:
-    """Check if block is a heading based on font size relative to page median.
-
-    Requirements:
-    - font_size > 0
-    - font_size >= median_font_size + 2.0
-
-    Level assignment:
-    - font_size >= median + 4.0 → level 1
-    - font_size >= median + 2.0 → level 2
-
-    Args:
-        block: Block dict with font_size field
-        median_font_size: Median font size for the page
-
-    Returns:
-        (is_heading, level)
-    """
-    font_size = block.get("font_size", 0)
-
-    if font_size <= 0 or median_font_size <= 0:
-        return False, 0
-
-    if font_size >= median_font_size + 4.0:
-        return True, 1
-
-    if font_size >= median_font_size + 2.0:
-        return True, 2
-
-    return False, 0
 
 def is_bold_heading(block: dict[str, Any]) -> bool:
     """Check if block qualifies as a bold heading.
@@ -331,6 +308,42 @@ def is_bold_heading(block: dict[str, Any]) -> bool:
         return False
 
     return True
+
+
+def is_fontsize_heading(
+    block: dict[str, Any],
+    median_font_size: float,
+) -> tuple[bool, int]:
+    """Check if block is a heading based on font size relative to page median.
+
+    Requirements:
+    - font_size > 0
+    - font_size >= median_font_size + 2.0
+
+    Level assignment:
+    - font_size >= median + 4.0 → level 1
+    - font_size >= median + 2.0 → level 2
+
+    Args:
+        block: Block dict with font_size field
+        median_font_size: Median font size for the page
+
+    Returns:
+        (is_heading, level)
+    """
+    font_size = block.get("font_size", 0)
+
+    if font_size <= 0 or median_font_size <= 0:
+        return False, 0
+
+    if font_size >= median_font_size + 4.0:
+        return True, 1
+
+    if font_size >= median_font_size + 2.0:
+        return True, 2
+
+    return False, 0
+
 
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
