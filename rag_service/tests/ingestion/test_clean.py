@@ -138,3 +138,50 @@ class TestFixHyphenatedLineBreaks:
 
     def test_empty_string(self) -> None:
         assert _fix_hyphenated_line_breaks("") == ""
+
+# -----------------------------------------------------------------------
+# _normalize_bullets_and_lists
+# -----------------------------------------------------------------------
+
+class TestNormalizeBulletsAndLists:
+    def test_bullet_dot_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("• item") == "- item"
+
+    def test_bullet_circle_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("◦ item") == "- item"
+
+    def test_bullet_square_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("▪ item") == "- item"
+
+    def test_bullet_arrow_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("▸ item") == "- item"
+
+    def test_bullet_check_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("✓ item") == "- item"
+
+    def test_bullet_dash_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("– item") == "- item"
+
+    def test_numbered_paren_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("1) item") == "1. item"
+
+    def test_numbered_bracket_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("(1) item") == "1. item"
+
+    def test_lettered_paren_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("a) item") == "a. item"
+
+    def test_lettered_bracket_normalized(self) -> None:
+        assert _normalize_bullets_and_lists("(a) item") == "a. item"
+
+    def test_multiline_bullets(self) -> None:
+        text = "• item one\n• item two"
+        result = _normalize_bullets_and_lists(text)
+        assert result == "- item one\n- item two"
+
+    def test_non_bullet_unchanged(self) -> None:
+        assert _normalize_bullets_and_lists("normal text") == "normal text"
+
+    def test_empty_string(self) -> None:
+        assert _normalize_bullets_and_lists("") == ""
+
