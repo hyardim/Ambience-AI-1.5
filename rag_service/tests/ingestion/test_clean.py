@@ -185,3 +185,60 @@ class TestNormalizeBulletsAndLists:
     def test_empty_string(self) -> None:
         assert _normalize_bullets_and_lists("") == ""
 
+# -----------------------------------------------------------------------
+# _remove_repeated_headers_footers
+# -----------------------------------------------------------------------
+
+class TestRemoveRepeatedHeadersFooters:
+    def test_repeated_header_removed(self) -> None:
+        # Block in header position (y0 < 842 * 0.15 = 126)
+        header_block = make_block("BSR Guidelines", bbox=[10.0, 20.0, 500.0, 40.0])
+        pages = [
+            make_page(i, blocks=[
+                header_block.copy(),
+                make_block(f"Content page {i}", block_id=1),
+            ])
+            for i in range(1, 6)
+        ]
+        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        assert removed == 5
+        for page in cleaned:
+            texts = [b["text"] for b in page["blocks"]]
+            assert "BSR Guidelines" not in texts
+
+    def test_repeated_footer_removed(self) -> None:
+        # Block in footer position (y3 > 842 * 0.85 = 715)
+        footer_block = make_block("Page 1", bbox=[10.0, 750.0, 500.0, 770.0])
+        pages = [
+            make_page(i, blocks=[
+                make_block(f"Content {i}", block_id=0),
+                footer_block.copy(),
+            ])
+            for i in range(1, 6)
+        ]
+        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        assert removed == 5
+
+    def test_non_repeated_block_kept(self) -> None:
+        # Block in header position but only on 1 of 5 pages (20% < 60%)
+        pages = [make_page(i) for i in range(1, 6)]
+        pages[0]["blocks"].append(
+            make_block("Unique header", bbox=[10.0, 20.0, 500.0, 40.0])
+        )
+        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        assert removed == 0
+
+    def test_middle_block_not_removed(self) -> None:
+        # Block in middle of page — should never be removed
+        middle_block = make_block("Same text every page", bbox=[10.0, 400.0, 500.0, 420.0])
+        pages = [
+            make_page(i, blocks=[middle_block.copy()])
+            for i in range(1, 6)
+        ]
+        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        assert removed == 0
+
+    def test_empty_pages_returns_zero_removed(self) -> None:
+        cleaned, removed = _remove_repeated_headers_footers([], num_pages=0)
+        assert removed == 0
+        assert cleaned == []
