@@ -98,7 +98,7 @@ def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Failed to extract PDF {pdf_path}: {e}")
-        raise PDFExtractionError(f"Failed to open PDF: {e}") from e
+        raise PDFExtractionError(f"Failed to extract PDF: {e}") from e
 
 
 def _open_pdf(pdf_path: str) -> fitz.Document:

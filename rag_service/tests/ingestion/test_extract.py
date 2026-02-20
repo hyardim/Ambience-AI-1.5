@@ -468,5 +468,5 @@ class TestExtractRawDocument:
         )
 
         with patch("src.ingestion.extract.fitz.open", return_value=doc):
-            with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
+            with pytest.raises(PDFExtractionError, match="Failed to extract PDF"):
                 extract_raw_document("test.pdf")
