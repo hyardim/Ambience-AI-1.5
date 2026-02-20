@@ -195,6 +195,38 @@ def _detect_columns(blocks: list[dict[str, Any]], page_width: float) -> int:
         return 2
     return 1
 
+def _sort_blocks(
+    blocks: list[dict[str, Any]],
+    page_width: float,
+    y_tolerance: int = Y_TOLERANCE,
+) -> list[dict[str, Any]]:
+    """Sort blocks into human reading order, handling multi-column layouts.
+
+    Args:
+        blocks: List of block dicts with bbox
+        page_width: Width of the page in points
+        y_tolerance: Tolerance for bucketing y-positions
+
+    Returns:
+        Sorted list of blocks
+    """
+    num_columns = _detect_columns(blocks, page_width)
+
+    if num_columns == 2:
+        left_blocks = [b for b in blocks if b["bbox"][0] < page_width / 2]
+        right_blocks = [b for b in blocks if b["bbox"][0] >= page_width / 2]
+        left_blocks.sort(
+            key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
+        )
+        right_blocks.sort(
+            key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
+        )
+        return left_blocks + right_blocks
+
+    blocks.sort(
+        key=lambda b: (round(b["bbox"][1] / y_tolerance), b["bbox"][0])
+    )
+    return blocks
 
 def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     """Detect scanned PDFs by checking average characters per page.
