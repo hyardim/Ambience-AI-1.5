@@ -256,3 +256,47 @@ class TestCellsToMarkdown:
         cells = [["1.0", "2.0"]]
         result = cells_to_markdown(cells)
         assert result == ""
+
+# -----------------------------------------------------------------------
+# find_table_caption
+# -----------------------------------------------------------------------
+
+class TestFindTableCaption:
+    def test_caption_pattern_detected(self) -> None:
+        table_bbox = [50.0, 300.0, 400.0, 500.0]
+        blocks = [
+            make_block("Table 1: Dosing Schedule", bbox=[50.0, 255.0, 400.0, 275.0])
+        ]
+        result = find_table_caption(table_bbox, blocks)
+        assert result == "Table 1: Dosing Schedule"
+
+    def test_bold_block_above_detected(self) -> None:
+        table_bbox = [50.0, 300.0, 400.0, 500.0]
+        blocks = [
+            make_block("Monitoring Schedule", bbox=[50.0, 255.0, 400.0, 275.0], is_bold=True)
+        ]
+        result = find_table_caption(table_bbox, blocks)
+        assert result == "Monitoring Schedule"
+
+    def test_block_too_far_above_ignored(self) -> None:
+        table_bbox = [50.0, 300.0, 400.0, 500.0]
+        blocks = [
+            make_block("Table 1: Far Away", bbox=[50.0, 100.0, 400.0, 120.0])
+        ]
+        result = find_table_caption(table_bbox, blocks)
+        assert result is None
+
+    def test_block_below_table_ignored(self) -> None:
+        table_bbox = [50.0, 300.0, 400.0, 500.0]
+        blocks = [
+            make_block("Table 1: Below", bbox=[50.0, 510.0, 400.0, 530.0])
+        ]
+        result = find_table_caption(table_bbox, blocks)
+        assert result is None
+
+    def test_no_caption_returns_none(self) -> None:
+        table_bbox = [50.0, 300.0, 400.0, 500.0]
+        blocks = [make_block("Normal text", bbox=[50.0, 255.0, 400.0, 275.0])]
+        result = find_table_caption(table_bbox, blocks)
+        assert result is None
+
