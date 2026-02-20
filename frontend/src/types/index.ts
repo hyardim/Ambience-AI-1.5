@@ -1,4 +1,4 @@
-export type UserRole = 'gp' | 'specialist';
+export type UserRole = 'gp' | 'specialist' | 'admin';
 
 export type QueryStatus = 'active' | 'resolved' | 'pending-review';
 

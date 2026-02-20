@@ -11,7 +11,7 @@ export function ChatMessage({ message, isOwnMessage = false }: ChatMessageProps)
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
     const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    
+
     if (isToday) {
       return `Sent today at ${timeStr}`;
     }
@@ -53,8 +53,8 @@ export function ChatMessage({ message, isOwnMessage = false }: ChatMessageProps)
 
         {/* Message bubble */}
         <div className={`rounded-2xl px-4 sm:px-5 py-3 sm:py-4 ${
-          isOwnMessage 
-            ? 'bg-[#e8edee] text-gray-900' 
+          isOwnMessage
+            ? 'bg-[#e8edee] text-gray-900'
             : message.senderType === 'ai'
               ? 'bg-white border-l-4 border-[#005eb8] shadow-sm'
               : 'bg-white shadow-sm'

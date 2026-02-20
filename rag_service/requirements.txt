@@ -18,4 +18,5 @@ numpy
 # Document Processing
 tqdm
 PyMuPDF
+langchain-text-splitters
 

@@ -26,4 +26,3 @@ docker run -d --rm \
 
 echo "Started container: ${CONTAINER_NAME}"
 echo "Tail logs: docker logs -f ${CONTAINER_NAME}"
-
