@@ -81,6 +81,32 @@ def _compute_page_median_font_size(blocks: list[dict[str, Any]]) -> float:
     sizes = [b["font_size"] for b in blocks if b.get("font_size", 0) > 0]
     return float(median(sizes)) if sizes else 0.0
 
+def is_numbered_heading(text: str) -> tuple[bool, int, str]:
+    """Check if text matches numbered heading pattern.
+
+    Pattern: starts with numeric prefix (1, 2.1, 3.2.1) followed by
+    capitalized text of at least 3 characters.
+
+    Args:
+        text: Block text to check
+
+    Returns:
+        (is_match, level, clean_text) where level is depth and
+        clean_text has the numeric prefix stripped
+    """
+    match = NUMBERED_HEADING_PATTERN.match(text.strip())
+    if not match:
+        return False, 0, text
+
+    number_part = match.group(1)  # e.g. "2.1" or "2.1."
+    clean_text = match.group(3)   # e.g. "Monitoring"
+
+    # Level = number of dots + 1 (strip trailing dot first)
+    stripped = number_part.rstrip(".")
+    level = stripped.count(".") + 1
+
+    return True, level, clean_text
+
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
 
