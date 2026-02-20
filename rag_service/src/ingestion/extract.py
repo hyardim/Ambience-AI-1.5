@@ -79,7 +79,7 @@ def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
                     )
                     continue
 
-            needs_ocr = _detect_needs_ocr(pages, num_pages)
+            needs_ocr = _detect_needs_ocr(pages, len(pages))
 
             logger.info(
                 f"Extracted {pdf_path}: {num_pages} pages, "
@@ -270,8 +270,7 @@ def _sort_blocks(
         right_blocks.sort(key=sort_key)
         return left_blocks + right_blocks
 
-    blocks.sort(key=sort_key)
-    return blocks
+    return sorted(blocks, key=sort_key)
 
 
 def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
