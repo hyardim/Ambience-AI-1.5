@@ -45,3 +45,17 @@ def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
     )
 
     pass
+
+def _normalize_unicode(text: str) -> str:
+    """Apply NFKC Unicode normalization.
+
+    Converts ligatures and visually similar characters to canonical form.
+    Example: 'ﬁ' → 'fi'
+
+    Args:
+        text: Raw block text
+
+    Returns:
+        NFKC normalized text
+    """
+    return unicodedata.normalize("NFKC", text)
