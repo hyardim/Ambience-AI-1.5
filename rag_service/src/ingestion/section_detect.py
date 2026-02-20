@@ -26,7 +26,9 @@ EXCLUDED_SECTIONS = {
     "appendices",
 }
 
-BULLET_PATTERN = re.compile(r"^[-•\d]")
+# Matches bullet/list markers only — digits excluded so numbered headings
+# are handled by is_numbered_heading (Rule A) not rejected here
+BULLET_PATTERN = re.compile(r"^[-•]")
 NUMBERED_HEADING_PATTERN = re.compile(
     r"^(\d+(\.\d+)*\.?)\s+([A-Z][a-zA-Z0-9\s\-:()]{2,})$"
 )

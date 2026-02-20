@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from src.ingestion.section_detect import (
@@ -595,8 +596,8 @@ class TestAddSectionMetadata:
                 )
             ]
         )
-        result1 = add_section_metadata(doc)
-        result2 = add_section_metadata(doc)
+        result1 = add_section_metadata(copy.deepcopy(doc))
+        result2 = add_section_metadata(copy.deepcopy(doc))
         assert result1 == result2
 
     def test_empty_document(self) -> None:
