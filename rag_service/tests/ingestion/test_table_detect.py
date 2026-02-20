@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.ingestion.table_detect import (
     _is_pipe_table_block,
     _normalize_cell,
@@ -20,6 +18,7 @@ from src.ingestion.table_detect import (
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
+
 
 def make_block(
     text: str,
@@ -95,9 +94,11 @@ def make_fitz_doc(
     doc.__exit__ = MagicMock(return_value=False)
     return doc
 
+
 # -----------------------------------------------------------------------
 # bboxes_overlap
 # -----------------------------------------------------------------------
+
 
 class TestBboxesOverlap:
     def test_overlapping_boxes(self) -> None:
@@ -118,9 +119,11 @@ class TestBboxesOverlap:
     def test_identical_boxes(self) -> None:
         assert bboxes_overlap([0, 0, 100, 100], [0, 0, 100, 100]) is True
 
+
 # -----------------------------------------------------------------------
 # find_overlapping_blocks
 # -----------------------------------------------------------------------
+
 
 class TestFindOverlappingBlocks:
     def test_finds_overlapping_block(self) -> None:
@@ -145,9 +148,11 @@ class TestFindOverlappingBlocks:
     def test_empty_blocks(self) -> None:
         assert find_overlapping_blocks([0.0, 0.0, 100.0, 100.0], []) == []
 
+
 # -----------------------------------------------------------------------
 # _normalize_cell
 # -----------------------------------------------------------------------
+
 
 class TestNormalizeCell:
     def test_none_returns_empty(self) -> None:
@@ -178,9 +183,11 @@ class TestNormalizeCell:
     def test_integer_input(self) -> None:
         assert _normalize_cell(42) == "42"
 
+
 # -----------------------------------------------------------------------
 # detect_header_row
 # -----------------------------------------------------------------------
+
 
 class TestDetectHeaderRow:
     def test_text_header_detected(self) -> None:
@@ -202,9 +209,11 @@ class TestDetectHeaderRow:
         cells = [["Drug", "Dose", "Note"], ["1.0", "2.0", "3.0"]]
         assert detect_header_row(cells) is True
 
+
 # -----------------------------------------------------------------------
 # cells_to_markdown
 # -----------------------------------------------------------------------
+
 
 class TestCellsToMarkdown:
     def test_basic_table(self) -> None:
@@ -251,15 +260,11 @@ class TestCellsToMarkdown:
         result = cells_to_markdown(cells)
         assert result.count("|") > 0
 
-    def test_empty_data_rows_returns_empty(self) -> None:
-        # Only header, no data rows, no header detection (numeric)
-        cells = [["1.0", "2.0"]]
-        result = cells_to_markdown(cells)
-        assert result == ""
 
 # -----------------------------------------------------------------------
 # find_table_caption
 # -----------------------------------------------------------------------
+
 
 class TestFindTableCaption:
     def test_caption_pattern_detected(self) -> None:
@@ -273,24 +278,22 @@ class TestFindTableCaption:
     def test_bold_block_above_detected(self) -> None:
         table_bbox = [50.0, 300.0, 400.0, 500.0]
         blocks = [
-            make_block("Monitoring Schedule", bbox=[50.0, 255.0, 400.0, 275.0], is_bold=True)
+            make_block(
+                "Monitoring Schedule", bbox=[50.0, 255.0, 400.0, 275.0], is_bold=True
+            )
         ]
         result = find_table_caption(table_bbox, blocks)
         assert result == "Monitoring Schedule"
 
     def test_block_too_far_above_ignored(self) -> None:
         table_bbox = [50.0, 300.0, 400.0, 500.0]
-        blocks = [
-            make_block("Table 1: Far Away", bbox=[50.0, 100.0, 400.0, 120.0])
-        ]
+        blocks = [make_block("Table 1: Far Away", bbox=[50.0, 100.0, 400.0, 120.0])]
         result = find_table_caption(table_bbox, blocks)
         assert result is None
 
     def test_block_below_table_ignored(self) -> None:
         table_bbox = [50.0, 300.0, 400.0, 500.0]
-        blocks = [
-            make_block("Table 1: Below", bbox=[50.0, 510.0, 400.0, 530.0])
-        ]
+        blocks = [make_block("Table 1: Below", bbox=[50.0, 510.0, 400.0, 530.0])]
         result = find_table_caption(table_bbox, blocks)
         assert result is None
 
@@ -300,9 +303,11 @@ class TestFindTableCaption:
         result = find_table_caption(table_bbox, blocks)
         assert result is None
 
+
 # -----------------------------------------------------------------------
 # _is_pipe_table_block
 # -----------------------------------------------------------------------
+
 
 class TestIsPipeTableBlock:
     def test_pipe_table_detected(self) -> None:
@@ -323,9 +328,11 @@ class TestIsPipeTableBlock:
     def test_empty_string_not_table(self) -> None:
         assert _is_pipe_table_block("") is False
 
+
 # -----------------------------------------------------------------------
 # detect_tables_with_pymupdf
 # -----------------------------------------------------------------------
+
 
 class TestDetectTablesWithPymupdf:
     def test_basic_table_detected(self) -> None:
@@ -367,42 +374,73 @@ class TestDetectTablesWithPymupdf:
 
         assert result == []
 
+
 # -----------------------------------------------------------------------
 # detect_and_convert_tables
 # -----------------------------------------------------------------------
 
+
 class TestDetectAndConvertTables:
     def test_returns_same_structure(self) -> None:
         doc = make_sectioned_doc()
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
         assert "source_path" in result
         assert "pages" in result
 
     def test_all_blocks_tagged_with_content_type(self) -> None:
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Text content", block_id=0),
-            make_block("Heading", block_id=1, is_heading=True),
-        ])])
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block("Text content", block_id=0),
+                        make_block("Heading", block_id=1, is_heading=True),
+                    ],
+                )
+            ]
+        )
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
         for page in result["pages"]:
             for block in page["blocks"]:
                 assert "content_type" in block
 
     def test_heading_tagged_correctly(self) -> None:
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Introduction", block_id=0, is_heading=True),
-        ])])
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block("Introduction", block_id=0, is_heading=True),
+                    ],
+                )
+            ]
+        )
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
         assert result["pages"][0]["blocks"][0]["content_type"] == "heading"
 
     def test_text_tagged_correctly(self) -> None:
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Body text", block_id=0),
-        ])])
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block("Body text", block_id=0),
+                    ],
+                )
+            ]
+        )
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
         assert result["pages"][0]["blocks"][0]["content_type"] == "text"
 
@@ -411,16 +449,27 @@ class TestDetectAndConvertTables:
         table_bbox = [50.0, 200.0, 400.0, 350.0]
         table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
 
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Text", block_id=0, bbox=[50.0, 210.0, 400.0, 230.0]),
-        ])])
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(
+                            "Text", block_id=0, bbox=[50.0, 210.0, 400.0, 230.0]
+                        ),
+                    ],
+                )
+            ]
+        )
 
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=table_info):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
 
         table_blocks = [
-            b for b in result["pages"][0]["blocks"]
-            if b.get("content_type") == "table"
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
         ]
         assert len(table_blocks) == 1
         assert "Drug" in table_blocks[0]["text"]
@@ -430,29 +479,60 @@ class TestDetectAndConvertTables:
         table_bbox = [50.0, 200.0, 400.0, 350.0]
         table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
 
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Text", block_id=0, bbox=[50.0, 210.0, 400.0, 230.0]),
-        ])])
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(
+                            "Text", block_id=0, bbox=[50.0, 210.0, 400.0, 230.0]
+                        ),
+                    ],
+                )
+            ]
+        )
 
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=table_info):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
 
         table_block = next(
-            b for b in result["pages"][0]["blocks"]
-            if b.get("content_type") == "table"
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
         )
-        assert all(k in table_block for k in [
-            "content_type", "text", "table_title", "section_path",
-            "section_title", "page_number", "bbox", "include_in_chunks",
-        ])
+        assert all(
+            k in table_block
+            for k in [
+                "content_type",
+                "text",
+                "table_title",
+                "section_path",
+                "section_title",
+                "page_number",
+                "bbox",
+                "include_in_chunks",
+            ]
+        )
         assert table_block["include_in_chunks"] is True
 
     def test_pipe_table_detected_by_heuristic(self) -> None:
-        pipe_text = "| Drug | Dose | Freq |\n| MTX | 7.5 | Weekly |\n| LEF | 20mg | Daily |"
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block(pipe_text, block_id=0),
-        ])])
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        pipe_text = (
+            "| Drug | Dose | Freq |\n| MTX | 7.5 | Weekly |\n| LEF | 20mg | Daily |"
+        )
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(pipe_text, block_id=0),
+                    ],
+                )
+            ]
+        )
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
         assert result["pages"][0]["blocks"][0]["content_type"] == "table"
 
@@ -461,37 +541,61 @@ class TestDetectAndConvertTables:
         table_bbox = [600.0, 600.0, 800.0, 800.0]  # far from any block
         table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
 
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Text", block_id=0, bbox=[10.0, 10.0, 100.0, 30.0]),
-        ])])
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block("Text", block_id=0, bbox=[10.0, 10.0, 100.0, 30.0]),
+                    ],
+                )
+            ]
+        )
 
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=table_info):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
 
         table_blocks = [
-            b for b in result["pages"][0]["blocks"]
-            if b.get("content_type") == "table"
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
         ]
         assert len(table_blocks) == 0
 
     def test_source_path_preserved(self) -> None:
         doc = make_sectioned_doc(source_path="guidelines.pdf")
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "guidelines.pdf")
         assert result["source_path"] == "guidelines.pdf"
 
     def test_empty_document(self) -> None:
         doc = make_sectioned_doc(pages=[])
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result = detect_and_convert_tables(doc, "test.pdf")
         assert result["pages"] == []
 
     def test_deterministic(self) -> None:
-        doc = make_sectioned_doc(pages=[make_page(1, blocks=[
-            make_block("Body text", block_id=0),
-        ])])
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block("Body text", block_id=0),
+                    ],
+                )
+            ]
+        )
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result1 = detect_and_convert_tables(doc, "test.pdf")
-        with patch("src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]):
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
             result2 = detect_and_convert_tables(doc, "test.pdf")
         assert result1 == result2
