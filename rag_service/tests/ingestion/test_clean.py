@@ -105,3 +105,36 @@ class TestNormalizeWhitespace:
 
     def test_two_newlines_preserved(self) -> None:
         assert _normalize_whitespace("a\n\nb") == "a\n\nb"
+
+
+# -----------------------------------------------------------------------
+# _fix_hyphenated_line_breaks
+# -----------------------------------------------------------------------
+
+class TestFixHyphenatedLineBreaks:
+    def test_basic_hyphen_merged(self) -> None:
+        assert _fix_hyphenated_line_breaks("treat-\nment") == "treatment"
+
+    def test_medical_term_merged(self) -> None:
+        assert _fix_hyphenated_line_breaks("inflam-\nmation") == "inflammation"
+
+    def test_covid_preserved(self) -> None:
+        assert _fix_hyphenated_line_breaks("COVID-19") == "COVID-19"
+
+    def test_uppercase_next_line_not_merged(self) -> None:
+        result = _fix_hyphenated_line_breaks("anti-\nInflammatory")
+        assert result == "anti-\nInflammatory"
+
+    def test_number_after_hyphen_not_merged(self) -> None:
+        assert _fix_hyphenated_line_breaks("step-\n1") == "step-\n1"
+
+    def test_multiple_hyphens_in_text(self) -> None:
+        text = "treat-\nment and anti-\ncoagulation"
+        result = _fix_hyphenated_line_breaks(text)
+        assert result == "treatment and anticoagulation"
+
+    def test_no_hyphen_unchanged(self) -> None:
+        assert _fix_hyphenated_line_breaks("hello world") == "hello world"
+
+    def test_empty_string(self) -> None:
+        assert _fix_hyphenated_line_breaks("") == ""
