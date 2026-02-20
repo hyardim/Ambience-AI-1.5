@@ -57,3 +57,51 @@ def make_clean_doc(
         "pages": pages,
     }
 
+# -----------------------------------------------------------------------
+# is_numbered_heading
+# -----------------------------------------------------------------------
+
+class TestIsNumberedHeading:
+    def test_level_1_heading(self) -> None:
+        match, level, clean = is_numbered_heading("1 Introduction")
+        assert match is True
+        assert level == 1
+        assert clean == "Introduction"
+
+    def test_level_2_heading(self) -> None:
+        match, level, clean = is_numbered_heading("2.1 Monitoring")
+        assert match is True
+        assert level == 2
+        assert clean == "Monitoring"
+
+    def test_level_3_heading(self) -> None:
+        match, level, clean = is_numbered_heading("3.2.1 Blood Tests")
+        assert match is True
+        assert level == 3
+        assert clean == "Blood Tests"
+
+    def test_trailing_dot_accepted(self) -> None:
+        match, level, clean = is_numbered_heading("2.1. Monitoring")
+        assert match is True
+        assert level == 2
+        assert clean == "Monitoring"
+
+    def test_dosage_not_heading(self) -> None:
+        match, level, clean = is_numbered_heading("2.5 mg dose")
+        assert match is False
+
+    def test_lowercase_after_number_not_heading(self) -> None:
+        match, level, _ = is_numbered_heading("1 tablet daily")
+        assert match is False
+
+    def test_short_text_not_heading(self) -> None:
+        match, _, _ = is_numbered_heading("1 Ab")
+        assert match is False
+
+    def test_no_number_not_heading(self) -> None:
+        match, _, _ = is_numbered_heading("Introduction")
+        assert match is False
+
+    def test_empty_string(self) -> None:
+        match, _, _ = is_numbered_heading("")
+        assert match is False
