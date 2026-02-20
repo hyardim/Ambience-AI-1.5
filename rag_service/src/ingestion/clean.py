@@ -59,3 +59,22 @@ def _normalize_unicode(text: str) -> str:
         NFKC normalized text
     """
     return unicodedata.normalize("NFKC", text)
+
+def _normalize_whitespace(text: str) -> str:
+    """Normalize whitespace in text.
+
+    - Normalizes line endings to \\n
+    - Collapses multiple spaces to single space
+    - Collapses 3+ newlines to max 2
+    - Trims leading/trailing whitespace
+
+    Args:
+        text: Block text
+
+    Returns:
+        Whitespace-normalized text
+    """
+    text = text.replace("\r\n", "\n")
+    text = re.sub(r" +", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
