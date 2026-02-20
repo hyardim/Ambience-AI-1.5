@@ -144,6 +144,47 @@ def is_allcaps_heading(text: str) -> bool:
 
     return all(c.isupper() for c in alpha_chars)
 
+def is_bold_heading(block: dict[str, Any]) -> bool:
+    """Check if block qualifies as a bold heading.
+
+    Requirements:
+    - is_bold = True
+    - Length <= 100 characters
+    - Fewer than 15 words
+    - Not all-caps (caught by Rule B)
+    - Does not start with bullet/list marker
+
+    Args:
+        block: Block dict with text and is_bold fields
+
+    Returns:
+        True if block qualifies as bold heading
+    """
+    if not block.get("is_bold", False):
+        return False
+
+    text = block.get("text", "").strip()
+
+    if not text:
+        return False
+
+    if BULLET_PATTERN.match(text):
+        return False
+
+    if len(text) > 100:
+        return False
+
+    words = text.split()
+    if len(words) >= 15:
+        return False
+
+    # Skip if all-caps — already caught by Rule B
+    alpha_chars = [c for c in text if c.isalpha()]
+    if alpha_chars and all(c.isupper() for c in alpha_chars):
+        return False
+
+    return True
+
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
 
