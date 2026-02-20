@@ -189,3 +189,27 @@ def bboxes_overlap(
         or bbox1[3] <= bbox2[1]
         or bbox2[3] <= bbox1[1]
     )
+
+def _normalize_cell(cell: Any) -> str:
+    """Normalize a table cell value.
+
+    - None → ""
+    - Newlines → " / "
+    - Pipe chars → "\\|"
+    - Trim whitespace
+    - Truncate at 100 chars
+
+    Args:
+        cell: Raw cell value
+
+    Returns:
+        Normalized cell string
+    """
+    if cell is None:
+        return ""
+    text = str(cell).replace("\n", " / ").replace("\r", "")
+    text = text.replace("|", "\\|")
+    text = text.strip()
+    if len(text) > CELL_MAX_LENGTH:
+        text = text[: CELL_MAX_LENGTH - 3] + "..."
+    return text
