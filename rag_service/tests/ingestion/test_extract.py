@@ -61,7 +61,7 @@ def make_fitz_doc(pages: list[MagicMock] | None = None) -> MagicMock:
     if pages is None:
         pages = [make_fitz_page()]
     doc.page_count = len(pages)
-    doc.__iter__ = MagicMock(return_value=iter(enumerate(pages, start=1)))
+    doc.__iter__ = MagicMock(return_value=iter(pages))
     doc.__enter__ = MagicMock(return_value=doc)
     doc.__exit__ = MagicMock(return_value=False)
     return doc
@@ -367,7 +367,7 @@ class TestExtractRawDocument:
 
         doc = MagicMock()
         doc.page_count = 2
-        doc.__iter__ = MagicMock(return_value=iter([(1, bad_page), (2, good_page)]))
+        doc.__iter__ = MagicMock(return_value=iter([bad_page, good_page]))
         doc.__enter__ = MagicMock(return_value=doc)
         doc.__exit__ = MagicMock(return_value=False)
 
