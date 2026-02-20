@@ -145,3 +145,36 @@ class TestFindOverlappingBlocks:
     def test_empty_blocks(self) -> None:
         assert find_overlapping_blocks([0.0, 0.0, 100.0, 100.0], []) == []
 
+# -----------------------------------------------------------------------
+# _normalize_cell
+# -----------------------------------------------------------------------
+
+class TestNormalizeCell:
+    def test_none_returns_empty(self) -> None:
+        assert _normalize_cell(None) == ""
+
+    def test_newline_replaced(self) -> None:
+        assert _normalize_cell("a\nb") == "a / b"
+
+    def test_pipe_escaped(self) -> None:
+        assert _normalize_cell("a | b") == r"a \| b"
+
+    def test_whitespace_trimmed(self) -> None:
+        assert _normalize_cell("  hello  ") == "hello"
+
+    def test_truncated_at_100(self) -> None:
+        long_text = "a" * 105
+        result = _normalize_cell(long_text)
+        assert len(result) == 100
+        assert result.endswith("...")
+
+    def test_exactly_100_not_truncated(self) -> None:
+        text = "a" * 100
+        assert _normalize_cell(text) == text
+
+    def test_normal_text_unchanged(self) -> None:
+        assert _normalize_cell("hello world") == "hello world"
+
+    def test_integer_input(self) -> None:
+        assert _normalize_cell(42) == "42"
+
