@@ -64,3 +64,35 @@ def make_fitz_doc(pages: list[MagicMock] | None = None) -> MagicMock:
     doc.__enter__ = MagicMock(return_value=doc)
     doc.__exit__ = MagicMock(return_value=False)
     return doc
+
+# -----------------------------------------------------------------------
+# _detect_columns
+# -----------------------------------------------------------------------
+
+class TestDetectColumns:
+    def test_single_column(self) -> None:
+        blocks = [
+            {"bbox": [10, 0, 200, 20]},
+            {"bbox": [10, 30, 200, 50]},
+            {"bbox": [10, 60, 200, 80]},
+        ]
+        assert _detect_columns(blocks, page_width=595.0) == 1
+
+    def test_two_columns(self) -> None:
+        blocks = [
+            {"bbox": [10, 0, 200, 20]},
+            {"bbox": [10, 30, 200, 50]},
+            {"bbox": [310, 0, 500, 20]},
+            {"bbox": [310, 30, 500, 50]},
+        ]
+        assert _detect_columns(blocks, page_width=595.0) == 2
+
+    def test_one_block_each_side_not_two_columns(self) -> None:
+        blocks = [
+            {"bbox": [10, 0, 200, 20]},
+            {"bbox": [310, 0, 500, 20]},
+        ]
+        assert _detect_columns(blocks, page_width=595.0) == 1
+
+    def test_empty_blocks(self) -> None:
+        assert _detect_columns([], page_width=595.0) == 1
