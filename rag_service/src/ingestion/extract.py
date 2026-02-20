@@ -284,6 +284,9 @@ def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     Returns:
         True if document appears to be scanned/image-based
     """
+    if num_pages == 0:
+        return False
+
     total_chars = sum(len(block["text"]) for page in pages for block in page["blocks"])
     avg_chars_per_page = total_chars / num_pages if num_pages > 0 else 0
     needs_ocr = avg_chars_per_page < OCR_CHAR_THRESHOLD
