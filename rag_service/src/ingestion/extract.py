@@ -104,6 +104,65 @@ def _extract_page(page: fitz.Page, page_number: int) -> dict[str, Any]:
     """
     pass
 
+def _extract_text_block(block: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract text and font metadata from a single PyMuPDF block.
+
+    Args:
+        block: Raw PyMuPDF block dict
+
+    Returns:
+        Extracted block dict, or None if block should be skipped
+    """
+    try:
+        bbox = list(block.get("bbox", [0, 0, 0, 0]))
+        lines = block.get("lines", [])
+
+        if not lines:
+            return None
+
+        block_text: list[str] = []
+        font_sizes: list[float] = []
+        font_names: list[str] = []
+        bold_count = 0
+        total_spans = 0
+
+        for line in lines:
+            line_text = ""
+            for span in line.get("spans", []):
+                line_text += span.get("text", "")
+                font_sizes.append(float(span.get("size", 0)))
+                font_names.append(span.get("font", ""))
+
+                if span.get("flags", 0) & 16:
+                    bold_count += 1
+                total_spans += 1
+
+            block_text.append(line_text.strip())
+
+        text = "\n".join(block_text).strip()
+
+        if not text:
+            return None
+
+        avg_font_size = sum(font_sizes) / len(font_sizes) if font_sizes else 0.0
+        dominant_font = (
+            max(set(font_names), key=font_names.count) if font_names else ""
+        )
+        is_bold = (bold_count / total_spans) > 0.5 if total_spans > 0 else False
+
+        return {
+            "text": text,
+            "bbox": bbox,
+            "font_size": avg_font_size,
+            "font_name": dominant_font,
+            "is_bold": is_bold,
+        }
+
+    except Exception as e:
+        logger.warning(f"Skipping malformed block: {e}")
+        return None
+
+
 def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     """Detect scanned PDFs by checking average characters per page.
 
