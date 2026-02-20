@@ -41,9 +41,43 @@ def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
     num_pages = len(pages)
     total_blocks = sum(len(p["blocks"]) for p in pages)
 
-    logger.info(f"Before cleaning: {total_blocks} blocks across {num_pages} pages")
+    logger.info(
+        f"Before cleaning: {total_blocks} blocks across {num_pages} pages"
+    )
 
-    pass
+    # Steps 1-4: clean each block's text
+    for page in pages:
+        for block in page["blocks"]:
+            text = block["text"]
+            text = _normalize_unicode(text)
+            text = _normalize_whitespace(text)
+            text = _fix_hyphenated_line_breaks(text)
+            text = _normalize_bullets_and_lists(text)
+            block["text"] = text
+
+    # Step 5: remove repeated headers/footers
+    pages, removed_headers = _remove_repeated_headers_footers(pages, num_pages)
+
+    # Step 6: remove duplicate pages
+    pages, removed_pages = _remove_duplicate_pages(pages)
+
+    # Step 7: remove empty blocks
+    for page in pages:
+        page["blocks"] = [b for b in page["blocks"] if b["text"].strip()]
+
+    final_blocks = sum(len(p["blocks"]) for p in pages)
+    final_pages = len(pages)
+
+    logger.info(f"Removed {removed_headers} header/footer blocks")
+    logger.info(f"Removed {removed_pages} duplicate pages")
+    logger.info(
+        f"After cleaning: {final_blocks} blocks across {final_pages} pages"
+    )
+
+    return {
+        **raw_doc,
+        "pages": pages,
+    }
 
 
 def _normalize_unicode(text: str) -> str:
