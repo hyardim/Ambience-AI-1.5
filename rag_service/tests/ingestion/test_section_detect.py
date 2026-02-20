@@ -247,3 +247,31 @@ class TestIsExcludedSection:
 
     def test_unknown_not_excluded(self) -> None:
         assert is_excluded_section("Unknown") is False
+
+
+# -----------------------------------------------------------------------
+# _compute_page_median_font_size
+# -----------------------------------------------------------------------
+
+class TestComputePageMedianFontSize:
+    def test_basic_median(self) -> None:
+        blocks = [
+            make_block("a", font_size=10.0),
+            make_block("b", font_size=12.0),
+            make_block("c", font_size=14.0),
+        ]
+        assert _compute_page_median_font_size(blocks) == 12.0
+
+    def test_zero_font_sizes_excluded(self) -> None:
+        blocks = [
+            make_block("a", font_size=0.0),
+            make_block("b", font_size=12.0),
+        ]
+        assert _compute_page_median_font_size(blocks) == 12.0
+
+    def test_all_zero_returns_zero(self) -> None:
+        blocks = [make_block("a", font_size=0.0)]
+        assert _compute_page_median_font_size(blocks) == 0.0
+
+    def test_empty_blocks_returns_zero(self) -> None:
+        assert _compute_page_median_font_size([]) == 0.0
