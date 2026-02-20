@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +14,7 @@ OCR_CHAR_THRESHOLD = 100
 
 
 class PDFExtractionError(Exception):
-    """Raised when PDF extraction fails."""
+    """Raised when PDF cannot be opened or processed."""
 
     pass
 
@@ -115,8 +117,6 @@ def _open_pdf(pdf_path: str) -> fitz.Document:
         return fitz.open(pdf_path)
     except FileNotFoundError as e:
         raise PDFExtractionError(f"PDF file not found: {pdf_path}") from e
-    except fitz.fitz.FileDataError as e:
-        raise PDFExtractionError(f"Invalid PDF: {pdf_path} - {e}") from e
     except PermissionError as e:
         raise PDFExtractionError(f"Permission denied: {pdf_path} - {e}") from e
     except Exception as e:
@@ -291,7 +291,7 @@ def _detect_needs_ocr(pages: list[dict[str, Any]], num_pages: int) -> bool:
     if needs_ocr:
         logger.warning(
             f"Low text density ({avg_chars_per_page:.1f} chars/page). "
-            "OCR may be needed."
+            f"OCR may be needed."
         )
 
     return needs_ocr

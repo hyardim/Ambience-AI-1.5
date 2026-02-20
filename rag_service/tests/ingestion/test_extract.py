@@ -420,8 +420,9 @@ class TestExtractRawDocument:
         with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("test.pdf")
 
-        required_fields = ["source_path", "num_pages", "needs_ocr", "pages"]
-        assert all(k in result for k in required_fields)
+        assert all(
+            k in result for k in ["source_path", "num_pages", "needs_ocr", "pages"]
+        )
         block = result["pages"][0]["blocks"][0]
         assert all(
             k in block
