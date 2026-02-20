@@ -143,3 +143,21 @@ def _remove_repeated_headers_footers(
         Tuple of (cleaned pages, number of blocks removed)
     """
     pass
+
+def _is_header_footer_block(
+    block: dict[str, Any],
+    patterns_to_remove: set[tuple[str, int]],
+) -> bool:
+    """Check if a block matches a repeated header/footer pattern.
+
+    Args:
+        block: Block dict with text and bbox
+        patterns_to_remove: Set of (normalized_text, y_bucket) patterns
+
+    Returns:
+        True if block should be removed
+    """
+    normalized = block["text"].lower().strip()
+    y0 = block["bbox"][1]
+    y_bucket = round(y0 / Y_BUCKET_SIZE) * Y_BUCKET_SIZE
+    return (normalized, y_bucket) in patterns_to_remove
