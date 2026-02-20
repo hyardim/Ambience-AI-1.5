@@ -27,7 +27,9 @@ EXCLUDED_SECTIONS = {
 }
 
 BULLET_PATTERN = re.compile(r"^[-•\d]")
-NUMBERED_HEADING_PATTERN = re.compile(r"^(\d+(\.\d+)*\.?)\s+([A-Z][a-zA-Z\s]{2,})$")
+NUMBERED_HEADING_PATTERN = re.compile(
+    r"^(\d+(\.\d+)*\.?)\s+([A-Z][a-zA-Z0-9\s\-:()]{2,})$"
+)
 
 
 def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
@@ -206,7 +208,9 @@ def is_numbered_heading(text: str) -> tuple[bool, int, str]:
     """Check if text matches numbered heading pattern.
 
     Pattern: starts with numeric prefix (1, 2.1, 3.2.1) followed by
-    capitalized text of at least 3 characters.
+    capitalized text of at least 3 characters. Allows letters, digits,
+    spaces, hyphens, colons, and parentheses after the prefix to support
+    headings like 'COVID-19 Guidelines', 'Post-operative Care', 'Section A: Overview'.
 
     Args:
         text: Block text to check

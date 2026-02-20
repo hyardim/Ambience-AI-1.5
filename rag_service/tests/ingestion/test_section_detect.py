@@ -107,6 +107,21 @@ class TestIsNumberedHeading:
         match, _, _ = is_numbered_heading("")
         assert match is False
 
+    def test_hyphenated_heading(self) -> None:
+        match, level, clean = is_numbered_heading("1 COVID-19 Guidelines")
+        assert match is True
+        assert clean == "COVID-19 Guidelines"
+
+    def test_heading_with_colon(self) -> None:
+        match, level, clean = is_numbered_heading("3 Section A: Overview")
+        assert match is True
+        assert clean == "Section A: Overview"
+
+    def test_postoperative_heading(self) -> None:
+        match, level, clean = is_numbered_heading("2.1 Post-operative Care")
+        assert match is True
+        assert clean == "Post-operative Care"
+
 
 # -----------------------------------------------------------------------
 # is_allcaps_heading
