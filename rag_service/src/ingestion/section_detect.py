@@ -144,6 +144,40 @@ def is_allcaps_heading(text: str) -> bool:
 
     return all(c.isupper() for c in alpha_chars)
 
+def is_fontsize_heading(
+    block: dict[str, Any],
+    median_font_size: float,
+) -> tuple[bool, int]:
+    """Check if block is a heading based on font size relative to page median.
+
+    Requirements:
+    - font_size > 0
+    - font_size >= median_font_size + 2.0
+
+    Level assignment:
+    - font_size >= median + 4.0 → level 1
+    - font_size >= median + 2.0 → level 2
+
+    Args:
+        block: Block dict with font_size field
+        median_font_size: Median font size for the page
+
+    Returns:
+        (is_heading, level)
+    """
+    font_size = block.get("font_size", 0)
+
+    if font_size <= 0 or median_font_size <= 0:
+        return False, 0
+
+    if font_size >= median_font_size + 4.0:
+        return True, 1
+
+    if font_size >= median_font_size + 2.0:
+        return True, 2
+
+    return False, 0
+
 def is_bold_heading(block: dict[str, Any]) -> bool:
     """Check if block qualifies as a bold heading.
 
