@@ -128,7 +128,56 @@ def cells_to_markdown(
     Returns:
         Markdown-formatted table string, or empty string if no data
     """
-    pass
+    if not cells:
+        return ""
+
+    # Normalize all cells
+    normalized = [[_normalize_cell(c) for c in row] for row in cells]
+
+    # Determine column count
+    max_cols = max(len(row) for row in normalized)
+    if max_cols == 0:
+        return ""
+
+    # Pad rows
+    for row in normalized:
+        while len(row) < max_cols:
+            row.append("")
+
+    # Single-column → bulleted list
+    if max_cols == 1:
+        items = [row[0] for row in normalized if row[0]]
+        if not items:
+            return ""
+        lines = []
+        if table_title:
+            lines.append(f"<!-- {table_title} -->")
+        lines.extend(f"- {item}" for item in items)
+        return "\n".join(lines)
+
+    has_header = detect_header_row(normalized)
+
+    if has_header:
+        header_row = normalized[0]
+        data_rows = normalized[1:]
+    else:
+        header_row = [f"Column {i + 1}" for i in range(max_cols)]
+        data_rows = normalized
+
+    # Skip if no data rows
+    if not data_rows:
+        return ""
+
+    lines = []
+    if table_title:
+        lines.append(f"<!-- {table_title} -->")
+
+    lines.append("| " + " | ".join(header_row) + " |")
+    lines.append("|" + "|".join(["---"] * max_cols) + "|")
+    for row in data_rows:
+        lines.append("| " + " | ".join(row) + " |")
+
+    return "\n".join(lines)
 
 
 def detect_header_row(cells: list[list[str]]) -> bool:
