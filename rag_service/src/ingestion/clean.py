@@ -23,7 +23,7 @@ def clean_document(raw_doc: dict[str, Any]) -> dict[str, Any]:
     Clean extracted PDF text by removing noise and normalizing formatting.
 
     Args:
-        raw_doc: RawDocument dict from extract_pdf.py
+        raw_doc: RawDocument dict from extract.py
 
     Returns:
         dict: CleanDocument with same structure but cleaned text
