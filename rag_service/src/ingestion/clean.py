@@ -117,4 +117,8 @@ def _normalize_bullets_and_lists(text: str) -> str:
     text = re.sub(r"^(\d+)\)\s*", r"\1. ", text, flags=re.MULTILINE)
     text = re.sub(r"^\((\d+)\)\s*", r"\1. ", text, flags=re.MULTILINE)
 
+    # Normalize lettered lists
+    text = re.sub(r"^([a-z])\)\s*", r"\1. ", text, flags=re.MULTILINE)
+    text = re.sub(r"^\(([a-z])\)\s*", r"\1. ", text, flags=re.MULTILINE)
+
     return text
