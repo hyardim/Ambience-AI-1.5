@@ -107,6 +107,43 @@ def is_numbered_heading(text: str) -> tuple[bool, int, str]:
 
     return True, level, clean_text
 
+def is_allcaps_heading(text: str) -> bool:
+    """Check if text is an all-caps heading.
+
+    Requirements:
+    - 100% uppercase
+    - Length <= 80 characters
+    - Fewer than 10 words
+    - Does not start with bullet/list marker
+
+    Args:
+        text: Block text to check
+
+    Returns:
+        True if text qualifies as all-caps heading
+    """
+    stripped = text.strip()
+
+    if not stripped:
+        return False
+
+    if BULLET_PATTERN.match(stripped):
+        return False
+
+    if len(stripped) > 80:
+        return False
+
+    words = stripped.split()
+    if len(words) >= 10:
+        return False
+
+    # Must be 100% uppercase — filter out non-alpha chars before checking
+    alpha_chars = [c for c in stripped if c.isalpha()]
+    if not alpha_chars:
+        return False
+
+    return all(c.isupper() for c in alpha_chars)
+
 def is_excluded_section(section_title: str) -> bool:
     """Check if section should be excluded from chunks.
 
