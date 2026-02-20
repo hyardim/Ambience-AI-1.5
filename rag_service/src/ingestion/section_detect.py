@@ -67,7 +67,26 @@ def _detect_heading(
     Returns:
         (is_heading, level, clean_text, heading_type)
     """
-    pass
+    # Rule A: numbered (priority 1)
+    matched, level, clean_text = is_numbered_heading(text)
+    if matched:
+        return True, level, clean_text, "numbered"
+
+    # Rule B: all-caps (priority 2)
+    if is_allcaps_heading(text):
+        return True, 1, text, "allcaps"
+
+    # Rule C: bold (priority 3)
+    if is_bold_heading(block):
+        return True, 2, text, "bold"
+
+    # Rule D: font-size (priority 4)
+    if page_median > 0:
+        matched, level = is_fontsize_heading(block, page_median)
+        if matched:
+            return True, level, text, "fontsize"
+
+    return False, 0, text, None
 
 def _compute_page_median_font_size(blocks: list[dict[str, Any]]) -> float:
     """Compute median font size for a page from blocks with font_size > 0.
