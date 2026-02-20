@@ -60,7 +60,34 @@ def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
                     "needs_ocr": False,
                     "pages": [],
                 }
-            pass
+
+            num_pages = doc.page_count
+            pages = []
+
+            for page_num, page in enumerate(doc, start=1):
+                try:
+                    page_data = _extract_page(page, page_num)
+                    pages.append(page_data)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to extract page {page_num} from {pdf_path}: {e}, skipping"
+                    )
+                    continue
+
+            needs_ocr = _detect_needs_ocr(pages, num_pages)
+
+            logger.info(
+                f"Extracted {pdf_path}: {num_pages} pages, "
+                f"{sum(len(p['blocks']) for p in pages)} blocks, "
+                f"needs_ocr={needs_ocr}"
+            )
+
+            return {
+                "source_path": pdf_path,
+                "num_pages": num_pages,
+                "needs_ocr": needs_ocr,
+                "pages": pages,
+            }
 
     except PDFExtractionError:
         raise
