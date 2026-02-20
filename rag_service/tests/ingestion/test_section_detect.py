@@ -488,7 +488,7 @@ class TestAddSectionMetadata:
             ]
         )
         result = add_section_metadata(doc)
-        assert result["pages"][1 - 1]["blocks"][1]["include_in_chunks"] is True
+        assert result["pages"][0]["blocks"][1]["include_in_chunks"] is True
 
     def test_excluded_section_include_in_chunks_false(self) -> None:
         doc = make_clean_doc(
