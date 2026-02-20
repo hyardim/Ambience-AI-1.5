@@ -78,3 +78,21 @@ def _normalize_whitespace(text: str) -> str:
     text = re.sub(r" +", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+def _fix_hyphenated_line_breaks(text: str) -> str:
+    """Merge words broken across lines by hyphens.
+
+    Only merges when:
+    - Hyphen is at end of line
+    - Next line starts with lowercase letter
+    - Both sides are alphabetic
+
+    Preserves legitimate hyphens like 'COVID-19', 'anti-inflammatory'.
+
+    Args:
+        text: Block text
+
+    Returns:
+        Text with hyphenated line breaks merged
+    """
+    return re.sub(r"([a-zA-Z]+)-\n([a-z][a-zA-Z]*)", r"\1\2", text)
