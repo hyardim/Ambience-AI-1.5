@@ -35,7 +35,7 @@ def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
     Detect headings and assign section metadata to all blocks.
 
     Args:
-        clean_doc: CleanDocument dict from clean_text.py
+        clean_doc: CleanDocument dict from clean.py
 
     Returns:
         dict: SectionedDocument with added fields per block:
