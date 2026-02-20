@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Import config chunk sizes.
-from .config import CHUNK_SIZE, CHUNK_OVERLAP
+from src.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 def chunk_pages(pages: List[Dict], cleaned_page_texts: List[str]) -> List[Dict]:
     """

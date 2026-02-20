@@ -10,13 +10,13 @@ from typing import List, Dict
 from tqdm import tqdm
 
 # Import our components.
-from .config import RAG_DATA_DIR
+from src.config import RAG_DATA_DIR
 from .extract import extract_pdf_pages
 from .clean import clean_lines_iterative, fix_stuttering_headers
 from .chunk import chunk_pages
 from .embed import load_embedder, embed_chunks, get_vector_dim
 from .metadata import sha256_file, parse_specialty_publisher_from_path, guess_title_from_filename, extract_published_date_from_frontmatter
-from app.db.utils import init_db, upsert_document, delete_chunks_for_doc, insert_chunks
+from src.retrieval.vector_store import init_db, upsert_document, delete_chunks_for_doc, insert_chunks
 
 def find_pdfs(root_dir: str) -> List[str]:
     """

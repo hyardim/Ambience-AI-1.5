@@ -175,22 +175,24 @@ def insert_chunks(chunks: List[Dict[str, Any]]) -> None:
     conn.close()
 
 def search_similar_chunks(query_embedding: List[float], limit: int = 5) -> List[Dict[str, Any]]:
-    """
-    Performs a vector similarity search (Cosine Distance) to find relevant chunks.
-    """
+    """Performs a vector similarity search (Cosine Distance) to find relevant chunks."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # We join 'chunks' with 'documents' to get the filename/metadata
-            # The <=> operator is Cosine Distance (0 = identical, 1 = opposite)
-            # We sort ASC because lower distance = better match.
+            # Join chunk rows with document metadata and compute cosine similarity (1 - distance)
             cur.execute(
                 """
                 SELECT 
+                    c.chunk_id,
+                    c.doc_id,
+                    c.chunk_index,
+                    c.page_start,
+                    c.page_end,
+                    c.section_path,
                     c.text,
                     d.filename,
                     d.specialty,
-                    (1 - (c.embedding <=> %s::vector)) as score
+                    (1 - (c.embedding <=> %s::vector)) AS score
                 FROM chunks c
                 JOIN documents d ON c.doc_id = d.doc_id
                 ORDER BY c.embedding <=> %s::vector ASC
@@ -200,12 +202,20 @@ def search_similar_chunks(query_embedding: List[float], limit: int = 5) -> List[
             )
             results = cur.fetchall()
 
-        # Format the results as a list of dictionaries
         return [
             {
-                "text": row[0],
-                "metadata": {"filename": row[1], "specialty": row[2]},
-                "score": float(row[3])
+                "chunk_id": row[0],
+                "doc_id": row[1],
+                "chunk_index": row[2],
+                "page_start": row[3],
+                "page_end": row[4],
+                "section_path": row[5],
+                "text": row[6],
+                "metadata": {
+                    "filename": row[7],
+                    "specialty": row[8],
+                },
+                "score": float(row[9]),
             }
             for row in results
         ]

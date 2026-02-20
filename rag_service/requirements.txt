@@ -1,6 +1,8 @@
 # Web Framework for the RAG API
 fastapi
 uvicorn[standard]
+httpx
+python-dotenv
 
 # Database and Vector support
 psycopg2-binary

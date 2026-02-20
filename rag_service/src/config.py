@@ -17,6 +17,12 @@ DATABASE_URL = os.getenv(
     "postgresql://admin:team20_password@localhost:5432/ambience_knowledge",
 )
 
+# Ollama connection (reachable from inside Docker via host.docker.internal)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "thewindmom/llama3-med42-8b")
+# Default max tokens for completions (can be overridden per request)
+OLLAMA_MAX_TOKENS = int(os.getenv("OLLAMA_MAX_TOKENS", "512"))
+
 # Root directory containing PDFs arranged like:
 #   rag_data/<specialty>/<publisher>/*.pdf
 RAG_DATA_DIR = os.getenv("RAG_DATA_DIR", "rag_data")
