@@ -139,6 +139,11 @@ class TestSortBlocks:
         sorted_b = _sort_blocks(blocks, page_width=595.0)
         assert sorted_b[0]["bbox"][0] == 10
 
+    def test_empty_blocks_returns_empty(self) -> None:
+        blocks: list[dict[str, Any]] = []
+        sorted_b = _sort_blocks(blocks, page_width=595.0)
+        assert sorted_b == []
+
 
 # -----------------------------------------------------------------------
 # _extract_text_block
