@@ -20,6 +20,7 @@ from src.ingestion.extract import (
 # Helpers
 # -----------------------------------------------------------------------
 
+
 def make_span(
     text: str = "Hello",
     size: float = 12.0,
@@ -65,9 +66,11 @@ def make_fitz_doc(pages: list[MagicMock] | None = None) -> MagicMock:
     doc.__exit__ = MagicMock(return_value=False)
     return doc
 
+
 # -----------------------------------------------------------------------
 # _detect_columns
 # -----------------------------------------------------------------------
+
 
 class TestDetectColumns:
     def test_single_column(self) -> None:
@@ -97,9 +100,11 @@ class TestDetectColumns:
     def test_empty_blocks(self) -> None:
         assert _detect_columns([], page_width=595.0) == 1
 
+
 # -----------------------------------------------------------------------
 # _sort_blocks
 # -----------------------------------------------------------------------
+
 
 class TestSortBlocks:
     def test_single_column_top_to_bottom(self) -> None:
@@ -133,9 +138,11 @@ class TestSortBlocks:
         sorted_b = _sort_blocks(blocks, page_width=595.0)
         assert sorted_b[0]["bbox"][0] == 10
 
+
 # -----------------------------------------------------------------------
 # _extract_text_block
 # -----------------------------------------------------------------------
+
 
 class TestExtractTextBlock:
     def test_basic_extraction(self) -> None:
@@ -154,11 +161,13 @@ class TestExtractTextBlock:
         assert result["is_bold"] is True
 
     def test_not_bold_when_minority(self) -> None:
-        block = make_block(spans=[
-            make_span("Normal", flags=0),
-            make_span("Normal", flags=0),
-            make_span("Bold", flags=16),
-        ])
+        block = make_block(
+            spans=[
+                make_span("Normal", flags=0),
+                make_span("Normal", flags=0),
+                make_span("Bold", flags=16),
+            ]
+        )
         result = _extract_text_block(block)
         assert result is not None
         assert result["is_bold"] is False
@@ -186,20 +195,24 @@ class TestExtractTextBlock:
         assert result["is_bold"] is False
 
     def test_dominant_font_selected(self) -> None:
-        block = make_block(spans=[
-            make_span("a", font="Arial"),
-            make_span("b", font="Arial"),
-            make_span("c", font="Times"),
-        ])
+        block = make_block(
+            spans=[
+                make_span("a", font="Arial"),
+                make_span("b", font="Arial"),
+                make_span("c", font="Times"),
+            ]
+        )
         result = _extract_text_block(block)
         assert result is not None
         assert result["font_name"] == "Arial"
 
     def test_average_font_size(self) -> None:
-        block = make_block(spans=[
-            make_span("a", size=10.0),
-            make_span("b", size=20.0),
-        ])
+        block = make_block(
+            spans=[
+                make_span("a", size=10.0),
+                make_span("b", size=20.0),
+            ]
+        )
         result = _extract_text_block(block)
         assert result is not None
         assert result["font_size"] == 15.0
@@ -228,9 +241,11 @@ class TestExtractTextBlock:
         result = _extract_text_block({"type": 0, "bbox": None, "lines": None})
         assert result is None
 
+
 # -----------------------------------------------------------------------
 # _detect_needs_ocr
 # -----------------------------------------------------------------------
+
 
 class TestDetectNeedsOcr:
     def test_low_text_density_is_ocr(self) -> None:
@@ -249,9 +264,11 @@ class TestDetectNeedsOcr:
         pages = [{"blocks": []}]
         assert _detect_needs_ocr(pages, num_pages=1) is True
 
+
 # -----------------------------------------------------------------------
 # _extract_page
 # -----------------------------------------------------------------------
+
 
 class TestExtractPage:
     def test_page_number_preserved(self) -> None:
@@ -260,20 +277,24 @@ class TestExtractPage:
         assert result["page_number"] == 3
 
     def test_image_blocks_ignored(self) -> None:
-        page = make_fitz_page(blocks=[
-            make_block(block_type=1),
-            make_block(spans=[make_span("Text")], block_type=0),
-        ])
+        page = make_fitz_page(
+            blocks=[
+                make_block(block_type=1),
+                make_block(spans=[make_span("Text")], block_type=0),
+            ]
+        )
         result = _extract_page(page, 1)
         assert len(result["blocks"]) == 1
         assert result["blocks"][0]["text"] == "Text"
 
     def test_block_ids_sequential(self) -> None:
-        page = make_fitz_page(blocks=[
-            make_block(spans=[make_span("A")], bbox=(10, 10, 200, 30)),
-            make_block(spans=[make_span("B")], bbox=(10, 50, 200, 70)),
-            make_block(spans=[make_span("C")], bbox=(10, 90, 200, 110)),
-        ])
+        page = make_fitz_page(
+            blocks=[
+                make_block(spans=[make_span("A")], bbox=(10, 10, 200, 30)),
+                make_block(spans=[make_span("B")], bbox=(10, 50, 200, 70)),
+                make_block(spans=[make_span("C")], bbox=(10, 90, 200, 110)),
+            ]
+        )
         result = _extract_page(page, 1)
         ids = [b["block_id"] for b in result["blocks"]]
         assert ids == list(range(len(ids)))
@@ -287,34 +308,36 @@ class TestExtractPage:
             for k in ["block_id", "text", "bbox", "font_size", "font_name", "is_bold"]
         )
 
+
 # -----------------------------------------------------------------------
 # extract_raw_document
 # -----------------------------------------------------------------------
 
+
 class TestExtractRawDocument:
     def test_basic_extraction(self) -> None:
         doc = make_fitz_doc()
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("test.pdf")
         assert result["num_pages"] == 1
         assert len(result["pages"]) == 1
 
     def test_source_path_preserved(self) -> None:
         doc = make_fitz_doc()
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("data/test.pdf")
         assert result["source_path"] == "data/test.pdf"
 
     def test_path_object_accepted(self) -> None:
         doc = make_fitz_doc()
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document(Path("data/test.pdf"))
         assert result["source_path"] == "data/test.pdf"
 
     def test_empty_pdf_returns_valid_structure(self) -> None:
         doc = make_fitz_doc(pages=[])
         doc.page_count = 0
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("empty.pdf")
         assert result["num_pages"] == 0
         assert result["pages"] == []
@@ -322,7 +345,7 @@ class TestExtractRawDocument:
 
     def test_corrupted_pdf_raises_error(self) -> None:
         with patch(
-            "src.ingestion.extract_pdf.fitz.open",
+            "src.ingestion.extract.fitz.open",
             side_effect=Exception("corrupted"),
         ):
             with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
@@ -330,7 +353,7 @@ class TestExtractRawDocument:
 
     def test_file_not_found_raises_error(self) -> None:
         with patch(
-            "src.ingestion.extract_pdf._open_pdf",
+            "src.ingestion.extract._open_pdf",
             side_effect=PDFExtractionError("PDF file not found: missing.pdf"),
         ):
             with pytest.raises(PDFExtractionError, match="PDF file not found"):
@@ -344,13 +367,11 @@ class TestExtractRawDocument:
 
         doc = MagicMock()
         doc.page_count = 2
-        doc.__iter__ = MagicMock(
-            return_value=iter([(1, bad_page), (2, good_page)])
-        )
+        doc.__iter__ = MagicMock(return_value=iter([(1, bad_page), (2, good_page)]))
         doc.__enter__ = MagicMock(return_value=doc)
         doc.__exit__ = MagicMock(return_value=False)
 
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("test.pdf")
 
         assert len(result["pages"]) == 1
@@ -358,14 +379,14 @@ class TestExtractRawDocument:
 
     def test_page_numbers_one_indexed(self) -> None:
         doc = make_fitz_doc(pages=[make_fitz_page(), make_fitz_page()])
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("test.pdf")
         assert [p["page_number"] for p in result["pages"]] == [1, 2]
 
     def test_needs_ocr_true_for_scanned(self) -> None:
         page = make_fitz_page(blocks=[make_block(spans=[make_span("Hi")])])
         doc = make_fitz_doc(pages=[page])
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("scanned.pdf")
         assert result["needs_ocr"] is True
 
@@ -373,31 +394,34 @@ class TestExtractRawDocument:
         long_text = "medical guidelines content " * 20
         page = make_fitz_page(blocks=[make_block(spans=[make_span(long_text)])])
         doc = make_fitz_doc(pages=[page])
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("normal.pdf")
         assert result["needs_ocr"] is False
 
     def test_deterministic_output(self) -> None:
-        page = make_fitz_page(blocks=[
-            make_block(spans=[make_span("A")], bbox=(10, 10, 200, 30)),
-            make_block(spans=[make_span("B")], bbox=(10, 50, 200, 70)),
-        ])
+        page = make_fitz_page(
+            blocks=[
+                make_block(spans=[make_span("A")], bbox=(10, 10, 200, 30)),
+                make_block(spans=[make_span("B")], bbox=(10, 50, 200, 70)),
+            ]
+        )
         doc1 = make_fitz_doc(pages=[page])
         doc2 = make_fitz_doc(pages=[page])
 
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc1):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc1):
             result1 = extract_raw_document("test.pdf")
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc2):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc2):
             result2 = extract_raw_document("test.pdf")
 
         assert result1 == result2
 
     def test_all_required_fields_present(self) -> None:
         doc = make_fitz_doc()
-        with patch("src.ingestion.extract_pdf.fitz.open", return_value=doc):
+        with patch("src.ingestion.extract.fitz.open", return_value=doc):
             result = extract_raw_document("test.pdf")
 
-        assert all(k in result for k in ["source_path", "num_pages", "needs_ocr", "pages"])
+        required_fields = ["source_path", "num_pages", "needs_ocr", "pages"]
+        assert all(k in result for k in required_fields)
         block = result["pages"][0]["blocks"][0]
         assert all(
             k in block
