@@ -138,3 +138,39 @@ class TestIsAllcapsHeading:
 
     def test_no_alpha_chars(self) -> None:
         assert is_allcaps_heading("123") is False
+
+# -----------------------------------------------------------------------
+# is_bold_heading
+# -----------------------------------------------------------------------
+
+class TestIsBoldHeading:
+    def test_bold_short_text(self) -> None:
+        block = make_block("Clinical Presentation", is_bold=True)
+        assert is_bold_heading(block) is True
+
+    def test_not_bold(self) -> None:
+        block = make_block("Clinical Presentation", is_bold=False)
+        assert is_bold_heading(block) is False
+
+    def test_too_long(self) -> None:
+        block = make_block("A" * 101, is_bold=True)
+        assert is_bold_heading(block) is False
+
+    def test_too_many_words(self) -> None:
+        text = "word " * 15
+        block = make_block(text, is_bold=True)
+        assert is_bold_heading(block) is False
+
+    def test_starts_with_bullet(self) -> None:
+        block = make_block("- Important point", is_bold=True)
+        assert is_bold_heading(block) is False
+
+    def test_allcaps_bold_not_matched(self) -> None:
+        # All-caps handled by Rule B, not Rule C
+        block = make_block("INTRODUCTION", is_bold=True)
+        assert is_bold_heading(block) is False
+
+    def test_empty_text(self) -> None:
+        block = make_block("", is_bold=True)
+        assert is_bold_heading(block) is False
+
