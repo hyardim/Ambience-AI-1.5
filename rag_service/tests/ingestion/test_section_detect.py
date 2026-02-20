@@ -143,7 +143,7 @@ class TestIsAllcapsHeading:
         assert is_allcaps_heading("COVID-19") is True
 
     def test_no_alpha_chars(self) -> None:
-        assert is_allcaps_heading("123") is False
+        assert is_allcaps_heading("!!! ???") is False
 
 
 # -----------------------------------------------------------------------
@@ -227,6 +227,11 @@ class TestIsFontsizeHeading:
         matched, level = is_fontsize_heading(block, median_font_size=12.0)
         assert matched is True
         assert level == 1
+
+    def test_slightly_larger_font_not_heading(self) -> None:
+        block = make_block("Text", font_size=13.0)
+        matched, _ = is_fontsize_heading(block, median_font_size=12.0)
+        assert matched is False
 
 
 # -----------------------------------------------------------------------
