@@ -114,3 +114,20 @@ def find_table_caption(
                 return text
 
     return None
+
+def cells_to_markdown(
+    cells: list[list[str]],
+    table_title: str | None = None,
+) -> str:
+    """Convert table cells to GitHub-flavored Markdown.
+
+    Args:
+        cells: List of rows, each row is list of cell strings
+        table_title: Optional caption included as HTML comment
+
+    Returns:
+        Markdown-formatted table string, or empty string if no data
+    """
+    pass
+
+
