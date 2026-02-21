@@ -256,8 +256,6 @@ def cells_to_markdown(
     # Single-column → bulleted list
     if max_cols == 1:
         items = [row[0] for row in normalized if row[0]]
-        if not items:
-            return ""
         lines = []
         if table_title:
             lines.append(f"<!-- {table_title} -->")

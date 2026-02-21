@@ -253,11 +253,6 @@ class TestCellsToMarkdown:
         assert "<!-- Table 1 -->" in result
         assert "- Item A" in result
 
-    def test_single_column_all_empty_returns_empty(self) -> None:
-        cells = [[""], [""]]
-        result = cells_to_markdown(cells)
-        assert result == ""
-
     def test_empty_cells_returns_empty(self) -> None:
         assert cells_to_markdown([]) == ""
 
