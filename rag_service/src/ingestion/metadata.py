@@ -167,6 +167,39 @@ def parse_pdf_date(date_str: str) -> str:
         return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
     except (ValueError, IndexError):
         return ""
+    
+def generate_doc_id(
+    doc: dict[str, Any],
+    pdf_metadata: dict[str, Any],
+    source_info: dict[str, Any],
+) -> str:
+    """Generate stable document ID.
+
+    Priority:
+    1. external_id from source_info
+    2. uid from PDF metadata
+    3. SHA-256 hash of title + author_org + first 1000 chars of first page
+
+    Args:
+        doc: TableAwareDocument dict
+        pdf_metadata: Extracted PDF metadata
+        source_info: Caller-supplied source info
+
+    Returns:
+        Stable document ID string
+    """
+    if source_info.get("external_id"):
+        return str(source_info["external_id"])
+
+    if pdf_metadata.get("uid"):
+        return str(pdf_metadata["uid"])
+
+    title = extract_title(doc, pdf_metadata, source_info)
+    author_org = source_info.get("author_org", "")
+    first_page_text = _get_page_text(doc, 0)[:1000]
+
+    hash_input = f"{title}|{author_org}|{first_page_text}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
 
 def extract_title(
