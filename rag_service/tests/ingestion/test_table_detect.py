@@ -626,7 +626,11 @@ class TestDetectAndConvertTables:
             "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
         ):
             result = detect_and_convert_tables(doc, "test.pdf")
-        assert result["pages"][0]["blocks"][0]["content_type"] == "table"
+        block = result["pages"][0]["blocks"][0]
+        assert block["content_type"] == "table"
+        assert block["include_in_chunks"] is True
+        assert block["table_title"] is None
+        assert block["page_number"] == 1
 
     def test_no_overlapping_blocks_table_skipped(self) -> None:
         cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]

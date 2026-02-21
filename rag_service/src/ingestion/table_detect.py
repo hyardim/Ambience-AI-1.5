@@ -108,6 +108,9 @@ def detect_and_convert_tables(
                 block.get("text", "")
             ):
                 block["content_type"] = "table"
+                block["table_title"] = None
+                block["page_number"] = page_num
+                block["include_in_chunks"] = True
                 n_heuristic += 1
         total_heuristic += n_heuristic
 
