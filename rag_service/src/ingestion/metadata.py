@@ -12,3 +12,6 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+VALID_SPECIALTIES = {"neurology", "rheumatology"}
+VALID_SOURCE_NAMES = {"NICE", "BSR", "Others"}
+VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard"}
