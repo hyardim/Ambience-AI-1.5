@@ -246,13 +246,11 @@ def parse_pdf_date(date_str: str) -> str:
     """
     if not date_str or not date_str.startswith("D:"):
         return ""
-    try:
-        trimmed = date_str[2:16]
-        if len(trimmed) < 8:
-            return ""
-        return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
-    except (ValueError, IndexError):
+
+    trimmed = date_str[2:16]
+    if len(trimmed) < 8:
         return ""
+    return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
 
 
 def generate_doc_id(
@@ -452,8 +450,6 @@ def _get_page_text(doc: dict[str, Any], page_index: int) -> str:
     pages = doc.get("pages", [])
     if not pages:
         return ""
-    try:
-        page = pages[page_index]
-        return " ".join(b.get("text", "") for b in page.get("blocks", []))
-    except IndexError:
-        return ""
+
+    page = pages[page_index]
+    return " ".join(b.get("text", "") for b in page.get("blocks", []))
