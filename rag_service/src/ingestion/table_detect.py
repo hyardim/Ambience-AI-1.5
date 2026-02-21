@@ -200,17 +200,21 @@ def find_table_caption(
         Caption string, or None if not found
     """
     table_top = table_bbox[1]
+    best_text: str | None = None
+    best_distance = float("inf")
 
     for block in page_blocks:
         block_bottom = block["bbox"][3]
-        if block_bottom < table_top and table_top - block_bottom < CAPTION_PROXIMITY_PX:
-            text = block.get("text", "").strip()
-            if CAPTION_PATTERN.match(text):
-                return str(text)
-            if block.get("is_bold", False):
-                return str(text)
+        if block_bottom < table_top:
+            distance = table_top - block_bottom
+            if distance < CAPTION_PROXIMITY_PX:
+                text = block.get("text", "").strip()
+                if CAPTION_PATTERN.match(text) or block.get("is_bold", False):
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_text = str(text)
 
-    return None
+    return best_text
 
 
 def cells_to_markdown(

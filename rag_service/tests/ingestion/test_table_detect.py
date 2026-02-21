@@ -317,6 +317,17 @@ class TestFindTableCaption:
         result = find_table_caption(table_bbox, blocks)
         assert result is None
 
+    def test_closest_block_wins_when_multiple_candidates(self) -> None:
+        table_bbox = [50.0, 300.0, 400.0, 500.0]
+        blocks = [
+            # Further away (40px above)
+            make_block("Table 1: Far Caption", bbox=[50.0, 240.0, 400.0, 260.0]),
+            # Closer (10px above)
+            make_block("Table 2: Close Caption", bbox=[50.0, 280.0, 400.0, 290.0]),
+        ]
+        result = find_table_caption(table_bbox, blocks)
+        assert result == "Table 2: Close Caption"
+
 
 # -----------------------------------------------------------------------
 # _is_pipe_table_block
