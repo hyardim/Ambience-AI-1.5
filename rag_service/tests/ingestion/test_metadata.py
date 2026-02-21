@@ -714,3 +714,11 @@ class TestAttachMetadata:
         with patch_pdf_meta():
             with pytest.raises(MetadataValidationError, match="source_path"):
                 attach_metadata(doc, source_info)
+
+    def test_block_page_number_set_from_page(self) -> None:
+        block = make_block("Some text")
+        del block["page_number"]  # simulate block without page_number from upstream
+        doc = make_table_aware_doc(pages=[make_page(page_number=3, blocks=[block])])
+        with patch_pdf_meta():
+            result = attach_metadata(doc, make_source_info())
+        assert result["pages"][0]["blocks"][0]["page_number"] == 3

@@ -107,6 +107,7 @@ def attach_metadata(
     for page in pages:
         page_num = page["page_number"]
         for block in page["blocks"]:
+            block.setdefault("page_number", page_num)
             block_uid = generate_block_uid(
                 doc_id=doc_id,
                 page_num=page_num,
