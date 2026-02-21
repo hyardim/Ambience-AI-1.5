@@ -201,6 +201,35 @@ def generate_doc_id(
     hash_input = f"{title}|{author_org}|{first_page_text}"
     return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
+def generate_doc_version(
+    doc: dict[str, Any],
+    pdf_metadata: dict[str, Any],
+    source_info: dict[str, Any],
+) -> str:
+    """Generate document version identifier.
+
+    Priority:
+    1. version from source_info
+    2. modDate from PDF metadata (already ISO format)
+    3. MD5 hash of first + last page text
+
+    Args:
+        doc: TableAwareDocument dict
+        pdf_metadata: Extracted PDF metadata
+        source_info: Caller-supplied source info
+
+    Returns:
+        Version string
+    """
+    if source_info.get("version"):
+        return str(source_info["version"])
+
+    if pdf_metadata.get("modDate"):
+        return str(pdf_metadata["modDate"])
+
+    first_page = _get_page_text(doc, 0)
+    last_page = _get_page_text(doc, -1)
+    return hashlib.md5(f"{first_page}|{last_page}".encode()).hexdigest()[:8]
 
 def extract_title(
     doc: dict[str, Any],
