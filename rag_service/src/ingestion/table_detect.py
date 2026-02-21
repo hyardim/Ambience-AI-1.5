@@ -35,10 +35,10 @@ def detect_and_convert_tables(
 
     Processing steps:
         1. Use PyMuPDF to detect tables by visual layout
-        2. Apply pipe-delimiter heuristic for borderless tables
-        3. Detect table captions (table_title)
-        4. Convert tables to Markdown
-        5. Map tables to document blocks
+        2. Detect table captions (table_title)
+        3. Convert tables to Markdown
+        4. Map tables to document blocks
+        5. Apply pipe-delimiter heuristic for borderless tables
         6. Tag all blocks with content_type
     """
     pages = sectioned_doc.get("pages", [])
