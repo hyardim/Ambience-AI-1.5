@@ -125,12 +125,15 @@ def detect_and_convert_tables(
         f"{total_captions} captions found"
     )
 
-    sample_tables = [
-        b["text"]
-        for page in pages
-        for b in page["blocks"]
-        if b.get("content_type") == "table"
-    ]
+    sample_tables = next(
+        (
+            b["text"]
+            for page in pages
+            for b in page["blocks"]
+            if b.get("content_type") == "table"
+        ),
+        None,
+    )
     if sample_tables:
         logger.debug(f"Sample Markdown table:\n{sample_tables[0]}")
 
