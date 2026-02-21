@@ -247,6 +247,9 @@ def cells_to_markdown(
         while len(row) < max_cols:
             row.append("")
 
+    if all(cell == "" for row in normalized for cell in row):
+        return ""
+
     # Single-column → bulleted list
     if max_cols == 1:
         items = [row[0] for row in normalized if row[0]]

@@ -276,6 +276,11 @@ class TestCellsToMarkdown:
         result = cells_to_markdown(cells)
         assert result.count("|") > 0
 
+    def test_all_empty_cells_returns_empty(self) -> None:
+        cells = [["", ""], ["", ""]]
+        result = cells_to_markdown(cells)
+        assert result == ""
+
 
 # -----------------------------------------------------------------------
 # find_table_caption
