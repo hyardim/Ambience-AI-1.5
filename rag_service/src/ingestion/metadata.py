@@ -17,6 +17,7 @@ VALID_SOURCE_NAMES = {"NICE", "BSR", "Others"}
 VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard"}
 TITLE_FONT_SIZE_THRESHOLD = 18
 
+
 class MetadataValidationError(Exception):
     """Raised when metadata validation fails."""
 
