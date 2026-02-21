@@ -105,6 +105,37 @@ def validate_source_info(source_info: dict[str, Any]) -> None:
             f"Invalid doc_type '{source_info['doc_type']}'. "
             f"Must be one of: {VALID_DOC_TYPES}"
         )
+    
+def extract_pdf_metadata(pdf_path: str) -> dict[str, Any]:
+    """Extract metadata from PDF file using PyMuPDF.
+
+    Args:
+        pdf_path: Path to the PDF file
+
+    Returns:
+        Dict with keys: title, author, subject, creator, producer,
+        creationDate, modDate, uid
+    """
+    try:
+        with fitz.open(pdf_path) as doc:
+            metadata = doc.metadata
+            return {
+                "title": metadata.get("title", ""),
+                "author": metadata.get("author", ""),
+                "subject": metadata.get("subject", ""),
+                "creator": metadata.get("creator", ""),
+                "producer": metadata.get("producer", ""),
+                "creationDate": parse_pdf_date(metadata.get("creationDate", "")),
+                "modDate": parse_pdf_date(metadata.get("modDate", "")),
+                "uid": metadata.get("uid", ""),
+            }
+    except Exception as e:
+        logger.warning(f"Failed to extract PDF metadata from {pdf_path}: {e}")
+        return {
+            "title": "", "author": "", "subject": "", "creator": "",
+            "producer": "", "creationDate": "", "modDate": "", "uid": "",
+        }
+
 
 def parse_pdf_date(date_str: str) -> str:
     """Convert PDF date format to ISO format.
