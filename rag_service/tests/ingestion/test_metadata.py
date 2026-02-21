@@ -158,3 +158,38 @@ class TestInferFromPath:
         )
         assert result["specialty"] == "rheumatology"
         assert result["source_name"] == "Others"
+
+# -----------------------------------------------------------------------
+# validate_source_info
+# -----------------------------------------------------------------------
+
+
+class TestValidateSourceInfo:
+    def test_valid_source_info_passes(self) -> None:
+        validate_source_info(make_source_info())
+
+    def test_missing_required_field_raises(self) -> None:
+        info = make_source_info()
+        del info["specialty"]
+        with pytest.raises(MetadataValidationError, match="specialty"):
+            validate_source_info(info)
+
+    def test_invalid_specialty_raises(self) -> None:
+        with pytest.raises(MetadataValidationError, match="Invalid specialty"):
+            validate_source_info(make_source_info(specialty="cardiology"))
+
+    def test_invalid_source_name_raises(self) -> None:
+        with pytest.raises(MetadataValidationError, match="Invalid source_name"):
+            validate_source_info(make_source_info(source_name="NHS"))
+
+    def test_invalid_doc_type_raises(self) -> None:
+        with pytest.raises(MetadataValidationError, match="Invalid doc_type"):
+            validate_source_info(make_source_info(doc_type="leaflet"))
+
+    def test_all_valid_specialties_pass(self) -> None:
+        for specialty in ["neurology", "rheumatology"]:
+            validate_source_info(make_source_info(specialty=specialty))
+
+    def test_all_valid_source_names_pass(self) -> None:
+        for source_name in ["NICE", "BSR", "Others"]:
+            validate_source_info(make_source_info(source_name=source_name))
