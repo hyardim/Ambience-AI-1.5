@@ -93,7 +93,7 @@ def detect_and_convert_tables(
                 "page_number": page_num,
                 "bbox": table_bbox,
                 "is_heading": False,
-                "include_in_chunks": True,
+                "include_in_chunks": overlapping[0].get("include_in_chunks", True),
             }
 
             # Remove overlapping blocks and insert table chunk
@@ -110,7 +110,6 @@ def detect_and_convert_tables(
                 block["content_type"] = "table"
                 block["table_title"] = None
                 block["page_number"] = page_num
-                block["include_in_chunks"] = True
                 n_heuristic += 1
         total_heuristic += n_heuristic
 

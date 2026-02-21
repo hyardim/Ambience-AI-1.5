@@ -28,6 +28,7 @@ def make_block(
     is_heading: bool = False,
     section_path: list[str] | None = None,
     section_title: str = "Introduction",
+    include_in_chunks: bool = True,
 ) -> dict[str, Any]:
     return {
         "block_id": block_id,
@@ -39,7 +40,7 @@ def make_block(
         "font_name": "Arial",
         "section_path": section_path or ["Introduction"],
         "section_title": section_title,
-        "include_in_chunks": True,
+        "include_in_chunks": include_in_chunks,
     }
 
 
@@ -695,3 +696,57 @@ class TestDetectAndConvertTables:
         ):
             result2 = detect_and_convert_tables(doc, "test.pdf")
         assert result1 == result2
+
+    def test_pymupdf_table_inherits_include_in_chunks_from_block(self) -> None:
+        cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
+        table_bbox = [50.0, 200.0, 400.0, 350.0]
+        table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
+
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(
+                            "Text",
+                            block_id=0,
+                            bbox=[50.0, 210.0, 400.0, 230.0],
+                            include_in_chunks=False,
+                        ),
+                    ],
+                )
+            ]
+        )
+
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
+            result = detect_and_convert_tables(doc, "test.pdf")
+        table_block = next(
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
+        )
+
+        assert table_block["include_in_chunks"] is False
+
+    def test_pipe_table_in_excluded_section_preserves_include_in_chunks(self) -> None:
+        pipe_text = (
+            "| Drug | Dose | Freq |\n| MTX | 7.5 | Weekly |\n| LEF | 20mg | Daily |"
+        )
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(pipe_text, block_id=0, include_in_chunks=False),
+                    ],
+                )
+            ]
+        )
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf", return_value=[]
+        ):
+            result = detect_and_convert_tables(doc, "test.pdf")
+        block = result["pages"][0]["blocks"][0]
+        assert block["content_type"] == "table"
+        assert block["include_in_chunks"] is False
