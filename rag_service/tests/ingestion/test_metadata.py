@@ -294,3 +294,54 @@ class TestExtractTitle:
         )
         assert extract_title(doc, make_pdf_metadata(), source_info) == "Bsr Guidelines"
 
+# -----------------------------------------------------------------------
+# generate_doc_id
+# -----------------------------------------------------------------------
+
+
+class TestGenerateDocId:
+    def test_external_id_used_first(self) -> None:
+        doc = make_table_aware_doc()
+        pdf_meta = make_pdf_metadata(uid="pdf-uid-123")
+        source_info = make_source_info(external_id="NICE-NG100")
+        assert generate_doc_id(doc, pdf_meta, source_info) == "NICE-NG100"
+
+    def test_pdf_uid_used_second(self) -> None:
+        doc = make_table_aware_doc()
+        pdf_meta = make_pdf_metadata(uid="pdf-uid-123")
+        assert generate_doc_id(doc, pdf_meta, make_source_info()) == "pdf-uid-123"
+
+    def test_content_hash_fallback(self) -> None:
+        result = generate_doc_id(
+            make_table_aware_doc(), make_pdf_metadata(), make_source_info()
+        )
+        assert len(result) == 16
+        assert result.isalnum()
+
+    def test_content_hash_stable_regardless_of_path(self) -> None:
+        doc = make_table_aware_doc(
+            pages=[make_page(blocks=[make_block("Same content")])]
+        )
+        pdf_meta = make_pdf_metadata()
+        id1 = generate_doc_id(
+            doc, pdf_meta,
+            make_source_info(source_path="data/raw/rheumatology/NICE/a.pdf", author_org="NICE"),
+        )
+        id2 = generate_doc_id(
+            doc, pdf_meta,
+            make_source_info(source_path="data/raw/rheumatology/NICE/b/a.pdf", author_org="NICE"),
+        )
+        assert id1 == id2
+
+    def test_different_content_gives_different_id(self) -> None:
+        pdf_meta = make_pdf_metadata()
+        source_info = make_source_info()
+        id1 = generate_doc_id(
+            make_table_aware_doc(pages=[make_page(blocks=[make_block("Content A")])]),
+            pdf_meta, source_info,
+        )
+        id2 = generate_doc_id(
+            make_table_aware_doc(pages=[make_page(blocks=[make_block("Content B")])]),
+            pdf_meta, source_info,
+        )
+        assert id1 != id2
