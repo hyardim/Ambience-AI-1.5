@@ -702,3 +702,15 @@ class TestAttachMetadata:
         assert meta["doc_type"] == "protocol"
         assert meta["author_org"] == "British Society for Rheumatology"
         assert meta["source_url"] == "https://bsr.org.uk/guidelines"
+
+    def test_missing_source_path_raises_metadata_validation_error(self) -> None:
+        doc = make_table_aware_doc(source_path="")
+        source_info = {
+            "source_name": "NICE",
+            "doc_type": "guideline",
+            "specialty": "rheumatology",
+            # source_path deliberately omitted
+        }
+        with patch_pdf_meta():
+            with pytest.raises(MetadataValidationError, match="source_path"):
+                attach_metadata(doc, source_info)

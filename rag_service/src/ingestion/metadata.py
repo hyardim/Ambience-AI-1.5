@@ -53,7 +53,12 @@ def attach_metadata(
     """
     # Step 1: infer missing fields from path
     source_info = {**source_info}
-    inferred = infer_from_path(source_info["source_path"])
+    source_path = source_info.get("source_path") or table_aware_doc.get("source_path")
+    if not source_path:
+        raise MetadataValidationError("source_info missing required field: source_path")
+    source_info["source_path"] = source_path
+
+    inferred = infer_from_path(source_path)
     if not source_info.get("specialty") and inferred.get("specialty"):
         source_info["specialty"] = inferred["specialty"]
     if not source_info.get("source_name") and inferred.get("source_name"):
