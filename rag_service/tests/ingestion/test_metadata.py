@@ -523,3 +523,144 @@ class TestValidateMetadata:
         doc = self._make_valid_doc()
         doc["pages"] = []
         assert validate_metadata(doc) is True
+
+# -----------------------------------------------------------------------
+# attach_metadata
+# -----------------------------------------------------------------------
+
+
+class TestAttachMetadata:
+    def test_doc_meta_attached(self) -> None:
+        with patch_pdf_meta():
+            result = attach_metadata(make_table_aware_doc(), make_source_info())
+        assert "doc_meta" in result
+
+    def test_doc_meta_required_fields_present(self) -> None:
+        with patch_pdf_meta():
+            result = attach_metadata(make_table_aware_doc(), make_source_info())
+        for field in [
+            "doc_id", "doc_version", "title", "source_name",
+            "doc_type", "specialty", "source_path", "ingestion_date",
+        ]:
+            assert field in result["doc_meta"]
+
+    def test_creation_date_in_doc_meta(self) -> None:
+        with patch_pdf_meta(creation_date="2024-01-01"):
+            result = attach_metadata(make_table_aware_doc(), make_source_info())
+        assert result["doc_meta"]["creation_date"] == "2024-01-01"
+
+    def test_creation_date_empty_when_not_in_pdf(self) -> None:
+        with patch_pdf_meta():
+            result = attach_metadata(make_table_aware_doc(), make_source_info())
+        assert result["doc_meta"]["creation_date"] == ""
+
+    def test_specialty_in_doc_meta(self) -> None:
+        with patch_pdf_meta():
+            result = attach_metadata(
+                make_table_aware_doc(), make_source_info(specialty="neurology")
+            )
+        assert result["doc_meta"]["specialty"] == "neurology"
+
+    def test_block_uid_attached_to_all_blocks(self) -> None:
+        doc = make_table_aware_doc(pages=[
+            make_page(blocks=[make_block("A", block_id=0), make_block("B", block_id=1)])
+        ])
+        with patch_pdf_meta():
+            result = attach_metadata(doc, make_source_info())
+        for block in result["pages"][0]["blocks"]:
+            assert "block_uid" in block
+            assert len(block["block_uid"]) == 16
+
+    def test_external_id_used_as_doc_id(self) -> None:
+        with patch_pdf_meta():
+            result = attach_metadata(
+                make_table_aware_doc(), make_source_info(external_id="NICE-NG100")
+            )
+        assert result["doc_meta"]["doc_id"] == "NICE-NG100"
+
+    def test_ingestion_date_is_today(self) -> None:
+        from datetime import date
+        with patch_pdf_meta():
+            result = attach_metadata(make_table_aware_doc(), make_source_info())
+        assert result["doc_meta"]["ingestion_date"] == date.today().isoformat()
+
+    def test_include_in_chunks_preserved(self) -> None:
+        doc = make_table_aware_doc(pages=[
+            make_page(blocks=[
+                make_block("Authors list", include_in_chunks=False),
+                make_block("Body", include_in_chunks=True),
+            ])
+        ])
+        with patch_pdf_meta():
+            result = attach_metadata(doc, make_source_info())
+        blocks = result["pages"][0]["blocks"]
+        assert blocks[0]["include_in_chunks"] is False
+        assert blocks[1]["include_in_chunks"] is True
+
+    def test_specialty_inferred_from_path_if_not_provided(self) -> None:
+        doc = make_table_aware_doc(
+            source_path="data/raw/neurology/BSR/guideline.pdf"
+        )
+        source_info = {
+            "source_path": "data/raw/neurology/BSR/guideline.pdf",
+            "doc_type": "guideline",
+        }
+        with patch_pdf_meta():
+            result = attach_metadata(doc, source_info)
+        assert result["doc_meta"]["specialty"] == "neurology"
+        assert result["doc_meta"]["source_name"] == "BSR"
+
+    def test_invalid_specialty_raises(self) -> None:
+        with patch_pdf_meta():
+            with pytest.raises(MetadataValidationError, match="Invalid specialty"):
+                attach_metadata(
+                    make_table_aware_doc(), make_source_info(specialty="cardiology")
+                )
+
+    def test_invalid_source_name_raises(self) -> None:
+        with patch_pdf_meta():
+            with pytest.raises(MetadataValidationError, match="Invalid source_name"):
+                attach_metadata(
+                    make_table_aware_doc(), make_source_info(source_name="NHS")
+                )
+
+    def test_invalid_doc_type_raises(self) -> None:
+        with patch_pdf_meta():
+            with pytest.raises(MetadataValidationError, match="Invalid doc_type"):
+                attach_metadata(
+                    make_table_aware_doc(), make_source_info(doc_type="leaflet")
+                )
+
+    def test_deterministic_block_uids(self) -> None:
+        doc = make_table_aware_doc()
+        source_info = make_source_info(external_id="NICE-NG100")
+        with patch_pdf_meta():
+            result1 = attach_metadata(doc, source_info)
+        with patch_pdf_meta():
+            result2 = attach_metadata(doc, source_info)
+        uids1 = [b["block_uid"] for b in result1["pages"][0]["blocks"]]
+        uids2 = [b["block_uid"] for b in result2["pages"][0]["blocks"]]
+        assert uids1 == uids2
+
+    def test_empty_document_no_blocks(self) -> None:
+        with patch_pdf_meta():
+            result = attach_metadata(make_table_aware_doc(pages=[]), make_source_info())
+        assert result["pages"] == []
+        assert "doc_meta" in result
+
+    def test_source_info_fields_in_doc_meta(self) -> None:
+        source_info = make_source_info(
+            source_name="BSR",
+            specialty="rheumatology",
+            doc_type="protocol",
+            author_org="British Society for Rheumatology",
+            source_url="https://bsr.org.uk/guidelines",
+        )
+        with patch_pdf_meta():
+            result = attach_metadata(make_table_aware_doc(), source_info)
+        meta = result["doc_meta"]
+        assert meta["source_name"] == "BSR"
+        assert meta["specialty"] == "rheumatology"
+        assert meta["doc_type"] == "protocol"
+        assert meta["author_org"] == "British Society for Rheumatology"
+        assert meta["source_url"] == "https://bsr.org.uk/guidelines"
