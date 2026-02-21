@@ -345,3 +345,53 @@ class TestGenerateDocId:
             pdf_meta, source_info,
         )
         assert id1 != id2
+
+# -----------------------------------------------------------------------
+# generate_doc_version
+# -----------------------------------------------------------------------
+
+
+class TestGenerateDocVersion:
+    def test_external_version_used_first(self) -> None:
+        assert generate_doc_version(
+            make_table_aware_doc(),
+            make_pdf_metadata(mod_date="2024-01-15"),
+            make_source_info(version="v2.1"),
+        ) == "v2.1"
+
+    def test_mod_date_used_second(self) -> None:
+        assert generate_doc_version(
+            make_table_aware_doc(),
+            make_pdf_metadata(mod_date="2024-01-15"),
+            make_source_info(),
+        ) == "2024-01-15"
+
+    def test_page_hash_fallback(self) -> None:
+        result = generate_doc_version(
+            make_table_aware_doc(), make_pdf_metadata(), make_source_info()
+        )
+        assert len(result) == 8
+        assert result.isalnum()
+
+    def test_changed_content_gives_different_version(self) -> None:
+        pdf_meta = make_pdf_metadata()
+        source_info = make_source_info()
+        v1 = generate_doc_version(
+            make_table_aware_doc(pages=[make_page(blocks=[make_block("Version 1")])]),
+            pdf_meta, source_info,
+        )
+        v2 = generate_doc_version(
+            make_table_aware_doc(pages=[make_page(blocks=[make_block("Version 2")])]),
+            pdf_meta, source_info,
+        )
+        assert v1 != v2
+
+    def test_unchanged_content_gives_same_version(self) -> None:
+        doc = make_table_aware_doc()
+        pdf_meta = make_pdf_metadata()
+        source_info = make_source_info()
+        assert (
+            generate_doc_version(doc, pdf_meta, source_info)
+            == generate_doc_version(doc, pdf_meta, source_info)
+        )
+
