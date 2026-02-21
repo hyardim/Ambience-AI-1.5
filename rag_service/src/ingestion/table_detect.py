@@ -262,10 +262,6 @@ def cells_to_markdown(
         header_row = [f"Column {i + 1}" for i in range(max_cols)]
         data_rows = normalized
 
-    # Skip if no data rows
-    if not data_rows:
-        return ""
-
     lines = []
     if table_title:
         lines.append(f"<!-- {table_title} -->")
