@@ -15,7 +15,7 @@ logger = setup_logger(__name__)
 VALID_SPECIALTIES = {"neurology", "rheumatology"}
 VALID_SOURCE_NAMES = {"NICE", "BSR", "Others"}
 VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard"}
-
+TITLE_FONT_SIZE_THRESHOLD = 18
 
 class MetadataValidationError(Exception):
     """Raised when metadata validation fails."""
@@ -356,7 +356,7 @@ def extract_title(
                 first_page_blocks,
                 key=lambda b: b.get("font_size", 0),
             )
-            if largest_block.get("font_size", 0) > 18:
+            if largest_block.get("font_size", 0) > TITLE_FONT_SIZE_THRESHOLD:
                 return str(largest_block["text"].strip())
 
     filename = os.path.basename(str(source_info["source_path"]))
