@@ -209,6 +209,10 @@ class TestDetectHeaderRow:
         cells = [["Drug", "Dose", "Note"], ["1.0", "2.0", "3.0"]]
         assert detect_header_row(cells) is True
 
+    def test_empty_first_row_not_header(self) -> None:
+        cells = [[], ["Drug", "Dose"]]
+        assert detect_header_row(cells) is False
+
 
 # -----------------------------------------------------------------------
 # cells_to_markdown
@@ -247,8 +251,18 @@ class TestCellsToMarkdown:
         assert "<!-- Table 1 -->" in result
         assert "- Item A" in result
 
+    def test_single_column_all_empty_returns_empty(self) -> None:
+        cells = [[""], [""]]
+        result = cells_to_markdown(cells)
+        assert result == ""
+
     def test_empty_cells_returns_empty(self) -> None:
         assert cells_to_markdown([]) == ""
+
+    def test_all_empty_rows_returns_empty(self) -> None:
+        cells = [[]]
+        result = cells_to_markdown(cells)
+        assert result == ""
 
     def test_pipe_in_cell_escaped(self) -> None:
         cells = [["A", "B"], ["x | y", "z"]]
@@ -516,6 +530,71 @@ class TestDetectAndConvertTables:
         )
         assert table_block["include_in_chunks"] is True
 
+    def test_caption_detected_and_stored(self) -> None:
+        cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
+        table_bbox = [50.0, 200.0, 400.0, 350.0]
+        table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
+
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(
+                            "Table 1: Dosing",
+                            block_id=0,
+                            bbox=[50.0, 155.0, 400.0, 175.0],
+                        ),
+                        make_block(
+                            "Content", block_id=1, bbox=[50.0, 210.0, 400.0, 230.0]
+                        ),
+                    ],
+                )
+            ]
+        )
+
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
+            result = detect_and_convert_tables(doc, "test.pdf")
+
+        table_block = next(
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
+        )
+        assert table_block["table_title"] == "Table 1: Dosing"
+
+    def test_empty_markdown_table_skipped(self) -> None:
+        # cells_to_markdown returns "" for header-only table (text header, no data rows)
+        # detect_header_row requires len >= 2, so single row → not header → data row
+        # Use empty cells list instead
+        table_bbox = [50.0, 200.0, 400.0, 350.0]
+        table_info = [{"cells": [], "bbox": table_bbox, "page_number": 1}]
+
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(
+                            "Text", block_id=0, bbox=[50.0, 210.0, 400.0, 230.0]
+                        ),
+                    ],
+                )
+            ]
+        )
+
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
+            result = detect_and_convert_tables(doc, "test.pdf")
+
+        table_blocks = [
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
+        ]
+        assert len(table_blocks) == 0
+
     def test_pipe_table_detected_by_heuristic(self) -> None:
         pipe_text = (
             "| Drug | Dose | Freq |\n| MTX | 7.5 | Weekly |\n| LEF | 20mg | Daily |"
@@ -538,7 +617,7 @@ class TestDetectAndConvertTables:
 
     def test_no_overlapping_blocks_table_skipped(self) -> None:
         cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
-        table_bbox = [600.0, 600.0, 800.0, 800.0]  # far from any block
+        table_bbox = [600.0, 600.0, 800.0, 800.0]
         table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
 
         doc = make_sectioned_doc(
