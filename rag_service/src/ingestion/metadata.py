@@ -49,3 +49,25 @@ def attach_metadata(
         9. Validate all metadata
     """
     pass
+
+
+def infer_from_path(source_path: str) -> dict[str, str]:
+    """Infer specialty and source_name from file path structure.
+
+    Expected path pattern: .../raw/{specialty}/{source_name}/{filename}.pdf
+
+    Args:
+        source_path: File path to the PDF
+
+    Returns:
+        Dict with 'specialty' and 'source_name' if inferable, else empty strings
+    """
+    parts = Path(source_path).parts
+    try:
+        raw_index = parts.index("raw")
+        return {
+            "specialty": parts[raw_index + 1],
+            "source_name": parts[raw_index + 2],
+        }
+    except (ValueError, IndexError):
+        return {"specialty": "", "source_name": ""}
