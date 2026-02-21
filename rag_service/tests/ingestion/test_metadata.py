@@ -395,3 +395,43 @@ class TestGenerateDocVersion:
             == generate_doc_version(doc, pdf_meta, source_info)
         )
 
+# -----------------------------------------------------------------------
+# generate_block_uid
+# -----------------------------------------------------------------------
+
+
+class TestGenerateBlockUid:
+    def test_returns_16_char_hex(self) -> None:
+        uid = generate_block_uid("doc123", 1, 0, "some text")
+        assert len(uid) == 16
+        assert all(c in "0123456789abcdef" for c in uid)
+
+    def test_same_inputs_same_uid(self) -> None:
+        assert (
+            generate_block_uid("doc123", 1, 0, "text")
+            == generate_block_uid("doc123", 1, 0, "text")
+        )
+
+    def test_different_text_different_uid(self) -> None:
+        assert (
+            generate_block_uid("doc123", 1, 0, "text A")
+            != generate_block_uid("doc123", 1, 0, "text B")
+        )
+
+    def test_different_page_different_uid(self) -> None:
+        assert (
+            generate_block_uid("doc123", 1, 0, "text")
+            != generate_block_uid("doc123", 2, 0, "text")
+        )
+
+    def test_case_insensitive(self) -> None:
+        assert (
+            generate_block_uid("doc123", 1, 0, "HELLO WORLD")
+            == generate_block_uid("doc123", 1, 0, "hello world")
+        )
+
+    def test_whitespace_normalized(self) -> None:
+        assert (
+            generate_block_uid("doc123", 1, 0, "  hello  ")
+            == generate_block_uid("doc123", 1, 0, "hello")
+        )
