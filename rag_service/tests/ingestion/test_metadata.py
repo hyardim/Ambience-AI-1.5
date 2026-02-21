@@ -105,6 +105,7 @@ def patch_pdf_meta(**kwargs: Any):  # type: ignore[no-untyped-def]
         return_value=make_pdf_metadata(**kwargs),
     )
 
+
 # -----------------------------------------------------------------------
 # parse_pdf_date
 # -----------------------------------------------------------------------
@@ -125,6 +126,7 @@ class TestParsePdfDate:
 
     def test_d_prefix_only_returns_empty(self) -> None:
         assert parse_pdf_date("D:") == ""
+
 
 # -----------------------------------------------------------------------
 # infer_from_path
@@ -158,6 +160,7 @@ class TestInferFromPath:
         )
         assert result["specialty"] == "rheumatology"
         assert result["source_name"] == "Others"
+
 
 # -----------------------------------------------------------------------
 # validate_source_info
@@ -193,6 +196,7 @@ class TestValidateSourceInfo:
     def test_all_valid_source_names_pass(self) -> None:
         for source_name in ["NICE", "BSR", "Others"]:
             validate_source_info(make_source_info(source_name=source_name))
+
 
 # -----------------------------------------------------------------------
 # extract_pdf_metadata
@@ -247,6 +251,7 @@ class TestExtractPdfMetadata:
         assert result["title"] == ""
         assert result["uid"] == ""
 
+
 # -----------------------------------------------------------------------
 # extract_title
 # -----------------------------------------------------------------------
@@ -259,22 +264,25 @@ class TestExtractTitle:
         assert extract_title(doc, pdf_meta, make_source_info()) == "RA Guidelines 2024"
 
     def test_generic_title_skipped(self) -> None:
-        doc = make_table_aware_doc(pages=[
-            make_page(blocks=[make_block("Big Title", font_size=24.0)])
-        ])
+        doc = make_table_aware_doc(
+            pages=[make_page(blocks=[make_block("Big Title", font_size=24.0)])]
+        )
         pdf_meta = make_pdf_metadata(title="Untitled")
         assert extract_title(doc, pdf_meta, make_source_info()) == "Big Title"
 
     def test_large_font_block_used_when_no_pdf_title(self) -> None:
-        doc = make_table_aware_doc(pages=[
-            make_page(blocks=[make_block("Clinical Guideline", font_size=22.0)])
-        ])
-        assert extract_title(doc, make_pdf_metadata(), make_source_info()) == "Clinical Guideline"
+        doc = make_table_aware_doc(
+            pages=[make_page(blocks=[make_block("Clinical Guideline", font_size=22.0)])]
+        )
+        assert (
+            extract_title(doc, make_pdf_metadata(), make_source_info())
+            == "Clinical Guideline"
+        )
 
     def test_small_font_block_not_used_as_title(self) -> None:
-        doc = make_table_aware_doc(pages=[
-            make_page(blocks=[make_block("Body text", font_size=12.0)])
-        ])
+        doc = make_table_aware_doc(
+            pages=[make_page(blocks=[make_block("Body text", font_size=12.0)])]
+        )
         source_info = make_source_info(
             source_path="data/raw/rheumatology/NICE/nice_ra_2024.pdf"
         )
@@ -285,7 +293,9 @@ class TestExtractTitle:
         source_info = make_source_info(
             source_path="data/raw/rheumatology/NICE/nice_ra_guidelines.pdf"
         )
-        assert extract_title(doc, make_pdf_metadata(), source_info) == "Nice Ra Guidelines"
+        assert (
+            extract_title(doc, make_pdf_metadata(), source_info) == "Nice Ra Guidelines"
+        )
 
     def test_empty_first_page_blocks_falls_back_to_filename(self) -> None:
         doc = make_table_aware_doc(pages=[make_page(blocks=[])])
@@ -293,6 +303,7 @@ class TestExtractTitle:
             source_path="data/raw/neurology/BSR/bsr_guidelines.pdf"
         )
         assert extract_title(doc, make_pdf_metadata(), source_info) == "Bsr Guidelines"
+
 
 # -----------------------------------------------------------------------
 # generate_doc_id
@@ -324,12 +335,18 @@ class TestGenerateDocId:
         )
         pdf_meta = make_pdf_metadata()
         id1 = generate_doc_id(
-            doc, pdf_meta,
-            make_source_info(source_path="data/raw/rheumatology/NICE/a.pdf", author_org="NICE"),
+            doc,
+            pdf_meta,
+            make_source_info(
+                source_path="data/raw/rheumatology/NICE/a.pdf", author_org="NICE"
+            ),
         )
         id2 = generate_doc_id(
-            doc, pdf_meta,
-            make_source_info(source_path="data/raw/rheumatology/NICE/b/a.pdf", author_org="NICE"),
+            doc,
+            pdf_meta,
+            make_source_info(
+                source_path="data/raw/rheumatology/NICE/b/a.pdf", author_org="NICE"
+            ),
         )
         assert id1 == id2
 
@@ -338,13 +355,16 @@ class TestGenerateDocId:
         source_info = make_source_info()
         id1 = generate_doc_id(
             make_table_aware_doc(pages=[make_page(blocks=[make_block("Content A")])]),
-            pdf_meta, source_info,
+            pdf_meta,
+            source_info,
         )
         id2 = generate_doc_id(
             make_table_aware_doc(pages=[make_page(blocks=[make_block("Content B")])]),
-            pdf_meta, source_info,
+            pdf_meta,
+            source_info,
         )
         assert id1 != id2
+
 
 # -----------------------------------------------------------------------
 # generate_doc_version
@@ -353,18 +373,24 @@ class TestGenerateDocId:
 
 class TestGenerateDocVersion:
     def test_external_version_used_first(self) -> None:
-        assert generate_doc_version(
-            make_table_aware_doc(),
-            make_pdf_metadata(mod_date="2024-01-15"),
-            make_source_info(version="v2.1"),
-        ) == "v2.1"
+        assert (
+            generate_doc_version(
+                make_table_aware_doc(),
+                make_pdf_metadata(mod_date="2024-01-15"),
+                make_source_info(version="v2.1"),
+            )
+            == "v2.1"
+        )
 
     def test_mod_date_used_second(self) -> None:
-        assert generate_doc_version(
-            make_table_aware_doc(),
-            make_pdf_metadata(mod_date="2024-01-15"),
-            make_source_info(),
-        ) == "2024-01-15"
+        assert (
+            generate_doc_version(
+                make_table_aware_doc(),
+                make_pdf_metadata(mod_date="2024-01-15"),
+                make_source_info(),
+            )
+            == "2024-01-15"
+        )
 
     def test_page_hash_fallback(self) -> None:
         result = generate_doc_version(
@@ -378,11 +404,13 @@ class TestGenerateDocVersion:
         source_info = make_source_info()
         v1 = generate_doc_version(
             make_table_aware_doc(pages=[make_page(blocks=[make_block("Version 1")])]),
-            pdf_meta, source_info,
+            pdf_meta,
+            source_info,
         )
         v2 = generate_doc_version(
             make_table_aware_doc(pages=[make_page(blocks=[make_block("Version 2")])]),
-            pdf_meta, source_info,
+            pdf_meta,
+            source_info,
         )
         assert v1 != v2
 
@@ -390,10 +418,10 @@ class TestGenerateDocVersion:
         doc = make_table_aware_doc()
         pdf_meta = make_pdf_metadata()
         source_info = make_source_info()
-        assert (
-            generate_doc_version(doc, pdf_meta, source_info)
-            == generate_doc_version(doc, pdf_meta, source_info)
+        assert generate_doc_version(doc, pdf_meta, source_info) == generate_doc_version(
+            doc, pdf_meta, source_info
         )
+
 
 # -----------------------------------------------------------------------
 # generate_block_uid
@@ -407,34 +435,30 @@ class TestGenerateBlockUid:
         assert all(c in "0123456789abcdef" for c in uid)
 
     def test_same_inputs_same_uid(self) -> None:
-        assert (
-            generate_block_uid("doc123", 1, 0, "text")
-            == generate_block_uid("doc123", 1, 0, "text")
+        assert generate_block_uid("doc123", 1, 0, "text") == generate_block_uid(
+            "doc123", 1, 0, "text"
         )
 
     def test_different_text_different_uid(self) -> None:
-        assert (
-            generate_block_uid("doc123", 1, 0, "text A")
-            != generate_block_uid("doc123", 1, 0, "text B")
+        assert generate_block_uid("doc123", 1, 0, "text A") != generate_block_uid(
+            "doc123", 1, 0, "text B"
         )
 
     def test_different_page_different_uid(self) -> None:
-        assert (
-            generate_block_uid("doc123", 1, 0, "text")
-            != generate_block_uid("doc123", 2, 0, "text")
+        assert generate_block_uid("doc123", 1, 0, "text") != generate_block_uid(
+            "doc123", 2, 0, "text"
         )
 
     def test_case_insensitive(self) -> None:
-        assert (
-            generate_block_uid("doc123", 1, 0, "HELLO WORLD")
-            == generate_block_uid("doc123", 1, 0, "hello world")
+        assert generate_block_uid("doc123", 1, 0, "HELLO WORLD") == generate_block_uid(
+            "doc123", 1, 0, "hello world"
         )
 
     def test_whitespace_normalized(self) -> None:
-        assert (
-            generate_block_uid("doc123", 1, 0, "  hello  ")
-            == generate_block_uid("doc123", 1, 0, "hello")
+        assert generate_block_uid("doc123", 1, 0, "  hello  ") == generate_block_uid(
+            "doc123", 1, 0, "hello"
         )
+
 
 # -----------------------------------------------------------------------
 # validate_metadata
@@ -524,6 +548,7 @@ class TestValidateMetadata:
         doc["pages"] = []
         assert validate_metadata(doc) is True
 
+
 # -----------------------------------------------------------------------
 # attach_metadata
 # -----------------------------------------------------------------------
@@ -539,8 +564,14 @@ class TestAttachMetadata:
         with patch_pdf_meta():
             result = attach_metadata(make_table_aware_doc(), make_source_info())
         for field in [
-            "doc_id", "doc_version", "title", "source_name",
-            "doc_type", "specialty", "source_path", "ingestion_date",
+            "doc_id",
+            "doc_version",
+            "title",
+            "source_name",
+            "doc_type",
+            "specialty",
+            "source_path",
+            "ingestion_date",
         ]:
             assert field in result["doc_meta"]
 
@@ -562,9 +593,13 @@ class TestAttachMetadata:
         assert result["doc_meta"]["specialty"] == "neurology"
 
     def test_block_uid_attached_to_all_blocks(self) -> None:
-        doc = make_table_aware_doc(pages=[
-            make_page(blocks=[make_block("A", block_id=0), make_block("B", block_id=1)])
-        ])
+        doc = make_table_aware_doc(
+            pages=[
+                make_page(
+                    blocks=[make_block("A", block_id=0), make_block("B", block_id=1)]
+                )
+            ]
+        )
         with patch_pdf_meta():
             result = attach_metadata(doc, make_source_info())
         for block in result["pages"][0]["blocks"]:
@@ -580,17 +615,22 @@ class TestAttachMetadata:
 
     def test_ingestion_date_is_today(self) -> None:
         from datetime import date
+
         with patch_pdf_meta():
             result = attach_metadata(make_table_aware_doc(), make_source_info())
         assert result["doc_meta"]["ingestion_date"] == date.today().isoformat()
 
     def test_include_in_chunks_preserved(self) -> None:
-        doc = make_table_aware_doc(pages=[
-            make_page(blocks=[
-                make_block("Authors list", include_in_chunks=False),
-                make_block("Body", include_in_chunks=True),
-            ])
-        ])
+        doc = make_table_aware_doc(
+            pages=[
+                make_page(
+                    blocks=[
+                        make_block("Authors list", include_in_chunks=False),
+                        make_block("Body", include_in_chunks=True),
+                    ]
+                )
+            ]
+        )
         with patch_pdf_meta():
             result = attach_metadata(doc, make_source_info())
         blocks = result["pages"][0]["blocks"]
@@ -598,9 +638,7 @@ class TestAttachMetadata:
         assert blocks[1]["include_in_chunks"] is True
 
     def test_specialty_inferred_from_path_if_not_provided(self) -> None:
-        doc = make_table_aware_doc(
-            source_path="data/raw/neurology/BSR/guideline.pdf"
-        )
+        doc = make_table_aware_doc(source_path="data/raw/neurology/BSR/guideline.pdf")
         source_info = {
             "source_path": "data/raw/neurology/BSR/guideline.pdf",
             "doc_type": "guideline",
