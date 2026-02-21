@@ -16,9 +16,12 @@ VALID_SPECIALTIES = {"neurology", "rheumatology"}
 VALID_SOURCE_NAMES = {"NICE", "BSR", "Others"}
 VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard"}
 
+
 class MetadataValidationError(Exception):
     """Raised when metadata validation fails."""
+
     pass
+
 
 def attach_metadata(
     table_aware_doc: dict[str, Any],
@@ -71,7 +74,8 @@ def infer_from_path(source_path: str) -> dict[str, str]:
         }
     except (ValueError, IndexError):
         return {"specialty": "", "source_name": ""}
-  
+
+
 def validate_source_info(source_info: dict[str, Any]) -> None:
     """Validate source_info fields.
 
@@ -105,7 +109,8 @@ def validate_source_info(source_info: dict[str, Any]) -> None:
             f"Invalid doc_type '{source_info['doc_type']}'. "
             f"Must be one of: {VALID_DOC_TYPES}"
         )
-    
+
+
 def extract_pdf_metadata(pdf_path: str) -> dict[str, Any]:
     """Extract metadata from PDF file using PyMuPDF.
 
@@ -132,8 +137,14 @@ def extract_pdf_metadata(pdf_path: str) -> dict[str, Any]:
     except Exception as e:
         logger.warning(f"Failed to extract PDF metadata from {pdf_path}: {e}")
         return {
-            "title": "", "author": "", "subject": "", "creator": "",
-            "producer": "", "creationDate": "", "modDate": "", "uid": "",
+            "title": "",
+            "author": "",
+            "subject": "",
+            "creator": "",
+            "producer": "",
+            "creationDate": "",
+            "modDate": "",
+            "uid": "",
         }
 
 
@@ -156,3 +167,42 @@ def parse_pdf_date(date_str: str) -> str:
         return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
     except (ValueError, IndexError):
         return ""
+
+def extract_title(
+    doc: dict[str, Any],
+    pdf_metadata: dict[str, Any],
+    source_info: dict[str, Any],
+) -> str:
+    """Extract or infer document title.
+
+    Priority:
+    1. PDF metadata title (if non-empty and not generic)
+    2. Largest-font block on first page (if font_size > 18)
+    3. Filename without extension
+
+    Args:
+        doc: TableAwareDocument dict
+        pdf_metadata: Extracted PDF metadata
+        source_info: Caller-supplied source info
+
+    Returns:
+        Title string
+    """
+    title = pdf_metadata.get("title", "").strip()
+    if title and title.lower() not in {"untitled", "document", "document1"}:
+        return title
+
+    pages = doc.get("pages", [])
+    if pages:
+        first_page_blocks = pages[0].get("blocks", [])
+        if first_page_blocks:
+            largest_block = max(
+                first_page_blocks,
+                key=lambda b: b.get("font_size", 0),
+            )
+            if largest_block.get("font_size", 0) > 18:
+                return largest_block["text"].strip()
+
+    filename = os.path.basename(source_info["source_path"])
+    return filename.replace(".pdf", "").replace("_", " ").title()
+
