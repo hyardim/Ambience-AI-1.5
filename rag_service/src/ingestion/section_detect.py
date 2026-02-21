@@ -33,6 +33,9 @@ NUMBERED_HEADING_PATTERN = re.compile(
     r"^(\d+(\.\d+)*\.?)\s+([A-Z][a-zA-Z0-9\s\-:()]{2,})$"
 )
 
+HEADING_LEVEL_1_FONT_DELTA = 4.0
+HEADING_LEVEL_2_FONT_DELTA = 2.0
+
 
 def add_section_metadata(clean_doc: dict[str, Any]) -> dict[str, Any]:
     """
@@ -341,10 +344,10 @@ def is_fontsize_heading(
     if font_size <= 0 or median_font_size <= 0:
         return False, 0
 
-    if font_size >= median_font_size + 4.0:
+    if font_size >= median_font_size + HEADING_LEVEL_1_FONT_DELTA:
         return True, 1
 
-    if font_size >= median_font_size + 2.0:
+    if font_size >= median_font_size + HEADING_LEVEL_2_FONT_DELTA:
         return True, 2
 
     return False, 0
