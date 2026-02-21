@@ -51,7 +51,91 @@ def attach_metadata(
         8. For each block, generate block_uid
         9. Validate all metadata
     """
-    pass
+    # Step 1: infer missing fields from path
+    source_info = {**source_info}
+    inferred = infer_from_path(source_info["source_path"])
+    if not source_info.get("specialty") and inferred.get("specialty"):
+        source_info["specialty"] = inferred["specialty"]
+    if not source_info.get("source_name") and inferred.get("source_name"):
+        source_info["source_name"] = inferred["source_name"]
+
+    # Step 2: validate source_info
+    validate_source_info(source_info)
+
+    pdf_path = source_info["source_path"]
+
+    # Step 3: extract PDF metadata
+    pdf_metadata = extract_pdf_metadata(pdf_path)
+
+    # Step 4: generate doc_id
+    doc_id = generate_doc_id(table_aware_doc, pdf_metadata, source_info)
+
+    # Step 5: generate doc_version
+    doc_version = generate_doc_version(table_aware_doc, pdf_metadata, source_info)
+
+    # Step 6: extract title
+    title = extract_title(table_aware_doc, pdf_metadata, source_info)
+
+    # Step 7: create doc_meta
+    doc_meta: dict[str, Any] = {
+        "doc_id": doc_id,
+        "doc_version": doc_version,
+        "title": title,
+        "source_name": source_info["source_name"],
+        "source_path": source_info["source_path"],
+        "doc_type": source_info["doc_type"],
+        "specialty": source_info["specialty"],
+        "author_org": source_info.get("author_org", ""),
+        "source_url": source_info.get("source_url", ""),
+        "creation_date": pdf_metadata.get("creationDate", ""),
+        "publish_date": source_info.get("publish_date", ""),
+        "last_updated_date": source_info.get("last_updated_date", ""),
+        "ingestion_date": date.today().isoformat(),
+    }
+
+    # Step 8: attach block_uid to every block
+    pages = table_aware_doc.get("pages", [])
+    total_blocks = 0
+    excluded_blocks = 0
+    sample_uid: str | None = None
+
+    for page in pages:
+        page_num = page["page_number"]
+        for block in page["blocks"]:
+            block_uid = generate_block_uid(
+                doc_id=doc_id,
+                page_num=page_num,
+                block_id=block.get("block_id", 0),
+                text=block.get("text", ""),
+            )
+            block["block_uid"] = block_uid
+            total_blocks += 1
+            if not block.get("include_in_chunks", True):
+                excluded_blocks += 1
+            if sample_uid is None:
+                sample_uid = block_uid
+
+    logger.info(
+        f"doc_id={doc_id}, doc_version={doc_version}, "
+        f"title={title}, specialty={source_info['specialty']}"
+    )
+    logger.info(
+        f"Total blocks: {total_blocks}, "
+        f"excluded (include_in_chunks=False): {excluded_blocks}"
+    )
+    if sample_uid:
+        logger.debug(f"Sample block_uid: {sample_uid}")
+
+    result = {
+        **table_aware_doc,
+        "doc_meta": doc_meta,
+        "pages": pages,
+    }
+
+    # Step 9: validate
+    validate_metadata(result)
+
+    return result
 
 
 def infer_from_path(source_path: str) -> dict[str, str]:
@@ -167,7 +251,8 @@ def parse_pdf_date(date_str: str) -> str:
         return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
     except (ValueError, IndexError):
         return ""
-    
+
+
 def generate_doc_id(
     doc: dict[str, Any],
     pdf_metadata: dict[str, Any],
@@ -201,6 +286,7 @@ def generate_doc_id(
     hash_input = f"{title}|{author_org}|{first_page_text}"
     return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
+
 def generate_doc_version(
     doc: dict[str, Any],
     pdf_metadata: dict[str, Any],
@@ -230,6 +316,7 @@ def generate_doc_version(
     first_page = _get_page_text(doc, 0)
     last_page = _get_page_text(doc, -1)
     return hashlib.md5(f"{first_page}|{last_page}".encode()).hexdigest()[:8]
+
 
 def extract_title(
     doc: dict[str, Any],
@@ -268,6 +355,7 @@ def extract_title(
 
     filename = os.path.basename(source_info["source_path"])
     return filename.replace(".pdf", "").replace("_", " ").title()
+
 
 def generate_block_uid(
     doc_id: str,
@@ -312,8 +400,14 @@ def validate_metadata(doc: dict[str, Any]) -> bool:
 
     doc_meta = doc["doc_meta"]
     required_doc_fields = [
-        "doc_id", "doc_version", "title", "source_name",
-        "doc_type", "specialty", "source_path", "ingestion_date",
+        "doc_id",
+        "doc_version",
+        "title",
+        "source_name",
+        "doc_type",
+        "specialty",
+        "source_path",
+        "ingestion_date",
     ]
     for field in required_doc_fields:
         if field not in doc_meta:
@@ -324,8 +418,12 @@ def validate_metadata(doc: dict[str, Any]) -> bool:
     for page in doc.get("pages", []):
         for block in page.get("blocks", []):
             required_block_fields = [
-                "block_id", "block_uid", "page_number",
-                "section_path", "section_title", "content_type",
+                "block_id",
+                "block_uid",
+                "page_number",
+                "section_path",
+                "section_title",
+                "content_type",
                 "include_in_chunks",
             ]
             for field in required_block_fields:
@@ -337,6 +435,7 @@ def validate_metadata(doc: dict[str, Any]) -> bool:
                 raise MetadataValidationError("include_in_chunks must be bool")
 
     return True
+
 
 def _get_page_text(doc: dict[str, Any], page_index: int) -> str:
     """Get concatenated block text for a page by index.
