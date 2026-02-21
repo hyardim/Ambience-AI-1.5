@@ -168,6 +168,7 @@ def parse_pdf_date(date_str: str) -> str:
     except (ValueError, IndexError):
         return ""
 
+
 def extract_title(
     doc: dict[str, Any],
     pdf_metadata: dict[str, Any],
@@ -206,3 +207,21 @@ def extract_title(
     filename = os.path.basename(source_info["source_path"])
     return filename.replace(".pdf", "").replace("_", " ").title()
 
+def _get_page_text(doc: dict[str, Any], page_index: int) -> str:
+    """Get concatenated block text for a page by index.
+
+    Args:
+        doc: Document dict with pages list
+        page_index: 0-based or negative index into pages list
+
+    Returns:
+        Concatenated block text, or empty string if page not found
+    """
+    pages = doc.get("pages", [])
+    if not pages:
+        return ""
+    try:
+        page = pages[page_index]
+        return " ".join(b.get("text", "") for b in page.get("blocks", []))
+    except IndexError:
+        return ""
