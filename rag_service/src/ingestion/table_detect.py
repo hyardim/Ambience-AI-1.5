@@ -135,7 +135,7 @@ def detect_and_convert_tables(
         None,
     )
     if sample_tables:
-        logger.debug(f"Sample Markdown table:\n{sample_tables[0]}")
+        logger.debug(f"Sample Markdown table:\n{sample_tables}")
 
     return {
         **sectioned_doc,
