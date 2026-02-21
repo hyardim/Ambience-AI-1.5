@@ -207,6 +207,49 @@ def extract_title(
     filename = os.path.basename(source_info["source_path"])
     return filename.replace(".pdf", "").replace("_", " ").title()
 
+def validate_metadata(doc: dict[str, Any]) -> bool:
+    """Validate all required metadata is present and valid.
+
+    Args:
+        doc: MetadataDocument dict
+
+    Returns:
+        True if valid
+
+    Raises:
+        MetadataValidationError: If any required field is missing or invalid
+    """
+    if "doc_meta" not in doc:
+        raise MetadataValidationError("Missing doc_meta")
+
+    doc_meta = doc["doc_meta"]
+    required_doc_fields = [
+        "doc_id", "doc_version", "title", "source_name",
+        "doc_type", "specialty", "source_path", "ingestion_date",
+    ]
+    for field in required_doc_fields:
+        if field not in doc_meta:
+            raise MetadataValidationError(f"Missing doc_meta.{field}")
+        if not doc_meta[field]:
+            raise MetadataValidationError(f"Empty doc_meta.{field}")
+
+    for page in doc.get("pages", []):
+        for block in page.get("blocks", []):
+            required_block_fields = [
+                "block_id", "block_uid", "page_number",
+                "section_path", "section_title", "content_type",
+                "include_in_chunks",
+            ]
+            for field in required_block_fields:
+                if field not in block:
+                    raise MetadataValidationError(f"Block missing {field}")
+            if not isinstance(block["section_path"], list):
+                raise MetadataValidationError("section_path must be list")
+            if not isinstance(block["include_in_chunks"], bool):
+                raise MetadataValidationError("include_in_chunks must be bool")
+
+    return True
+
 def _get_page_text(doc: dict[str, Any], page_index: int) -> str:
     """Get concatenated block text for a page by index.
 
