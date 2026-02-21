@@ -435,3 +435,91 @@ class TestGenerateBlockUid:
             generate_block_uid("doc123", 1, 0, "  hello  ")
             == generate_block_uid("doc123", 1, 0, "hello")
         )
+
+# -----------------------------------------------------------------------
+# validate_metadata
+# -----------------------------------------------------------------------
+
+
+class TestValidateMetadata:
+    def _make_valid_doc(self) -> dict[str, Any]:
+        return {
+            "doc_meta": {
+                "doc_id": "abc123",
+                "doc_version": "v1",
+                "title": "Guidelines",
+                "source_name": "NICE",
+                "doc_type": "guideline",
+                "specialty": "rheumatology",
+                "source_path": "data/raw/rheumatology/NICE/test.pdf",
+                "ingestion_date": "2024-01-15",
+            },
+            "pages": [
+                {
+                    "page_number": 1,
+                    "blocks": [
+                        {
+                            "block_id": 0,
+                            "block_uid": "uid123",
+                            "page_number": 1,
+                            "section_path": ["Introduction"],
+                            "section_title": "Introduction",
+                            "content_type": "text",
+                            "include_in_chunks": True,
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_valid_doc_passes(self) -> None:
+        assert validate_metadata(self._make_valid_doc()) is True
+
+    def test_missing_doc_meta_raises(self) -> None:
+        doc = self._make_valid_doc()
+        del doc["doc_meta"]
+        with pytest.raises(MetadataValidationError, match="Missing doc_meta"):
+            validate_metadata(doc)
+
+    def test_missing_doc_field_raises(self) -> None:
+        doc = self._make_valid_doc()
+        del doc["doc_meta"]["doc_id"]
+        with pytest.raises(MetadataValidationError, match="Missing doc_meta.doc_id"):
+            validate_metadata(doc)
+
+    def test_empty_doc_field_raises(self) -> None:
+        doc = self._make_valid_doc()
+        doc["doc_meta"]["title"] = ""
+        with pytest.raises(MetadataValidationError, match="Empty doc_meta.title"):
+            validate_metadata(doc)
+
+    def test_missing_specialty_raises(self) -> None:
+        doc = self._make_valid_doc()
+        del doc["doc_meta"]["specialty"]
+        with pytest.raises(MetadataValidationError, match="Missing doc_meta.specialty"):
+            validate_metadata(doc)
+
+    def test_missing_block_field_raises(self) -> None:
+        doc = self._make_valid_doc()
+        del doc["pages"][0]["blocks"][0]["block_uid"]
+        with pytest.raises(MetadataValidationError, match="Block missing block_uid"):
+            validate_metadata(doc)
+
+    def test_invalid_section_path_type_raises(self) -> None:
+        doc = self._make_valid_doc()
+        doc["pages"][0]["blocks"][0]["section_path"] = "Introduction"
+        with pytest.raises(MetadataValidationError, match="section_path must be list"):
+            validate_metadata(doc)
+
+    def test_invalid_include_in_chunks_type_raises(self) -> None:
+        doc = self._make_valid_doc()
+        doc["pages"][0]["blocks"][0]["include_in_chunks"] = "yes"
+        with pytest.raises(
+            MetadataValidationError, match="include_in_chunks must be bool"
+        ):
+            validate_metadata(doc)
+
+    def test_empty_pages_passes(self) -> None:
+        doc = self._make_valid_doc()
+        doc["pages"] = []
+        assert validate_metadata(doc) is True
