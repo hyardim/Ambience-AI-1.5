@@ -162,7 +162,8 @@ def detect_tables_with_pymupdf(
                 return results
 
             page = doc[page_num - 1]
-            tables = page.find_tables()
+            finder = page.find_tables()
+            tables = getattr(finder, "tables", finder)
 
             for table in tables:
                 cells = table.extract()

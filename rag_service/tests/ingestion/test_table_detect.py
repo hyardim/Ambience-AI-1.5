@@ -78,7 +78,9 @@ def make_fitz_table(
 
 def make_fitz_page(tables: list[MagicMock] | None = None) -> MagicMock:
     page = MagicMock()
-    page.find_tables.return_value = tables or []
+    finder = MagicMock()
+    finder.tables = tables or []
+    page.find_tables.return_value = finder
     return page
 
 
