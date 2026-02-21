@@ -104,3 +104,24 @@ def patch_pdf_meta(**kwargs: Any):  # type: ignore[no-untyped-def]
         "src.ingestion.metadata.extract_pdf_metadata",
         return_value=make_pdf_metadata(**kwargs),
     )
+
+# -----------------------------------------------------------------------
+# parse_pdf_date
+# -----------------------------------------------------------------------
+
+
+class TestParsePdfDate:
+    def test_valid_date_parsed(self) -> None:
+        assert parse_pdf_date("D:20240115120000") == "2024-01-15"
+
+    def test_missing_prefix_returns_empty(self) -> None:
+        assert parse_pdf_date("20240115") == ""
+
+    def test_empty_string_returns_empty(self) -> None:
+        assert parse_pdf_date("") == ""
+
+    def test_too_short_returns_empty(self) -> None:
+        assert parse_pdf_date("D:202") == ""
+
+    def test_d_prefix_only_returns_empty(self) -> None:
+        assert parse_pdf_date("D:") == ""
