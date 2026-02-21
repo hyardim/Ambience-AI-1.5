@@ -338,7 +338,7 @@ def extract_title(
     Returns:
         Title string
     """
-    title = pdf_metadata.get("title", "").strip()
+    title = str(pdf_metadata.get("title", "").strip())
     if title and title.lower() not in {"untitled", "document", "document1"}:
         return title
 
@@ -351,9 +351,9 @@ def extract_title(
                 key=lambda b: b.get("font_size", 0),
             )
             if largest_block.get("font_size", 0) > 18:
-                return largest_block["text"].strip()
+                return str(largest_block["text"].strip())
 
-    filename = os.path.basename(source_info["source_path"])
+    filename = os.path.basename(str(source_info["source_path"]))
     return filename.replace(".pdf", "").replace("_", " ").title()
 
 
