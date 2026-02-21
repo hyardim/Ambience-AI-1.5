@@ -722,3 +722,47 @@ class TestAttachMetadata:
         with patch_pdf_meta():
             result = attach_metadata(doc, make_source_info())
         assert result["pages"][0]["blocks"][0]["page_number"] == 3
+
+
+# -----------------------------------------------------------------------
+# get_page_text
+# -----------------------------------------------------------------------
+
+
+class TestGetPageText:
+    def test_valid_index_returns_text(self) -> None:
+        from src.ingestion.metadata import _get_page_text
+
+        doc = make_table_aware_doc(
+            pages=[make_page(page_number=1, blocks=[make_block("hello")])]
+        )
+        assert _get_page_text(doc, 0) == "hello"
+
+    def test_negative_index_returns_text(self) -> None:
+        from src.ingestion.metadata import _get_page_text
+
+        doc = make_table_aware_doc(
+            pages=[make_page(page_number=1, blocks=[make_block("hello")])]
+        )
+        assert _get_page_text(doc, -1) == "hello"
+
+    def test_out_of_bounds_index_returns_empty(self) -> None:
+        from src.ingestion.metadata import _get_page_text
+
+        doc = make_table_aware_doc(
+            pages=[make_page(page_number=1, blocks=[make_block("hello")])]
+        )
+        assert _get_page_text(doc, 5) == ""
+
+    def test_out_of_bounds_negative_index_returns_empty(self) -> None:
+        from src.ingestion.metadata import _get_page_text
+
+        doc = make_table_aware_doc(
+            pages=[make_page(page_number=1, blocks=[make_block("hello")])]
+        )
+        assert _get_page_text(doc, -10) == ""
+
+    def test_empty_pages_returns_empty(self) -> None:
+        from src.ingestion.metadata import _get_page_text
+
+        assert _get_page_text(make_table_aware_doc(pages=[]), 0) == ""

@@ -457,5 +457,8 @@ def _get_page_text(doc: dict[str, Any], page_index: int) -> str:
     if not pages:
         return ""
 
+    if not (-len(pages) <= page_index < len(pages)):
+        return ""
+
     page = pages[page_index]
     return " ".join(b.get("text", "") for b in page.get("blocks", []))
