@@ -105,3 +105,23 @@ def validate_source_info(source_info: dict[str, Any]) -> None:
             f"Invalid doc_type '{source_info['doc_type']}'. "
             f"Must be one of: {VALID_DOC_TYPES}"
         )
+
+def parse_pdf_date(date_str: str) -> str:
+    """Convert PDF date format to ISO format.
+
+    PDF format: D:YYYYMMDDHHmmss
+    Output: YYYY-MM-DD
+
+    Args:
+        date_str: PDF date string
+
+    Returns:
+        ISO date string, or empty string if parsing fails
+    """
+    if not date_str or not date_str.startswith("D:"):
+        return ""
+    try:
+        trimmed = date_str[2:16]
+        return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
+    except (ValueError, IndexError):
+        return ""
