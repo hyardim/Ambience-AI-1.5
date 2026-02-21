@@ -207,6 +207,32 @@ def extract_title(
     filename = os.path.basename(source_info["source_path"])
     return filename.replace(".pdf", "").replace("_", " ").title()
 
+def generate_block_uid(
+    doc_id: str,
+    page_num: int,
+    block_id: int,
+    text: str,
+) -> str:
+    """Generate stable block UID based on content, not version.
+
+    Allows unchanged blocks to keep the same UID across document versions,
+    enabling deduplication when documents are updated. Intentionally excludes
+    doc_version so unchanged content is not orphaned on document updates.
+
+    Args:
+        doc_id: Document ID
+        page_num: 1-indexed page number
+        block_id: Block ID within page
+        text: Block text content
+
+    Returns:
+        16-character hex string
+    """
+    normalized_text = text.strip().lower()[:500]
+    hash_input = f"{doc_id}|{page_num}|{block_id}|{normalized_text}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+
+
 def validate_metadata(doc: dict[str, Any]) -> bool:
     """Validate all required metadata is present and valid.
 
