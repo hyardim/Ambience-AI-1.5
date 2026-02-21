@@ -193,3 +193,56 @@ class TestValidateSourceInfo:
     def test_all_valid_source_names_pass(self) -> None:
         for source_name in ["NICE", "BSR", "Others"]:
             validate_source_info(make_source_info(source_name=source_name))
+
+# -----------------------------------------------------------------------
+# extract_pdf_metadata
+# -----------------------------------------------------------------------
+
+
+class TestExtractPdfMetadata:
+    def test_extracts_title_and_dates(self) -> None:
+        mock_metadata = {
+            "title": "RA Guidelines",
+            "author": "NICE",
+            "subject": "",
+            "creator": "",
+            "producer": "",
+            "creationDate": "D:20240101000000",
+            "modDate": "D:20240115000000",
+            "uid": "abc123",
+        }
+        mock_doc = MagicMock()
+        mock_doc.metadata = mock_metadata
+        mock_doc.__enter__ = MagicMock(return_value=mock_doc)
+        mock_doc.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.ingestion.metadata.fitz.open", return_value=mock_doc):
+            result = extract_pdf_metadata("test.pdf")
+
+        assert result["title"] == "RA Guidelines"
+        assert result["creationDate"] == "2024-01-01"
+        assert result["modDate"] == "2024-01-15"
+        assert result["uid"] == "abc123"
+
+    def test_exception_returns_empty_dict(self) -> None:
+        with patch(
+            "src.ingestion.metadata.fitz.open",
+            side_effect=Exception("file error"),
+        ):
+            result = extract_pdf_metadata("missing.pdf")
+
+        assert result["title"] == ""
+        assert result["creationDate"] == ""
+        assert result["modDate"] == ""
+
+    def test_missing_keys_default_to_empty(self) -> None:
+        mock_doc = MagicMock()
+        mock_doc.metadata = {}
+        mock_doc.__enter__ = MagicMock(return_value=mock_doc)
+        mock_doc.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.ingestion.metadata.fitz.open", return_value=mock_doc):
+            result = extract_pdf_metadata("test.pdf")
+
+        assert result["title"] == ""
+        assert result["uid"] == ""
