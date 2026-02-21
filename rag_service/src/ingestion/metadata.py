@@ -71,3 +71,37 @@ def infer_from_path(source_path: str) -> dict[str, str]:
         }
     except (ValueError, IndexError):
         return {"specialty": "", "source_name": ""}
+  
+def validate_source_info(source_info: dict[str, Any]) -> None:
+    """Validate source_info fields.
+
+    Args:
+        source_info: Caller-supplied source info dict
+
+    Raises:
+        MetadataValidationError: If any required field is missing or invalid
+    """
+    required = ["source_name", "source_path", "doc_type", "specialty"]
+    for field in required:
+        if not source_info.get(field):
+            raise MetadataValidationError(
+                f"source_info missing required field: {field}"
+            )
+
+    if source_info["specialty"] not in VALID_SPECIALTIES:
+        raise MetadataValidationError(
+            f"Invalid specialty '{source_info['specialty']}'. "
+            f"Must be one of: {VALID_SPECIALTIES}"
+        )
+
+    if source_info["source_name"] not in VALID_SOURCE_NAMES:
+        raise MetadataValidationError(
+            f"Invalid source_name '{source_info['source_name']}'. "
+            f"Must be one of: {VALID_SOURCE_NAMES}"
+        )
+
+    if source_info["doc_type"] not in VALID_DOC_TYPES:
+        raise MetadataValidationError(
+            f"Invalid doc_type '{source_info['doc_type']}'. "
+            f"Must be one of: {VALID_DOC_TYPES}"
+        )
