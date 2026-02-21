@@ -248,6 +248,8 @@ def parse_pdf_date(date_str: str) -> str:
         return ""
     try:
         trimmed = date_str[2:16]
+        if len(trimmed) < 8:
+            return ""
         return f"{trimmed[0:4]}-{trimmed[4:6]}-{trimmed[6:8]}"
     except (ValueError, IndexError):
         return ""
