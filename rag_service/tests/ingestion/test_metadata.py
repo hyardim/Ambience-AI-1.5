@@ -246,3 +246,51 @@ class TestExtractPdfMetadata:
 
         assert result["title"] == ""
         assert result["uid"] == ""
+
+# -----------------------------------------------------------------------
+# extract_title
+# -----------------------------------------------------------------------
+
+
+class TestExtractTitle:
+    def test_pdf_metadata_title_used(self) -> None:
+        doc = make_table_aware_doc()
+        pdf_meta = make_pdf_metadata(title="RA Guidelines 2024")
+        assert extract_title(doc, pdf_meta, make_source_info()) == "RA Guidelines 2024"
+
+    def test_generic_title_skipped(self) -> None:
+        doc = make_table_aware_doc(pages=[
+            make_page(blocks=[make_block("Big Title", font_size=24.0)])
+        ])
+        pdf_meta = make_pdf_metadata(title="Untitled")
+        assert extract_title(doc, pdf_meta, make_source_info()) == "Big Title"
+
+    def test_large_font_block_used_when_no_pdf_title(self) -> None:
+        doc = make_table_aware_doc(pages=[
+            make_page(blocks=[make_block("Clinical Guideline", font_size=22.0)])
+        ])
+        assert extract_title(doc, make_pdf_metadata(), make_source_info()) == "Clinical Guideline"
+
+    def test_small_font_block_not_used_as_title(self) -> None:
+        doc = make_table_aware_doc(pages=[
+            make_page(blocks=[make_block("Body text", font_size=12.0)])
+        ])
+        source_info = make_source_info(
+            source_path="data/raw/rheumatology/NICE/nice_ra_2024.pdf"
+        )
+        assert extract_title(doc, make_pdf_metadata(), source_info) == "Nice Ra 2024"
+
+    def test_filename_fallback_no_pages(self) -> None:
+        doc = make_table_aware_doc(pages=[])
+        source_info = make_source_info(
+            source_path="data/raw/rheumatology/NICE/nice_ra_guidelines.pdf"
+        )
+        assert extract_title(doc, make_pdf_metadata(), source_info) == "Nice Ra Guidelines"
+
+    def test_empty_first_page_blocks_falls_back_to_filename(self) -> None:
+        doc = make_table_aware_doc(pages=[make_page(blocks=[])])
+        source_info = make_source_info(
+            source_path="data/raw/neurology/BSR/bsr_guidelines.pdf"
+        )
+        assert extract_title(doc, make_pdf_metadata(), source_info) == "Bsr Guidelines"
+
