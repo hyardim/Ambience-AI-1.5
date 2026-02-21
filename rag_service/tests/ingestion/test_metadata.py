@@ -125,3 +125,36 @@ class TestParsePdfDate:
 
     def test_d_prefix_only_returns_empty(self) -> None:
         assert parse_pdf_date("D:") == ""
+
+# -----------------------------------------------------------------------
+# infer_from_path
+# -----------------------------------------------------------------------
+
+
+class TestInferFromPath:
+    def test_infers_specialty_and_source_name(self) -> None:
+        result = infer_from_path("data/raw/rheumatology/BSR/guideline.pdf")
+        assert result["specialty"] == "rheumatology"
+        assert result["source_name"] == "BSR"
+
+    def test_infers_neurology_nice(self) -> None:
+        result = infer_from_path("data/raw/neurology/NICE/guideline.pdf")
+        assert result["specialty"] == "neurology"
+        assert result["source_name"] == "NICE"
+
+    def test_missing_raw_returns_empty(self) -> None:
+        result = infer_from_path("/downloads/guideline.pdf")
+        assert result["specialty"] == ""
+        assert result["source_name"] == ""
+
+    def test_raw_at_end_returns_empty(self) -> None:
+        result = infer_from_path("/data/raw")
+        assert result["specialty"] == ""
+        assert result["source_name"] == ""
+
+    def test_absolute_path_works(self) -> None:
+        result = infer_from_path(
+            "/home/kavin/Desktop/Ambience-AI-1.5/rag_service/data/raw/rheumatology/Others/file.pdf"
+        )
+        assert result["specialty"] == "rheumatology"
+        assert result["source_name"] == "Others"
