@@ -61,6 +61,45 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
     pass
 
 # -----------------------------------------------------------------------
+# Batch + single embedding with retry
+# -----------------------------------------------------------------------
+
+
+def _embed_batch(
+    model: SentenceTransformer,
+    texts: list[str],
+    attempt: int = 0,
+) -> list[list[float]]:
+    """
+    Embed a batch of texts with retry logic.
+
+    Args:
+        model: Loaded SentenceTransformer model
+        texts: List of texts to embed
+        attempt: Current attempt number (0-indexed)
+
+    Returns:
+        List of embedding vectors
+
+    Raises:
+        Exception: On final failure so caller can fall back to per-chunk
+    """
+    try:
+        vectors = model.encode(texts, show_progress_bar=False)
+        return [v.tolist() for v in vectors]
+    except Exception as e:
+        if attempt < MAX_RETRIES - 1:
+            wait = RETRY_BACKOFF_BASE ** attempt
+            logger.warning(
+                f"Batch embedding failed (attempt {attempt + 1}): {e}. "
+                f"Retrying in {wait:.1f}s"
+            )
+            time.sleep(wait)
+            return _embed_batch(model, texts, attempt + 1)
+        raise
+
+
+# -----------------------------------------------------------------------
 # Metadata helpers
 # -----------------------------------------------------------------------
 
