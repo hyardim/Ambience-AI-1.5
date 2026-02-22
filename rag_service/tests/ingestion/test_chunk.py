@@ -2,14 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from src.ingestion.chunk import (
     MAX_CHUNK_TOKENS,
-    MAX_MERGE_SECTIONS,
-    MIN_CHUNK_TOKENS,
-    OVERLAP_TOKENS,
-    SHORT_SECTION_TOKENS,
     build_citation,
     chunk_document,
     chunk_section_group,
@@ -26,7 +20,10 @@ from src.ingestion.chunk import (
 # Helpers
 # -----------------------------------------------------------------------
 
-LONG_SENTENCE = "This is a detailed clinical recommendation about the management of rheumatoid arthritis in adult patients. "
+LONG_SENTENCE = (
+    "This is a detailed clinical recommendation about the management of "
+    "rheumatoid arthritis in adult patients. "
+)
 
 
 def make_block(
@@ -102,6 +99,7 @@ def make_metadata_doc(
 def long_text(n_sentences: int = 60) -> str:
     return LONG_SENTENCE * n_sentences
 
+
 # -----------------------------------------------------------------------
 # count_tokens
 # -----------------------------------------------------------------------
@@ -120,6 +118,7 @@ class TestCountTokens:
     def test_deterministic(self) -> None:
         text = "The patient was prescribed methotrexate."
         assert count_tokens(text) == count_tokens(text)
+
 
 # -----------------------------------------------------------------------
 # split_into_sentences
@@ -146,6 +145,7 @@ class TestSplitIntoSentences:
     def test_whitespace_only_filtered(self) -> None:
         assert split_into_sentences("  ") == []
 
+
 # -----------------------------------------------------------------------
 # clean_chunk_text
 # -----------------------------------------------------------------------
@@ -164,9 +164,11 @@ class TestCleanChunkText:
     def test_empty_string(self) -> None:
         assert clean_chunk_text("") == ""
 
+
 # -----------------------------------------------------------------------
 # generate_chunk_id
 # -----------------------------------------------------------------------
+
 
 class TestGenerateChunkId:
     def test_returns_16_char_hex(self) -> None:
@@ -175,16 +177,25 @@ class TestGenerateChunkId:
         assert all(c in "0123456789abcdef" for c in cid)
 
     def test_deterministic(self) -> None:
-        assert generate_chunk_id("doc1", "v1", "text") == generate_chunk_id("doc1", "v1", "text")
+        assert generate_chunk_id("doc1", "v1", "text") == generate_chunk_id(
+            "doc1", "v1", "text"
+        )
 
     def test_different_text_different_id(self) -> None:
-        assert generate_chunk_id("doc1", "v1", "text A") != generate_chunk_id("doc1", "v1", "text B")
+        assert generate_chunk_id("doc1", "v1", "text A") != generate_chunk_id(
+            "doc1", "v1", "text B"
+        )
 
     def test_different_version_different_id(self) -> None:
-        assert generate_chunk_id("doc1", "v1", "text") != generate_chunk_id("doc1", "v2", "text")
+        assert generate_chunk_id("doc1", "v1", "text") != generate_chunk_id(
+            "doc1", "v2", "text"
+        )
 
     def test_content_based_not_positional(self) -> None:
-        assert generate_chunk_id("doc1", "v1", "identical text") == generate_chunk_id("doc1", "v1", "identical text")
+        assert generate_chunk_id("doc1", "v1", "identical text") == generate_chunk_id(
+            "doc1", "v1", "identical text"
+        )
+
 
 # -----------------------------------------------------------------------
 # build_citation
@@ -194,13 +205,26 @@ class TestGenerateChunkId:
 class TestBuildCitation:
     def test_all_fields_present(self) -> None:
         citation = build_citation(
-            {"section_path": ["Treatment"], "section_title": "Treatment", "page_range": "5-7"},
+            {
+                "section_path": ["Treatment"],
+                "section_title": "Treatment",
+                "page_range": "5-7",
+            },
             make_doc_meta(),
         )
         for field in [
-            "doc_id", "source_name", "specialty", "title", "author_org",
-            "creation_date", "last_updated_date", "section_path",
-            "section_title", "page_range", "source_url", "access_date",
+            "doc_id",
+            "source_name",
+            "specialty",
+            "title",
+            "author_org",
+            "creation_date",
+            "last_updated_date",
+            "section_path",
+            "section_title",
+            "page_range",
+            "source_url",
+            "access_date",
         ]:
             assert field in citation
 
@@ -218,6 +242,7 @@ class TestBuildCitation:
         )
         assert citation["access_date"] == "2024-06-01"
 
+
 # -----------------------------------------------------------------------
 # make_table_chunk
 # -----------------------------------------------------------------------
@@ -229,11 +254,15 @@ class TestMakeTableChunk:
         assert chunk["content_type"] == "table"
 
     def test_block_uid_in_block_uids(self) -> None:
-        chunk = make_table_chunk(make_block(content_type="table", block_uid="tbl001"), make_doc_meta(), 0)
+        chunk = make_table_chunk(
+            make_block(content_type="table", block_uid="tbl001"), make_doc_meta(), 0
+        )
         assert "tbl001" in chunk["block_uids"]
 
     def test_page_start_equals_page_end(self) -> None:
-        chunk = make_table_chunk(make_block(content_type="table", page_number=5), make_doc_meta(), 0)
+        chunk = make_table_chunk(
+            make_block(content_type="table", page_number=5), make_doc_meta(), 0
+        )
         assert chunk["page_start"] == 5
         assert chunk["page_end"] == 5
 
@@ -249,9 +278,11 @@ class TestMakeTableChunk:
     def test_token_count_present(self) -> None:
         chunk = make_table_chunk(
             make_block(content_type="table", text="| A | B |\n| 1 | 2 |"),
-            make_doc_meta(), 0,
+            make_doc_meta(),
+            0,
         )
         assert chunk["token_count"] > 0
+
 
 # -----------------------------------------------------------------------
 # group_blocks_by_section
@@ -284,6 +315,7 @@ class TestGroupBlocksBySection:
     def test_empty_blocks(self) -> None:
         assert group_blocks_by_section([]) == []
 
+
 # -----------------------------------------------------------------------
 # merge_short_sections
 # -----------------------------------------------------------------------
@@ -291,26 +323,44 @@ class TestGroupBlocksBySection:
 
 class TestMergeShortSections:
     def _short(self, section: str, uid: str) -> dict[str, Any]:
-        return make_block(text="Short.", block_uid=uid, section_path=[section], section_title=section)
+        return make_block(
+            text="Short.", block_uid=uid, section_path=[section], section_title=section
+        )
 
     def _long(self, section: str, uid: str) -> dict[str, Any]:
-        return make_block(text=long_text(5), block_uid=uid, section_path=[section], section_title=section)
+        return make_block(
+            text=long_text(5),
+            block_uid=uid,
+            section_path=[section],
+            section_title=section,
+        )
 
     def test_short_merged_with_next(self) -> None:
-        result = merge_short_sections([[self._short("A", "u1")], [self._long("B", "u2")]])
+        result = merge_short_sections(
+            [[self._short("A", "u1")], [self._long("B", "u2")]]
+        )
         assert len(result) == 1
         assert len(result[0]) == 2
 
     def test_long_not_merged(self) -> None:
-        result = merge_short_sections([[self._long("A", "u1")], [self._long("B", "u2")]])
+        result = merge_short_sections(
+            [[self._long("A", "u1")], [self._long("B", "u2")]]
+        )
         assert len(result) == 2
 
     def test_short_at_end_stays_standalone(self) -> None:
-        result = merge_short_sections([[self._long("A", "u1")], [self._short("B", "u2")]])
+        result = merge_short_sections(
+            [[self._long("A", "u1")], [self._short("B", "u2")]]
+        )
         assert len(result) == 2
 
     def test_table_not_merged_into(self) -> None:
-        table = make_block(text="| A | B |\n| 1 | 2 |", content_type="table", block_uid="t1", section_path=["T"])
+        table = make_block(
+            text="| A | B |\n| 1 | 2 |",
+            content_type="table",
+            block_uid="t1",
+            section_path=["T"],
+        )
         result = merge_short_sections([[self._short("A", "u1")], [table]])
         assert len(result) == 2
 
@@ -322,6 +372,7 @@ class TestMergeShortSections:
         result = merge_short_sections(groups)
         assert len(result) <= len(groups)
 
+
 # -----------------------------------------------------------------------
 # chunk_section_group
 # -----------------------------------------------------------------------
@@ -329,28 +380,40 @@ class TestMergeShortSections:
 
 class TestChunkSectionGroup:
     def test_short_group_one_chunk(self) -> None:
-        chunks, _ = chunk_section_group([make_block(text="Short text.", block_uid="u1")], make_doc_meta(), 0, [])
+        chunks, _ = chunk_section_group(
+            [make_block(text="Short text.", block_uid="u1")], make_doc_meta(), 0, []
+        )
         assert len(chunks) == 1
 
     def test_long_group_multiple_chunks(self) -> None:
-        chunks, _ = chunk_section_group([make_block(text=long_text(60), block_uid="u1")], make_doc_meta(), 0, [])
+        chunks, _ = chunk_section_group(
+            [make_block(text=long_text(60), block_uid="u1")], make_doc_meta(), 0, []
+        )
         assert len(chunks) > 1
 
     def test_all_within_token_limit(self) -> None:
-        chunks, _ = chunk_section_group([make_block(text=long_text(60), block_uid="u1")], make_doc_meta(), 0, [])
+        chunks, _ = chunk_section_group(
+            [make_block(text=long_text(60), block_uid="u1")], make_doc_meta(), 0, []
+        )
         for chunk in chunks:
             assert chunk["token_count"] <= MAX_CHUNK_TOKENS
 
     def test_chunk_index_starts_at_offset(self) -> None:
-        chunks, _ = chunk_section_group([make_block(text="Some text.", block_uid="u1")], make_doc_meta(), 5, [])
+        chunks, _ = chunk_section_group(
+            [make_block(text="Some text.", block_uid="u1")], make_doc_meta(), 5, []
+        )
         assert chunks[0]["chunk_index"] == 5
 
     def test_no_overlap_returned_across_boundary(self) -> None:
-        _, returned_overlap = chunk_section_group([make_block(text="Some content.", block_uid="u1")], make_doc_meta(), 0, [])
+        _, returned_overlap = chunk_section_group(
+            [make_block(text="Some content.", block_uid="u1")], make_doc_meta(), 0, []
+        )
         assert returned_overlap == []
 
     def test_block_uids_in_chunk(self) -> None:
-        chunks, _ = chunk_section_group([make_block(text="Some text.", block_uid="abc123")], make_doc_meta(), 0, [])
+        chunks, _ = chunk_section_group(
+            [make_block(text="Some text.", block_uid="abc123")], make_doc_meta(), 0, []
+        )
         assert "abc123" in chunks[0]["block_uids"]
 
     def test_page_start_page_end_set(self) -> None:
@@ -367,14 +430,29 @@ class TestChunkSectionGroup:
         assert overlap == []
 
     def test_citation_fields_complete(self) -> None:
-        chunks, _ = chunk_section_group([make_block(text="Clinical content.", block_uid="u1")], make_doc_meta(), 0, [])
+        chunks, _ = chunk_section_group(
+            [make_block(text="Clinical content.", block_uid="u1")],
+            make_doc_meta(),
+            0,
+            [],
+        )
         citation = chunks[0]["citation"]
         for field in [
-            "doc_id", "source_name", "specialty", "title", "author_org",
-            "creation_date", "last_updated_date", "section_path",
-            "section_title", "page_range", "source_url", "access_date",
+            "doc_id",
+            "source_name",
+            "specialty",
+            "title",
+            "author_org",
+            "creation_date",
+            "last_updated_date",
+            "section_path",
+            "section_title",
+            "page_range",
+            "source_url",
+            "access_date",
         ]:
             assert field in citation
+
 
 # -----------------------------------------------------------------------
 # chunk_document (integration)
@@ -386,19 +464,41 @@ class TestChunkDocument:
         assert "chunks" in chunk_document(make_metadata_doc())
 
     def test_excluded_blocks_not_in_chunks(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text="Authors: Dr Smith", include_in_chunks=False, block_uid="excluded1"),
-            make_block(text="Clinical content.", include_in_chunks=True, block_uid="included1"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(
+                        text="Authors: Dr Smith",
+                        include_in_chunks=False,
+                        block_uid="excluded1",
+                    ),
+                    make_block(
+                        text="Clinical content.",
+                        include_in_chunks=True,
+                        block_uid="included1",
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         all_uids = [uid for c in result["chunks"] for uid in c["block_uids"]]
         assert "excluded1" not in all_uids
         assert "included1" in all_uids
 
     def test_table_becomes_one_chunk(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text="| Drug | Dose |\n| MTX | 7.5mg |", content_type="table", block_uid="tbl1"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(
+                        text="| Drug | Dose |\n| MTX | 7.5mg |",
+                        content_type="table",
+                        block_uid="tbl1",
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         table_chunks = [c for c in result["chunks"] if c["content_type"] == "table"]
         assert len(table_chunks) == 1
@@ -408,23 +508,40 @@ class TestChunkDocument:
         big_table = ("| " + " | ".join(["Col"] * 5) + " |\n") + (
             "| " + " | ".join(["data"] * 5) + " |\n"
         ) * 50
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text=big_table, content_type="table", block_uid="bigtbl"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(
+                        text=big_table, content_type="table", block_uid="bigtbl"
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         assert len([c for c in result["chunks"] if c["content_type"] == "table"]) == 1
 
     def test_long_section_multiple_chunks(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text=long_text(60), block_uid="long1"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(text=long_text(60), block_uid="long1"),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         assert len([c for c in result["chunks"] if c["content_type"] == "text"]) > 1
 
     def test_all_text_chunks_within_token_limit(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text=long_text(60), block_uid="long1"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(text=long_text(60), block_uid="long1"),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         for chunk in result["chunks"]:
             if chunk["content_type"] == "text":
@@ -437,17 +554,29 @@ class TestChunkDocument:
         assert ids1 == ids2
 
     def test_chunk_index_sequential(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text=long_text(60), block_uid="u1"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(text=long_text(60), block_uid="u1"),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         indices = [c["chunk_index"] for c in result["chunks"]]
         assert indices == list(range(len(indices)))
 
     def test_page_start_page_end_correct(self) -> None:
-        pages = [{"page_number": 3, "blocks": [
-            make_block(text="Content on page 3.", page_number=3, block_uid="u1"),
-        ]}]
+        pages = [
+            {
+                "page_number": 3,
+                "blocks": [
+                    make_block(
+                        text="Content on page 3.", page_number=3, block_uid="u1"
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         for chunk in result["chunks"]:
             assert chunk["page_start"] >= 3
@@ -459,17 +588,41 @@ class TestChunkDocument:
     def test_citation_complete_on_all_chunks(self) -> None:
         for chunk in chunk_document(make_metadata_doc())["chunks"]:
             for field in [
-                "doc_id", "source_name", "specialty", "title", "author_org",
-                "creation_date", "last_updated_date", "section_path",
-                "section_title", "page_range", "source_url", "access_date",
+                "doc_id",
+                "source_name",
+                "specialty",
+                "title",
+                "author_org",
+                "creation_date",
+                "last_updated_date",
+                "section_path",
+                "section_title",
+                "page_range",
+                "source_url",
+                "access_date",
             ]:
                 assert field in chunk["citation"]
 
     def test_no_overlap_across_section_boundary(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text=long_text(10), block_uid="s1", section_path=["Section 1"], section_title="Section 1"),
-            make_block(text=long_text(10), block_uid="s2", section_path=["Section 2"], section_title="Section 2"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(
+                        text=long_text(10),
+                        block_uid="s1",
+                        section_path=["Section 1"],
+                        section_title="Section 1",
+                    ),
+                    make_block(
+                        text=long_text(10),
+                        block_uid="s2",
+                        section_path=["Section 2"],
+                        section_title="Section 2",
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         s1_chunks = [c for c in result["chunks"] if c["section_title"] == "Section 1"]
         s2_chunks = [c for c in result["chunks"] if c["section_title"] == "Section 2"]
@@ -487,19 +640,49 @@ class TestChunkDocument:
         assert result["source_path"] == doc["source_path"]
 
     def test_short_section_merged(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text="Short.", block_uid="short1", section_path=["Short Section"], section_title="Short Section"),
-            make_block(text=long_text(10), block_uid="long1", section_path=["Long Section"], section_title="Long Section"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(
+                        text="Short.",
+                        block_uid="short1",
+                        section_path=["Short Section"],
+                        section_title="Short Section",
+                    ),
+                    make_block(
+                        text=long_text(10),
+                        block_uid="long1",
+                        section_path=["Long Section"],
+                        section_title="Long Section",
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         all_text = " ".join(c["text"] for c in result["chunks"])
         assert "Short." in all_text
 
     def test_short_section_at_end_standalone(self) -> None:
-        pages = [{"page_number": 1, "blocks": [
-            make_block(text=long_text(10), block_uid="long1", section_path=["Long Section"], section_title="Long Section"),
-            make_block(text="Short final note.", block_uid="short1", section_path=["End Note"], section_title="End Note"),
-        ]}]
+        pages = [
+            {
+                "page_number": 1,
+                "blocks": [
+                    make_block(
+                        text=long_text(10),
+                        block_uid="long1",
+                        section_path=["Long Section"],
+                        section_title="Long Section",
+                    ),
+                    make_block(
+                        text="Short final note.",
+                        block_uid="short1",
+                        section_path=["End Note"],
+                        section_title="End Note",
+                    ),
+                ],
+            }
+        ]
         result = chunk_document(make_metadata_doc(pages=pages))
         all_text = " ".join(c["text"] for c in result["chunks"])
         assert "Short final note." in all_text
