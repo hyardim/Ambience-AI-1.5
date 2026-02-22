@@ -219,3 +219,151 @@ class TestEmbedSingle:
         assert result is not None
         assert call_count == 2
 
+# -----------------------------------------------------------------------
+# embed_chunks (integration)
+# -----------------------------------------------------------------------
+
+
+class TestEmbedChunks:
+    def test_all_chunks_embedded_successfully(self) -> None:
+        doc = make_chunked_doc(chunks=[make_chunk(f"c{i}") for i in range(3)])
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result = embed_chunks(doc)
+        for chunk in result["chunks"]:
+            assert chunk["embedding_status"] == "success"
+
+    def test_embedding_dimensions_correct(self) -> None:
+        doc = make_chunked_doc()
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result = embed_chunks(doc)
+        assert len(result["chunks"][0]["embedding"]) == EMBEDDING_DIMENSIONS
+
+    def test_all_metadata_fields_present_on_success(self) -> None:
+        doc = make_chunked_doc()
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result = embed_chunks(doc)
+        chunk = result["chunks"][0]
+        for field in [
+            "embedding",
+            "embedding_status",
+            "embedding_model_name",
+            "embedding_model_version",
+            "embedding_dimensions",
+            "embedding_error",
+        ]:
+            assert field in chunk
+
+    def test_batch_size_respected(self) -> None:
+        n_chunks = EMBEDDING_BATCH_SIZE + 5
+        doc = make_chunked_doc(chunks=[make_chunk(f"c{i}") for i in range(n_chunks)])
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            embed_chunks(doc)
+        assert model.encode.call_count >= 2
+
+    def test_failed_batch_falls_back_to_per_chunk(self) -> None:
+        doc = make_chunked_doc(chunks=[make_chunk("c1"), make_chunk("c2")])
+        model = MagicMock()
+
+        def encode_side_effect(texts, **kwargs):  # type: ignore[no-untyped-def]
+            if len(texts) > 1:
+                raise RuntimeError("batch error")
+            return np.array([make_fake_vector()])
+
+        model.encode.side_effect = encode_side_effect
+
+        with patch("src.ingestion.embed._load_model", return_value=model), \
+             patch("src.ingestion.embed.time.sleep"):
+            result = embed_chunks(doc)
+
+        assert all(c["embedding_status"] == "success" for c in result["chunks"])
+
+    def test_quarantined_chunk_has_failed_status(self) -> None:
+        doc = make_chunked_doc(chunks=[make_chunk("fail_chunk")])
+        model = make_mock_model(fail=True)
+        with patch("src.ingestion.embed._load_model", return_value=model), \
+             patch("src.ingestion.embed.time.sleep"):
+            result = embed_chunks(doc)
+        chunk = result["chunks"][0]
+        assert chunk["embedding_status"] == "failed"
+        assert chunk["embedding"] is None
+
+    def test_pipeline_continues_after_quarantine(self) -> None:
+        fail_chunk = make_chunk("fail", text="bad text")
+        ok_chunk = make_chunk("ok", text="good text")
+        doc = make_chunked_doc(chunks=[fail_chunk, ok_chunk])
+        model = MagicMock()
+
+        def encode_side_effect(texts, **kwargs):  # type: ignore[no-untyped-def]
+            if len(texts) > 1:
+                raise RuntimeError("batch fail")
+            if texts[0] == "bad text":
+                raise RuntimeError("single fail")
+            return np.array([make_fake_vector()])
+
+        model.encode.side_effect = encode_side_effect
+
+        with patch("src.ingestion.embed._load_model", return_value=model), \
+             patch("src.ingestion.embed.time.sleep"):
+            result = embed_chunks(doc)
+
+        statuses = {c["chunk_id"]: c["embedding_status"] for c in result["chunks"]}
+        assert statuses["fail"] == "failed"
+        assert statuses["ok"] == "success"
+
+    def test_error_message_recorded_on_failed_chunk(self) -> None:
+        doc = make_chunked_doc(chunks=[make_chunk("fail_chunk")])
+        model = make_mock_model(fail=True)
+        with patch("src.ingestion.embed._load_model", return_value=model), \
+             patch("src.ingestion.embed.time.sleep"):
+            result = embed_chunks(doc)
+        chunk = result["chunks"][0]
+        assert chunk["embedding_error"] is not None
+        assert len(chunk["embedding_error"]) > 0
+
+    def test_empty_document_returns_empty_chunks(self) -> None:
+        doc = make_chunked_doc(chunks=[])
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result = embed_chunks(doc)
+        assert result["chunks"] == []
+
+    def test_original_doc_fields_preserved(self) -> None:
+        doc = make_chunked_doc()
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result = embed_chunks(doc)
+        assert result["source_path"] == doc["source_path"]
+        assert result["doc_meta"] == doc["doc_meta"]
+
+    def test_model_loaded_once(self) -> None:
+        doc = make_chunked_doc(chunks=[make_chunk(f"c{i}") for i in range(5)])
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model) as mock_load:
+            embed_chunks(doc)
+        mock_load.assert_called_once()
+
+    def test_deterministic_same_input_same_embedding(self) -> None:
+        vec = [float(i) / 384 for i in range(384)]
+        model = MagicMock()
+        model.encode.return_value = np.array([vec])
+
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result1 = embed_chunks(make_chunked_doc())
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result2 = embed_chunks(make_chunked_doc())
+
+        assert result1["chunks"][0]["embedding"] == result2["chunks"][0]["embedding"]
+
+    def test_embedding_model_name_on_all_chunks(self) -> None:
+        doc = make_chunked_doc(chunks=[make_chunk(f"c{i}") for i in range(3)])
+        model = make_mock_model()
+        with patch("src.ingestion.embed._load_model", return_value=model):
+            result = embed_chunks(doc)
+        for chunk in result["chunks"]:
+            assert chunk["embedding_model_name"] == EMBEDDING_MODEL_NAME
+            assert chunk["embedding_model_version"] == EMBEDDING_MODEL_VERSION
+            assert chunk["embedding_dimensions"] == EMBEDDING_DIMENSIONS
