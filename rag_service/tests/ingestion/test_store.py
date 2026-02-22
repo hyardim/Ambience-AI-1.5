@@ -91,3 +91,45 @@ def make_mock_conn(existing_row: tuple | None = None) -> MagicMock:
     conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
     conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
     return conn, cur
+
+# -----------------------------------------------------------------------
+# _build_metadata
+# -----------------------------------------------------------------------
+
+
+class TestBuildMetadata:
+    def test_all_required_keys_present(self) -> None:
+        chunk = make_chunk()
+        metadata = _build_metadata(chunk)
+        for key in [
+            "source_name",
+            "title",
+            "section_path",
+            "section_title",
+            "page_start",
+            "page_end",
+            "citation",
+        ]:
+            assert key in metadata
+
+    def test_source_name_from_citation(self) -> None:
+        chunk = make_chunk()
+        metadata = _build_metadata(chunk)
+        assert metadata["source_name"] == "NICE"
+
+    def test_section_path_correct(self) -> None:
+        chunk = make_chunk(section_path=["Treatment", "DMARDs"])
+        metadata = _build_metadata(chunk)
+        assert metadata["section_path"] == ["Treatment", "DMARDs"]
+
+    def test_page_range_correct(self) -> None:
+        chunk = make_chunk(page_start=3, page_end=5)
+        metadata = _build_metadata(chunk)
+        assert metadata["page_start"] == 3
+        assert metadata["page_end"] == 5
+
+    def test_citation_embedded(self) -> None:
+        chunk = make_chunk()
+        metadata = _build_metadata(chunk)
+        assert isinstance(metadata["citation"], dict)
+        assert metadata["citation"]["doc_id"] == "doc123"
