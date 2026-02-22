@@ -58,7 +58,59 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
         5. On chunk failure, quarantine with embedding_status="failed"
         6. Attach embedding metadata to all chunks
     """
-    pass
+    chunks = chunked_doc.get("chunks", [])
+
+    if not chunks:
+        logger.info("No chunks to embed.")
+        return {**chunked_doc, "chunks": chunks}
+
+    model = _load_model()
+    logger.info(
+        f"Embedding {len(chunks)} chunks in batches of {EMBEDDING_BATCH_SIZE}"
+    )
+
+    n_success = 0
+    n_failed = 0
+
+    for batch_start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
+        batch = chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
+        batch_num = batch_start // EMBEDDING_BATCH_SIZE + 1
+        texts = [c.get("text", "") for c in batch]
+
+        try:
+            vectors = _embed_batch(model, texts)
+            for chunk, vector in zip(batch, vectors):
+                chunk.update(_make_success_fields(vector))
+                n_success += 1
+        except Exception:
+            # Batch failed after all retries — fall back to per-chunk
+            logger.warning(
+                f"Batch {batch_num} failed after all retries, "
+                f"falling back to per-chunk embedding"
+            )
+            for chunk in batch:
+                text = chunk.get("text", "")
+                vector = _embed_single(model, text)
+                if vector is not None:
+                    chunk.update(_make_success_fields(vector))
+                    n_success += 1
+                else:
+                    chunk.update(_make_failure_fields("Failed after all retries"))
+                    n_failed += 1
+                    logger.error(
+                        f"Chunk {chunk.get('chunk_id')} failed after all retries"
+                    )
+
+    logger.info(f"Embedded: {n_success} success, {n_failed} failed")
+
+    if n_success > 0:
+        sample = chunks[0].get("embedding", [])
+        if sample:
+            import math
+            norm = math.sqrt(sum(x * x for x in sample))
+            logger.debug(f"Sample embedding norm: {norm:.4f}")
+
+    return {**chunked_doc, "chunks": chunks}
 
 # -----------------------------------------------------------------------
 # Batch + single embedding with retry
