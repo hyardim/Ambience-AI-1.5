@@ -28,3 +28,8 @@ def _resolve_db_url(db_url: str | None, dry_run: bool) -> str | None:
         )
         sys.exit(1)
     return None
+
+def _configure_log_level(log_level: str) -> None:
+    """Set root logger level from CLI flag."""
+    numeric = getattr(logging, log_level.upper(), logging.INFO)
+    logging.getLogger().setLevel(numeric)
