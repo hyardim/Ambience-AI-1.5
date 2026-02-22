@@ -265,3 +265,48 @@ def _backfill_debug_artifacts(doc_id: str) -> None:
         pending_dir.rmdir()
     except OSError:
         pass
+
+# -----------------------------------------------------------------------
+# Multi-file orchestration
+# -----------------------------------------------------------------------
+
+
+def discover_pdfs(
+    input_path: Path,
+    since: date | None = None,
+    max_files: int | None = None,
+) -> list[Path]:
+    """
+    Discover PDF files from a path (file or folder, recursive).
+
+    Args:
+        input_path: Path to PDF file or folder
+        since: Only include files modified after this date
+        max_files: Maximum number of files to return
+
+    Returns:
+        List of PDF paths sorted by modification time (oldest first)
+    """
+    if input_path.is_file():
+        if input_path.suffix.lower() != ".pdf":
+            raise ValueError(f"Input file is not a PDF: {input_path}")
+        pdfs = [input_path]
+    elif input_path.is_dir():
+        pdfs = sorted(
+            input_path.rglob("*.pdf"),
+            key=lambda p: p.stat().st_mtime,
+        )
+    else:
+        raise ValueError(f"Input path does not exist: {input_path}")
+
+    if since is not None:
+        pdfs = [
+            p
+            for p in pdfs
+            if date.fromtimestamp(p.stat().st_mtime) > since
+        ]
+
+    if max_files is not None:
+        pdfs = pdfs[:max_files]
+
+    return pdfs
