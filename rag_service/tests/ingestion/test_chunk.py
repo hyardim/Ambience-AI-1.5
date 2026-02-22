@@ -120,3 +120,28 @@ class TestCountTokens:
     def test_deterministic(self) -> None:
         text = "The patient was prescribed methotrexate."
         assert count_tokens(text) == count_tokens(text)
+
+# -----------------------------------------------------------------------
+# split_into_sentences
+# -----------------------------------------------------------------------
+
+
+class TestSplitIntoSentences:
+    def test_single_sentence(self) -> None:
+        result = split_into_sentences("This is a sentence.")
+        assert len(result) == 1
+
+    def test_multiple_sentences(self) -> None:
+        result = split_into_sentences("First sentence. Second sentence. Third.")
+        assert len(result) == 3
+
+    def test_empty_string(self) -> None:
+        assert split_into_sentences("") == []
+
+    def test_medical_abbreviation_not_split(self) -> None:
+        text = "Use DMARDs (e.g. methotrexate) first. Then biologics."
+        result = split_into_sentences(text)
+        assert len(result) == 2
+
+    def test_whitespace_only_filtered(self) -> None:
+        assert split_into_sentences("  ") == []
