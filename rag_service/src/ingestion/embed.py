@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
@@ -89,12 +90,14 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
             )
             for chunk in batch:
                 text = chunk.get("text", "")
-                single_vector = _embed_single(model, text)
+                single_vector, error = _embed_single(model, text)
                 if single_vector is not None:
                     chunk.update(_make_success_fields(single_vector))
                     n_success += 1
                 else:
-                    chunk.update(_make_failure_fields("Failed after all retries"))
+                    chunk.update(
+                        _make_failure_fields(error or "Failed after all retries")
+                    )
                     n_failed += 1
                     logger.error(
                         f"Chunk {chunk.get('chunk_id')} failed after all retries"
@@ -105,8 +108,6 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
     if n_success > 0:
         sample = chunks[0].get("embedding", [])
         if sample:
-            import math
-
             norm = math.sqrt(sum(x * x for x in sample))
             logger.debug(f"Sample embedding norm: {norm:.4f}")
 
@@ -156,21 +157,16 @@ def _embed_single(
     model: SentenceTransformer,
     text: str,
     attempt: int = 0,
-) -> list[float] | None:
+) -> tuple[list[float] | None, str | None]:
     """
     Embed a single text with retry + backoff.
 
-    Args:
-        model: Loaded SentenceTransformer model
-        text: Text to embed
-        attempt: Current attempt number (0-indexed)
-
     Returns:
-        Embedding vector, or None on final failure
+        (embedding, error_message) — error_message is None on success
     """
     try:
         vector = model.encode([text], show_progress_bar=False)
-        return vector[0].tolist()
+        return vector[0].tolist(), None
     except Exception as e:
         if attempt < MAX_RETRIES - 1:
             wait = RETRY_BACKOFF_BASE**attempt
@@ -180,7 +176,7 @@ def _embed_single(
             )
             time.sleep(wait)
             return _embed_single(model, text, attempt + 1)
-        return None
+        return None, str(e)
 
 
 # -----------------------------------------------------------------------

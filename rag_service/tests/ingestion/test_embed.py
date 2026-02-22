@@ -194,15 +194,17 @@ class TestEmbedBatch:
 class TestEmbedSingle:
     def test_returns_vector_on_success(self) -> None:
         model = make_mock_model()
-        result = _embed_single(model, "some text")
-        assert isinstance(result, list)
-        assert len(result) == EMBEDDING_DIMENSIONS
+        vector, error = _embed_single(model, "some text")
+        assert isinstance(vector, list)
+        assert len(vector) == EMBEDDING_DIMENSIONS
+        assert error is None
 
     def test_returns_none_after_max_retries(self) -> None:
         model = make_mock_model(fail=True)
         with patch("src.ingestion.embed.time.sleep"):
-            result = _embed_single(model, "some text")
-        assert result is None
+            vector, error = _embed_single(model, "some text")
+        assert vector is None
+        assert error == "model error"
 
     def test_retries_on_transient_failure(self) -> None:
         model = MagicMock()
@@ -218,9 +220,10 @@ class TestEmbedSingle:
         model.encode.side_effect = encode_side_effect
 
         with patch("src.ingestion.embed.time.sleep"):
-            result = _embed_single(model, "text")
+            vector, error = _embed_single(model, "text")
 
-        assert result is not None
+        assert vector is not None
+        assert error is None
         assert call_count == 2
 
 
@@ -334,8 +337,7 @@ class TestEmbedChunks:
         ):
             result = embed_chunks(doc)
         chunk = result["chunks"][0]
-        assert chunk["embedding_error"] is not None
-        assert len(chunk["embedding_error"]) > 0
+        assert chunk["embedding_error"] == "model error"
 
     def test_empty_document_returns_empty_chunks(self) -> None:
         doc = make_chunked_doc(chunks=[])
