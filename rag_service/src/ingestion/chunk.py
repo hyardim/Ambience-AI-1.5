@@ -29,7 +29,10 @@ _ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
 def _ensure_nltk_data() -> None:
-    """Download required NLTK data if not already present. Runs once."""
+    """Verify required NLTK tokenizer data is present.
+
+    Raises RuntimeError if missing.
+    """
     global _NLTK_INITIALISED
     if _NLTK_INITIALISED:
         return
