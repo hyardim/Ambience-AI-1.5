@@ -69,10 +69,14 @@ def split_into_sentences(text: str) -> list[str]:
     sentences = sent_tokenize(text)
     return [s for s in sentences if s.strip()]
 
+def generate_chunk_id(doc_id: str, doc_version: str, text: str) -> str:
+    """Stable chunk ID: SHA-256 of doc_id + doc_version + text."""
+    hash_input = f"{doc_id}|{doc_version}|{text}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+
 # -----------------------------------------------------------------------
 # Text cleaning
 # -----------------------------------------------------------------------
-
 
 def clean_chunk_text(text: str) -> str:
     """Strip whitespace, collapse excessive newlines, preserve paragraph breaks."""
