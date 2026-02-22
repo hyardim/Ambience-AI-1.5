@@ -321,3 +321,58 @@ class TestMergeShortSections:
         groups = [[self._short(s, f"u{i}")] for i, s in enumerate(["A", "B", "C", "D"])]
         result = merge_short_sections(groups)
         assert len(result) <= len(groups)
+
+# -----------------------------------------------------------------------
+# chunk_section_group
+# -----------------------------------------------------------------------
+
+
+class TestChunkSectionGroup:
+    def test_short_group_one_chunk(self) -> None:
+        chunks, _ = chunk_section_group([make_block(text="Short text.", block_uid="u1")], make_doc_meta(), 0, [])
+        assert len(chunks) == 1
+
+    def test_long_group_multiple_chunks(self) -> None:
+        chunks, _ = chunk_section_group([make_block(text=long_text(60), block_uid="u1")], make_doc_meta(), 0, [])
+        assert len(chunks) > 1
+
+    def test_all_within_token_limit(self) -> None:
+        chunks, _ = chunk_section_group([make_block(text=long_text(60), block_uid="u1")], make_doc_meta(), 0, [])
+        for chunk in chunks:
+            assert chunk["token_count"] <= MAX_CHUNK_TOKENS
+
+    def test_chunk_index_starts_at_offset(self) -> None:
+        chunks, _ = chunk_section_group([make_block(text="Some text.", block_uid="u1")], make_doc_meta(), 5, [])
+        assert chunks[0]["chunk_index"] == 5
+
+    def test_no_overlap_returned_across_boundary(self) -> None:
+        _, returned_overlap = chunk_section_group([make_block(text="Some content.", block_uid="u1")], make_doc_meta(), 0, [])
+        assert returned_overlap == []
+
+    def test_block_uids_in_chunk(self) -> None:
+        chunks, _ = chunk_section_group([make_block(text="Some text.", block_uid="abc123")], make_doc_meta(), 0, [])
+        assert "abc123" in chunks[0]["block_uids"]
+
+    def test_page_start_page_end_set(self) -> None:
+        blocks = [
+            make_block(text="Page one.", block_uid="u1", page_number=3),
+            make_block(text="Page two.", block_uid="u2", page_number=4),
+        ]
+        chunks, _ = chunk_section_group(blocks, make_doc_meta(), 0, [])
+        assert min(c["page_start"] for c in chunks) == 3
+
+    def test_empty_blocks_returns_empty(self) -> None:
+        chunks, overlap = chunk_section_group([], make_doc_meta(), 0, [])
+        assert chunks == []
+        assert overlap == []
+
+    def test_citation_fields_complete(self) -> None:
+        chunks, _ = chunk_section_group([make_block(text="Clinical content.", block_uid="u1")], make_doc_meta(), 0, [])
+        citation = chunks[0]["citation"]
+        for field in [
+            "doc_id", "source_name", "specialty", "title", "author_org",
+            "creation_date", "last_updated_date", "section_path",
+            "section_title", "page_range", "source_url", "access_date",
+        ]:
+            assert field in citation
+
