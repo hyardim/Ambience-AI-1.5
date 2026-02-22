@@ -1,20 +1,22 @@
-.PHONY: help install install-dev setup db-up db-down db-reset test lint format type-check clean run-ingest run-query
+.PHONY: help install install-dev setup db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query
 
 help:
 	@echo "Available commands:"
-	@echo "  make install       - Install production dependencies"
-	@echo "  make install-dev   - Install development dependencies"
-	@echo "  make setup         - Set up project (create dirs, copy .env)"
-	@echo "  make db-up         - Start database"
-	@echo "  make db-down       - Stop database"
-	@echo "  make db-reset      - Reset database"
-	@echo "  make test          - Run tests"
-	@echo "  make lint          - Run linter (ruff)"
-	@echo "  make format        - Format code (ruff)"
-	@echo "  make type-check    - Run type checker (mypy)"
-	@echo "  make clean         - Clean cache and temp files"
-# 	@echo "  make run-ingest    - Run ingestion pipeline"
-# 	@echo "  make run-query     - Run RAG query"
+	@echo "  make install            - Install production dependencies"
+	@echo "  make install-dev        - Install development dependencies"
+	@echo "  make setup              - Set up project (create dirs, copy .env)"
+	@echo "  make db-up              - Start database"
+	@echo "  make db-down            - Stop database"
+	@echo "  make db-reset           - Reset database (wipes data)"
+	@echo "  make db-migrate         - Run database migrations"
+	@echo "  make db-migrate-reset   - Drop and recreate rag_chunks table"
+	@echo "  make test               - Run tests"
+	@echo "  make lint               - Run linter (ruff)"
+	@echo "  make format             - Format code (ruff)"
+	@echo "  make type-check         - Run type checker (mypy)"
+	@echo "  make clean              - Clean cache and temp files"
+# 	@echo "  make run-ingest          - Run ingestion pipeline"
+# 	@echo "  make run-query           - Run RAG query"
 
 install:
 	pip install -e .
@@ -42,6 +44,15 @@ db-reset:
 	docker-compose down -v
 	docker-compose up -d
 	@sleep 5
+
+db-migrate:
+	psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
+	psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+
+db-migrate-reset:
+	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
+	psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
+	psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
 
 test:
 	pytest
