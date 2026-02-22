@@ -185,6 +185,75 @@ def merge_short_sections(
 # Text chunking
 # -----------------------------------------------------------------------
 
+def chunk_section_group(
+    blocks: list[dict[str, Any]],
+    doc_meta: dict[str, Any],
+    chunk_index_start: int,
+    overlap_sentences: list[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Split a section group into sentence-aligned chunks with overlap.
+
+    Returns (chunks, last_overlap_sentences)
+    """
+    if not blocks:
+        return [], []
+
+    sentence_block_pairs: list[tuple[str, dict[str, Any]]] = []
+    for block in blocks:
+        text = block.get("text", "").strip()
+        if not text:
+            continue
+        for s in split_into_sentences(text):
+            sentence_block_pairs.append((s, block))
+
+    if not sentence_block_pairs:
+        return [], []
+
+    chunks: list[dict[str, Any]] = []
+    chunk_index = chunk_index_start
+
+    current_sentences: list[str] = list(overlap_sentences)
+    current_blocks: list[dict[str, Any]] = []
+
+    i = 0
+    while i < len(sentence_block_pairs):
+        sentence, block = sentence_block_pairs[i]
+        candidate = current_sentences + [sentence]
+        candidate_tokens = count_tokens(" ".join(candidate))
+
+        if candidate_tokens > MAX_CHUNK_TOKENS and current_blocks:
+            chunk = _build_text_chunk(
+                sentences=current_sentences,
+                contributing_blocks=current_blocks,
+                doc_meta=doc_meta,
+                chunk_index=chunk_index,
+            )
+            if chunk:
+                chunks.append(chunk)
+                chunk_index += 1
+
+            overlap_sentences = _compute_overlap(current_sentences)
+            current_sentences = list(overlap_sentences)
+            current_blocks = []
+        else:
+            current_sentences.append(sentence)
+            current_blocks.append(block)
+            i += 1
+
+    # Emit remaining
+    if current_blocks:
+        chunk = _build_text_chunk(
+            sentences=current_sentences,
+            contributing_blocks=current_blocks,
+            doc_meta=doc_meta,
+            chunk_index=chunk_index,
+        )
+        if chunk:
+            chunks.append(chunk)
+
+    # No overlap across section boundaries
+    return chunks, []
+
 def _build_text_chunk(
     sentences: list[str],
     contributing_blocks: list[dict[str, Any]],
