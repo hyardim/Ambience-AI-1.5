@@ -154,3 +154,49 @@ class TestMetadataJson:
     def test_different_metadata_different_json(self) -> None:
         assert _metadata_json({"a": 1}) != _metadata_json({"a": 2})
 
+# -----------------------------------------------------------------------
+# _upsert_chunk
+# -----------------------------------------------------------------------
+
+
+class TestUpsertChunk:
+    def test_inserts_new_chunk(self) -> None:
+        conn, cur = make_mock_conn(existing_row=None)
+        result = _upsert_chunk(conn, make_chunk(), "doc123", "v1")
+        assert result == "inserted"
+        assert cur.execute.call_count == 2  # SELECT + INSERT
+        conn.commit.assert_called_once()
+
+    def test_skips_identical_chunk(self) -> None:
+        chunk = make_chunk()
+        metadata = _build_metadata(chunk)
+        existing_row = (chunk["text"], metadata)
+        conn, cur = make_mock_conn(existing_row=existing_row)
+        result = _upsert_chunk(conn, chunk, "doc123", "v1")
+        assert result == "skipped"
+        conn.commit.assert_not_called()
+
+    def test_updates_on_text_change(self) -> None:
+        chunk = make_chunk(text="New text.")
+        existing_row = ("Old text.", _build_metadata(chunk))
+        conn, cur = make_mock_conn(existing_row=existing_row)
+        result = _upsert_chunk(conn, chunk, "doc123", "v1")
+        assert result == "updated"
+        conn.commit.assert_called_once()
+
+    def test_updates_on_metadata_change(self) -> None:
+        chunk = make_chunk()
+        old_metadata = {"source_name": "OLD", "title": "Old Title",
+                        "section_path": [], "section_title": "",
+                        "page_start": 0, "page_end": 0, "citation": {}}
+        existing_row = (chunk["text"], old_metadata)
+        conn, cur = make_mock_conn(existing_row=existing_row)
+        result = _upsert_chunk(conn, chunk, "doc123", "v1")
+        assert result == "updated"
+        conn.commit.assert_called_once()
+
+    def test_raises_on_db_error(self) -> None:
+        conn, cur = make_mock_conn(existing_row=None)
+        cur.execute.side_effect = Exception("DB error")
+        with pytest.raises(Exception, match="DB error"):
+            _upsert_chunk(conn, make_chunk(), "doc123", "v1")
