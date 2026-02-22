@@ -1,3 +1,6 @@
+-include .env
+export
+
 .PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query
 
 help:
@@ -51,11 +54,13 @@ db-reset:
 	@sleep 5
 
 db-migrate:
+	@test -n "$(DATABASE_URL)" || (echo "ERROR: DATABASE_URL is not set. Check your .env file." && exit 1)
 	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
 	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
 	@echo "Migrations applied."
 
 db-migrate-reset:
+	@test -n "$(DATABASE_URL)" || (echo "ERROR: DATABASE_URL is not set. Check your .env file." && exit 1)
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS chunks CASCADE;"
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
