@@ -182,6 +182,21 @@ def merge_short_sections(
     return result
 
 # -----------------------------------------------------------------------
+# Text chunking
+# -----------------------------------------------------------------------
+
+def _compute_overlap(sentences: list[str]) -> list[str]:
+    """Take sentences from end of list until overlap token budget is reached."""
+    overlap: list[str] = []
+    for sentence in reversed(sentences):
+        candidate = [sentence] + overlap
+        if count_tokens(" ".join(candidate)) > OVERLAP_TOKENS:
+            break
+        overlap = candidate
+    return overlap
+
+
+# -----------------------------------------------------------------------
 # Citation + chunk ID
 # -----------------------------------------------------------------------
 
