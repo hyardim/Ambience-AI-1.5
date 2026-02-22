@@ -52,3 +52,41 @@ class PipelineError(Exception):
         self.pdf_path = pdf_path
         self.message = message
         super().__init__(f"{stage} | {pdf_path} | {message}")
+
+# -----------------------------------------------------------------------
+# Debug artifacts
+# -----------------------------------------------------------------------
+
+
+def _strip_embeddings(doc: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of doc with embedding vectors replaced by metadata."""
+    import copy
+
+    doc_copy = copy.deepcopy(doc)
+    for chunk in doc_copy.get("chunks", []):
+        if "embedding" in chunk:
+            chunk["embedding"] = "<stripped>"
+    return doc_copy
+
+
+def _write_debug_artifact(
+    doc_id: str,
+    stage_num: int,
+    stage_name: str,
+    data: dict[str, Any],
+) -> None:
+    """Write a pipeline stage output to data/debug/<doc_id>/<stage>.json."""
+    from ..config import path_config
+
+    debug_dir = path_config.data_debug / doc_id
+    debug_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{stage_num:02d}_{stage_name}.json"
+    path = debug_dir / filename
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+        logger.debug(f"Debug artifact written: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to write debug artifact {path}: {e}")
