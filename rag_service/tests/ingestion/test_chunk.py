@@ -252,3 +252,35 @@ class TestMakeTableChunk:
             make_doc_meta(), 0,
         )
         assert chunk["token_count"] > 0
+
+# -----------------------------------------------------------------------
+# group_blocks_by_section
+# -----------------------------------------------------------------------
+
+
+class TestGroupBlocksBySection:
+    def test_single_group(self) -> None:
+        blocks = [
+            make_block(block_id=0, section_path=["Intro"]),
+            make_block(block_id=1, section_path=["Intro"]),
+        ]
+        assert len(group_blocks_by_section(blocks)) == 1
+
+    def test_two_sections(self) -> None:
+        blocks = [
+            make_block(block_id=0, section_path=["Intro"]),
+            make_block(block_id=1, section_path=["Methods"]),
+        ]
+        assert len(group_blocks_by_section(blocks)) == 2
+
+    def test_interleaved_not_merged(self) -> None:
+        blocks = [
+            make_block(block_id=0, section_path=["Intro"]),
+            make_block(block_id=1, section_path=["Methods"]),
+            make_block(block_id=2, section_path=["Intro"]),
+        ]
+        assert len(group_blocks_by_section(blocks)) == 3
+
+    def test_empty_blocks(self) -> None:
+        assert group_blocks_by_section([]) == []
+
