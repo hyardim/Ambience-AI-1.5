@@ -750,3 +750,33 @@ class TestDetectAndConvertTables:
         block = result["pages"][0]["blocks"][0]
         assert block["content_type"] == "table"
         assert block["include_in_chunks"] is False
+
+    def test_table_chunk_has_block_id(self) -> None:
+        cells = [["Drug", "Dose"], ["MTX", "7.5mg"]]
+        table_bbox = [50.0, 200.0, 400.0, 350.0]
+        table_info = [{"cells": cells, "bbox": table_bbox, "page_number": 1}]
+
+        doc = make_sectioned_doc(
+            pages=[
+                make_page(
+                    1,
+                    blocks=[
+                        make_block(
+                            "Text", block_id=3, bbox=[50.0, 210.0, 400.0, 230.0]
+                        ),
+                    ],
+                )
+            ]
+        )
+
+        with patch(
+            "src.ingestion.table_detect.detect_tables_with_pymupdf",
+            return_value=table_info,
+        ):
+            result = detect_and_convert_tables(doc, "test.pdf")
+
+        table_block = next(
+            b for b in result["pages"][0]["blocks"] if b.get("content_type") == "table"
+        )
+        assert "block_id" in table_block
+        assert table_block["block_id"] == 3
