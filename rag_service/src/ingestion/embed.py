@@ -35,6 +35,7 @@ def _load_model() -> SentenceTransformer:
         _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _MODEL
 
+
 # -----------------------------------------------------------------------
 # Main function
 # -----------------------------------------------------------------------
@@ -65,9 +66,7 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
         return {**chunked_doc, "chunks": chunks}
 
     model = _load_model()
-    logger.info(
-        f"Embedding {len(chunks)} chunks in batches of {EMBEDDING_BATCH_SIZE}"
-    )
+    logger.info(f"Embedding {len(chunks)} chunks in batches of {EMBEDDING_BATCH_SIZE}")
 
     n_success = 0
     n_failed = 0
@@ -79,7 +78,7 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
 
         try:
             vectors = _embed_batch(model, texts)
-            for chunk, vector in zip(batch, vectors):
+            for chunk, vector in zip(batch, vectors, strict=True):
                 chunk.update(_make_success_fields(vector))
                 n_success += 1
         except Exception:
@@ -90,9 +89,9 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
             )
             for chunk in batch:
                 text = chunk.get("text", "")
-                vector = _embed_single(model, text)
-                if vector is not None:
-                    chunk.update(_make_success_fields(vector))
+                single_vector = _embed_single(model, text)
+                if single_vector is not None:
+                    chunk.update(_make_success_fields(single_vector))
                     n_success += 1
                 else:
                     chunk.update(_make_failure_fields("Failed after all retries"))
@@ -107,10 +106,12 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
         sample = chunks[0].get("embedding", [])
         if sample:
             import math
+
             norm = math.sqrt(sum(x * x for x in sample))
             logger.debug(f"Sample embedding norm: {norm:.4f}")
 
     return {**chunked_doc, "chunks": chunks}
+
 
 # -----------------------------------------------------------------------
 # Batch + single embedding with retry
@@ -141,7 +142,7 @@ def _embed_batch(
         return [v.tolist() for v in vectors]
     except Exception as e:
         if attempt < MAX_RETRIES - 1:
-            wait = RETRY_BACKOFF_BASE ** attempt
+            wait = RETRY_BACKOFF_BASE**attempt
             logger.warning(
                 f"Batch embedding failed (attempt {attempt + 1}): {e}. "
                 f"Retrying in {wait:.1f}s"
@@ -149,6 +150,7 @@ def _embed_batch(
             time.sleep(wait)
             return _embed_batch(model, texts, attempt + 1)
         raise
+
 
 def _embed_single(
     model: SentenceTransformer,
@@ -171,7 +173,7 @@ def _embed_single(
         return vector[0].tolist()
     except Exception as e:
         if attempt < MAX_RETRIES - 1:
-            wait = RETRY_BACKOFF_BASE ** attempt
+            wait = RETRY_BACKOFF_BASE**attempt
             logger.warning(
                 f"Single embedding failed (attempt {attempt + 1}): {e}. "
                 f"Retrying in {wait:.1f}s"
@@ -196,6 +198,7 @@ def _make_success_fields(embedding: list[float]) -> dict[str, Any]:
         "embedding_dimensions": EMBEDDING_DIMENSIONS,
         "embedding_error": None,
     }
+
 
 def _make_failure_fields(error: str) -> dict[str, Any]:
     """Return embedding metadata dict for a failed embed."""
