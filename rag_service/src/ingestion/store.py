@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import numpy as np
 import psycopg2.extras
 from pgvector.psycopg2 import register_vector
 
@@ -86,7 +87,6 @@ def _upsert_chunk(
     Upsert a single chunk. Returns "inserted" | "updated" | "skipped".
     Raises on DB error.
     """
-    import numpy as np
 
     chunk_id = chunk["chunk_id"]
     text = chunk["text"]
