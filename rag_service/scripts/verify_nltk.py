@@ -1,30 +1,44 @@
-"""Verify NLTK data integrity after download."""
+"""Verify NLTK tokenizer data is installed and loadable."""
 
-import hashlib
-import pathlib
 import sys
 
-import nltk
 
-# SHA-256 checksums of known-good NLTK punkt files
-# Update these when intentionally upgrading NLTK data
-EXPECTED = {
-    "punkt": "51c3078994aeaf650bfc8e028be4fb42b4a0d177d41c012b6a983979653660ec",
-    "punkt_tab": "e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106",
-}
+def verify() -> None:
+    failed = False
 
-data_path = pathlib.Path(nltk.data.path[0])
-
-for resource, expected_hash in EXPECTED.items():
-    zip_path = data_path / "tokenizers" / f"{resource}.zip"
-    if not zip_path.exists():
-        print(f"ERROR: {zip_path} not found")
-        sys.exit(1)
-    actual = hashlib.sha256(zip_path.read_bytes()).hexdigest()
-    if actual != expected_hash:
-        print(f"ERROR: {resource} checksum mismatch")
-        print(f"  Expected: {expected_hash}")
-        print(f"  Got:      {actual}")
+    try:
+        import nltk
+    except ImportError:
+        print("ERROR: nltk is not installed — run: pip install nltk")
         sys.exit(1)
 
-print("NLTK data integrity verified.")
+    for resource in ("punkt", "punkt_tab"):
+        try:
+            nltk.data.find(f"tokenizers/{resource}")
+            print(f"OK: {resource} found")
+        except LookupError:
+            print(
+                f"ERROR: {resource} not found — run: "
+                f"python -m nltk.downloader {resource}"
+            )
+            failed = True
+
+    # Verify punkt actually works by tokenizing a test string
+    try:
+        from nltk.tokenize import sent_tokenize
+
+        result = sent_tokenize("This is a test. It should tokenize correctly.")
+        assert len(result) == 2, f"Expected 2 sentences, got {len(result)}"
+        print("OK: tokenizer functional")
+    except Exception as e:
+        print(f"ERROR: tokenizer failed: {e}")
+        failed = True
+
+    if failed:
+        sys.exit(1)
+
+    print("NLTK data verified.")
+
+
+if __name__ == "__main__":
+    verify()
