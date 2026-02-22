@@ -326,3 +326,110 @@ def load_ingestion_config(config_path: Path) -> dict[str, Any]:
         return {}
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+def run_ingestion(
+    input_path: Path,
+    source_name: str,
+    db_url: str | None,
+    dry_run: bool = False,
+    since: date | None = None,
+    max_files: int | None = None,
+    write_debug_artifacts: bool = False,
+) -> dict[str, Any]:
+    """
+    Discover PDFs, run pipeline per file, return summary report.
+
+    Args:
+        input_path: Path to PDF file or folder
+        source_name: Key into configs/sources.yaml
+        db_url: Postgres connection string, or None
+        dry_run: If True, skip DB writes
+        since: Only process files modified after this date
+        max_files: Maximum number of files to process
+        write_debug_artifacts: If True, write intermediate JSON outputs
+
+    Returns:
+        Summary report dict
+    """
+    from ..config import path_config
+
+    sources_path = Path("configs/sources.yaml")
+    config_path = Path("configs/ingestion.yaml")
+
+    # Load source metadata
+    sources = load_sources(sources_path)
+    if source_name not in sources:
+        raise ValueError(
+            f"Unknown --source-name '{source_name}'. "
+            f"Available: {sorted(sources.keys())}. "
+            f"Check configs/sources.yaml."
+        )
+    source_info = sources[source_name]
+
+    # Load ingestion config (optional)
+    ingestion_config = load_ingestion_config(config_path)
+    logger.debug(f"Ingestion config loaded: {ingestion_config}")
+
+    # Discover PDFs
+    pdfs = discover_pdfs(input_path, since=since, max_files=max_files)
+    logger.info(f"Found {len(pdfs)} PDF(s) to process from {input_path}")
+
+    if not pdfs:
+        logger.warning("No PDFs found matching criteria.")
+        return {
+            "files_scanned": 0,
+            "files_succeeded": 0,
+            "files_failed": 0,
+            "total_chunks": 0,
+            "embeddings_succeeded": 0,
+            "embeddings_failed": 0,
+            "db": {"inserted": 0, "updated": 0, "skipped": 0, "failed": 0},
+        }
+
+    # Initialise summary
+    summary: dict[str, Any] = {
+        "files_scanned": len(pdfs),
+        "files_succeeded": 0,
+        "files_failed": 0,
+        "total_chunks": 0,
+        "embeddings_succeeded": 0,
+        "embeddings_failed": 0,
+        "db": {"inserted": 0, "updated": 0, "skipped": 0, "failed": 0},
+    }
+
+    for pdf_path in pdfs:
+        logger.info(f"Processing: {pdf_path}")
+        try:
+            report = run_pipeline(
+                pdf_path=pdf_path,
+                source_info=source_info,
+                db_url=db_url,
+                dry_run=dry_run,
+                write_debug_artifacts=write_debug_artifacts,
+            )
+            summary["files_succeeded"] += 1
+            summary["total_chunks"] += report["chunks"]
+            summary["embeddings_succeeded"] += report["embeddings_succeeded"]
+            summary["embeddings_failed"] += report["embeddings_failed"]
+            for key in ("inserted", "updated", "skipped", "failed"):
+                summary["db"][key] += report["db"][key]
+
+        except PipelineError as e:
+            summary["files_failed"] += 1
+            logger.error(f"ERROR | {e.stage} | {e.pdf_path} | {e.message}")
+        except Exception as e:
+            summary["files_failed"] += 1
+            logger.error(f"ERROR | UNKNOWN | {pdf_path} | {e}")
+
+    logger.info(
+        f"Ingestion complete: "
+        f"scanned={summary['files_scanned']} "
+        f"succeeded={summary['files_succeeded']} "
+        f"failed={summary['files_failed']} "
+        f"chunks={summary['total_chunks']} "
+        f"db=inserted:{summary['db']['inserted']} "
+        f"updated:{summary['db']['updated']} "
+        f"skipped:{summary['db']['skipped']}"
+    )
+
+    return summary
