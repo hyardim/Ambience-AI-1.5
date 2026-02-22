@@ -90,7 +90,6 @@ def _upsert_chunk(
 
     chunk_id = chunk["chunk_id"]
     text = chunk["text"]
-    embedding = np.array(chunk["embedding"], dtype=np.float32)
     metadata = _build_metadata(chunk)
     metadata_str = _metadata_json(metadata)
 
@@ -108,6 +107,7 @@ def _upsert_chunk(
 
         if existing is None:
             # Case A — insert
+            embedding = np.array(chunk["embedding"], dtype=np.float32)
             cur.execute(
                 """
                 INSERT INTO rag_chunks (
@@ -134,6 +134,7 @@ def _upsert_chunk(
 
         if existing_text != text:
             # Case B — text changed, update text + embedding + metadata
+            embedding = np.array(chunk["embedding"], dtype=np.float32)
             cur.execute(
                 """
                 UPDATE rag_chunks
