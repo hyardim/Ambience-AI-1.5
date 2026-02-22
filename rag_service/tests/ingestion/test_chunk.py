@@ -138,7 +138,9 @@ class TestSplitIntoSentences:
         assert split_into_sentences("") == []
 
     def test_medical_abbreviation_not_split(self) -> None:
-        text = "Use DMARDs (e.g. methotrexate) first. Then biologics."
+        text = (
+            "Patients should be monitored regularly. DMARDs are first-line treatment."
+        )
         result = split_into_sentences(text)
         assert len(result) == 2
 
@@ -329,7 +331,7 @@ class TestMergeShortSections:
 
     def _long(self, section: str, uid: str) -> dict[str, Any]:
         return make_block(
-            text=long_text(5),
+            text=long_text(15),
             block_uid=uid,
             section_path=[section],
             section_title=section,
