@@ -111,12 +111,13 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
         chunks.extend(new_chunks)
         chunk_index += len(new_chunks)
 
-    # Re-sort all chunks by page_start then chunk_index for natural reading order
-    chunks.sort(key=lambda c: (c["page_start"], c["chunk_index"]))
+    # Sort by page then original block order instead of chunk_index
+    chunks.sort(key=lambda c: (c["page_start"], c["_source_order"]))
 
     # Re-assign chunk_index after sort
     for i, chunk in enumerate(chunks):
         chunk["chunk_index"] = i
+        del chunk["_source_order"]
 
     n_text = sum(1 for c in chunks if c["content_type"] == "text")
     n_table = sum(1 for c in chunks if c["content_type"] == "table")
@@ -196,6 +197,7 @@ def make_table_chunk(
         "block_uids": [block.get("block_uid", "")],
         "token_count": count_tokens(text),
         "citation": citation,
+        "_source_order": block.get("block_id", 0),
     }
 
 
@@ -396,6 +398,7 @@ def _build_text_chunk(
         "block_uids": block_uids,
         "token_count": count_tokens(text),
         "citation": citation,
+        "_source_order": min(b.get("block_id", 0) for b in contributing_blocks),
     }
 
 
