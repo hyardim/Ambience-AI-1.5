@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
 import nltk
@@ -436,7 +437,6 @@ def generate_chunk_id(doc_id: str, doc_version: str, text: str) -> str:
 
 def clean_chunk_text(text: str) -> str:
     """Strip whitespace, collapse excessive newlines, preserve paragraph breaks."""
-    import re
 
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
