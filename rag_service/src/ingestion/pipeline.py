@@ -38,3 +38,17 @@ STAGE_METADATA = "METADATA"
 STAGE_CHUNK = "CHUNK"
 STAGE_EMBED = "EMBED"
 STAGE_STORE = "STORE"
+
+# -----------------------------------------------------------------------
+# Errors
+# -----------------------------------------------------------------------
+
+
+class PipelineError(Exception):
+    """Raised when a pipeline stage fails."""
+
+    def __init__(self, stage: str, pdf_path: str, message: str) -> None:
+        self.stage = stage
+        self.pdf_path = pdf_path
+        self.message = message
+        super().__init__(f"{stage} | {pdf_path} | {message}")
