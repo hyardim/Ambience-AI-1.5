@@ -163,3 +163,25 @@ class TestCleanChunkText:
 
     def test_empty_string(self) -> None:
         assert clean_chunk_text("") == ""
+
+# -----------------------------------------------------------------------
+# generate_chunk_id
+# -----------------------------------------------------------------------
+
+class TestGenerateChunkId:
+    def test_returns_16_char_hex(self) -> None:
+        cid = generate_chunk_id("doc1", "v1", "some text")
+        assert len(cid) == 16
+        assert all(c in "0123456789abcdef" for c in cid)
+
+    def test_deterministic(self) -> None:
+        assert generate_chunk_id("doc1", "v1", "text") == generate_chunk_id("doc1", "v1", "text")
+
+    def test_different_text_different_id(self) -> None:
+        assert generate_chunk_id("doc1", "v1", "text A") != generate_chunk_id("doc1", "v1", "text B")
+
+    def test_different_version_different_id(self) -> None:
+        assert generate_chunk_id("doc1", "v1", "text") != generate_chunk_id("doc1", "v2", "text")
+
+    def test_content_based_not_positional(self) -> None:
+        assert generate_chunk_id("doc1", "v1", "identical text") == generate_chunk_id("doc1", "v1", "identical text")
