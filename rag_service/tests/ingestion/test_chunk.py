@@ -185,3 +185,35 @@ class TestGenerateChunkId:
 
     def test_content_based_not_positional(self) -> None:
         assert generate_chunk_id("doc1", "v1", "identical text") == generate_chunk_id("doc1", "v1", "identical text")
+
+# -----------------------------------------------------------------------
+# build_citation
+# -----------------------------------------------------------------------
+
+
+class TestBuildCitation:
+    def test_all_fields_present(self) -> None:
+        citation = build_citation(
+            {"section_path": ["Treatment"], "section_title": "Treatment", "page_range": "5-7"},
+            make_doc_meta(),
+        )
+        for field in [
+            "doc_id", "source_name", "specialty", "title", "author_org",
+            "creation_date", "last_updated_date", "section_path",
+            "section_title", "page_range", "source_url", "access_date",
+        ]:
+            assert field in citation
+
+    def test_page_range_set(self) -> None:
+        citation = build_citation(
+            {"section_path": [], "section_title": "", "page_range": "12-13"},
+            make_doc_meta(),
+        )
+        assert citation["page_range"] == "12-13"
+
+    def test_access_date_from_ingestion_date(self) -> None:
+        citation = build_citation(
+            {"section_path": [], "section_title": "", "page_range": "1"},
+            make_doc_meta(ingestion_date="2024-06-01"),
+        )
+        assert citation["access_date"] == "2024-06-01"
