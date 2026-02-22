@@ -70,6 +70,50 @@ def split_into_sentences(text: str) -> list[str]:
     return [s for s in sentences if s.strip()]
 
 # -----------------------------------------------------------------------
+# Table chunks
+# -----------------------------------------------------------------------
+
+
+def make_table_chunk(
+    block: dict[str, Any],
+    doc_meta: dict[str, Any],
+    chunk_index: int,
+) -> dict[str, Any]:
+    """Create a single chunk from a table block."""
+    text = clean_chunk_text(block.get("text", ""))
+    page = block.get("page_number", 0)
+    section_path = block.get("section_path", ["Unknown"])
+    section_title = block.get("section_title", "Unknown")
+    page_range = str(page)
+
+    citation = build_citation(
+        {
+            "section_path": section_path,
+            "section_title": section_title,
+            "page_range": page_range,
+        },
+        doc_meta,
+    )
+
+    return {
+        "chunk_id": generate_chunk_id(
+            doc_meta.get("doc_id", ""),
+            doc_meta.get("doc_version", ""),
+            text,
+        ),
+        "chunk_index": chunk_index,
+        "content_type": "table",
+        "text": text,
+        "section_path": section_path,
+        "section_title": section_title,
+        "page_start": page,
+        "page_end": page,
+        "block_uids": [block.get("block_uid", "")],
+        "token_count": count_tokens(text),
+        "citation": citation,
+    }
+
+# -----------------------------------------------------------------------
 # Citation + chunk ID
 # -----------------------------------------------------------------------
 
