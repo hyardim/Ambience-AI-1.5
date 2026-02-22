@@ -532,6 +532,7 @@ class TestDetectAndConvertTables:
         assert all(
             k in table_block
             for k in [
+                "block_id",
                 "content_type",
                 "text",
                 "table_title",
