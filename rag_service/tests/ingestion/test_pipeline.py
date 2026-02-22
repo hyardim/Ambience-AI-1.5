@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -147,16 +147,17 @@ PIPELINE_PATCHES = [
 ]
 
 
-def make_all_patches(embedded_doc: dict[str, Any] | None = None) -> dict[str, MagicMock]:
+def make_all_patches(
+    embedded_doc: dict[str, Any] | None = None,
+) -> dict[str, MagicMock]:
     doc = embedded_doc or make_embedded_doc()
     raw = make_raw_doc()
     mocks = {}
     return_values = [raw, raw, raw, raw, doc, doc, doc, make_db_report()]
-    for patch_path, rv in zip(PIPELINE_PATCHES, return_values):
+    for patch_path, rv in zip(PIPELINE_PATCHES, return_values, strict=True):
         m = MagicMock(return_value=rv)
         mocks[patch_path] = m
     return mocks
-
 
 
 # -----------------------------------------------------------------------
@@ -179,6 +180,7 @@ class TestStripEmbeddings:
         doc = {"source_path": "x.pdf", "chunks": []}
         stripped = _strip_embeddings(doc)
         assert stripped["chunks"] == []
+
 
 # -----------------------------------------------------------------------
 # discover_pdfs
@@ -220,7 +222,6 @@ class TestDiscoverPdfs:
 
     def test_since_filters_old_files(self, tmp_path: Path) -> None:
         import os
-        import time
 
         old = tmp_path / "old.pdf"
         old.touch()
@@ -241,6 +242,7 @@ class TestDiscoverPdfs:
         result = discover_pdfs(tmp_path)
         assert result == []
 
+
 # -----------------------------------------------------------------------
 # load_sources
 # -----------------------------------------------------------------------
@@ -256,6 +258,7 @@ class TestLoadSources:
     def test_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
             load_sources(tmp_path / "missing.yaml")
+
 
 # -----------------------------------------------------------------------
 # load_ingestion_config
@@ -313,13 +316,30 @@ class TestRunPipeline:
 
     def test_dry_run_skips_store(self) -> None:
         with (
-            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
             patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
             patch("src.ingestion.pipeline.store_chunks") as mock_store,
         ):
             run_pipeline(
@@ -333,14 +353,33 @@ class TestRunPipeline:
 
     def test_store_called_when_not_dry_run(self) -> None:
         with (
-            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
             patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()) as mock_store,
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch(
+                "src.ingestion.pipeline.store_chunks", return_value=make_db_report()
+            ) as mock_store,
         ):
             run_pipeline(
                 pdf_path=Path("/data/raw/NICE/test.pdf"),
@@ -369,12 +408,27 @@ class TestRunPipeline:
 
     def test_chunk_failure_raises_pipeline_error(self) -> None:
         with (
-            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
             patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.chunk_document", side_effect=RuntimeError("token exceeded")),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                side_effect=RuntimeError("token exceeded"),
+            ),
         ):
             with pytest.raises(PipelineError) as exc_info:
                 run_pipeline(
@@ -396,13 +450,30 @@ class TestRunPipeline:
 
     def test_debug_artifacts_written_when_flag_set(self, tmp_path: Path) -> None:
         with (
-            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
             patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
             patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
             patch("src.ingestion.pipeline.path_config") as mock_path,
         ):
@@ -417,13 +488,30 @@ class TestRunPipeline:
 
     def test_debug_artifacts_not_written_by_default(self, tmp_path: Path) -> None:
         with (
-            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
             patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
-            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
-            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
             patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
             patch("src.ingestion.pipeline.path_config") as mock_path,
         ):
@@ -460,8 +548,14 @@ class TestRunIngestion:
         sources = tmp_path / "sources.yaml"
         sources.write_text("NICE:\n  source_name: NICE\n")
         with (
-            patch("src.ingestion.pipeline.Path", side_effect=lambda x: tmp_path / x if "configs" in str(x) else Path(x)),
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.Path",
+                side_effect=lambda x: tmp_path / x if "configs" in str(x) else Path(x),
+            ),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
         ):
             with pytest.raises(ValueError, match="Unknown --source-name"):
@@ -474,7 +568,10 @@ class TestRunIngestion:
 
     def test_empty_folder_returns_zero_counts(self, tmp_path: Path) -> None:
         with (
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
         ):
             summary = run_ingestion(
@@ -490,19 +587,25 @@ class TestRunIngestion:
         pdf = tmp_path / "test.pdf"
         pdf.touch()
         with (
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
-            patch("src.ingestion.pipeline.run_pipeline", return_value={
-                "file": str(pdf),
-                "doc_id": "abc123",
-                "pages": 2,
-                "chunks": 5,
-                "embeddings_succeeded": 5,
-                "embeddings_failed": 0,
-                "headings_detected": 3,
-                "tables_detected": 1,
-                "db": make_db_report(inserted=5),
-            }),
+            patch(
+                "src.ingestion.pipeline.run_pipeline",
+                return_value={
+                    "file": str(pdf),
+                    "doc_id": "abc123",
+                    "pages": 2,
+                    "chunks": 5,
+                    "embeddings_succeeded": 5,
+                    "embeddings_failed": 0,
+                    "headings_detected": 3,
+                    "tables_detected": 1,
+                    "db": make_db_report(inserted=5),
+                },
+            ),
         ):
             summary = run_ingestion(
                 input_path=tmp_path,
@@ -518,7 +621,10 @@ class TestRunIngestion:
         pdf = tmp_path / "test.pdf"
         pdf.touch()
         with (
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
             patch(
                 "src.ingestion.pipeline.run_pipeline",
@@ -560,7 +666,10 @@ class TestRunIngestion:
             }
 
         with (
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
             patch("src.ingestion.pipeline.run_pipeline", side_effect=side_effect),
         ):
@@ -596,7 +705,10 @@ class TestRunIngestion:
             }
 
         with (
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
             patch("src.ingestion.pipeline.run_pipeline", side_effect=side_effect),
         ):
@@ -612,7 +724,10 @@ class TestRunIngestion:
 
     def test_summary_has_all_keys(self, tmp_path: Path) -> None:
         with (
-            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
             patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
         ):
             summary = run_ingestion(
@@ -621,8 +736,15 @@ class TestRunIngestion:
                 db_url=None,
                 dry_run=True,
             )
-        for key in ["files_scanned", "files_succeeded", "files_failed",
-                    "total_chunks", "embeddings_succeeded", "embeddings_failed", "db"]:
+        for key in [
+            "files_scanned",
+            "files_succeeded",
+            "files_failed",
+            "total_chunks",
+            "embeddings_succeeded",
+            "embeddings_failed",
+            "db",
+        ]:
             assert key in summary
         for key in ["inserted", "updated", "skipped", "failed"]:
             assert key in summary["db"]
