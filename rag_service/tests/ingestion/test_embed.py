@@ -182,3 +182,40 @@ class TestEmbedBatch:
         assert model.encode.call_count == 1
 
 
+# -----------------------------------------------------------------------
+# _embed_single
+# -----------------------------------------------------------------------
+
+
+class TestEmbedSingle:
+    def test_returns_vector_on_success(self) -> None:
+        model = make_mock_model()
+        result = _embed_single(model, "some text")
+        assert isinstance(result, list)
+        assert len(result) == EMBEDDING_DIMENSIONS
+
+    def test_returns_none_after_max_retries(self) -> None:
+        model = make_mock_model(fail=True)
+        with patch("src.ingestion.embed.time.sleep"):
+            result = _embed_single(model, "some text")
+        assert result is None
+
+    def test_retries_on_transient_failure(self) -> None:
+        model = MagicMock()
+        call_count = 0
+
+        def encode_side_effect(texts, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RuntimeError("transient")
+            return np.array([make_fake_vector()])
+
+        model.encode.side_effect = encode_side_effect
+
+        with patch("src.ingestion.embed.time.sleep"):
+            result = _embed_single(model, "text")
+
+        assert result is not None
+        assert call_count == 2
+
