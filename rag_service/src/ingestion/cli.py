@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import click
@@ -98,7 +98,7 @@ def ingest(
     source_name: str,
     db_url: str | None,
     dry_run: bool,
-    since: object,
+    since: datetime | None,
     max_files: int | None,
     log_level: str,
     write_debug_artifacts: bool,
@@ -108,9 +108,7 @@ def ingest(
 
     resolved_db_url = _resolve_db_url(db_url, dry_run)
 
-    since_date: date | None = None
-    if since is not None:
-        since_date = since.date()  # type: ignore[union-attr]
+    since_date: date | None = since.date() if since is not None else None
 
     if dry_run:
         logger.info("DRY RUN — no database writes will occur")

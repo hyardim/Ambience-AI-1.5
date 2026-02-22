@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import copy
 import json
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from ..config import path_config
 from ..utils.logger import setup_logger
 from .chunk import chunk_document
 from .clean import clean_document
@@ -60,7 +64,6 @@ class PipelineError(Exception):
 
 def _strip_embeddings(doc: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of doc with embedding vectors replaced by metadata."""
-    import copy
 
     doc_copy = copy.deepcopy(doc)
     for chunk in doc_copy.get("chunks", []):
@@ -76,7 +79,6 @@ def _write_debug_artifact(
     data: dict[str, Any],
 ) -> None:
     """Write a pipeline stage output to data/debug/<doc_id>/<stage>.json."""
-    from ..config import path_config
 
     debug_dir = path_config.data_debug / doc_id
     debug_dir.mkdir(parents=True, exist_ok=True)
@@ -252,7 +254,6 @@ def run_pipeline(
 
 def _backfill_debug_artifacts(doc_id: str) -> None:
     """Rename debug artifacts written under 'pending' to the real doc_id."""
-    from ..config import path_config
 
     pending_dir = path_config.data_debug / "pending"
     if not pending_dir.exists():
@@ -316,20 +317,20 @@ def discover_pdfs(
 
 def load_sources(sources_path: Path) -> dict[str, Any]:
     """Load sources.yaml and return as dict."""
-    import yaml
 
     with open(sources_path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        result: dict[str, Any] = yaml.safe_load(f)
+        return result
 
 
 def load_ingestion_config(config_path: Path) -> dict[str, Any]:
     """Load ingestion.yaml if it exists, return empty dict otherwise."""
-    import yaml
 
     if not config_path.exists():
         return {}
     with open(config_path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        result: dict[str, Any] = yaml.safe_load(f) or {}
+        return result
 
 
 def run_ingestion(
