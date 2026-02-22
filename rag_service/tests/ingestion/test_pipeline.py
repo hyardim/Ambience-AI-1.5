@@ -690,8 +690,8 @@ class TestRunIngestion:
 
         processed = []
 
-        def side_effect(*args: Any, **kwargs: Any) -> dict[str, Any]:
-            processed.append(kwargs.get("pdf_path", args[0]))
+        def side_effect(**kwargs: Any) -> dict[str, Any]:
+            processed.append(kwargs.get("pdf_path"))
             return {
                 "file": "x.pdf",
                 "doc_id": "abc",
