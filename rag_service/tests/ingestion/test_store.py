@@ -133,3 +133,24 @@ class TestBuildMetadata:
         metadata = _build_metadata(chunk)
         assert isinstance(metadata["citation"], dict)
         assert metadata["citation"]["doc_id"] == "doc123"
+
+# -----------------------------------------------------------------------
+# _metadata_json
+# -----------------------------------------------------------------------
+
+
+class TestMetadataJson:
+    def test_returns_string(self) -> None:
+        assert isinstance(_metadata_json({"a": 1}), str)
+
+    def test_sorted_keys(self) -> None:
+        result = _metadata_json({"b": 2, "a": 1})
+        assert result.index('"a"') < result.index('"b"')
+
+    def test_deterministic(self) -> None:
+        meta = {"b": 2, "a": 1, "c": [1, 2, 3]}
+        assert _metadata_json(meta) == _metadata_json(meta)
+
+    def test_different_metadata_different_json(self) -> None:
+        assert _metadata_json({"a": 1}) != _metadata_json({"a": 2})
+
