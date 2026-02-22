@@ -6,12 +6,9 @@ from typing import Any
 
 import nltk
 import tiktoken
+from nltk.tokenize import sent_tokenize  # noqa: E402
 
 from ..utils.logger import setup_logger
-
-nltk.download("punkt", quiet=True)
-nltk.download("punkt_tab", quiet=True)
-from nltk.tokenize import sent_tokenize  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -25,7 +22,22 @@ OVERLAP_TOKENS = 80
 SHORT_SECTION_TOKENS = 150
 MAX_MERGE_SECTIONS = 2
 
+_NLTK_INITIALISED = False
+
 _ENCODER = tiktoken.get_encoding("cl100k_base")
+
+
+def _ensure_nltk_data() -> None:
+    """Download required NLTK data if not already present. Runs once."""
+    global _NLTK_INITIALISED
+    if _NLTK_INITIALISED:
+        return
+    for resource in ("punkt", "punkt_tab"):
+        try:
+            nltk.data.find(f"tokenizers/{resource}")
+        except LookupError:
+            nltk.download(resource, quiet=True)
+    _NLTK_INITIALISED = True
 
 
 # -----------------------------------------------------------------------
@@ -138,6 +150,7 @@ def count_tokens(text: str) -> int:
 
 def split_into_sentences(text: str) -> list[str]:
     """Split text into sentences using nltk.sent_tokenize."""
+    _ensure_nltk_data()
     sentences = sent_tokenize(text)
     return [s for s in sentences if s.strip()]
 

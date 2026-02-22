@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import call, patch
 
+import src.ingestion.chunk as chunk_module
 from src.ingestion.chunk import (
     MAX_CHUNK_TOKENS,
     build_citation,
@@ -146,6 +148,22 @@ class TestSplitIntoSentences:
 
     def test_whitespace_only_filtered(self) -> None:
         assert split_into_sentences("  ") == []
+
+    def test_nltk_data_downloaded_if_missing(self) -> None:
+        chunk_module._NLTK_INITIALISED = False
+        with (
+            patch("nltk.data.find", side_effect=LookupError),
+            patch("nltk.download") as mock_download,
+        ):
+            chunk_module._ensure_nltk_data()
+
+        mock_download.assert_has_calls(
+            [
+                call("punkt", quiet=True),
+                call("punkt_tab", quiet=True),
+            ]
+        )
+        chunk_module._NLTK_INITIALISED = True
 
 
 # -----------------------------------------------------------------------
