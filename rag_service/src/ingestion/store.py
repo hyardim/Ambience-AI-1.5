@@ -10,6 +10,69 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+
+def store_chunks(embedded_doc: dict[str, Any]) -> dict[str, Any]:
+    """
+    Persist embedded chunks into Postgres + pgvector.
+
+    Args:
+        embedded_doc: EmbeddedDocument dict from embed.py
+
+    Returns:
+        Report dict with inserted, updated, skipped, failed counts
+
+    Processing steps:
+        1. Filter out failed chunks (embedding_status != "success")
+        2. Connect to Postgres via db.get_raw_connection()
+        3. For each chunk: determine upsert case and execute
+        4. Return report
+    """
+    chunks = embedded_doc.get("chunks", [])
+    doc_meta = embedded_doc.get("doc_meta", {})
+    doc_id = doc_meta.get("doc_id", "")
+    doc_version = doc_meta.get("doc_version", "")
+
+    # Pre-filter failed chunks
+    eligible = [c for c in chunks if c.get("embedding_status") == "success"]
+    n_failed = len(chunks) - len(eligible)
+
+    if not eligible:
+        logger.info(f"No eligible chunks to store for doc_id={doc_id}")
+        return {"inserted": 0, "updated": 0, "skipped": 0, "failed": n_failed}
+
+    logger.info(f"Storing {len(eligible)} chunks for doc_id={doc_id}")
+
+    report: dict[str, int] = {
+        "inserted": 0,
+        "updated": 0,
+        "skipped": 0,
+        "failed": n_failed,
+    }
+
+    conn = db.get_raw_connection()
+    try:
+        register_vector(conn)
+        for chunk in eligible:
+            chunk_id = chunk.get("chunk_id", "")
+            try:
+                action = _upsert_chunk(conn, chunk, doc_id, doc_version)
+                report[action] += 1
+                logger.debug(f"Chunk {chunk_id}: {action}")
+            except Exception as e:
+                report["failed"] += 1
+                logger.warning(f"Chunk {chunk_id} failed to write: {e}")
+                conn.rollback()
+    finally:
+        conn.close()
+
+    logger.info(
+        f"Store report: inserted={report['inserted']} "
+        f"updated={report['updated']} "
+        f"skipped={report['skipped']} "
+        f"failed={report['failed']}"
+    )
+    return report
+
 def _upsert_chunk(
     conn: Any,
     chunk: dict[str, Any],
