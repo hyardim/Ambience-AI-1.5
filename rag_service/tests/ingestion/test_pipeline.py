@@ -921,7 +921,7 @@ class TestRunIngestion:
                 dry_run=True,
             )
         for key in [
-            "files_scanned",gi
+            "files_scanned",
             "files_succeeded",
             "files_failed",
             "total_chunks",
