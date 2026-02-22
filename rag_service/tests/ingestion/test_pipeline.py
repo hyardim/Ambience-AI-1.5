@@ -256,3 +256,19 @@ class TestLoadSources:
     def test_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
             load_sources(tmp_path / "missing.yaml")
+
+# -----------------------------------------------------------------------
+# load_ingestion_config
+# -----------------------------------------------------------------------
+
+
+class TestLoadIngestionConfig:
+    def test_returns_empty_if_missing(self, tmp_path: Path) -> None:
+        result = load_ingestion_config(tmp_path / "missing.yaml")
+        assert result == {}
+
+    def test_loads_yaml_if_present(self, tmp_path: Path) -> None:
+        f = tmp_path / "ingestion.yaml"
+        f.write_text("embedding:\n  dimensions: 384\n")
+        result = load_ingestion_config(f)
+        assert result["embedding"]["dimensions"] == 384
