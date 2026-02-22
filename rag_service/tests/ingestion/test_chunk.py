@@ -455,6 +455,37 @@ class TestChunkSectionGroup:
         ]:
             assert field in citation
 
+    def test_block_with_empty_text_skipped(self) -> None:
+        # covers the `if not text: continue` guard (line 281)
+        blocks = [
+            make_block(text="", block_uid="empty"),
+            make_block(text="Real content.", block_uid="real"),
+        ]
+        chunks, _ = chunk_section_group(blocks, make_doc_meta(), 0, [])
+        assert len(chunks) == 1
+        assert "empty" not in chunks[0]["block_uids"]
+
+    def test_all_empty_text_blocks_returns_empty(self) -> None:
+        # covers the `if not sentence_block_pairs: return [], []` guard (line 286)
+        blocks = [
+            make_block(text="", block_uid="e1"),
+            make_block(text="   ", block_uid="e2"),
+        ]
+        chunks, overlap = chunk_section_group(blocks, make_doc_meta(), 0, [])
+        assert chunks == []
+        assert overlap == []
+
+    def test_build_text_chunk_empty_contributing_blocks_returns_none(self) -> None:
+        from src.ingestion.chunk import _build_text_chunk
+
+        result = _build_text_chunk(
+            sentences=["Some sentence."],
+            contributing_blocks=[],
+            doc_meta=make_doc_meta(),
+            chunk_index=0,
+        )
+        assert result is None
+
 
 # -----------------------------------------------------------------------
 # chunk_document (integration)
