@@ -113,11 +113,6 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
     # Re-assign chunk_index after sort
     for i, chunk in enumerate(chunks):
         chunk["chunk_index"] = i
-        chunk["chunk_id"] = generate_chunk_id(
-            doc_meta.get("doc_id", ""),
-            doc_meta.get("doc_version", ""),
-            chunk["text"],
-        )
 
     n_text = sum(1 for c in chunks if c["content_type"] == "text")
     n_table = sum(1 for c in chunks if c["content_type"] == "table")
