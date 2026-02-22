@@ -19,8 +19,8 @@ help:
 	@echo "  make format             - Format code (ruff)"
 	@echo "  make type-check         - Run type checker (mypy)"
 	@echo "  make clean              - Clean cache and temp files"
-# 	@echo "  make run-ingest          - Run ingestion pipeline"
-# 	@echo "  make run-query           - Run RAG query"
+	@echo "  make run-ingest         - Run ingestion pipeline (INPUT=... SOURCE=...)"
+# 	@echo "  make run-query          - Run RAG query"
 
 install:
 	pip install -e .
@@ -34,7 +34,7 @@ nltk-download:
 	python scripts/verify_nltk.py
 
 setup:
-	mkdir -p data/raw data/processed logs
+	mkdir -p data/raw data/processed data/debug logs configs
 	[ ! -f .env ] && cp .env.example .env || echo ".env already exists, skipping"
 	$(MAKE) nltk-download
 	@echo "Setup complete! Edit .env with your configuration"
@@ -90,8 +90,11 @@ clean:
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf htmlcov/ .coverage
 
-# run-ingest:
-# 	python scripts/ingest.py
+run-ingest:
+	python -m src.ingestion.cli ingest \
+	  --input $(INPUT) \
+	  --source-name $(SOURCE) \
+	  --log-level INFO
 
 # run-query:
 # 	python scripts/query.py
