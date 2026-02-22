@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
-import os
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -39,6 +37,7 @@ STAGE_CHUNK = "CHUNK"
 STAGE_EMBED = "EMBED"
 STAGE_STORE = "STORE"
 
+
 # -----------------------------------------------------------------------
 # Errors
 # -----------------------------------------------------------------------
@@ -52,6 +51,7 @@ class PipelineError(Exception):
         self.pdf_path = pdf_path
         self.message = message
         super().__init__(f"{stage} | {pdf_path} | {message}")
+
 
 # -----------------------------------------------------------------------
 # Debug artifacts
@@ -91,9 +91,11 @@ def _write_debug_artifact(
     except Exception as e:
         logger.warning(f"Failed to write debug artifact {path}: {e}")
 
+
 # -----------------------------------------------------------------------
 # Single file pipeline
 # -----------------------------------------------------------------------
+
 
 def run_pipeline(
     pdf_path: Path,
@@ -186,7 +188,9 @@ def run_pipeline(
         raise PipelineError(STAGE_EMBED, path_str, str(e)) from e
 
     if write_debug_artifacts:
-        _write_debug_artifact(doc_id, 7, "embedded_meta", _strip_embeddings(embedded_doc))
+        _write_debug_artifact(
+            doc_id, 7, "embedded_meta", _strip_embeddings(embedded_doc)
+        )
 
     # ---- Stage 8: Store ----
     db_report: dict[str, int] = {
@@ -245,6 +249,7 @@ def run_pipeline(
 
     return report
 
+
 def _backfill_debug_artifacts(doc_id: str) -> None:
     """Rename debug artifacts written under 'pending' to the real doc_id."""
     from ..config import path_config
@@ -265,6 +270,7 @@ def _backfill_debug_artifacts(doc_id: str) -> None:
         pending_dir.rmdir()
     except OSError:
         pass
+
 
 # -----------------------------------------------------------------------
 # Multi-file orchestration
@@ -300,16 +306,13 @@ def discover_pdfs(
         raise ValueError(f"Input path does not exist: {input_path}")
 
     if since is not None:
-        pdfs = [
-            p
-            for p in pdfs
-            if date.fromtimestamp(p.stat().st_mtime) > since
-        ]
+        pdfs = [p for p in pdfs if date.fromtimestamp(p.stat().st_mtime) > since]
 
     if max_files is not None:
         pdfs = pdfs[:max_files]
 
     return pdfs
+
 
 def load_sources(sources_path: Path) -> dict[str, Any]:
     """Load sources.yaml and return as dict."""
@@ -317,6 +320,7 @@ def load_sources(sources_path: Path) -> dict[str, Any]:
 
     with open(sources_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
+
 
 def load_ingestion_config(config_path: Path) -> dict[str, Any]:
     """Load ingestion.yaml if it exists, return empty dict otherwise."""
@@ -326,6 +330,7 @@ def load_ingestion_config(config_path: Path) -> dict[str, Any]:
         return {}
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
 
 def run_ingestion(
     input_path: Path,
@@ -351,7 +356,6 @@ def run_ingestion(
     Returns:
         Summary report dict
     """
-    from ..config import path_config
 
     sources_path = Path("configs/sources.yaml")
     config_path = Path("configs/ingestion.yaml")
