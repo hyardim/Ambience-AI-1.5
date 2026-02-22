@@ -115,3 +115,23 @@ class TestMakeSuccessFields:
         fields = _make_success_fields(make_fake_vector())
         assert len(fields["embedding"]) == EMBEDDING_DIMENSIONS
 
+# -----------------------------------------------------------------------
+# _make_failure_fields
+# -----------------------------------------------------------------------
+
+
+class TestMakeFailureFields:
+    def test_all_fields_present(self) -> None:
+        fields = _make_failure_fields("timeout error")
+        assert fields["embedding_status"] == "failed"
+        assert fields["embedding"] is None
+        assert fields["embedding_error"] == "timeout error"
+        assert fields["embedding_model_name"] == EMBEDDING_MODEL_NAME
+        assert fields["embedding_model_version"] == EMBEDDING_MODEL_VERSION
+        assert fields["embedding_dimensions"] == EMBEDDING_DIMENSIONS
+
+    def test_error_message_stored(self) -> None:
+        fields = _make_failure_fields("OOM error")
+        assert fields["embedding_error"] == "OOM error"
+
+
