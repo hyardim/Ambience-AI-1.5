@@ -75,3 +75,14 @@ def _make_success_fields(embedding: list[float]) -> dict[str, Any]:
         "embedding_dimensions": EMBEDDING_DIMENSIONS,
         "embedding_error": None,
     }
+
+def _make_failure_fields(error: str) -> dict[str, Any]:
+    """Return embedding metadata dict for a failed embed."""
+    return {
+        "embedding": None,
+        "embedding_status": "failed",
+        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "embedding_model_version": EMBEDDING_MODEL_VERSION,
+        "embedding_dimensions": EMBEDDING_DIMENSIONS,
+        "embedding_error": error,
+    }
