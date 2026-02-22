@@ -145,3 +145,21 @@ class TestSplitIntoSentences:
 
     def test_whitespace_only_filtered(self) -> None:
         assert split_into_sentences("  ") == []
+
+# -----------------------------------------------------------------------
+# clean_chunk_text
+# -----------------------------------------------------------------------
+
+
+class TestCleanChunkText:
+    def test_strips_whitespace(self) -> None:
+        assert clean_chunk_text("  hello  ") == "hello"
+
+    def test_collapses_triple_newlines(self) -> None:
+        assert "\n\n\n" not in clean_chunk_text("a\n\n\n\nb")
+
+    def test_preserves_double_newline(self) -> None:
+        assert "\n\n" in clean_chunk_text("para one\n\npara two")
+
+    def test_empty_string(self) -> None:
+        assert clean_chunk_text("") == ""
