@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -225,7 +226,7 @@ class TestDiscoverPdfs:
 
         old = tmp_path / "old.pdf"
         old.touch()
-        os.utime(old, (0, 0))  # set mtime to epoch
+        os.utime(old, (0, 0))
 
         new = tmp_path / "new.pdf"
         new.touch()
@@ -440,6 +441,84 @@ class TestRunPipeline:
                 )
             assert exc_info.value.stage == "CHUNK"
 
+    def test_embed_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", side_effect=RuntimeError("OOM")
+            ),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "EMBED"
+
+    def test_store_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch(
+                "src.ingestion.pipeline.store_chunks",
+                side_effect=RuntimeError("DB down"),
+            ),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url="postgresql://localhost/db",
+                    dry_run=False,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "STORE"
+
     def test_report_chunk_count_correct(self) -> None:
         report = self._run()
         assert report["chunks"] == 1
@@ -525,6 +604,94 @@ class TestRunPipeline:
             )
         assert list(tmp_path.iterdir()) == []
 
+    def test_debug_artifacts_contain_correct_stages(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.data_debug = tmp_path
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=True,
+            )
+
+        doc_id = FAKE_DOC_META["doc_id"]
+        artifact_dir = tmp_path / doc_id
+        filenames = {f.name for f in artifact_dir.iterdir()}
+        assert "05_metadata.json" in filenames
+        assert "06_chunked.json" in filenames
+        assert "07_embedded_meta.json" in filenames
+
+    def test_debug_artifact_vectors_stripped(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.data_debug = tmp_path
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=True,
+            )
+
+        doc_id = FAKE_DOC_META["doc_id"]
+        artifact = tmp_path / doc_id / "07_embedded_meta.json"
+        data = json.loads(artifact.read_text())
+        assert data["chunks"][0]["embedding"] == "<stripped>"
+
 
 # -----------------------------------------------------------------------
 # run_ingestion
@@ -545,13 +712,7 @@ class TestRunIngestion:
         return f
 
     def test_unknown_source_name_raises(self, tmp_path: Path) -> None:
-        sources = tmp_path / "sources.yaml"
-        sources.write_text("NICE:\n  source_name: NICE\n")
         with (
-            patch(
-                "src.ingestion.pipeline.Path",
-                side_effect=lambda x: tmp_path / x if "configs" in str(x) else Path(x),
-            ),
             patch(
                 "src.ingestion.pipeline.load_sources",
                 return_value={"NICE": FAKE_SOURCE_INFO},
@@ -688,7 +849,7 @@ class TestRunIngestion:
         for i in range(5):
             (tmp_path / f"{i}.pdf").touch()
 
-        processed = []
+        processed: list[Any] = []
 
         def side_effect(**kwargs: Any) -> dict[str, Any]:
             processed.append(kwargs.get("pdf_path"))
@@ -722,6 +883,29 @@ class TestRunIngestion:
 
         assert len(processed) == 2
 
+    def test_unknown_exception_increments_failed(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "test.pdf"
+        pdf.touch()
+        with (
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch(
+                "src.ingestion.pipeline.run_pipeline",
+                side_effect=RuntimeError("unexpected"),
+            ),
+        ):
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+            )
+        assert summary["files_failed"] == 1
+        assert summary["files_succeeded"] == 0
+
     def test_summary_has_all_keys(self, tmp_path: Path) -> None:
         with (
             patch(
@@ -737,7 +921,7 @@ class TestRunIngestion:
                 dry_run=True,
             )
         for key in [
-            "files_scanned",
+            "files_scanned",gi
             "files_succeeded",
             "files_failed",
             "total_chunks",
