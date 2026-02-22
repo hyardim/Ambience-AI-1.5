@@ -91,3 +91,27 @@ def make_mock_model(
             return np.array(vecs[:n])
         model.encode.side_effect = encode_side_effect
     return model
+
+# -----------------------------------------------------------------------
+# _make_success_fields
+# -----------------------------------------------------------------------
+
+
+class TestMakeSuccessFields:
+    def test_all_fields_present(self) -> None:
+        fields = _make_success_fields(make_fake_vector())
+        assert fields["embedding_status"] == "success"
+        assert fields["embedding_model_name"] == EMBEDDING_MODEL_NAME
+        assert fields["embedding_model_version"] == EMBEDDING_MODEL_VERSION
+        assert fields["embedding_dimensions"] == EMBEDDING_DIMENSIONS
+        assert fields["embedding_error"] is None
+
+    def test_embedding_value_set(self) -> None:
+        vec = make_fake_vector()
+        fields = _make_success_fields(vec)
+        assert fields["embedding"] == vec
+
+    def test_embedding_length_correct(self) -> None:
+        fields = _make_success_fields(make_fake_vector())
+        assert len(fields["embedding"]) == EMBEDDING_DIMENSIONS
+
