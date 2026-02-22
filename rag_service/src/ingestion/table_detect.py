@@ -85,6 +85,7 @@ def detect_and_convert_tables(
                 block["is_table_content"] = True
 
             table_chunk: dict[str, Any] = {
+                "block_id": overlapping[0].get("block_id", original_position),
                 "content_type": "table",
                 "text": markdown,
                 "table_title": table_title,
