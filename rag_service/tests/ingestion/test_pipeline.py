@@ -179,3 +179,64 @@ class TestStripEmbeddings:
         doc = {"source_path": "x.pdf", "chunks": []}
         stripped = _strip_embeddings(doc)
         assert stripped["chunks"] == []
+
+# -----------------------------------------------------------------------
+# discover_pdfs
+# -----------------------------------------------------------------------
+
+
+class TestDiscoverPdfs:
+    def test_single_pdf_file(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "test.pdf"
+        pdf.touch()
+        result = discover_pdfs(pdf)
+        assert result == [pdf]
+
+    def test_non_pdf_file_raises(self, tmp_path: Path) -> None:
+        txt = tmp_path / "test.txt"
+        txt.touch()
+        with pytest.raises(ValueError, match="not a PDF"):
+            discover_pdfs(txt)
+
+    def test_folder_finds_pdfs_recursively(self, tmp_path: Path) -> None:
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (tmp_path / "a.pdf").touch()
+        (sub / "b.pdf").touch()
+        result = discover_pdfs(tmp_path)
+        assert len(result) == 2
+
+    def test_folder_ignores_non_pdfs(self, tmp_path: Path) -> None:
+        (tmp_path / "a.pdf").touch()
+        (tmp_path / "b.txt").touch()
+        result = discover_pdfs(tmp_path)
+        assert len(result) == 1
+
+    def test_max_files_limits_results(self, tmp_path: Path) -> None:
+        for i in range(5):
+            (tmp_path / f"{i}.pdf").touch()
+        result = discover_pdfs(tmp_path, max_files=2)
+        assert len(result) == 2
+
+    def test_since_filters_old_files(self, tmp_path: Path) -> None:
+        import os
+        import time
+
+        old = tmp_path / "old.pdf"
+        old.touch()
+        os.utime(old, (0, 0))  # set mtime to epoch
+
+        new = tmp_path / "new.pdf"
+        new.touch()
+
+        result = discover_pdfs(tmp_path, since=date(2000, 1, 1))
+        assert new in result
+        assert old not in result
+
+    def test_nonexistent_path_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="does not exist"):
+            discover_pdfs(tmp_path / "nonexistent")
+
+    def test_empty_folder_returns_empty(self, tmp_path: Path) -> None:
+        result = discover_pdfs(tmp_path)
+        assert result == []
