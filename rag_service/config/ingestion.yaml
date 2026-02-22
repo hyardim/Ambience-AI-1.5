@@ -1,0 +1,12 @@
+embedding:
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  model_version: "main"
+  dimensions: 384
+
+chunking:
+  target_chunk_size: 450
+  overlap_percentage: 0.15
+
+logging:
+  level: INFO
+  file: logs/rag.log
