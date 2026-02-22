@@ -376,3 +376,130 @@ class TestChunkSectionGroup:
         ]:
             assert field in citation
 
+# -----------------------------------------------------------------------
+# chunk_document (integration)
+# -----------------------------------------------------------------------
+
+
+class TestChunkDocument:
+    def test_chunks_key_present(self) -> None:
+        assert "chunks" in chunk_document(make_metadata_doc())
+
+    def test_excluded_blocks_not_in_chunks(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text="Authors: Dr Smith", include_in_chunks=False, block_uid="excluded1"),
+            make_block(text="Clinical content.", include_in_chunks=True, block_uid="included1"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        all_uids = [uid for c in result["chunks"] for uid in c["block_uids"]]
+        assert "excluded1" not in all_uids
+        assert "included1" in all_uids
+
+    def test_table_becomes_one_chunk(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text="| Drug | Dose |\n| MTX | 7.5mg |", content_type="table", block_uid="tbl1"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        table_chunks = [c for c in result["chunks"] if c["content_type"] == "table"]
+        assert len(table_chunks) == 1
+        assert table_chunks[0]["block_uids"] == ["tbl1"]
+
+    def test_table_not_split(self) -> None:
+        big_table = ("| " + " | ".join(["Col"] * 5) + " |\n") + (
+            "| " + " | ".join(["data"] * 5) + " |\n"
+        ) * 50
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text=big_table, content_type="table", block_uid="bigtbl"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        assert len([c for c in result["chunks"] if c["content_type"] == "table"]) == 1
+
+    def test_long_section_multiple_chunks(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text=long_text(60), block_uid="long1"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        assert len([c for c in result["chunks"] if c["content_type"] == "text"]) > 1
+
+    def test_all_text_chunks_within_token_limit(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text=long_text(60), block_uid="long1"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        for chunk in result["chunks"]:
+            if chunk["content_type"] == "text":
+                assert chunk["token_count"] <= MAX_CHUNK_TOKENS
+
+    def test_chunk_ids_deterministic(self) -> None:
+        doc = make_metadata_doc()
+        ids1 = [c["chunk_id"] for c in chunk_document(doc)["chunks"]]
+        ids2 = [c["chunk_id"] for c in chunk_document(doc)["chunks"]]
+        assert ids1 == ids2
+
+    def test_chunk_index_sequential(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text=long_text(60), block_uid="u1"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        indices = [c["chunk_index"] for c in result["chunks"]]
+        assert indices == list(range(len(indices)))
+
+    def test_page_start_page_end_correct(self) -> None:
+        pages = [{"page_number": 3, "blocks": [
+            make_block(text="Content on page 3.", page_number=3, block_uid="u1"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        for chunk in result["chunks"]:
+            assert chunk["page_start"] >= 3
+
+    def test_block_uids_populated(self) -> None:
+        for chunk in chunk_document(make_metadata_doc())["chunks"]:
+            assert len(chunk["block_uids"]) > 0
+
+    def test_citation_complete_on_all_chunks(self) -> None:
+        for chunk in chunk_document(make_metadata_doc())["chunks"]:
+            for field in [
+                "doc_id", "source_name", "specialty", "title", "author_org",
+                "creation_date", "last_updated_date", "section_path",
+                "section_title", "page_range", "source_url", "access_date",
+            ]:
+                assert field in chunk["citation"]
+
+    def test_no_overlap_across_section_boundary(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text=long_text(10), block_uid="s1", section_path=["Section 1"], section_title="Section 1"),
+            make_block(text=long_text(10), block_uid="s2", section_path=["Section 2"], section_title="Section 2"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        s1_chunks = [c for c in result["chunks"] if c["section_title"] == "Section 1"]
+        s2_chunks = [c for c in result["chunks"] if c["section_title"] == "Section 2"]
+        if s1_chunks and s2_chunks:
+            assert s1_chunks[-1]["section_path"] != s2_chunks[0]["section_path"]
+
+    def test_empty_document_returns_empty_chunks(self) -> None:
+        assert chunk_document(make_metadata_doc(pages=[]))["chunks"] == []
+
+    def test_original_doc_fields_preserved(self) -> None:
+        doc = make_metadata_doc()
+        result = chunk_document(doc)
+        assert "doc_meta" in result
+        assert "pages" in result
+        assert result["source_path"] == doc["source_path"]
+
+    def test_short_section_merged(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text="Short.", block_uid="short1", section_path=["Short Section"], section_title="Short Section"),
+            make_block(text=long_text(10), block_uid="long1", section_path=["Long Section"], section_title="Long Section"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        all_text = " ".join(c["text"] for c in result["chunks"])
+        assert "Short." in all_text
+
+    def test_short_section_at_end_standalone(self) -> None:
+        pages = [{"page_number": 1, "blocks": [
+            make_block(text=long_text(10), block_uid="long1", section_path=["Long Section"], section_title="Long Section"),
+            make_block(text="Short final note.", block_uid="short1", section_path=["End Note"], section_title="End Note"),
+        ]}]
+        result = chunk_document(make_metadata_doc(pages=pages))
+        all_text = " ".join(c["text"] for c in result["chunks"])
+        assert "Short final note." in all_text
