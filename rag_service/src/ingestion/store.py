@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 import numpy as np
+import psycopg2
 import psycopg2.extras
 from pgvector.psycopg2 import register_vector
 
@@ -13,7 +14,9 @@ from ..utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 
-def store_chunks(embedded_doc: dict[str, Any]) -> dict[str, Any]:
+def store_chunks(
+    embedded_doc: dict[str, Any], db_url: str | None = None
+) -> dict[str, Any]:
     """
     Persist embedded chunks into Postgres + pgvector.
 
@@ -51,7 +54,7 @@ def store_chunks(embedded_doc: dict[str, Any]) -> dict[str, Any]:
         "failed": n_failed,
     }
 
-    conn = db.get_raw_connection()
+    conn = psycopg2.connect(db_url) if db_url else db.get_raw_connection()
     try:
         register_vector(conn)
         psycopg2.extras.register_default_jsonb(conn)
