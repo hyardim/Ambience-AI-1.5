@@ -272,3 +272,167 @@ class TestLoadIngestionConfig:
         f.write_text("embedding:\n  dimensions: 384\n")
         result = load_ingestion_config(f)
         assert result["embedding"]["dimensions"] == 384
+
+
+# -----------------------------------------------------------------------
+# run_pipeline
+# -----------------------------------------------------------------------
+
+
+class TestRunPipeline:
+    def _run(
+        self,
+        dry_run: bool = True,
+        write_debug: bool = False,
+        embedded_doc: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        doc = embedded_doc or make_embedded_doc()
+        raw = make_raw_doc()
+        with (
+            patch("src.ingestion.pipeline.extract_raw_document", return_value=raw),
+            patch("src.ingestion.pipeline.clean_document", return_value=raw),
+            patch("src.ingestion.pipeline.add_section_metadata", return_value=raw),
+            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=raw),
+            patch("src.ingestion.pipeline.attach_metadata", return_value=doc),
+            patch("src.ingestion.pipeline.chunk_document", return_value=doc),
+            patch("src.ingestion.pipeline.embed_chunks", return_value=doc),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+        ):
+            return run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=dry_run,
+                write_debug_artifacts=write_debug,
+            )
+
+    def test_returns_report_dict(self) -> None:
+        report = self._run()
+        for key in ["file", "doc_id", "pages", "chunks", "embeddings_succeeded", "db"]:
+            assert key in report
+
+    def test_dry_run_skips_store(self) -> None:
+        with (
+            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.store_chunks") as mock_store,
+        ):
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=False,
+            )
+        mock_store.assert_not_called()
+
+    def test_store_called_when_not_dry_run(self) -> None:
+        with (
+            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()) as mock_store,
+        ):
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url="postgresql://localhost/db",
+                dry_run=False,
+                write_debug_artifacts=False,
+            )
+        mock_store.assert_called_once()
+
+    def test_extract_failure_raises_pipeline_error(self) -> None:
+        with patch(
+            "src.ingestion.pipeline.extract_raw_document",
+            side_effect=RuntimeError("corrupt pdf"),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "EXTRACT"
+            assert "corrupt pdf" in exc_info.value.message
+
+    def test_chunk_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.chunk_document", side_effect=RuntimeError("token exceeded")),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "CHUNK"
+
+    def test_report_chunk_count_correct(self) -> None:
+        report = self._run()
+        assert report["chunks"] == 1
+
+    def test_db_report_zeros_on_dry_run(self) -> None:
+        report = self._run(dry_run=True)
+        assert report["db"] == {"inserted": 0, "updated": 0, "skipped": 0, "failed": 0}
+
+    def test_debug_artifacts_written_when_flag_set(self, tmp_path: Path) -> None:
+        with (
+            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.data_debug = tmp_path
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=True,
+            )
+
+    def test_debug_artifacts_not_written_by_default(self, tmp_path: Path) -> None:
+        with (
+            patch("src.ingestion.pipeline.extract_raw_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.add_section_metadata", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.detect_and_convert_tables", return_value=make_raw_doc()),
+            patch("src.ingestion.pipeline.attach_metadata", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.chunk_document", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.data_debug = tmp_path
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=False,
+            )
+        assert list(tmp_path.iterdir()) == []
