@@ -52,7 +52,76 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
         8. Attach full chunk metadata and citation
         9. Assign chunk_index and generate chunk_id
     """
-    pass
+    doc_meta = metadata_doc.get("doc_meta", {})
+    pages = metadata_doc.get("pages", [])
+
+    # Step 1: collect all blocks with include_in_chunks=True
+    all_blocks: list[dict[str, Any]] = []
+    for page in pages:
+        for block in page.get("blocks", []):
+            if block.get("include_in_chunks", False):
+                all_blocks.append(block)
+
+    # Step 2: separate tables from text
+    table_blocks = [b for b in all_blocks if b.get("content_type") == "table"]
+    text_blocks = [b for b in all_blocks if b.get("content_type") != "table"]
+
+    chunks: list[dict[str, Any]] = []
+    chunk_index = 0
+
+    # Table blocks → one chunk each
+    for block in table_blocks:
+        chunk = make_table_chunk(block, doc_meta, chunk_index)
+        chunks.append(chunk)
+        chunk_index += 1
+
+    # Step 3: group text blocks by section_path
+    section_groups = group_blocks_by_section(text_blocks)
+
+    # Step 4: merge short sections
+    section_groups = merge_short_sections(section_groups)
+
+    # Steps 5-9: chunk each section group
+    overlap_sentences: list[str] = []
+    for group in section_groups:
+        new_chunks, overlap_sentences = chunk_section_group(
+            blocks=group,
+            doc_meta=doc_meta,
+            chunk_index_start=chunk_index,
+            overlap_sentences=overlap_sentences,
+        )
+        chunks.extend(new_chunks)
+        chunk_index += len(new_chunks)
+
+    # Re-sort all chunks by page_start then chunk_index for natural reading order
+    chunks.sort(key=lambda c: (c["page_start"], c["chunk_index"]))
+
+    # Re-assign chunk_index after sort
+    for i, chunk in enumerate(chunks):
+        chunk["chunk_index"] = i
+        chunk["chunk_id"] = generate_chunk_id(
+            doc_meta.get("doc_id", ""),
+            doc_meta.get("doc_version", ""),
+            chunk["text"],
+        )
+
+    n_text = sum(1 for c in chunks if c["content_type"] == "text")
+    n_table = sum(1 for c in chunks if c["content_type"] == "table")
+    n_merged = sum(1 for g in section_groups if len({
+        tuple(b.get("section_path", [])) for b in g
+    }) > 1)
+
+    logger.info(f"Total chunks: {len(chunks)}, text: {n_text}, table: {n_table}")
+    logger.info(f"Short sections merged: {n_merged}")
+    if chunks:
+        logger.debug(f"Example chunk: {chunks[0]['citation']}")
+
+    return {
+        **metadata_doc,
+        "chunks": chunks,
+    }
+
+
 
 # -----------------------------------------------------------------------
 # Token counting + sentence splitting
