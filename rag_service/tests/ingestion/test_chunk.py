@@ -284,3 +284,40 @@ class TestGroupBlocksBySection:
     def test_empty_blocks(self) -> None:
         assert group_blocks_by_section([]) == []
 
+# -----------------------------------------------------------------------
+# merge_short_sections
+# -----------------------------------------------------------------------
+
+
+class TestMergeShortSections:
+    def _short(self, section: str, uid: str) -> dict[str, Any]:
+        return make_block(text="Short.", block_uid=uid, section_path=[section], section_title=section)
+
+    def _long(self, section: str, uid: str) -> dict[str, Any]:
+        return make_block(text=long_text(5), block_uid=uid, section_path=[section], section_title=section)
+
+    def test_short_merged_with_next(self) -> None:
+        result = merge_short_sections([[self._short("A", "u1")], [self._long("B", "u2")]])
+        assert len(result) == 1
+        assert len(result[0]) == 2
+
+    def test_long_not_merged(self) -> None:
+        result = merge_short_sections([[self._long("A", "u1")], [self._long("B", "u2")]])
+        assert len(result) == 2
+
+    def test_short_at_end_stays_standalone(self) -> None:
+        result = merge_short_sections([[self._long("A", "u1")], [self._short("B", "u2")]])
+        assert len(result) == 2
+
+    def test_table_not_merged_into(self) -> None:
+        table = make_block(text="| A | B |\n| 1 | 2 |", content_type="table", block_uid="t1", section_path=["T"])
+        result = merge_short_sections([[self._short("A", "u1")], [table]])
+        assert len(result) == 2
+
+    def test_empty_groups(self) -> None:
+        assert merge_short_sections([]) == []
+
+    def test_max_merge_respected(self) -> None:
+        groups = [[self._short(s, f"u{i}")] for i, s in enumerate(["A", "B", "C", "D"])]
+        result = merge_short_sections(groups)
+        assert len(result) <= len(groups)
