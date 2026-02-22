@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import psycopg2.extras
 from pgvector.psycopg2 import register_vector
 
 from ..utils.db import db
@@ -52,6 +53,7 @@ def store_chunks(embedded_doc: dict[str, Any]) -> dict[str, Any]:
     conn = db.get_raw_connection()
     try:
         register_vector(conn)
+        psycopg2.extras.register_default_jsonb(conn)
         for chunk in eligible:
             chunk_id = chunk.get("chunk_id", "")
             try:
@@ -186,4 +188,6 @@ def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
 
 def _metadata_json(metadata: dict[str, Any]) -> str:
     """Serialise metadata to sorted JSON string for comparison."""
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
     return json.dumps(metadata, sort_keys=True)

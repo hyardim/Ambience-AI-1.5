@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -154,6 +155,11 @@ class TestMetadataJson:
     def test_different_metadata_different_json(self) -> None:
         assert _metadata_json({"a": 1}) != _metadata_json({"a": 2})
 
+    def test_handles_string_input(self) -> None:
+        meta = {"b": 2, "a": 1}
+        as_string = json.dumps(meta)
+        assert _metadata_json(as_string) == _metadata_json(meta)
+
 
 # -----------------------------------------------------------------------
 # _upsert_chunk
@@ -215,16 +221,13 @@ class TestUpsertChunk:
 
 
 class TestStoreChunks:
-    def _make_conn_patch(self, existing_row: tuple | None = None):
-        conn, cur = make_mock_conn(existing_row=existing_row)
-        return conn, cur
-
     def test_inserts_new_chunk(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
         conn, cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         assert report["inserted"] == 1
@@ -241,6 +244,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         assert report["skipped"] == 1
@@ -253,6 +257,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         assert report["failed"] == 1
@@ -279,6 +284,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
 
@@ -293,6 +299,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         assert report["inserted"] == 1
@@ -303,6 +310,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection") as mock_conn,
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         mock_conn.assert_not_called()
@@ -314,6 +322,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         for key in ["inserted", "updated", "skipped", "failed"]:
@@ -325,6 +334,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             store_chunks(doc)
         conn.close.assert_called_once()
@@ -336,6 +346,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             store_chunks(doc)
         conn.close.assert_called_once()
@@ -346,6 +357,7 @@ class TestStoreChunks:
         with (
             patch("src.ingestion.store.db.get_raw_connection") as mock_conn,
             patch("src.ingestion.store.register_vector"),
+            patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
         ):
             report = store_chunks(doc)
         mock_conn.assert_not_called()
