@@ -134,4 +134,51 @@ class TestMakeFailureFields:
         fields = _make_failure_fields("OOM error")
         assert fields["embedding_error"] == "OOM error"
 
+# -----------------------------------------------------------------------
+# _embed_batch
+# -----------------------------------------------------------------------
+
+
+class TestEmbedBatch:
+    def test_returns_vectors_for_each_text(self) -> None:
+        model = make_mock_model()
+        result = _embed_batch(model, ["text one", "text two", "text three"])
+        assert len(result) == 3
+
+    def test_each_vector_is_list_of_floats(self) -> None:
+        model = make_mock_model()
+        result = _embed_batch(model, ["hello"])
+        assert isinstance(result[0], list)
+        assert all(isinstance(x, float) for x in result[0])
+
+    def test_retries_on_failure(self) -> None:
+        model = MagicMock()
+        call_count = 0
+
+        def encode_side_effect(texts, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RuntimeError("transient error")
+            return np.array([make_fake_vector()])
+
+        model.encode.side_effect = encode_side_effect
+
+        with patch("src.ingestion.embed.time.sleep"):
+            result = _embed_batch(model, ["text"])
+
+        assert call_count == 2
+        assert len(result) == 1
+
+    def test_raises_after_max_retries(self) -> None:
+        model = make_mock_model(fail=True)
+        with patch("src.ingestion.embed.time.sleep"):
+            with pytest.raises(RuntimeError):
+                _embed_batch(model, ["text"])
+
+    def test_encode_called_once_on_success(self) -> None:
+        model = make_mock_model()
+        _embed_batch(model, ["text one", "text two"])
+        assert model.encode.call_count == 1
+
 
