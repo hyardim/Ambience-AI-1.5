@@ -64,3 +64,7 @@ def count_tokens(text: str) -> int:
     return len(_ENCODER.encode(text))
 
 
+def split_into_sentences(text: str) -> list[str]:
+    """Split text into sentences using nltk.sent_tokenize."""
+    sentences = sent_tokenize(text)
+    return [s for s in sentences if s.strip()]
