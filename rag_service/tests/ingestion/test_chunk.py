@@ -102,3 +102,21 @@ def make_metadata_doc(
 def long_text(n_sentences: int = 60) -> str:
     return LONG_SENTENCE * n_sentences
 
+# -----------------------------------------------------------------------
+# count_tokens
+# -----------------------------------------------------------------------
+
+
+class TestCountTokens:
+    def test_empty_string(self) -> None:
+        assert count_tokens("") == 0
+
+    def test_single_word(self) -> None:
+        assert count_tokens("hello") > 0
+
+    def test_longer_text_more_tokens(self) -> None:
+        assert count_tokens("hello world foo bar") > count_tokens("hello")
+
+    def test_deterministic(self) -> None:
+        text = "The patient was prescribed methotrexate."
+        assert count_tokens(text) == count_tokens(text)
