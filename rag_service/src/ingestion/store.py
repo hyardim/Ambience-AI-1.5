@@ -10,6 +10,102 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+def _upsert_chunk(
+    conn: Any,
+    chunk: dict[str, Any],
+    doc_id: str,
+    doc_version: str,
+) -> str:
+    """
+    Upsert a single chunk. Returns "inserted" | "updated" | "skipped".
+    Raises on DB error.
+    """
+    import numpy as np
+
+    chunk_id = chunk["chunk_id"]
+    text = chunk["text"]
+    embedding = np.array(chunk["embedding"], dtype=np.float32)
+    metadata = _build_metadata(chunk)
+    metadata_str = _metadata_json(metadata)
+
+    with conn.cursor() as cur:
+        # Look up existing row
+        cur.execute(
+            """
+            SELECT text, metadata
+            FROM rag_chunks
+            WHERE doc_id = %s AND doc_version = %s AND chunk_id = %s
+            """,
+            (doc_id, doc_version, chunk_id),
+        )
+        existing = cur.fetchone()
+
+        if existing is None:
+            # Case A — insert
+            cur.execute(
+                """
+                INSERT INTO rag_chunks (
+                    doc_id, doc_version, chunk_id, chunk_index,
+                    content_type, text, embedding, metadata
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    doc_id,
+                    doc_version,
+                    chunk_id,
+                    chunk["chunk_index"],
+                    chunk["content_type"],
+                    text,
+                    embedding,
+                    json.dumps(metadata),
+                ),
+            )
+            conn.commit()
+            return "inserted"
+
+        existing_text, existing_metadata = existing
+        existing_metadata_str = _metadata_json(existing_metadata)
+
+        if existing_text != text:
+            # Case B — text changed, update text + embedding + metadata
+            cur.execute(
+                """
+                UPDATE rag_chunks
+                SET text = %s,
+                    embedding = %s,
+                    metadata = %s,
+                    updated_at = NOW()
+                WHERE doc_id = %s AND doc_version = %s AND chunk_id = %s
+                """,
+                (
+                    text,
+                    embedding,
+                    json.dumps(metadata),
+                    doc_id,
+                    doc_version,
+                    chunk_id,
+                ),
+            )
+            conn.commit()
+            return "updated"
+
+        if existing_metadata_str != metadata_str:
+            # Case C — metadata only changed
+            cur.execute(
+                """
+                UPDATE rag_chunks
+                SET metadata = %s,
+                    updated_at = NOW()
+                WHERE doc_id = %s AND doc_version = %s AND chunk_id = %s
+                """,
+                (json.dumps(metadata), doc_id, doc_version, chunk_id),
+            )
+            conn.commit()
+            return "updated"
+
+        # Case D — identical, skip
+        return "skipped"
+
 def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
     """Extract and return the metadata jsonb payload from a chunk."""
     return {
