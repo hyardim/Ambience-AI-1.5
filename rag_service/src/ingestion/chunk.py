@@ -68,3 +68,14 @@ def split_into_sentences(text: str) -> list[str]:
     """Split text into sentences using nltk.sent_tokenize."""
     sentences = sent_tokenize(text)
     return [s for s in sentences if s.strip()]
+
+# -----------------------------------------------------------------------
+# Text cleaning
+# -----------------------------------------------------------------------
+
+
+def clean_chunk_text(text: str) -> str:
+    """Strip whitespace, collapse excessive newlines, preserve paragraph breaks."""
+    import re
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
