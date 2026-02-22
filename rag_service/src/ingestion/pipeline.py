@@ -317,3 +317,12 @@ def load_sources(sources_path: Path) -> dict[str, Any]:
 
     with open(sources_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+def load_ingestion_config(config_path: Path) -> dict[str, Any]:
+    """Load ingestion.yaml if it exists, return empty dict otherwise."""
+    import yaml
+
+    if not config_path.exists():
+        return {}
+    with open(config_path, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
