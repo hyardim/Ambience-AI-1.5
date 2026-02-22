@@ -114,6 +114,35 @@ def make_table_chunk(
     }
 
 # -----------------------------------------------------------------------
+# Section grouping + merging
+# -----------------------------------------------------------------------
+
+
+def group_blocks_by_section(
+    blocks: list[dict[str, Any]],
+) -> list[list[dict[str, Any]]]:
+    """Group consecutive text blocks by identical section_path."""
+    if not blocks:
+        return []
+
+    groups: list[list[dict[str, Any]]] = []
+    current_group: list[dict[str, Any]] = [blocks[0]]
+    current_path = tuple(blocks[0].get("section_path", []))
+
+    for block in blocks[1:]:
+        path = tuple(block.get("section_path", []))
+        if path == current_path:
+            current_group.append(block)
+        else:
+            groups.append(current_group)
+            current_group = [block]
+            current_path = path
+
+    groups.append(current_group)
+    return groups
+
+
+# -----------------------------------------------------------------------
 # Citation + chunk ID
 # -----------------------------------------------------------------------
 
