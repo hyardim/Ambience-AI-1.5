@@ -95,6 +95,156 @@ def _write_debug_artifact(
 # Single file pipeline
 # -----------------------------------------------------------------------
 
+def run_pipeline(
+    pdf_path: Path,
+    source_info: dict[str, Any],
+    db_url: str | None,
+    dry_run: bool,
+    write_debug_artifacts: bool,
+) -> dict[str, Any]:
+    """
+    Run all pipeline stages for a single PDF.
+
+    Args:
+        pdf_path: Path to the PDF file
+        source_info: Source metadata dict from sources.yaml
+        db_url: Postgres connection string, or None if dry_run
+        dry_run: If True, skip DB write
+        write_debug_artifacts: If True, write intermediate JSON outputs
+
+    Returns:
+        Per-file report dict with counts and metrics
+
+    Raises:
+        PipelineError: On stage failure, with stage label attached
+    """
+    path_str = str(pdf_path)
+    source_info = {**source_info, "source_path": path_str}
+
+    # ---- Stage 1: Extract ----
+    try:
+        raw_doc = extract_raw_document(pdf_path)
+    except Exception as e:
+        raise PipelineError(STAGE_EXTRACT, path_str, str(e)) from e
+
+    if write_debug_artifacts:
+        _write_debug_artifact("pending", 1, "raw", raw_doc)
+
+    # ---- Stage 2: Clean ----
+    try:
+        clean_doc = clean_document(raw_doc)
+    except Exception as e:
+        raise PipelineError(STAGE_CLEAN, path_str, str(e)) from e
+
+    if write_debug_artifacts:
+        _write_debug_artifact("pending", 2, "clean", clean_doc)
+
+    # ---- Stage 3: Section detect ----
+    try:
+        sectioned_doc = add_section_metadata(clean_doc)
+    except Exception as e:
+        raise PipelineError(STAGE_SECTION, path_str, str(e)) from e
+
+    if write_debug_artifacts:
+        _write_debug_artifact("pending", 3, "sectioned", sectioned_doc)
+
+    # ---- Stage 4: Table detect ----
+    try:
+        table_aware_doc = detect_and_convert_tables(sectioned_doc, pdf_path=path_str)
+    except Exception as e:
+        raise PipelineError(STAGE_TABLE, path_str, str(e)) from e
+
+    if write_debug_artifacts:
+        _write_debug_artifact("pending", 4, "table_aware", table_aware_doc)
+
+    # ---- Stage 5: Metadata ----
+    try:
+        metadata_doc = attach_metadata(table_aware_doc, source_info)
+    except Exception as e:
+        raise PipelineError(STAGE_METADATA, path_str, str(e)) from e
+
+    doc_id = metadata_doc.get("doc_meta", {}).get("doc_id", "unknown")
+
+    if write_debug_artifacts:
+        _write_debug_artifact(doc_id, 5, "metadata", metadata_doc)
+        # Retroactively rename earlier artifacts now that we have doc_id
+        _backfill_debug_artifacts(doc_id)
+
+    # ---- Stage 6: Chunk ----
+    try:
+        chunked_doc = chunk_document(metadata_doc)
+    except Exception as e:
+        raise PipelineError(STAGE_CHUNK, path_str, str(e)) from e
+
+    if write_debug_artifacts:
+        _write_debug_artifact(doc_id, 6, "chunked", chunked_doc)
+
+    # ---- Stage 7: Embed ----
+    try:
+        embedded_doc = embed_chunks(chunked_doc)
+    except Exception as e:
+        raise PipelineError(STAGE_EMBED, path_str, str(e)) from e
+
+    if write_debug_artifacts:
+        _write_debug_artifact(doc_id, 7, "embedded_meta", _strip_embeddings(embedded_doc))
+
+    # ---- Stage 8: Store ----
+    db_report: dict[str, int] = {
+        "inserted": 0,
+        "updated": 0,
+        "skipped": 0,
+        "failed": 0,
+    }
+    if not dry_run:
+        try:
+            db_report = store_chunks(embedded_doc, db_url=db_url)
+        except Exception as e:
+            raise PipelineError(STAGE_STORE, path_str, str(e)) from e
+
+    # ---- Build per-file report ----
+    chunks = embedded_doc.get("chunks", [])
+    n_success = sum(1 for c in chunks if c.get("embedding_status") == "success")
+    n_failed = sum(1 for c in chunks if c.get("embedding_status") == "failed")
+
+    pages = embedded_doc.get("pages", [])
+    n_tables = sum(
+        1
+        for page in pages
+        for block in page.get("blocks", [])
+        if block.get("content_type") == "table"
+    )
+    n_headings = sum(
+        1
+        for page in pages
+        for block in page.get("blocks", [])
+        if block.get("is_heading", False)
+    )
+
+    report = {
+        "file": path_str,
+        "doc_id": doc_id,
+        "pages": embedded_doc.get("num_pages", 0),
+        "chunks": len(chunks),
+        "embeddings_succeeded": n_success,
+        "embeddings_failed": n_failed,
+        "headings_detected": n_headings,
+        "tables_detected": n_tables,
+        "db": db_report,
+    }
+
+    logger.info(
+        f"Completed {pdf_path.name}: "
+        f"pages={report['pages']} "
+        f"chunks={report['chunks']} "
+        f"embeddings={n_success}/{n_success + n_failed} "
+        f"db=inserted:{db_report['inserted']} "
+        f"updated:{db_report['updated']} "
+        f"skipped:{db_report['skipped']} "
+        f"failed:{db_report['failed']}"
+    )
+
+    return report
+
 def _backfill_debug_artifacts(doc_id: str) -> None:
     """Rename debug artifacts written under 'pending' to the real doc_id."""
     from ..config import path_config
