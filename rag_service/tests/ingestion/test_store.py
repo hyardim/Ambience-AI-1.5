@@ -200,3 +200,125 @@ class TestUpsertChunk:
         cur.execute.side_effect = Exception("DB error")
         with pytest.raises(Exception, match="DB error"):
             _upsert_chunk(conn, make_chunk(), "doc123", "v1")
+
+# -----------------------------------------------------------------------
+# store_chunks
+# -----------------------------------------------------------------------
+
+
+class TestStoreChunks:
+    def _make_conn_patch(self, existing_row: tuple | None = None):
+        conn, cur = make_mock_conn(existing_row=existing_row)
+        return conn, cur
+
+    def test_inserts_new_chunk(self) -> None:
+        doc = make_embedded_doc(chunks=[make_chunk()])
+        conn, cur = make_mock_conn(existing_row=None)
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        assert report["inserted"] == 1
+        assert report["updated"] == 0
+        assert report["skipped"] == 0
+        assert report["failed"] == 0
+
+    def test_skips_identical_chunk(self) -> None:
+        chunk = make_chunk()
+        metadata = _build_metadata(chunk)
+        existing_row = (chunk["text"], metadata)
+        doc = make_embedded_doc(chunks=[chunk])
+        conn, cur = make_mock_conn(existing_row=existing_row)
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        assert report["skipped"] == 1
+        assert report["inserted"] == 0
+
+    def test_failed_embedding_not_written(self) -> None:
+        chunk = make_chunk(embedding_status="failed")
+        doc = make_embedded_doc(chunks=[chunk])
+        conn, cur = make_mock_conn()
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        assert report["failed"] == 1
+        cur.execute.assert_not_called()
+
+    def test_pipeline_continues_after_db_error(self) -> None:
+        chunks = [make_chunk("c1"), make_chunk("c2")]
+        doc = make_embedded_doc(chunks=chunks)
+        conn = MagicMock()
+        cur = MagicMock()
+        call_count = 0
+
+        def fetchone_side_effect():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("DB error")
+            return None
+
+        cur.fetchone.side_effect = fetchone_side_effect
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+
+        assert report["failed"] >= 1
+        assert report["inserted"] + report["failed"] == 2
+
+    def test_mixed_batch_counts_correct(self) -> None:
+        chunk_new = make_chunk("new")
+        chunk_fail = make_chunk("fail", embedding_status="failed")
+        doc = make_embedded_doc(chunks=[chunk_new, chunk_fail])
+        conn, cur = make_mock_conn(existing_row=None)
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        assert report["inserted"] == 1
+        assert report["failed"] == 1
+
+    def test_empty_document_returns_zero_counts(self) -> None:
+        doc = make_embedded_doc(chunks=[])
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection") as mock_conn, \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        mock_conn.assert_not_called()
+        assert report == {"inserted": 0, "updated": 0, "skipped": 0, "failed": 0}
+
+    def test_report_has_all_keys(self) -> None:
+        doc = make_embedded_doc(chunks=[make_chunk()])
+        conn, cur = make_mock_conn(existing_row=None)
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        for key in ["inserted", "updated", "skipped", "failed"]:
+            assert key in report
+
+    def test_connection_closed_after_run(self) -> None:
+        doc = make_embedded_doc(chunks=[make_chunk()])
+        conn, cur = make_mock_conn(existing_row=None)
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            store_chunks(doc)
+        conn.close.assert_called_once()
+
+    def test_connection_closed_even_on_error(self) -> None:
+        doc = make_embedded_doc(chunks=[make_chunk()])
+        conn = MagicMock()
+        conn.cursor.side_effect = Exception("connection dropped")
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn), \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            store_chunks(doc)
+        conn.close.assert_called_once()
+
+    def test_all_failed_embeddings_no_db_calls(self) -> None:
+        chunks = [make_chunk(f"c{i}", embedding_status="failed") for i in range(3)]
+        doc = make_embedded_doc(chunks=chunks)
+        with patch("src.ingestion.store_pgvector.db.get_raw_connection") as mock_conn, \
+             patch("src.ingestion.store_pgvector.register_vector"):
+            report = store_chunks(doc)
+        mock_conn.assert_not_called()
+        assert report["failed"] == 3
