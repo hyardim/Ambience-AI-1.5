@@ -98,6 +98,36 @@ def _embed_batch(
             return _embed_batch(model, texts, attempt + 1)
         raise
 
+def _embed_single(
+    model: SentenceTransformer,
+    text: str,
+    attempt: int = 0,
+) -> list[float] | None:
+    """
+    Embed a single text with retry + backoff.
+
+    Args:
+        model: Loaded SentenceTransformer model
+        text: Text to embed
+        attempt: Current attempt number (0-indexed)
+
+    Returns:
+        Embedding vector, or None on final failure
+    """
+    try:
+        vector = model.encode([text], show_progress_bar=False)
+        return vector[0].tolist()
+    except Exception as e:
+        if attempt < MAX_RETRIES - 1:
+            wait = RETRY_BACKOFF_BASE ** attempt
+            logger.warning(
+                f"Single embedding failed (attempt {attempt + 1}): {e}. "
+                f"Retrying in {wait:.1f}s"
+            )
+            time.sleep(wait)
+            return _embed_single(model, text, attempt + 1)
+        return None
+
 
 # -----------------------------------------------------------------------
 # Metadata helpers
