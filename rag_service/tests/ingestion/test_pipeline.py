@@ -436,3 +436,193 @@ class TestRunPipeline:
                 write_debug_artifacts=False,
             )
         assert list(tmp_path.iterdir()) == []
+
+
+# -----------------------------------------------------------------------
+# run_ingestion
+# -----------------------------------------------------------------------
+
+
+class TestRunIngestion:
+    def _sources_yaml(self, tmp_path: Path) -> Path:
+        f = tmp_path / "sources.yaml"
+        f.write_text(
+            "NICE:\n"
+            "  source_name: NICE\n"
+            "  author_org: NICE\n"
+            "  specialty: rheumatology\n"
+            "  doc_type: guideline\n"
+            "  source_url: https://nice.org.uk\n"
+        )
+        return f
+
+    def test_unknown_source_name_raises(self, tmp_path: Path) -> None:
+        sources = tmp_path / "sources.yaml"
+        sources.write_text("NICE:\n  source_name: NICE\n")
+        with (
+            patch("src.ingestion.pipeline.Path", side_effect=lambda x: tmp_path / x if "configs" in str(x) else Path(x)),
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+        ):
+            with pytest.raises(ValueError, match="Unknown --source-name"):
+                run_ingestion(
+                    input_path=tmp_path,
+                    source_name="UNKNOWN",
+                    db_url=None,
+                    dry_run=True,
+                )
+
+    def test_empty_folder_returns_zero_counts(self, tmp_path: Path) -> None:
+        with (
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+        ):
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+            )
+        assert summary["files_scanned"] == 0
+        assert summary["files_succeeded"] == 0
+
+    def test_successful_run_increments_counts(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "test.pdf"
+        pdf.touch()
+        with (
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch("src.ingestion.pipeline.run_pipeline", return_value={
+                "file": str(pdf),
+                "doc_id": "abc123",
+                "pages": 2,
+                "chunks": 5,
+                "embeddings_succeeded": 5,
+                "embeddings_failed": 0,
+                "headings_detected": 3,
+                "tables_detected": 1,
+                "db": make_db_report(inserted=5),
+            }),
+        ):
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+            )
+        assert summary["files_succeeded"] == 1
+        assert summary["total_chunks"] == 5
+        assert summary["db"]["inserted"] == 5
+
+    def test_pipeline_error_increments_failed(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "test.pdf"
+        pdf.touch()
+        with (
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch(
+                "src.ingestion.pipeline.run_pipeline",
+                side_effect=PipelineError("EXTRACT", str(pdf), "corrupt"),
+            ),
+        ):
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+            )
+        assert summary["files_failed"] == 1
+        assert summary["files_succeeded"] == 0
+
+    def test_one_failure_does_not_stop_others(self, tmp_path: Path) -> None:
+        pdf1 = tmp_path / "a.pdf"
+        pdf2 = tmp_path / "b.pdf"
+        pdf1.touch()
+        pdf2.touch()
+
+        call_count = 0
+
+        def side_effect(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise PipelineError("EXTRACT", str(pdf1), "corrupt")
+            return {
+                "file": str(pdf2),
+                "doc_id": "abc",
+                "pages": 1,
+                "chunks": 2,
+                "embeddings_succeeded": 2,
+                "embeddings_failed": 0,
+                "headings_detected": 0,
+                "tables_detected": 0,
+                "db": make_db_report(inserted=2),
+            }
+
+        with (
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch("src.ingestion.pipeline.run_pipeline", side_effect=side_effect),
+        ):
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+            )
+
+        assert summary["files_failed"] == 1
+        assert summary["files_succeeded"] == 1
+        assert summary["total_chunks"] == 2
+
+    def test_max_files_limits_processing(self, tmp_path: Path) -> None:
+        for i in range(5):
+            (tmp_path / f"{i}.pdf").touch()
+
+        processed = []
+
+        def side_effect(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            processed.append(kwargs.get("pdf_path", args[0]))
+            return {
+                "file": "x.pdf",
+                "doc_id": "abc",
+                "pages": 1,
+                "chunks": 1,
+                "embeddings_succeeded": 1,
+                "embeddings_failed": 0,
+                "headings_detected": 0,
+                "tables_detected": 0,
+                "db": make_db_report(),
+            }
+
+        with (
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch("src.ingestion.pipeline.run_pipeline", side_effect=side_effect),
+        ):
+            run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+                max_files=2,
+            )
+
+        assert len(processed) == 2
+
+    def test_summary_has_all_keys(self, tmp_path: Path) -> None:
+        with (
+            patch("src.ingestion.pipeline.load_sources", return_value={"NICE": FAKE_SOURCE_INFO}),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+        ):
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                db_url=None,
+                dry_run=True,
+            )
+        for key in ["files_scanned", "files_succeeded", "files_failed",
+                    "total_chunks", "embeddings_succeeded", "embeddings_failed", "db"]:
+            assert key in summary
+        for key in ["inserted", "updated", "skipped", "failed"]:
+            assert key in summary["db"]
