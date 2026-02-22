@@ -34,3 +34,28 @@ def _load_model() -> SentenceTransformer:
         logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
         _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _MODEL
+
+# -----------------------------------------------------------------------
+# Main function
+# -----------------------------------------------------------------------
+
+
+def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
+    """
+    Generate embeddings for all chunks in a ChunkedDocument.
+
+    Args:
+        chunked_doc: ChunkedDocument dict from chunk.py
+
+    Returns:
+        EmbeddedDocument with embedding fields attached to every chunk
+
+    Processing steps:
+        1. Extract texts from all chunks
+        2. Split into batches of EMBEDDING_BATCH_SIZE
+        3. Embed each batch with retry + exponential backoff
+        4. On batch failure, fall back to per-chunk embedding
+        5. On chunk failure, quarantine with embedding_status="failed"
+        6. Attach embedding metadata to all chunks
+    """
+    pass
