@@ -69,6 +69,31 @@ def split_into_sentences(text: str) -> list[str]:
     sentences = sent_tokenize(text)
     return [s for s in sentences if s.strip()]
 
+# -----------------------------------------------------------------------
+# Citation + chunk ID
+# -----------------------------------------------------------------------
+
+
+def build_citation(
+    chunk_meta: dict[str, Any],
+    doc_meta: dict[str, Any],
+) -> dict[str, Any]:
+    """Build citation object from chunk and document metadata."""
+    return {
+        "doc_id": doc_meta.get("doc_id", ""),
+        "source_name": doc_meta.get("source_name", ""),
+        "specialty": doc_meta.get("specialty", ""),
+        "title": doc_meta.get("title", ""),
+        "author_org": doc_meta.get("author_org", ""),
+        "creation_date": doc_meta.get("creation_date", ""),
+        "last_updated_date": doc_meta.get("last_updated_date", ""),
+        "section_path": chunk_meta.get("section_path", []),
+        "section_title": chunk_meta.get("section_title", ""),
+        "page_range": chunk_meta.get("page_range", ""),
+        "source_url": doc_meta.get("source_url", ""),
+        "access_date": doc_meta.get("ingestion_date", ""),
+    }
+
 def generate_chunk_id(doc_id: str, doc_version: str, text: str) -> str:
     """Stable chunk ID: SHA-256 of doc_id + doc_version + text."""
     hash_input = f"{doc_id}|{doc_version}|{text}"
