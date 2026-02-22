@@ -59,3 +59,19 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
         6. Attach embedding metadata to all chunks
     """
     pass
+
+# -----------------------------------------------------------------------
+# Metadata helpers
+# -----------------------------------------------------------------------
+
+
+def _make_success_fields(embedding: list[float]) -> dict[str, Any]:
+    """Return embedding metadata dict for a successful embed."""
+    return {
+        "embedding": embedding,
+        "embedding_status": "success",
+        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "embedding_model_version": EMBEDDING_MODEL_VERSION,
+        "embedding_dimensions": EMBEDDING_DIMENSIONS,
+        "embedding_error": None,
+    }
