@@ -240,3 +240,19 @@ class TestDiscoverPdfs:
     def test_empty_folder_returns_empty(self, tmp_path: Path) -> None:
         result = discover_pdfs(tmp_path)
         assert result == []
+
+# -----------------------------------------------------------------------
+# load_sources
+# -----------------------------------------------------------------------
+
+
+class TestLoadSources:
+    def test_loads_yaml(self, tmp_path: Path) -> None:
+        f = tmp_path / "sources.yaml"
+        f.write_text("NICE:\n  source_name: NICE\n  specialty: rheumatology\n")
+        result = load_sources(f)
+        assert result["NICE"]["source_name"] == "NICE"
+
+    def test_missing_file_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError):
+            load_sources(tmp_path / "missing.yaml")
