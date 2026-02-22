@@ -1,10 +1,11 @@
-.PHONY: help install install-dev setup db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query
+.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query
 
 help:
 	@echo "Available commands:"
 	@echo "  make install            - Install production dependencies"
 	@echo "  make install-dev        - Install development dependencies"
 	@echo "  make setup              - Set up project (create dirs, copy .env)"
+	@echo "  make nltk-download      - Download and verify NLTK tokenizer data"
 	@echo "  make db-up              - Start database"
 	@echo "  make db-down            - Stop database"
 	@echo "  make db-reset           - Reset database (wipes data)"
@@ -23,12 +24,16 @@ install:
 
 install-dev:
 	pip install -e ".[dev]"
+	$(MAKE) nltk-download
+
+nltk-download:
 	python -m nltk.downloader punkt punkt_tab
 	python scripts/verify_nltk.py
 
 setup:
 	mkdir -p data/raw data/processed logs
 	[ ! -f .env ] && cp .env.example .env || echo ".env already exists, skipping"
+	$(MAKE) nltk-download
 	@echo "Setup complete! Edit .env with your configuration"
 
 db-up:
@@ -46,15 +51,17 @@ db-reset:
 	@sleep 5
 
 db-migrate:
-	psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
-	psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
+	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+	@echo "Migrations applied."
 
 db-migrate-reset:
-	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
-	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS chunks CASCADE;"
-	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
-	psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
-	psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
+	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS chunks CASCADE;"
+	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
+	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
+	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+	@echo "Migration reset complete."
 
 test:
 	pytest
