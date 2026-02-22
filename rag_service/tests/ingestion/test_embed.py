@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+import src.ingestion.embed as embed_module
 from src.ingestion.embed import (
     EMBEDDING_BATCH_SIZE,
     EMBEDDING_DIMENSIONS,
@@ -379,3 +380,12 @@ class TestEmbedChunks:
             assert chunk["embedding_model_name"] == EMBEDDING_MODEL_NAME
             assert chunk["embedding_model_version"] == EMBEDDING_MODEL_VERSION
             assert chunk["embedding_dimensions"] == EMBEDDING_DIMENSIONS
+
+    def test_model_loaded_on_first_call(self) -> None:
+        embed_module._MODEL = None  # force unloaded state
+        mock_model = make_mock_model()
+        with patch("src.ingestion.embed.SentenceTransformer", return_value=mock_model):
+            result = embed_module._load_model()
+
+        assert result is mock_model
+        embed_module._MODEL = None  # reset after test
