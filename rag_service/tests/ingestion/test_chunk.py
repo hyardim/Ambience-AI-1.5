@@ -217,3 +217,38 @@ class TestBuildCitation:
             make_doc_meta(ingestion_date="2024-06-01"),
         )
         assert citation["access_date"] == "2024-06-01"
+
+# -----------------------------------------------------------------------
+# make_table_chunk
+# -----------------------------------------------------------------------
+
+
+class TestMakeTableChunk:
+    def test_content_type_is_table(self) -> None:
+        chunk = make_table_chunk(make_block(content_type="table"), make_doc_meta(), 0)
+        assert chunk["content_type"] == "table"
+
+    def test_block_uid_in_block_uids(self) -> None:
+        chunk = make_table_chunk(make_block(content_type="table", block_uid="tbl001"), make_doc_meta(), 0)
+        assert "tbl001" in chunk["block_uids"]
+
+    def test_page_start_equals_page_end(self) -> None:
+        chunk = make_table_chunk(make_block(content_type="table", page_number=5), make_doc_meta(), 0)
+        assert chunk["page_start"] == 5
+        assert chunk["page_end"] == 5
+
+    def test_chunk_id_is_16_hex(self) -> None:
+        chunk = make_table_chunk(make_block(content_type="table"), make_doc_meta(), 0)
+        assert len(chunk["chunk_id"]) == 16
+
+    def test_citation_present(self) -> None:
+        chunk = make_table_chunk(make_block(content_type="table"), make_doc_meta(), 0)
+        assert "citation" in chunk
+        assert chunk["citation"]["doc_id"] == "doc123"
+
+    def test_token_count_present(self) -> None:
+        chunk = make_table_chunk(
+            make_block(content_type="table", text="| A | B |\n| 1 | 2 |"),
+            make_doc_meta(), 0,
+        )
+        assert chunk["token_count"] > 0
