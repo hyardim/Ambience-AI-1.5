@@ -54,3 +54,13 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
     """
     pass
 
+# -----------------------------------------------------------------------
+# Token counting + sentence splitting
+# -----------------------------------------------------------------------
+
+
+def count_tokens(text: str) -> int:
+    """Count tokens using cl100k_base encoding."""
+    return len(_ENCODER.encode(text))
+
+
