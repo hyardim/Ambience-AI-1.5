@@ -37,7 +37,10 @@ def _ensure_nltk_data() -> None:
         try:
             nltk.data.find(f"tokenizers/{resource}")
         except LookupError:
-            nltk.download(resource, quiet=True)
+            raise RuntimeError(
+                f"Required NLTK resource '{resource}' is not installed. "
+                f"Run: python -m nltk.downloader {resource}"
+            ) from None
     _NLTK_INITIALISED = True
 
 

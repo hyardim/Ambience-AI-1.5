@@ -21,6 +21,7 @@ install:
 
 install-dev:
 	pip install -e ".[dev]"
+	python -m nltk.downloader punkt punkt_tab
 
 setup:
 	mkdir -p data/raw data/processed logs

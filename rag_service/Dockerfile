@@ -4,7 +4,8 @@ RUN apt-get update && apt-get install -y build-essential curl && rm -rf /var/lib
 
 COPY pyproject.toml .
 COPY src /app/src
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e . && \
+    python -m nltk.downloader punkt punkt_tab
 
 ENV PYTHONPATH=/app
 CMD ["python", "-m", "http.server", "8001"]
