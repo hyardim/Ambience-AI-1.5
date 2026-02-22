@@ -13,6 +13,7 @@ from .pipeline import run_ingestion
 
 logger = setup_logger(__name__)
 
+
 def _resolve_db_url(db_url: str | None, dry_run: bool) -> str | None:
     """Resolve DB URL from CLI flag or environment variable."""
     if db_url:
@@ -29,15 +30,18 @@ def _resolve_db_url(db_url: str | None, dry_run: bool) -> str | None:
         sys.exit(1)
     return None
 
+
 def _configure_log_level(log_level: str) -> None:
     """Set root logger level from CLI flag."""
     numeric = getattr(logging, log_level.upper(), logging.INFO)
     logging.getLogger().setLevel(numeric)
 
+
 @click.group()
 def cli() -> None:
     """Ambience RAG ingestion CLI."""
     pass
+
 
 @cli.command()
 @click.option(
