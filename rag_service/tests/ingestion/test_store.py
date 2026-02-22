@@ -223,10 +223,8 @@ class TestStoreChunks:
         doc = make_embedded_doc(chunks=[make_chunk()])
         conn, cur = make_mock_conn(existing_row=None)
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         assert report["inserted"] == 1
@@ -241,10 +239,8 @@ class TestStoreChunks:
         doc = make_embedded_doc(chunks=[chunk])
         conn, cur = make_mock_conn(existing_row=existing_row)
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         assert report["skipped"] == 1
@@ -255,10 +251,8 @@ class TestStoreChunks:
         doc = make_embedded_doc(chunks=[chunk])
         conn, cur = make_mock_conn()
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         assert report["failed"] == 1
@@ -283,10 +277,8 @@ class TestStoreChunks:
         conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
 
@@ -299,10 +291,8 @@ class TestStoreChunks:
         doc = make_embedded_doc(chunks=[chunk_new, chunk_fail])
         conn, cur = make_mock_conn(existing_row=None)
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         assert report["inserted"] == 1
@@ -311,8 +301,8 @@ class TestStoreChunks:
     def test_empty_document_returns_zero_counts(self) -> None:
         doc = make_embedded_doc(chunks=[])
         with (
-            patch("src.ingestion.store_pgvector.db.get_raw_connection") as mock_conn,
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection") as mock_conn,
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         mock_conn.assert_not_called()
@@ -322,10 +312,8 @@ class TestStoreChunks:
         doc = make_embedded_doc(chunks=[make_chunk()])
         conn, cur = make_mock_conn(existing_row=None)
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         for key in ["inserted", "updated", "skipped", "failed"]:
@@ -335,10 +323,8 @@ class TestStoreChunks:
         doc = make_embedded_doc(chunks=[make_chunk()])
         conn, cur = make_mock_conn(existing_row=None)
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             store_chunks(doc)
         conn.close.assert_called_once()
@@ -348,10 +334,8 @@ class TestStoreChunks:
         conn = MagicMock()
         conn.cursor.side_effect = Exception("connection dropped")
         with (
-            patch(
-                "src.ingestion.store_pgvector.db.get_raw_connection", return_value=conn
-            ),
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
+            patch("src.ingestion.store.register_vector"),
         ):
             store_chunks(doc)
         conn.close.assert_called_once()
@@ -360,8 +344,8 @@ class TestStoreChunks:
         chunks = [make_chunk(f"c{i}", embedding_status="failed") for i in range(3)]
         doc = make_embedded_doc(chunks=chunks)
         with (
-            patch("src.ingestion.store_pgvector.db.get_raw_connection") as mock_conn,
-            patch("src.ingestion.store_pgvector.register_vector"),
+            patch("src.ingestion.store.db.get_raw_connection") as mock_conn,
+            patch("src.ingestion.store.register_vector"),
         ):
             report = store_chunks(doc)
         mock_conn.assert_not_called()
