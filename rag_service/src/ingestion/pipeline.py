@@ -310,3 +310,10 @@ def discover_pdfs(
         pdfs = pdfs[:max_files]
 
     return pdfs
+
+def load_sources(sources_path: Path) -> dict[str, Any]:
+    """Load sources.yaml and return as dict."""
+    import yaml
+
+    with open(sources_path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
