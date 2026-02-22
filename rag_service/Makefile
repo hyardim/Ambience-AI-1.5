@@ -51,6 +51,8 @@ db-migrate:
 
 db-migrate-reset:
 	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
+	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS chunks CASCADE;"
+	psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
 	psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
 	psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
 

@@ -1,7 +1,3 @@
--- Drop old schema if present (previous design, replaced by rag_chunks)
-DROP TABLE IF EXISTS chunks CASCADE;
-DROP TABLE IF EXISTS documents CASCADE;
-
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
