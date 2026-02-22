@@ -9,8 +9,8 @@ import nltk
 # SHA-256 checksums of known-good NLTK punkt files
 # Update these when intentionally upgrading NLTK data
 EXPECTED = {
-    "punkt": "expected_sha256_here",
-    "punkt_tab": "expected_sha256_here",
+    "punkt": "51c3078994aeaf650bfc8e028be4fb42b4a0d177d41c012b6a983979653660ec",
+    "punkt_tab": "e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106",
 }
 
 data_path = pathlib.Path(nltk.data.path[0])
