@@ -185,6 +185,57 @@ def merge_short_sections(
 # Text chunking
 # -----------------------------------------------------------------------
 
+def _build_text_chunk(
+    sentences: list[str],
+    contributing_blocks: list[dict[str, Any]],
+    doc_meta: dict[str, Any],
+    chunk_index: int,
+) -> dict[str, Any] | None:
+    """Build a text chunk dict from sentences and contributing blocks."""
+    text = clean_chunk_text(" ".join(sentences))
+    if not text or not contributing_blocks:
+        return None
+
+    page_numbers = [b.get("page_number", 0) for b in contributing_blocks]
+    page_start = min(page_numbers)
+    page_end = max(page_numbers)
+    page_range = str(page_start) if page_start == page_end else f"{page_start}-{page_end}"
+
+    section_path = contributing_blocks[0].get("section_path", ["Unknown"])
+    section_title = contributing_blocks[0].get("section_title", "Unknown")
+
+    block_uids = list(dict.fromkeys(
+        b.get("block_uid", "") for b in contributing_blocks
+        if b.get("block_uid")
+    ))
+
+    citation = build_citation(
+        {
+            "section_path": section_path,
+            "section_title": section_title,
+            "page_range": page_range,
+        },
+        doc_meta,
+    )
+
+    return {
+        "chunk_id": generate_chunk_id(
+            doc_meta.get("doc_id", ""),
+            doc_meta.get("doc_version", ""),
+            text,
+        ),
+        "chunk_index": chunk_index,
+        "content_type": "text",
+        "text": text,
+        "section_path": section_path,
+        "section_title": section_title,
+        "page_start": page_start,
+        "page_end": page_end,
+        "block_uids": block_uids,
+        "token_count": count_tokens(text),
+        "citation": citation,
+    }
+
 def _compute_overlap(sentences: list[str]) -> list[str]:
     """Take sentences from end of list until overlap token budget is reached."""
     overlap: list[str] = []
