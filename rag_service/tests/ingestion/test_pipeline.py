@@ -157,3 +157,25 @@ def make_all_patches(embedded_doc: dict[str, Any] | None = None) -> dict[str, Ma
         mocks[patch_path] = m
     return mocks
 
+
+
+# -----------------------------------------------------------------------
+# _strip_embeddings
+# -----------------------------------------------------------------------
+
+
+class TestStripEmbeddings:
+    def test_strips_embedding_vectors(self) -> None:
+        doc = make_embedded_doc()
+        stripped = _strip_embeddings(doc)
+        assert stripped["chunks"][0]["embedding"] == "<stripped>"
+
+    def test_original_unchanged(self) -> None:
+        doc = make_embedded_doc()
+        _strip_embeddings(doc)
+        assert doc["chunks"][0]["embedding"] == [0.1] * 384
+
+    def test_no_chunks_returns_doc(self) -> None:
+        doc = {"source_path": "x.pdf", "chunks": []}
+        stripped = _strip_embeddings(doc)
+        assert stripped["chunks"] == []
