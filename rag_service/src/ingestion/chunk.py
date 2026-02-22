@@ -16,6 +16,7 @@ logger = setup_logger(__name__)
 # Constants
 # -----------------------------------------------------------------------
 
+# Aspirational minimum — not enforced when section boundaries prevent merging.
 MIN_CHUNK_TOKENS = 300
 MAX_CHUNK_TOKENS = 800
 OVERLAP_TOKENS = 80
