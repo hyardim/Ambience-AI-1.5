@@ -5,7 +5,7 @@ from typing import Any
 
 from pgvector.psycopg2 import register_vector
 
-from ...src.utils.db import db
+from ..utils.db import db
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -72,6 +72,7 @@ def store_chunks(embedded_doc: dict[str, Any]) -> dict[str, Any]:
         f"failed={report['failed']}"
     )
     return report
+
 
 def _upsert_chunk(
     conn: Any,
@@ -169,6 +170,7 @@ def _upsert_chunk(
         # Case D — identical, skip
         return "skipped"
 
+
 def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
     """Extract and return the metadata jsonb payload from a chunk."""
     return {
@@ -180,6 +182,7 @@ def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
         "page_end": chunk.get("page_end", 0),
         "citation": chunk.get("citation", {}),
     }
+
 
 def _metadata_json(metadata: dict[str, Any]) -> str:
     """Serialise metadata to sorted JSON string for comparison."""
