@@ -36,6 +36,9 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.1",             # .env files
     "tqdm>=4.66.0",                     # Progress bars
+
+    "pyyaml>=6.0.0",    # for configs/ingestion.yaml and configs/sources.yaml
+    "click>=8.1.0",     # for CLI
 ]
 
 [project.optional-dependencies]
