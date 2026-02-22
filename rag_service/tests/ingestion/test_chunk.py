@@ -151,7 +151,7 @@ class TestSplitIntoSentences:
     def test_whitespace_only_filtered(self) -> None:
         assert split_into_sentences("  ") == []
 
-    def test_nltk_data_downloaded_if_missing(self) -> None:
+    def test_raises_runtime_error_if_nltk_data_missing(self) -> None:
         chunk_module._NLTK_INITIALISED = False
         with patch("nltk.data.find", side_effect=LookupError):
             with pytest.raises(RuntimeError, match="punkt"):
