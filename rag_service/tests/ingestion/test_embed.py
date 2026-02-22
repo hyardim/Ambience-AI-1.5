@@ -6,13 +6,11 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-import src.ingestion.embed as embed_module
 from src.ingestion.embed import (
     EMBEDDING_BATCH_SIZE,
     EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_MODEL_VERSION,
-    MAX_RETRIES,
     _embed_batch,
     _embed_single,
     _make_failure_fields,
@@ -85,12 +83,15 @@ def make_mock_model(
     if fail:
         model.encode.side_effect = RuntimeError("model error")
     else:
+
         def encode_side_effect(texts, **kwargs):  # type: ignore[no-untyped-def]
             n = len(texts)
             vecs = vectors if vectors else [make_fake_vector() for _ in range(n)]
             return np.array(vecs[:n])
+
         model.encode.side_effect = encode_side_effect
     return model
+
 
 # -----------------------------------------------------------------------
 # _make_success_fields
@@ -115,6 +116,7 @@ class TestMakeSuccessFields:
         fields = _make_success_fields(make_fake_vector())
         assert len(fields["embedding"]) == EMBEDDING_DIMENSIONS
 
+
 # -----------------------------------------------------------------------
 # _make_failure_fields
 # -----------------------------------------------------------------------
@@ -133,6 +135,7 @@ class TestMakeFailureFields:
     def test_error_message_stored(self) -> None:
         fields = _make_failure_fields("OOM error")
         assert fields["embedding_error"] == "OOM error"
+
 
 # -----------------------------------------------------------------------
 # _embed_batch
@@ -219,6 +222,7 @@ class TestEmbedSingle:
         assert result is not None
         assert call_count == 2
 
+
 # -----------------------------------------------------------------------
 # embed_chunks (integration)
 # -----------------------------------------------------------------------
@@ -275,8 +279,10 @@ class TestEmbedChunks:
 
         model.encode.side_effect = encode_side_effect
 
-        with patch("src.ingestion.embed._load_model", return_value=model), \
-             patch("src.ingestion.embed.time.sleep"):
+        with (
+            patch("src.ingestion.embed._load_model", return_value=model),
+            patch("src.ingestion.embed.time.sleep"),
+        ):
             result = embed_chunks(doc)
 
         assert all(c["embedding_status"] == "success" for c in result["chunks"])
@@ -284,8 +290,10 @@ class TestEmbedChunks:
     def test_quarantined_chunk_has_failed_status(self) -> None:
         doc = make_chunked_doc(chunks=[make_chunk("fail_chunk")])
         model = make_mock_model(fail=True)
-        with patch("src.ingestion.embed._load_model", return_value=model), \
-             patch("src.ingestion.embed.time.sleep"):
+        with (
+            patch("src.ingestion.embed._load_model", return_value=model),
+            patch("src.ingestion.embed.time.sleep"),
+        ):
             result = embed_chunks(doc)
         chunk = result["chunks"][0]
         assert chunk["embedding_status"] == "failed"
@@ -306,8 +314,10 @@ class TestEmbedChunks:
 
         model.encode.side_effect = encode_side_effect
 
-        with patch("src.ingestion.embed._load_model", return_value=model), \
-             patch("src.ingestion.embed.time.sleep"):
+        with (
+            patch("src.ingestion.embed._load_model", return_value=model),
+            patch("src.ingestion.embed.time.sleep"),
+        ):
             result = embed_chunks(doc)
 
         statuses = {c["chunk_id"]: c["embedding_status"] for c in result["chunks"]}
@@ -317,8 +327,10 @@ class TestEmbedChunks:
     def test_error_message_recorded_on_failed_chunk(self) -> None:
         doc = make_chunked_doc(chunks=[make_chunk("fail_chunk")])
         model = make_mock_model(fail=True)
-        with patch("src.ingestion.embed._load_model", return_value=model), \
-             patch("src.ingestion.embed.time.sleep"):
+        with (
+            patch("src.ingestion.embed._load_model", return_value=model),
+            patch("src.ingestion.embed.time.sleep"),
+        ):
             result = embed_chunks(doc)
         chunk = result["chunks"][0]
         assert chunk["embedding_error"] is not None
