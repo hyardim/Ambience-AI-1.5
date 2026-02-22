@@ -90,3 +90,28 @@ def _write_debug_artifact(
         logger.debug(f"Debug artifact written: {path}")
     except Exception as e:
         logger.warning(f"Failed to write debug artifact {path}: {e}")
+
+# -----------------------------------------------------------------------
+# Single file pipeline
+# -----------------------------------------------------------------------
+
+def _backfill_debug_artifacts(doc_id: str) -> None:
+    """Rename debug artifacts written under 'pending' to the real doc_id."""
+    from ..config import path_config
+
+    pending_dir = path_config.data_debug / "pending"
+    if not pending_dir.exists():
+        return
+
+    real_dir = path_config.data_debug / doc_id
+    real_dir.mkdir(parents=True, exist_ok=True)
+
+    for artifact in pending_dir.iterdir():
+        target = real_dir / artifact.name
+        if not target.exists():
+            artifact.rename(target)
+
+    try:
+        pending_dir.rmdir()
+    except OSError:
+        pass
