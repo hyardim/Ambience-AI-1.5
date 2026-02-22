@@ -26,6 +26,7 @@ MAX_MERGE_SECTIONS = 2
 
 _ENCODER = tiktoken.get_encoding("cl100k_base")
 
+
 # -----------------------------------------------------------------------
 # Main function
 # -----------------------------------------------------------------------
@@ -107,9 +108,11 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
 
     n_text = sum(1 for c in chunks if c["content_type"] == "text")
     n_table = sum(1 for c in chunks if c["content_type"] == "table")
-    n_merged = sum(1 for g in section_groups if len({
-        tuple(b.get("section_path", [])) for b in g
-    }) > 1)
+    n_merged = sum(
+        1
+        for g in section_groups
+        if len({tuple(b.get("section_path", [])) for b in g}) > 1
+    )
 
     logger.info(f"Total chunks: {len(chunks)}, text: {n_text}, table: {n_table}")
     logger.info(f"Short sections merged: {n_merged}")
@@ -120,7 +123,6 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
         **metadata_doc,
         "chunks": chunks,
     }
-
 
 
 # -----------------------------------------------------------------------
@@ -137,6 +139,7 @@ def split_into_sentences(text: str) -> list[str]:
     """Split text into sentences using nltk.sent_tokenize."""
     sentences = sent_tokenize(text)
     return [s for s in sentences if s.strip()]
+
 
 # -----------------------------------------------------------------------
 # Table chunks
@@ -182,6 +185,7 @@ def make_table_chunk(
         "citation": citation,
     }
 
+
 # -----------------------------------------------------------------------
 # Section grouping + merging
 # -----------------------------------------------------------------------
@@ -209,6 +213,7 @@ def group_blocks_by_section(
 
     groups.append(current_group)
     return groups
+
 
 def merge_short_sections(
     groups: list[list[dict[str, Any]]],
@@ -250,9 +255,11 @@ def merge_short_sections(
 
     return result
 
+
 # -----------------------------------------------------------------------
 # Text chunking
 # -----------------------------------------------------------------------
+
 
 def chunk_section_group(
     blocks: list[dict[str, Any]],
@@ -323,6 +330,7 @@ def chunk_section_group(
     # No overlap across section boundaries
     return chunks, []
 
+
 def _build_text_chunk(
     sentences: list[str],
     contributing_blocks: list[dict[str, Any]],
@@ -337,15 +345,18 @@ def _build_text_chunk(
     page_numbers = [b.get("page_number", 0) for b in contributing_blocks]
     page_start = min(page_numbers)
     page_end = max(page_numbers)
-    page_range = str(page_start) if page_start == page_end else f"{page_start}-{page_end}"
+    page_range = (
+        str(page_start) if page_start == page_end else f"{page_start}-{page_end}"
+    )
 
     section_path = contributing_blocks[0].get("section_path", ["Unknown"])
     section_title = contributing_blocks[0].get("section_title", "Unknown")
 
-    block_uids = list(dict.fromkeys(
-        b.get("block_uid", "") for b in contributing_blocks
-        if b.get("block_uid")
-    ))
+    block_uids = list(
+        dict.fromkeys(
+            b.get("block_uid", "") for b in contributing_blocks if b.get("block_uid")
+        )
+    )
 
     citation = build_citation(
         {
@@ -373,6 +384,7 @@ def _build_text_chunk(
         "token_count": count_tokens(text),
         "citation": citation,
     }
+
 
 def _compute_overlap(sentences: list[str]) -> list[str]:
     """Take sentences from end of list until overlap token budget is reached."""
@@ -410,17 +422,21 @@ def build_citation(
         "access_date": doc_meta.get("ingestion_date", ""),
     }
 
+
 def generate_chunk_id(doc_id: str, doc_version: str, text: str) -> str:
     """Stable chunk ID: SHA-256 of doc_id + doc_version + text."""
     hash_input = f"{doc_id}|{doc_version}|{text}"
     return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
+
 # -----------------------------------------------------------------------
 # Text cleaning
 # -----------------------------------------------------------------------
 
+
 def clean_chunk_text(text: str) -> str:
     """Strip whitespace, collapse excessive newlines, preserve paragraph breaks."""
     import re
+
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
