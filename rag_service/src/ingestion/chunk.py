@@ -141,6 +141,45 @@ def group_blocks_by_section(
     groups.append(current_group)
     return groups
 
+def merge_short_sections(
+    groups: list[list[dict[str, Any]]],
+) -> list[list[dict[str, Any]]]:
+    """Merge section groups below SHORT_SECTION_TOKENS into next valid group."""
+    if not groups:
+        return []
+
+    result: list[list[dict[str, Any]]] = []
+    i = 0
+
+    while i < len(groups):
+        group = groups[i]
+        group_text = " ".join(b.get("text", "") for b in group)
+        group_tokens = count_tokens(group_text)
+
+        if group_tokens < SHORT_SECTION_TOKENS:
+            merged = list(group)
+            merges = 0
+            j = i + 1
+
+            while j < len(groups) and merges < MAX_MERGE_SECTIONS:
+                next_group = groups[j]
+                if any(b.get("content_type") == "table" for b in next_group):
+                    break
+                merged.extend(next_group)
+                merges += 1
+                j += 1
+
+                merged_text = " ".join(b.get("text", "") for b in merged)
+                if count_tokens(merged_text) >= SHORT_SECTION_TOKENS:
+                    break
+
+            result.append(merged)
+            i = j if merges > 0 else i + 1
+        else:
+            result.append(group)
+            i += 1
+
+    return result
 
 # -----------------------------------------------------------------------
 # Citation + chunk ID
