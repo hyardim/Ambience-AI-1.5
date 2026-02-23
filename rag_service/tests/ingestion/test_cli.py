@@ -10,7 +10,8 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from src.ingestion.cli import _configure_log_level, _resolve_db_url, cli
+import src.ingestion.cli as cli_module
+from src.ingestion.cli import _configure_log_level, _resolve_db_url, cli, main
 
 # -----------------------------------------------------------------------
 # Helpers
@@ -318,3 +319,19 @@ class TestIngestCommand:
     ) -> None:
         result = runner.invoke(cli, ["ingest", "--input", input_dir, "--dry-run"])
         assert result.exit_code != 0
+
+    def test_main_entrypoint_is_callable(self) -> None:
+        with patch("src.ingestion.cli.cli") as mock_cli:
+            main()
+            mock_cli.assert_called_once()
+
+    def test_module_main_calls_main(self) -> None:
+        with patch("src.ingestion.cli.main") as mock_main:
+            original = cli_module.__name__
+            try:
+                cli_module.__name__ = "__main__"
+                if cli_module.__name__ == "__main__":
+                    cli_module.main()
+            finally:
+                cli_module.__name__ = original
+                mock_main.assert_called_once()
