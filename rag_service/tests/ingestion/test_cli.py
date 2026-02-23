@@ -71,3 +71,28 @@ class TestResolveDbUrl:
                 )
         assert result.exit_code == 1
 
+# -----------------------------------------------------------------------
+# _configure_log_level
+# -----------------------------------------------------------------------
+
+
+class TestConfigureLogLevel:
+    def test_sets_debug_level(self) -> None:
+        import logging
+        _configure_log_level("DEBUG")
+        assert logging.getLogger().level == logging.DEBUG
+
+    def test_sets_info_level(self) -> None:
+        import logging
+        _configure_log_level("INFO")
+        assert logging.getLogger().level == logging.INFO
+
+    def test_sets_warning_level(self) -> None:
+        import logging
+        _configure_log_level("WARNING")
+        assert logging.getLogger().level == logging.WARNING
+
+    def test_sets_error_level(self) -> None:
+        import logging
+        _configure_log_level("ERROR")
+        assert logging.getLogger().level == logging.ERROR
