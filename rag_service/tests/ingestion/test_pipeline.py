@@ -10,6 +10,7 @@ import pytest
 
 from src.ingestion.pipeline import (
     PipelineError,
+    _backfill_debug_artifacts,
     _strip_embeddings,
     discover_pdfs,
     load_ingestion_config,
@@ -407,6 +408,105 @@ class TestRunPipeline:
             assert exc_info.value.stage == "EXTRACT"
             assert "corrupt pdf" in exc_info.value.message
 
+    def test_clean_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.clean_document",
+                side_effect=RuntimeError("clean failed"),
+            ),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "CLEAN"
+
+    def test_section_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                side_effect=RuntimeError("section failed"),
+            ),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "SECTION"
+
+    def test_table_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                side_effect=RuntimeError("table failed"),
+            ),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "TABLE"
+
+    def test_metadata_failure_raises_pipeline_error(self) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                side_effect=RuntimeError("metadata failed"),
+            ),
+        ):
+            with pytest.raises(PipelineError) as exc_info:
+                run_pipeline(
+                    pdf_path=Path("/data/raw/NICE/test.pdf"),
+                    source_info=FAKE_SOURCE_INFO,
+                    db_url=None,
+                    dry_run=True,
+                    write_debug_artifacts=False,
+                )
+            assert exc_info.value.stage == "METADATA"
+
     def test_chunk_failure_raises_pipeline_error(self) -> None:
         with (
             patch(
@@ -692,6 +792,133 @@ class TestRunPipeline:
         data = json.loads(artifact.read_text())
         assert data["chunks"][0]["embedding"] == "<stripped>"
 
+    def test_write_debug_artifact_handles_write_error(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+            patch("builtins.open", side_effect=OSError("disk full")),
+        ):
+            mock_path.data_debug = tmp_path
+            # Should not raise — write errors are caught and logged
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=True,
+            )
+
+    def test_backfill_skips_if_no_pending_dir(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.data_debug = tmp_path
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=True,
+            )
+        assert not (tmp_path / "pending").exists()
+
+    def test_backfill_moves_pending_artifacts_to_doc_id_dir(
+        self, tmp_path: Path
+    ) -> None:
+        pending_dir = tmp_path / "pending"
+        pending_dir.mkdir()
+        (pending_dir / "01_raw.json").write_text("{}")
+
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=make_raw_doc(),
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=make_raw_doc()),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=make_raw_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=make_embedded_doc(),
+            ),
+            patch(
+                "src.ingestion.pipeline.embed_chunks", return_value=make_embedded_doc()
+            ),
+            patch("src.ingestion.pipeline.store_chunks", return_value=make_db_report()),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.data_debug = tmp_path
+            run_pipeline(
+                pdf_path=Path("/data/raw/NICE/test.pdf"),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=True,
+            )
+
+        doc_id = FAKE_DOC_META["doc_id"]
+        assert (tmp_path / doc_id / "01_raw.json").exists()
+        assert not pending_dir.exists()
+
 
 # -----------------------------------------------------------------------
 # run_ingestion
@@ -932,3 +1159,40 @@ class TestRunIngestion:
             assert key in summary
         for key in ["inserted", "updated", "skipped", "failed"]:
             assert key in summary["db"]
+
+
+# -----------------------------------------------------------------------
+# _backfill_debug_artifacts
+# -----------------------------------------------------------------------
+
+
+class TestBackfillDebugArtifacts:
+    def test_returns_early_if_no_pending_dir(self, tmp_path: Path) -> None:
+        # pending dir does not exist — should return silently without error
+        with patch("src.ingestion.pipeline.path_config") as mock_path:
+            mock_path.data_debug = tmp_path
+            _backfill_debug_artifacts("abc123")
+        assert not (tmp_path / "pending").exists()
+        assert not (tmp_path / "abc123").exists()
+
+    def test_oserror_on_rmdir_is_swallowed(self, tmp_path: Path) -> None:
+        # Create pending dir with two files — after moving one, add another
+        # so rmdir fails because dir is non-empty
+        pending_dir = tmp_path / "pending"
+        pending_dir.mkdir()
+        (pending_dir / "01_raw.json").write_text("{}")
+
+        original_rmdir = Path.rmdir
+
+        def rmdir_that_fails(self: Path) -> None:
+            # Put a new file in before rmdir so it raises OSError
+            (self / "leftover.json").write_text("{}")
+            original_rmdir(self)
+
+        with (
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+            patch.object(Path, "rmdir", rmdir_that_fails),
+        ):
+            mock_path.data_debug = tmp_path
+            # Should not raise despite OSError from rmdir
+            _backfill_debug_artifacts("abc123")
