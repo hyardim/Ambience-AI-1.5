@@ -37,3 +37,37 @@ def run_ingest(runner: CliRunner, args: list[str], input_path: str) -> Any:
         ["ingest", "--input", input_path, "--source-name", "NICE", *args],
     )
 
+# -----------------------------------------------------------------------
+# _resolve_db_url
+# -----------------------------------------------------------------------
+
+
+class TestResolveDbUrl:
+    def test_returns_explicit_db_url(self) -> None:
+        result = _resolve_db_url("postgresql://localhost/db", dry_run=False)
+        assert result == "postgresql://localhost/db"
+
+    def test_falls_back_to_env_var(self) -> None:
+        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env/db"}):
+            result = _resolve_db_url(None, dry_run=False)
+        assert result == "postgresql://env/db"
+
+    def test_returns_none_on_dry_run_with_no_url(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            result = _resolve_db_url(None, dry_run=True)
+        assert result is None
+
+    def test_exits_if_no_url_and_not_dry_run(self) -> None:
+        runner = CliRunner()
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            runner.isolated_filesystem(),
+        ):
+            import tempfile, pathlib
+            with tempfile.TemporaryDirectory() as tmp:
+                result = runner.invoke(
+                    cli,
+                    ["ingest", "--input", tmp, "--source-name", "NICE"],
+                )
+        assert result.exit_code == 1
+
