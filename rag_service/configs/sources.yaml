@@ -1,0 +1,13 @@
+NICE:
+  source_name: NICE
+  author_org: National Institute for Health and Care Excellence
+  specialty: rheumatology
+  doc_type: guideline
+  source_url: https://www.nice.org.uk
+
+BSR:
+  source_name: BSR
+  author_org: British Society for Rheumatology
+  specialty: rheumatology
+  doc_type: guideline
+  source_url: https://www.rheumatology.org.uk

@@ -36,6 +36,9 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.1",             # .env files
     "tqdm>=4.66.0",                     # Progress bars
+
+    "pyyaml>=6.0.0",    # for configs/ingestion.yaml and configs/sources.yaml
+    "click>=8.1.0",     # for CLI
 ]
 
 [project.optional-dependencies]
@@ -51,6 +54,7 @@ dev = [
     # Type stubs
     "types-tqdm>=4.66.0",
     "types-psycopg2>=2.9.0",
+    "types-PyYAML>=6.0.0",
 ]
 
 [build-system]
@@ -114,6 +118,7 @@ omit = ["tests/*", "**/__init__.py"]
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
+    "if __name__ == .__main__.:",
     "def __repr__",
     "raise AssertionError",
     "raise NotImplementedError",

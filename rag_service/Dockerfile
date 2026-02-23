@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y build-essential curl && rm -rf /var/lib
 COPY pyproject.toml .
 COPY src /app/src
 COPY scripts /app/scripts
+COPY configs /app/configs
 RUN pip install --no-cache-dir -e . && \
     python -m nltk.downloader punkt punkt_tab && \
     python scripts/verify_nltk.py
