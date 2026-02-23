@@ -118,6 +118,7 @@ omit = ["tests/*", "**/__init__.py"]
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
+    "if __name__ == .__main__.:",
     "def __repr__",
     "raise AssertionError",
     "raise NotImplementedError",
