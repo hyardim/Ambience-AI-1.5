@@ -96,3 +96,172 @@ class TestConfigureLogLevel:
         import logging
         _configure_log_level("ERROR")
         assert logging.getLogger().level == logging.ERROR
+
+
+# -----------------------------------------------------------------------
+# ingest command
+# -----------------------------------------------------------------------
+
+
+class TestIngestCommand:
+    @pytest.fixture()
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    @pytest.fixture()
+    def input_dir(self, tmp_path: Any) -> str:
+        (tmp_path / "test.pdf").touch()
+        return str(tmp_path)
+
+    def test_dry_run_succeeds(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY):
+            result = runner.invoke(
+                cli,
+                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+            )
+        assert result.exit_code == 0
+        assert "Ingestion complete" in result.output
+
+    def test_output_contains_all_summary_fields(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY):
+            result = runner.invoke(
+                cli,
+                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+            )
+        assert "Files scanned" in result.output
+        assert "Succeeded" in result.output
+        assert "Failed" in result.output
+        assert "Total chunks" in result.output
+        assert "Embeddings OK" in result.output
+        assert "DB inserted" in result.output
+
+    def test_exits_1_when_files_failed(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAILED_SUMMARY):
+            result = runner.invoke(
+                cli,
+                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+            )
+        assert result.exit_code == 1
+
+    def test_value_error_from_pipeline_exits_1(self, runner: CliRunner, input_dir: str) -> None:
+        with patch(
+            "src.ingestion.cli.run_ingestion",
+            side_effect=ValueError("Unknown --source-name 'FOO'"),
+        ):
+            result = runner.invoke(
+                cli,
+                ["ingest", "--input", input_dir, "--source-name", "FOO", "--dry-run"],
+            )
+        assert result.exit_code == 1
+        assert "ERROR" in result.output
+
+    def test_passes_db_url_to_run_ingestion(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY) as mock_run:
+            runner.invoke(
+                cli,
+                [
+                    "ingest",
+                    "--input", input_dir,
+                    "--source-name", "NICE",
+                    "--db-url", "postgresql://localhost/db",
+                ],
+            )
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs["db_url"] == "postgresql://localhost/db"
+
+    def test_passes_dry_run_to_run_ingestion(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY) as mock_run:
+            runner.invoke(
+                cli,
+                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+            )
+        assert mock_run.call_args.kwargs["dry_run"] is True
+
+    def test_passes_max_files_to_run_ingestion(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY) as mock_run:
+            runner.invoke(
+                cli,
+                [
+                    "ingest",
+                    "--input", input_dir,
+                    "--source-name", "NICE",
+                    "--dry-run",
+                    "--max-files", "3",
+                ],
+            )
+        assert mock_run.call_args.kwargs["max_files"] == 3
+
+    def test_passes_since_date_to_run_ingestion(self, runner: CliRunner, input_dir: str) -> None:
+        from datetime import date
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY) as mock_run:
+            runner.invoke(
+                cli,
+                [
+                    "ingest",
+                    "--input", input_dir,
+                    "--source-name", "NICE",
+                    "--dry-run",
+                    "--since", "2024-01-01",
+                ],
+            )
+        assert mock_run.call_args.kwargs["since"] == date(2024, 1, 1)
+
+    def test_passes_write_debug_artifacts_to_run_ingestion(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY) as mock_run:
+            runner.invoke(
+                cli,
+                [
+                    "ingest",
+                    "--input", input_dir,
+                    "--source-name", "NICE",
+                    "--dry-run",
+                    "--write-debug-artifacts",
+                ],
+            )
+        assert mock_run.call_args.kwargs["write_debug_artifacts"] is True
+
+    def test_log_level_debug_accepted(self, runner: CliRunner, input_dir: str) -> None:
+        with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY):
+            result = runner.invoke(
+                cli,
+                [
+                    "ingest",
+                    "--input", input_dir,
+                    "--source-name", "NICE",
+                    "--dry-run",
+                    "--log-level", "DEBUG",
+                ],
+            )
+        assert result.exit_code == 0
+
+    def test_invalid_log_level_rejected(self, runner: CliRunner, input_dir: str) -> None:
+        result = runner.invoke(
+            cli,
+            [
+                "ingest",
+                "--input", input_dir,
+                "--source-name", "NICE",
+                "--dry-run",
+                "--log-level", "VERBOSE",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_env_var_db_url_used_when_no_flag(self, runner: CliRunner, input_dir: str) -> None:
+        with (
+            patch.dict(os.environ, {"DATABASE_URL": "postgresql://env/db"}),
+            patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY) as mock_run,
+        ):
+            runner.invoke(
+                cli,
+                ["ingest", "--input", input_dir, "--source-name", "NICE"],
+            )
+        assert mock_run.call_args.kwargs["db_url"] == "postgresql://env/db"
+
+    def test_missing_input_flag_exits_nonzero(self, runner: CliRunner) -> None:
+        result = runner.invoke(cli, ["ingest", "--source-name", "NICE", "--dry-run"])
+        assert result.exit_code != 0
+
+    def test_missing_source_name_exits_nonzero(self, runner: CliRunner, input_dir: str) -> None:
+        result = runner.invoke(cli, ["ingest", "--input", input_dir, "--dry-run"])
+        assert result.exit_code != 0
