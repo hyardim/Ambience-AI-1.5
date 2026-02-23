@@ -1,5 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
-import { User } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { User, LogOut } from 'lucide-react';
 import { NHSLogo } from './NHSLogo';
 import { NotificationDropdown } from './NotificationDropdown';
 import type { Notification } from '../types';
@@ -8,13 +8,20 @@ interface HeaderProps {
   userRole: 'gp' | 'specialist';
   userName?: string;
   notifications?: Notification[];
+  onLogout?: () => void;
 }
 
-export function Header({ userRole, userName, notifications = [] }: HeaderProps) {
+export function Header({ userRole, userName, notifications = [], onLogout }: HeaderProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const basePath = userRole === 'gp' ? '/gp' : '/specialist';
-  
+
   const isQueriesActive = location.pathname.includes('/queries') || location.pathname.includes('/query/');
+
+  const handleLogout = () => {
+    if (onLogout) onLogout();
+    navigate('/login');
+  };
 
   return (
     <header className="bg-[#005eb8] shadow-lg sticky top-0 z-40">
@@ -47,6 +54,16 @@ export function Header({ userRole, userName, notifications = [] }: HeaderProps) 
                 <span className="hidden md:block text-sm font-medium">{userName}</span>
               )}
             </div>
+
+            {onLogout && (
+              <button
+                onClick={handleLogout}
+                className="text-white/80 hover:text-white transition-colors p-2 rounded hover:bg-white/10"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
           </nav>
         </div>
       </div>

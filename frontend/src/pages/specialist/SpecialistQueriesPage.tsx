@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Clock } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { QueryCard } from '../../components/QueryCard';
 import { mockQueries, mockSpecialistNotifications } from '../../data/mockData';
 import type { QueryStatus, Severity } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function SpecialistQueriesPage() {
-  const navigate = useNavigate();
+  const { username, logout } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<QueryStatus | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<Severity | 'all'>('all');
@@ -27,8 +27,8 @@ export function SpecialistQueriesPage() {
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="specialist" userName="Dr. James Wilson" notifications={mockSpecialistNotifications} />
-      
+      <Header userRole="specialist" userName={username || 'Specialist User'} notifications={mockSpecialistNotifications} onLogout={logout} />
+
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">

@@ -3,6 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import type { UserRole } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+
+function routeForRole(role: UserRole): string {
+  if (role === 'specialist') return '/specialist/queries';
+  return '/gp/queries';
+}
 
 export function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -16,7 +22,9 @@ export function RegisterPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -25,7 +33,7 @@ export function RegisterPage() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -39,14 +47,28 @@ export function RegisterPage() {
       return;
     }
 
-    // Demo registration - navigate to login
-    navigate('/login');
+    setIsSubmitting(true);
+    try {
+      const registeredRole = await register({
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        specialty: formData.role === 'specialist' ? formData.specialty : undefined,
+      });
+      navigate(routeForRole(registeredRole));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create account');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
       <AuthHeader />
-      
+
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-10">
@@ -123,6 +145,7 @@ export function RegisterPage() {
                 >
                   <option value="gp">General Practitioner</option>
                   <option value="specialist">Specialist</option>
+                  <option value="admin">Admin</option>
                 </select>
               </div>
 
@@ -188,9 +211,10 @@ export function RegisterPage() {
 
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="w-full bg-[#005eb8] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#003087] transition-colors focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:ring-offset-2"
               >
-                Create Account
+                {isSubmitting ? 'Creating Account...' : 'Create Account'}
               </button>
             </form>
 

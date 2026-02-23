@@ -2,15 +2,42 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
 
+// Use 'backend' service name in Docker, fallback to localhost for local dev
+const backendUrl = process.env.DOCKER_ENV === 'true'
+  ? 'http://backend:8000'
+  : 'http://localhost:8000';
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    host: '0.0.0.0', // 👈 This allows the container to talk to your Mac
-    port: 5173,      // 👈 Matches the port in your docker-compose
+    host: '0.0.0.0',
+    port: 5173,
     strictPort: true,
     watch: {
-      usePolling: true, // 👈 Ensures hot-reload works on macOS Docker
-    }
-  }
+      usePolling: true,
+    },
+    proxy: {
+      '/auth': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/chats': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/specialist': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/search': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/health': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+    },
+  },
 })

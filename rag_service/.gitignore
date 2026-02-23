@@ -1,0 +1,70 @@
+# Python bytecode and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+my_env/
+.env
+.env.*
+!.env.example
+
+# Local Python dependency dump (vendored site-packages)
+pydeps/
+
+# Notebooks cache
+.ipynb_checkpoints/
+
+# Logs and runtime files
+*.log
+logs/
+tmp/
+*.pid
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Large model/data artifacts
+med42/
+data/*
+rag_data/*
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+.cache/
+.cache/huggingface/
+postgres_data/
+
+# Editor settings
+.vscode/
+.idea/
+
+# Old code
+old_code/
+setup.md
+
+# coverage
+.coverage
+htmlcov/
+coverage.xml
+
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+
+# Debug artifacts from ingestion pipeline
+data/debug/
