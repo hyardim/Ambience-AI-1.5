@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from datetime import date
 from pathlib import Path
@@ -62,9 +63,13 @@ class PipelineError(Exception):
 # -----------------------------------------------------------------------
 
 
+def _make_temp_id(path_str: str) -> str:
+    """Derive a stable per-PDF temp directory name from the pdf path."""
+    return "pending_" + hashlib.md5(path_str.encode()).hexdigest()[:8]
+
+
 def _strip_embeddings(doc: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of doc with embedding vectors replaced by metadata."""
-
     doc_copy = copy.deepcopy(doc)
     for chunk in doc_copy.get("chunks", []):
         if "embedding" in chunk:
@@ -79,7 +84,6 @@ def _write_debug_artifact(
     data: dict[str, Any],
 ) -> None:
     """Write a pipeline stage output to data/debug/<doc_id>/<stage>.json."""
-
     debug_dir = path_config.data_debug / doc_id
     debug_dir.mkdir(parents=True, exist_ok=True)
 
@@ -92,6 +96,26 @@ def _write_debug_artifact(
         logger.debug(f"Debug artifact written: {path}")
     except Exception as e:
         logger.warning(f"Failed to write debug artifact {path}: {e}")
+
+
+def _backfill_debug_artifacts(doc_id: str, temp_id: str) -> None:
+    """Rename debug artifacts written under temp_id to the real doc_id."""
+    pending_dir = path_config.data_debug / temp_id
+    if not pending_dir.exists():
+        return
+
+    real_dir = path_config.data_debug / doc_id
+    real_dir.mkdir(parents=True, exist_ok=True)
+
+    for artifact in pending_dir.iterdir():
+        target = real_dir / artifact.name
+        if not target.exists():
+            artifact.rename(target)
+
+    try:
+        pending_dir.rmdir()
+    except OSError:
+        pass
 
 
 # -----------------------------------------------------------------------
@@ -125,6 +149,9 @@ def run_pipeline(
     path_str = str(pdf_path)
     source_info = {**source_info, "source_path": path_str}
 
+    # Derive a per-PDF temp directory name so concurrent runs don't collide
+    temp_id = _make_temp_id(path_str)
+
     # ---- Stage 1: Extract ----
     try:
         raw_doc = extract_raw_document(pdf_path)
@@ -132,7 +159,7 @@ def run_pipeline(
         raise PipelineError(STAGE_EXTRACT, path_str, str(e)) from e
 
     if write_debug_artifacts:
-        _write_debug_artifact("pending", 1, "raw", raw_doc)
+        _write_debug_artifact(temp_id, 1, "raw", raw_doc)
 
     # ---- Stage 2: Clean ----
     try:
@@ -141,7 +168,7 @@ def run_pipeline(
         raise PipelineError(STAGE_CLEAN, path_str, str(e)) from e
 
     if write_debug_artifacts:
-        _write_debug_artifact("pending", 2, "clean", clean_doc)
+        _write_debug_artifact(temp_id, 2, "clean", clean_doc)
 
     # ---- Stage 3: Section detect ----
     try:
@@ -150,7 +177,7 @@ def run_pipeline(
         raise PipelineError(STAGE_SECTION, path_str, str(e)) from e
 
     if write_debug_artifacts:
-        _write_debug_artifact("pending", 3, "sectioned", sectioned_doc)
+        _write_debug_artifact(temp_id, 3, "sectioned", sectioned_doc)
 
     # ---- Stage 4: Table detect ----
     try:
@@ -159,7 +186,7 @@ def run_pipeline(
         raise PipelineError(STAGE_TABLE, path_str, str(e)) from e
 
     if write_debug_artifacts:
-        _write_debug_artifact("pending", 4, "table_aware", table_aware_doc)
+        _write_debug_artifact(temp_id, 4, "table_aware", table_aware_doc)
 
     # ---- Stage 5: Metadata ----
     try:
@@ -171,8 +198,7 @@ def run_pipeline(
 
     if write_debug_artifacts:
         _write_debug_artifact(doc_id, 5, "metadata", metadata_doc)
-        # Retroactively rename earlier artifacts now that we have doc_id
-        _backfill_debug_artifacts(doc_id)
+        _backfill_debug_artifacts(doc_id, temp_id)
 
     # ---- Stage 6: Chunk ----
     try:
@@ -252,27 +278,6 @@ def run_pipeline(
     return report
 
 
-def _backfill_debug_artifacts(doc_id: str) -> None:
-    """Rename debug artifacts written under 'pending' to the real doc_id."""
-
-    pending_dir = path_config.data_debug / "pending"
-    if not pending_dir.exists():
-        return
-
-    real_dir = path_config.data_debug / doc_id
-    real_dir.mkdir(parents=True, exist_ok=True)
-
-    for artifact in pending_dir.iterdir():
-        target = real_dir / artifact.name
-        if not target.exists():
-            artifact.rename(target)
-
-    try:
-        pending_dir.rmdir()
-    except OSError:
-        pass
-
-
 # -----------------------------------------------------------------------
 # Multi-file orchestration
 # -----------------------------------------------------------------------
@@ -316,21 +321,29 @@ def discover_pdfs(
 
 
 def load_sources(sources_path: Path) -> dict[str, Any]:
-    """Load sources.yaml and return as dict."""
+    """Load sources.yaml and return as dict.
 
+    Raises ValueError if file is empty or invalid.
+    """
     with open(sources_path, encoding="utf-8") as f:
-        result: dict[str, Any] = yaml.safe_load(f)
-        return result
+        result = yaml.safe_load(f)
+    if not isinstance(result, dict):
+        raise ValueError(
+            f"Invalid sources config at {sources_path}: "
+            f"expected a mapping, got {type(result).__name__}"
+        )
+    return result
 
 
 def load_ingestion_config(config_path: Path) -> dict[str, Any]:
     """Load ingestion.yaml if it exists, return empty dict otherwise."""
-
     if not config_path.exists():
         return {}
     with open(config_path, encoding="utf-8") as f:
-        result: dict[str, Any] = yaml.safe_load(f) or {}
-        return result
+        result = yaml.safe_load(f)
+    if not isinstance(result, dict):
+        return {}
+    return result
 
 
 def run_ingestion(
@@ -357,9 +370,9 @@ def run_ingestion(
     Returns:
         Summary report dict
     """
-
-    sources_path = Path("configs/sources.yaml")
-    config_path = Path("configs/ingestion.yaml")
+    # Resolve config paths relative to project root, not CWD
+    sources_path = path_config.root / "configs" / "sources.yaml"
+    config_path = path_config.root / "configs" / "ingestion.yaml"
 
     # Load source metadata
     sources = load_sources(sources_path)
@@ -371,7 +384,7 @@ def run_ingestion(
         )
     source_info = sources[source_name]
 
-    # Load ingestion config (optional)
+    # Load ingestion config (optional) — loaded for future use, logged for debuggability
     ingestion_config = load_ingestion_config(config_path)
     logger.debug(f"Ingestion config loaded: {ingestion_config}")
 
