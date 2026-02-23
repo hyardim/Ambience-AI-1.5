@@ -23,15 +23,8 @@ from .table_detect import detect_and_convert_tables
 logger = setup_logger(__name__)
 
 # -----------------------------------------------------------------------
-# Constants
+# Stage labels
 # -----------------------------------------------------------------------
-
-DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-DEFAULT_EMBEDDING_VERSION = "main"
-DEFAULT_EMBEDDING_DIMENSIONS = 384
-DEFAULT_CHUNK_SIZE = 450
-DEFAULT_OVERLAP = 0.15
-DEFAULT_LOG_LEVEL = "INFO"
 
 STAGE_EXTRACT = "EXTRACT"
 STAGE_CLEAN = "CLEAN"
@@ -69,7 +62,7 @@ def _make_temp_id(path_str: str) -> str:
 
 
 def _strip_embeddings(doc: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of doc with embedding vectors replaced by metadata."""
+    """Return a copy of doc with embedding vectors replaced by a sentinel string."""
     doc_copy = copy.deepcopy(doc)
     for chunk in doc_copy.get("chunks", []):
         if "embedding" in chunk:
@@ -136,7 +129,7 @@ def run_pipeline(
     Args:
         pdf_path: Path to the PDF file
         source_info: Source metadata dict from sources.yaml
-        db_url: Postgres connection string, or None if dry_run
+        db_url: Postgres connection string. Required when dry_run is False.
         dry_run: If True, skip DB write
         write_debug_artifacts: If True, write intermediate JSON outputs
 
@@ -144,8 +137,14 @@ def run_pipeline(
         Per-file report dict with counts and metrics
 
     Raises:
+        ValueError: If dry_run is False and db_url is None
         PipelineError: On stage failure, with stage label attached
     """
+    if not dry_run and db_url is None:
+        raise ValueError(
+            "db_url is required when dry_run=False. Pass --db-url or set DATABASE_URL."
+        )
+
     path_str = str(pdf_path)
     source_info = {**source_info, "source_path": path_str}
 
@@ -323,7 +322,9 @@ def discover_pdfs(
 def load_sources(sources_path: Path) -> dict[str, Any]:
     """Load sources.yaml and return as dict.
 
-    Raises ValueError if file is empty or invalid.
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file is empty or not a mapping.
     """
     with open(sources_path, encoding="utf-8") as f:
         result = yaml.safe_load(f)
@@ -384,9 +385,10 @@ def run_ingestion(
         )
     source_info = sources[source_name]
 
-    # Load ingestion config (optional) — loaded for future use, logged for debuggability
-    ingestion_config = load_ingestion_config(config_path)
-    logger.debug(f"Ingestion config loaded: {ingestion_config}")
+    # TODO(#10): wire ingestion_config into chunk_document and embed_chunks
+    # so that configs/ingestion.yaml values for chunk size, overlap, and
+    # embedding model are applied at runtime rather than using stage defaults.
+    _ = load_ingestion_config(config_path)
 
     # Discover PDFs
     pdfs = discover_pdfs(input_path, since=since, max_files=max_files)

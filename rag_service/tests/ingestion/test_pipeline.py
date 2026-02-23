@@ -255,7 +255,6 @@ class TestDiscoverPdfs:
         assert len(result) == 2
 
     def test_since_filters_old_files(self, tmp_path: Path) -> None:
-
         old = tmp_path / "old.pdf"
         old.touch()
         os.utime(old, (0, 0))
@@ -370,6 +369,20 @@ class TestRunPipeline:
         report = self._run()
         for key in ["file", "doc_id", "pages", "chunks", "embeddings_succeeded", "db"]:
             assert key in report
+
+    def test_dry_run_false_with_no_db_url_raises(self) -> None:
+        with pytest.raises(ValueError, match="db_url is required"):
+            run_pipeline(
+                pdf_path=Path(PDF_PATH_STR),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=False,
+                write_debug_artifacts=False,
+            )
+
+    def test_dry_run_true_with_no_db_url_does_not_raise(self) -> None:
+        report = self._run(dry_run=True)
+        assert "db" in report
 
     def test_dry_run_skips_store(self) -> None:
         with (
