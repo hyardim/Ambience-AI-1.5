@@ -11,12 +11,22 @@ const backendUrl = process.env.DOCKER_ENV === 'true'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,
+    watch: {
+      usePolling: true,
+    },
     proxy: {
       '/auth': {
         target: backendUrl,
         changeOrigin: true,
       },
       '/chats': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/specialist': {
         target: backendUrl,
         changeOrigin: true,
       },
