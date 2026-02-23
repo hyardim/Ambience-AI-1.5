@@ -19,7 +19,9 @@ help:
 	@echo "  make format             - Format code (ruff)"
 	@echo "  make type-check         - Run type checker (mypy)"
 	@echo "  make clean              - Clean cache and temp files"
-	@echo "  make run-ingest         - Run ingestion pipeline (INPUT=... SOURCE=...)"
+	@echo "  make run-ingest         - Run ingestion pipeline"
+	@echo "                           Required: INPUT=... SOURCE=..."
+	@echo "                           Optional: DRY_RUN=1 DB_URL=... SINCE=YYYY-MM-DD MAX_FILES=N WRITE_DEBUG=1 LOG_LEVEL=..."
 # 	@echo "  make run-query          - Run RAG query"
 
 install:
@@ -94,7 +96,12 @@ run-ingest:
 	python -m src.ingestion.cli ingest \
 	  --input $(INPUT) \
 	  --source-name $(SOURCE) \
-	  --log-level INFO
+	  --log-level $(or $(LOG_LEVEL),INFO) \
+	  $(if $(DRY_RUN),--dry-run) \
+	  $(if $(DB_URL),--db-url $(DB_URL)) \
+	  $(if $(SINCE),--since $(SINCE)) \
+	  $(if $(MAX_FILES),--max-files $(MAX_FILES)) \
+	  $(if $(WRITE_DEBUG),--write-debug-artifacts)
 
 # run-query:
 # 	python scripts/query.py
