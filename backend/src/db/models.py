@@ -28,7 +28,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String)
-    role = Column(SQLEnum(UserRole), default=UserRole.GP)
+    role = Column(SQLEnum(UserRole, native_enum=False), default=UserRole.GP)
     specialty = Column(String, nullable=True)   # e.g. "neurology", "rheumatology"
     is_active = Column(Boolean, default=True)
 
@@ -53,7 +53,7 @@ class Chat(Base):
     __tablename__ = "chats"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, default="New Chat")
-    status = Column(SQLEnum(ChatStatus), default=ChatStatus.OPEN)
+    status = Column(SQLEnum(ChatStatus, native_enum=False), default=ChatStatus.OPEN)
 
     # Clinical context
     specialty = Column(String, nullable=True)    # e.g. "neurology"
