@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Trash2, MessageSquare, Loader2 } from 'lucide-react';
+import { Plus, Search, Trash2, Loader2 } from 'lucide-react';
+import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { getChats, deleteChat } from '../../services/api';
@@ -47,11 +48,10 @@ export function GPQueriesPage() {
   );
 
   const getPreview = (chat: BackendChat) => {
-    if (chat.messages.length === 0) return 'No messages yet';
-    const last = chat.messages[chat.messages.length - 1];
-    const text = last.content.substring(0, 120);
-    return text.length < last.content.length ? `${text}...` : text;
+    return `Created ${formatDate(chat.created_at)}`;
   };
+
+  const formatSpecialty = (s: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : null);
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -122,12 +122,17 @@ export function GPQueriesPage() {
                     <span className="text-xs text-gray-500 shrink-0">{formatDate(chat.created_at)}</span>
                   </div>
                   <div className="flex items-end justify-between gap-4">
-                    <p className="text-gray-600 text-sm line-clamp-2 flex-1 min-w-0">{getPreview(chat)}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-gray-600 text-sm">{getPreview(chat)}</p>
+                    </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="flex items-center gap-1 text-xs text-gray-500">
-                        <MessageSquare className="w-4 h-4" />
-                        {chat.messages.length}
-                      </span>
+                      {chat.specialty && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium">
+                          {formatSpecialty(chat.specialty)}
+                        </span>
+                      )}
+                      {chat.severity && <SeverityBadge severity={chat.severity} />}
+                      <StatusBadge status={chat.status} />
                       <button
                         onClick={(e) => handleDelete(e, chat.id)}
                         className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"

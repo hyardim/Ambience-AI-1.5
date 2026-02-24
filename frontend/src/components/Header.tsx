@@ -5,7 +5,7 @@ import { NotificationDropdown } from './NotificationDropdown';
 import type { Notification } from '../types';
 
 interface HeaderProps {
-  userRole: 'gp' | 'specialist';
+  userRole: 'gp' | 'specialist' | 'admin';
   userName?: string;
   notifications?: Notification[];
   onLogout?: () => void;
@@ -47,12 +47,18 @@ export function Header({ userRole, userName, notifications = [], onLogout }: Hea
             <NotificationDropdown notifications={notifications} userRole={userRole} />
 
             <div className="flex items-center gap-2 text-white">
-              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-[#005eb8]" />
-              </div>
-              {userName && (
-                <span className="hidden md:block text-sm font-medium">{userName}</span>
-              )}
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 text-white hover:text-white/80 transition-colors rounded px-2 py-1"
+                title="My Profile"
+              >
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                  <User className="w-6 h-6 text-[#005eb8]" />
+                </div>
+                {userName && (
+                  <span className="hidden md:block text-sm font-medium">{userName}</span>
+                )}
+              </Link>
             </div>
 
             {onLogout && (

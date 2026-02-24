@@ -99,6 +99,7 @@ class PathConfig:
         self.root: Path = Path(__file__).parent.parent
         self.data_raw: Path = self.root / "data" / "raw"
         self.data_processed: Path = self.root / "data" / "processed"
+        self.data_debug: Path = self.root / "data" / "debug"
         self.logs: Path = self.root / "logs"
 
 

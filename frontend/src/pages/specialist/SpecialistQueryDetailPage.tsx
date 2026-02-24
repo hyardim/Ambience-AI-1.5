@@ -1,32 +1,178 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, RotateCcw, AlertTriangle } from 'lucide-react';
+import {
+  ArrowLeft, CheckCircle, XCircle, RotateCcw, AlertTriangle,
+  Loader2, UserPlus,
+} from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { mockQueries, mockSpecialistNotifications } from '../../data/mockData';
-import type { Message, QueryStatus } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  getSpecialistChatDetail,
+  getProfile,
+  assignChat,
+  reviewChat,
+} from '../../services/api';
+import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
+import type { Message } from '../../types';
+
+/** Map a backend message to the frontend Message shape used by ChatMessage */
+function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
+  const isAI = msg.sender === 'ai';
+  const isSpecialist = msg.sender === 'specialist';
+  return {
+    id: String(msg.id),
+    senderId: msg.sender,
+    senderName: isAI ? 'NHS AI Assistant' : isSpecialist ? currentUser : 'GP User',
+    senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
+    content: msg.content,
+    timestamp: new Date(msg.created_at),
+  };
+}
 
 export function SpecialistQueryDetailPage() {
   const { username, logout } = useAuth();
   const { queryId } = useParams<{ queryId: string }>();
   const navigate = useNavigate();
-  const query = mockQueries.find(q => q.id === queryId);
-  const [messages, setMessages] = useState<Message[]>(query?.messages || []);
-  const [status, setStatus] = useState<QueryStatus>(query?.status || 'active');
+
+  const [chat, setChat] = useState<BackendChatWithMessages | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
-  if (!query) {
+  const [myUserId, setMyUserId] = useState<number | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch profile (for specialist ID) + chat detail
+  useEffect(() => {
+    loadData();
+  }, [queryId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const loadData = async () => {
+    if (!queryId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const [profile, chatData] = await Promise.all([
+        getProfile(),
+        getSpecialistChatDetail(Number(queryId)),
+      ]);
+      setMyUserId(profile.id);
+      setChat(chatData);
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User')));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load consultation');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Actions ──────────────────────────────────────────────────
+
+  const handleAssign = async () => {
+    if (!chat || myUserId === null) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      const updated = await assignChat(chat.id, myUserId);
+      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign chat');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!chat) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      const updated = await reviewChat(chat.id, 'approve');
+      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+      setShowApproveConfirm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!chat || !rejectReason.trim()) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      const updated = await reviewChat(chat.id, 'reject', rejectReason.trim());
+      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+      setShowRejectModal(false);
+      setRejectReason('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reject');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendMessage = (content: string) => {
+    // Specialist comments are added optimistically (local only — backend
+    // doesn't yet have a specialist-message endpoint, but we keep the UX).
+    const newMessage: Message = {
+      id: `local-${Date.now()}`,
+      senderId: 'specialist',
+      senderName: username || 'Specialist User',
+      senderType: 'specialist',
+      content,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, newMessage]);
+  };
+
+  // ── Derived state ────────────────────────────────────────────
+
+  const chatStatus = chat?.status ?? '';
+  const isSubmitted = chatStatus === 'submitted';
+  const isAssignedOrReviewing = chatStatus === 'assigned' || chatStatus === 'reviewing';
+  const isTerminal = ['approved', 'rejected', 'closed'].includes(chatStatus);
+  const canAssign = isSubmitted;
+  const canReview = isAssignedOrReviewing;
+
+  const formatSpecialty = (s: string | null) =>
+    s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
+
+  // ── Loading / not-found states ───────────────────────────────
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole="specialist" userName={username || 'Specialist User'} notifications={mockSpecialistNotifications} onLogout={logout} />
+        <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+        </main>
+      </div>
+    );
+  }
+
+  if (!chat) {
+    return (
+      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+        <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Query not found</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Query not found</h1>
+            {error && <p className="text-red-600 mb-4">{error}</p>}
             <button
               onClick={() => navigate('/specialist/queries')}
               className="text-[#005eb8] hover:text-[#003087] font-medium"
@@ -39,67 +185,11 @@ export function SpecialistQueryDetailPage() {
     );
   }
 
-  const handleSendMessage = (content: string) => {
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      senderId: 'specialist-1',
-      senderName: username || 'Specialist User',
-      senderType: 'specialist',
-      content,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, newMessage]);
-  };
-
-  const handleApprove = () => {
-    setStatus('resolved');
-    setShowApproveConfirm(false);
-    const approvalMessage: Message = {
-      id: `msg-${Date.now()}`,
-      senderId: 'specialist-1',
-      senderName: username || 'Specialist User',
-      senderType: 'specialist',
-      content: '✅ I have reviewed the AI response and approve this advice for the GP.',
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, approvalMessage]);
-  };
-
-  const handleReject = () => {
-    if (rejectReason.trim()) {
-      setStatus('pending-review');
-      const rejectMessage: Message = {
-        id: `msg-${Date.now()}`,
-        senderId: 'specialist-1',
-        senderName: username || 'Specialist User',
-        senderType: 'specialist',
-        content: `❌ The AI response requires modification: ${rejectReason}`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, rejectMessage]);
-      setShowRejectModal(false);
-      setRejectReason('');
-    }
-  };
-
-  const handleRetry = () => {
-    setStatus('pending-review');
-    const retryMessage: Message = {
-      id: `msg-${Date.now()}`,
-      senderId: 'specialist-1',
-      senderName: username || 'Specialist User',
-      senderType: 'specialist',
-      content: '🔄 Requesting AI to regenerate the response with additional context.',
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, retryMessage]);
-  };
-
-  const canReview = status === 'active' || status === 'pending-review';
+  // ── Render ───────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="specialist" userName={username || 'Specialist User'} notifications={mockSpecialistNotifications} onLogout={logout} />
+      <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
         {/* Back Button */}
@@ -116,64 +206,111 @@ export function SpecialistQueryDetailPage() {
           <div className="p-6 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="flex-1">
-                <h1 className="text-xl font-bold text-gray-900 mb-2">{query.title}</h1>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">
+                  {chat.title || 'Untitled Consultation'}
+                </h1>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                  <span>From: {query.gpName}</span>
-                  <span>•</span>
-                  <span className="capitalize">{query.specialty}</span>
-                  <span>•</span>
-                  <span>{new Date(query.createdAt).toLocaleDateString()}</span>
+                  <span className="capitalize">{formatSpecialty(chat.specialty)}</span>
+                  <span>·</span>
+                  <span>
+                    {new Date(chat.created_at).toLocaleDateString('en-GB', {
+                      day: 'numeric', month: 'short', year: 'numeric',
+                    })}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <SeverityBadge severity={query.severity} />
-                <StatusBadge status={status} />
+                {chat.severity && <SeverityBadge severity={chat.severity} />}
+                <StatusBadge status={chat.status} />
               </div>
             </div>
 
-            {/* Action Buttons */}
-            {canReview && (
-              <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => setShowApproveConfirm(true)}
-                  className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  Approve Response
-                </button>
-                <button
-                  onClick={() => setShowRejectModal(true)}
-                  className="inline-flex items-center gap-2 bg-[#da291c] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#b52217] transition-colors"
-                >
-                  <XCircle className="w-5 h-5" />
-                  Request Changes
-                </button>
-                <button
-                  onClick={handleRetry}
-                  className="inline-flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                  Regenerate AI Response
-                </button>
+            {/* Error */}
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
               </div>
             )}
+
+            {/* Action area */}
+            <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200">
+              {/* Assign button */}
+              {canAssign && (
+                <button
+                  onClick={handleAssign}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  {actionLoading ? 'Assigning…' : 'Assign to Me'}
+                </button>
+              )}
+
+              {/* Review buttons */}
+              {canReview && (
+                <>
+                  <button
+                    onClick={() => setShowApproveConfirm(true)}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-5 h-5" />
+                    Approve Response
+                  </button>
+                  <button
+                    onClick={() => setShowRejectModal(true)}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-[#da291c] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#b52217] transition-colors disabled:opacity-50"
+                  >
+                    <XCircle className="w-5 h-5" />
+                    Request Changes
+                  </button>
+                </>
+              )}
+
+              {/* Terminal status banner */}
+              {isTerminal && (
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                  chatStatus === 'approved'
+                    ? 'bg-green-50 text-green-700'
+                    : 'bg-red-50 text-red-700'
+                }`}>
+                  {chatStatus === 'approved' ? (
+                    <><CheckCircle className="w-5 h-5" /> Approved</>
+                  ) : (
+                    <><XCircle className="w-5 h-5" /> Rejected</>
+                  )}
+                  {chat.review_feedback && (
+                    <span className="ml-2 font-normal">— {chat.review_feedback}</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map(message => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isOwnMessage={message.senderType === 'specialist'}
-              />
-            ))}
+            {messages.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">No messages yet.</p>
+            ) : (
+              messages.map(message => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isOwnMessage={message.senderType === 'specialist'}
+                />
+              ))
+            )}
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Chat Input */}
-          {status !== 'resolved' && (
+          {/* Chat Input (disabled for terminal states) */}
+          {!isTerminal && (
             <div className="border-t border-gray-200 p-4">
-              <ChatInput onSendMessage={handleSendMessage} placeholder="Add a comment or ask for clarification..." />
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                placeholder="Add a comment or ask for clarification..."
+              />
             </div>
           )}
         </div>
@@ -200,9 +337,10 @@ export function SpecialistQueryDetailPage() {
               </button>
               <button
                 onClick={handleApprove}
-                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f]"
+                disabled={actionLoading}
+                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
               >
-                Confirm Approval
+                {actionLoading ? 'Approving…' : 'Confirm Approval'}
               </button>
             </div>
           </div>
@@ -239,10 +377,10 @@ export function SpecialistQueryDetailPage() {
               </button>
               <button
                 onClick={handleReject}
-                disabled={!rejectReason.trim()}
+                disabled={!rejectReason.trim() || actionLoading}
                 className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit Feedback
+                {actionLoading ? 'Submitting…' : 'Submit Feedback'}
               </button>
             </div>
           </div>
