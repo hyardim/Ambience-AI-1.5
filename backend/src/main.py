@@ -92,12 +92,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from src.api import auth, chats, specialist, rag  # noqa: E402
+from src.api import auth, chats, specialist, rag, notifications  # noqa: E402
 
-app.include_router(auth.router,       prefix="/auth",       tags=["Auth"])
-app.include_router(chats.router,      prefix="/chats",      tags=["Chats"])
-app.include_router(specialist.router, prefix="/specialist",  tags=["Specialist"])
-app.include_router(rag.router,        tags=["RAG"])
+app.include_router(auth.router,          prefix="/auth",          tags=["Auth"])
+app.include_router(chats.router,         prefix="/chats",         tags=["Chats"])
+app.include_router(specialist.router,    prefix="/specialist",    tags=["Specialist"])
+app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+app.include_router(rag.router,           tags=["RAG"])
 
 
 @app.get("/")
