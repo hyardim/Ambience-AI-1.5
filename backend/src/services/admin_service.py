@@ -154,3 +154,39 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     chat_repository.delete(db, chat)
+
+
+# ---------------------------------------------------------------------------
+# Audit log viewing
+# ---------------------------------------------------------------------------
+
+def list_audit_logs(
+    db: Session,
+    action: Optional[str] = None,
+    user_id: Optional[int] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: int = 200,
+) -> list[dict]:
+    query = db.query(AuditLog)
+    if action:
+        query = query.filter(AuditLog.action == action.upper())
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    if date_from:
+        query = query.filter(AuditLog.timestamp >= date_from)
+    if date_to:
+        query = query.filter(AuditLog.timestamp <= date_to)
+
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
+    return [
+        {
+            "id": log.id,
+            "user_id": log.user_id,
+            "user_email": log.user.email if log.user else None,
+            "action": log.action,
+            "details": log.details,
+            "timestamp": log.timestamp,
+        }
+        for log in logs
+    ]
