@@ -3,11 +3,11 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from src.config import OLLAMA_MAX_TOKENS
-from src.ingestion.embed import embed_chunks, get_vector_dim, load_embedder
-from src.llm.client import generate_answer
-from src.llm.prompts import build_grounded_prompt
-from src.retrieval.vector_store import init_db, search_similar_chunks
+from .config import OLLAMA_MAX_TOKENS
+from .generation.client import generate_answer
+from .generation.prompts import build_grounded_prompt
+from .ingestion.embed import embed_chunks, get_vector_dim, load_embedder
+from .retrieval.vector_store import init_db, search_similar_chunks
 
 app = FastAPI(title="Ambience Med42 RAG Service")
 

@@ -1,7 +1,6 @@
-
 import httpx
 
-from src.config import OLLAMA_BASE_URL, OLLAMA_MAX_TOKENS, OLLAMA_MODEL
+from ..config import OLLAMA_BASE_URL, OLLAMA_MAX_TOKENS, OLLAMA_MODEL
 
 
 async def generate_answer(prompt: str, max_tokens: int | None = None) -> str:
@@ -18,7 +17,8 @@ async def generate_answer(prompt: str, max_tokens: int | None = None) -> str:
             resp = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
             resp.raise_for_status()
             data = resp.json()
-            # Ollama returns the final text in the "response" field for non-streaming requests
+            # Ollama returns the final text in the "response" field for
+            # non-streaming requests
             return data.get("response", "").strip()
     except httpx.HTTPError as exc:  # pragma: no cover - passthrough for FastAPI handler
-        raise RuntimeError(f"Ollama request failed: {exc}")
+        raise RuntimeError(f"Ollama request failed: {exc}") from exc

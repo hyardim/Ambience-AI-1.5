@@ -1,5 +1,3 @@
-
-
 def _format_context(chunks: list[dict]) -> str:
     if not chunks:
         return "[1] No supporting passages found in the knowledge base."
@@ -26,9 +24,11 @@ def _format_context(chunks: list[dict]) -> str:
 def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
     context_block = _format_context(chunks)
     instructions = (
-        "You are a cautious clinical assistant. Use only the provided context to answer the clinician's question. "
-        "Cite supporting passages with bracketed numbers like [1], [2]. If the context does not contain the answer, "
-        "state that you do not have enough information instead of guessing. Keep the response concise and factual."
+        "You are a cautious clinical assistant. Use only the provided context to "
+        "answer the clinician's question. "
+        "Cite supporting passages with bracketed numbers like [1], [2]. If the "
+        "context does not contain the answer, state that you do not have enough "
+        "information instead of guessing. Keep the response concise and factual."
     )
 
     return (
