@@ -74,3 +74,104 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
     response = ChatWithMessages(**chat_to_response(chat).model_dump())
     response.messages = [msg_to_response(m) for m in messages]
     return response
+
+
+# ---------------------------------------------------------------------------
+# Update
+# ---------------------------------------------------------------------------
+
+def update_chat(
+    db: Session, user: User, chat_id: int, payload: ChatUpdate
+) -> ChatResponse:
+    chat = chat_repository.get(db, chat_id, user_id=user.id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    fields: dict = {}
+    if payload.title is not None:
+        fields["title"] = payload.title
+    if payload.specialty is not None:
+        fields["specialty"] = payload.specialty
+    if payload.severity is not None:
+        fields["severity"] = payload.severity
+    if payload.status is not None:
+        try:
+            fields["status"] = ChatStatus(payload.status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
+
+    chat = chat_repository.update(db, chat, **fields)
+    audit_repository.log(
+        db, user_id=user.id, action="UPDATE_CHAT", details=f"Updated chat {chat_id}"
+    )
+    return chat_to_response(chat)
+
+
+# ---------------------------------------------------------------------------
+# Delete
+# ---------------------------------------------------------------------------
+
+def delete_chat(db: Session, user: User, chat_id: int) -> None:
+    chat = chat_repository.get(db, chat_id, user_id=user.id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    chat_repository.delete(db, chat)
+    audit_repository.log(
+        db, user_id=user.id, action="DELETE_CHAT", details=f"Deleted chat {chat_id}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Send message
+# ---------------------------------------------------------------------------
+
+def send_message(db: Session, user: User, chat_id: int, content: str) -> dict:
+    chat = chat_repository.get(db, chat_id, user_id=user.id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    message_repository.create(db, chat_id=chat.id, content=content, sender="user")
+    ai_msg = message_repository.create(
+        db,
+        chat_id=chat.id,
+        content=f"I received: {content}",
+        sender="ai",
+        citations=[],
+    )
+
+    if chat.status == ChatStatus.OPEN:
+        chat_repository.update(db, chat, status=ChatStatus.SUBMITTED)
+        audit_repository.log(
+            db,
+            user_id=user.id,
+            action="AUTO_SUBMIT_FOR_REVIEW",
+            details=f"Chat {chat_id} auto-submitted after AI response",
+        )
+
+    return {"status": "Message sent", "ai_response": ai_msg.content}
+
+
+# ---------------------------------------------------------------------------
+# Submit for review
+# ---------------------------------------------------------------------------
+
+def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
+    chat = chat_repository.get(db, chat_id, user_id=user.id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if chat.status != ChatStatus.OPEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only OPEN chats can be submitted (current: {chat.status.value})",
+        )
+
+    chat = chat_repository.update(db, chat, status=ChatStatus.SUBMITTED)
+    audit_repository.log(
+        db,
+        user_id=user.id,
+        action="SUBMIT_FOR_REVIEW",
+        details=f"Chat {chat_id} submitted for specialist review",
+    )
+    return chat_to_response(chat)
