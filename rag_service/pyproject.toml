@@ -36,6 +36,17 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.1",             # .env files
     "tqdm>=4.66.0",                     # Progress bars
+
+    "pyyaml>=6.0.0",    # for configs/ingestion.yaml and configs/sources.yaml
+    "click>=8.1.0",     # for CLI
+
+    # API & HTTP
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
+
+    # Optional model runtime
+    "openvino>=2023.3.0",
 ]
 
 [project.optional-dependencies]
