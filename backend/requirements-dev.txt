@@ -1,0 +1,7 @@
+# Install production deps first: pip install -r requirements.txt
+-r requirements.txt
+
+# --- Testing ---
+pytest
+pytest-asyncio
+httpx
