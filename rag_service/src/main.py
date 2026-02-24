@@ -86,12 +86,16 @@ async def clinical_query(request: QueryRequest):
         ]
     except Exception as e:
         print(f"❌ /query Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"RAG Inference Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG Inference Error: {str(e)}"
+        ) from e
 
 
 @app.post("/answer", response_model=AnswerResponse)
 async def generate_clinical_answer(request: AnswerRequest):
-    """Retrieve supporting chunks, build a grounded prompt, and call Ollama for an answer."""
+    """Retrieve supporting chunks, build a grounded prompt, and call Ollama
+    for an answer."""
     try:
         embeddings_result = embed_chunks(model, [{"text": request.query}], batch_size=1)
         query_embedding = embeddings_result[0]["embedding"]
@@ -120,4 +124,7 @@ async def generate_clinical_answer(request: AnswerRequest):
         return AnswerResponse(answer=answer_text, citations=citations)
     except Exception as e:
         print(f"❌ /answer Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"RAG Answer Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG Answer Error: {str(e)}"
+        ) from e
