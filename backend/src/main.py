@@ -26,7 +26,6 @@ def ensure_auth_columns() -> None:
 
 
 
-
 def ensure_default_users() -> None:
     if os.getenv("AUTH_BOOTSTRAP_DEMO_USERS", "true").lower() != "true":
         return
