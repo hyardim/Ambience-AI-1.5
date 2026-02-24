@@ -6,7 +6,7 @@ import os
 
 from src.db.base import Base
 from src.db.session import engine
-from src.db.models import User
+from src.db.models import User, UserRole
 from src.db.session import SessionLocal
 import src.db.models  # noqa: F401 — ensures all models are registered before create_all
 
@@ -25,6 +25,8 @@ def ensure_auth_columns() -> None:
         )
 
 
+
+
 def ensure_default_users() -> None:
     if os.getenv("AUTH_BOOTSTRAP_DEMO_USERS", "true").lower() != "true":
         return
@@ -34,21 +36,21 @@ def ensure_default_users() -> None:
             "email": "gp@example.com",
             "password": "password123",
             "full_name": "Dr. GP User",
-            "role": "gp",
+            "role": UserRole.GP,
             "specialty": None,
         },
         {
             "email": "specialist@example.com",
             "password": "password123",
             "full_name": "Dr. Specialist User",
-            "role": "specialist",
+            "role": UserRole.SPECIALIST,
             "specialty": "neurology",
         },
         {
             "email": "admin@example.com",
             "password": "password123",
             "full_name": "System Admin",
-            "role": "admin",
+            "role": UserRole.ADMIN,
             "specialty": None,
         },
     ]

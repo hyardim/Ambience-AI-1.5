@@ -32,20 +32,21 @@ export function GPNewQueryPage() {
     setIsSubmitting(true);
 
     try {
-      // 1. Create the chat
-      const chat = await createChat({ title: formData.title || 'New Consultation' });
+      // 1. Create the chat with specialty + severity as proper fields
+      const chat = await createChat({
+        title: formData.title || 'New Consultation',
+        specialty: formData.specialty || undefined,
+        severity: formData.severity || undefined,
+      });
 
       // 2. Build the first message with clinical context
       let messageContent = formData.message;
-      const contextParts: string[] = [];
-      if (formData.patientAge) contextParts.push(`Patient age: ${formData.patientAge}`);
-      if (formData.specialty) contextParts.push(`Specialty: ${formData.specialty}`);
-      if (formData.severity) contextParts.push(`Severity: ${formData.severity}`);
-      if (contextParts.length > 0) {
-        messageContent = `[${contextParts.join(' | ')}]\n\n${formData.message}`;
+      if (formData.patientAge) {
+        messageContent = `[Patient age: ${formData.patientAge}]\n\n${formData.message}`;
       }
 
-      // 3. Send the first message (backend auto-generates AI response)
+      // 3. Send the first message (backend auto-generates AI response
+      //    and auto-submits the chat for specialist review)
       await sendMessage(chat.id, messageContent);
 
       // 4. Navigate to the chat detail page

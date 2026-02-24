@@ -20,6 +20,9 @@ import { GPQueryDetailPage } from './pages/gp/GPQueryDetailPage';
 import { SpecialistQueriesPage } from './pages/specialist/SpecialistQueriesPage';
 import { SpecialistQueryDetailPage } from './pages/specialist/SpecialistQueryDetailPage';
 
+// Profile page
+import { ProfilePage } from './pages/ProfilePage';
+
 function App() {
   return (
     <AuthProvider>
@@ -44,6 +47,9 @@ function App() {
           <Route path="/specialist" element={<Navigate to="/specialist/queries" replace />} />
           <Route path="/specialist/queries" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueriesPage /></ProtectedRoute>} />
           <Route path="/specialist/query/:queryId" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueryDetailPage /></ProtectedRoute>} />
+
+          {/* Profile (all authenticated users) */}
+          <Route path="/profile" element={<ProtectedRoute allowedRoles={['gp', 'specialist', 'admin']}><ProfilePage /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

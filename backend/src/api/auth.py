@@ -7,7 +7,7 @@ from src.db.session import get_db
 from src.db.models import User, UserRole, AuditLog
 from src.core import security
 from src.core.config import settings
-from src.schemas.auth import UserRegister, ProfileUpdate, UserOut
+from src.schemas.auth import UserRegister, ProfileUpdate, UserOut, AuthResponse
 
 router = APIRouter()
 
@@ -23,20 +23,24 @@ def _get_user_or_404(db: Session, email: str) -> User:
     return user
 
 
-def _make_token(user: User) -> dict:
+def _make_auth_response(user: User) -> AuthResponse:
     expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token = security.create_access_token(
         data={"sub": user.email, "role": user.role.value},
         expires_delta=expires,
     )
-    return {"access_token": token, "token_type": "bearer"}
+    return AuthResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserOut.model_validate(user),
+    )
 
 
 # ---------------------------------------------------------------------------
 # POST /auth/login  — existing auto-signup login
 # ---------------------------------------------------------------------------
 
-@router.post("/login")
+@router.post("/login", response_model=AuthResponse)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
@@ -68,14 +72,14 @@ def login(
     db.add(AuditLog(user_id=user.id, action="LOGIN", details=user.email))
     db.commit()
 
-    return _make_token(user)
+    return _make_auth_response(user)
 
 
 # ---------------------------------------------------------------------------
 # POST /auth/register  — explicit registration with role + specialty
 # ---------------------------------------------------------------------------
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserRegister, db: Session = Depends(get_db)):
     """
     Register a new account with a specific role.
@@ -104,7 +108,7 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.refresh(user)
     db.add(AuditLog(user_id=user.id, action="REGISTER", details=payload.email))
     db.commit()
-    return user
+    return _make_auth_response(user)
 
 
 # ---------------------------------------------------------------------------

@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, ClipboardCheck } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
+import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { getChat, sendMessage as apiSendMessage } from '../../services/api';
-import type { BackendChat, BackendMessage } from '../../types/api';
+import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
 import type { Message } from '../../types';
 
 /** Map a backend message to the frontend Message shape */
 function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
-  const isAI = msg.role === 'assistant';
+  const isAI = msg.sender === 'ai';
   return {
     id: String(msg.id),
     senderId: isAI ? 'ai' : 'user',
@@ -26,7 +27,7 @@ export function GPQueryDetailPage() {
   const { queryId } = useParams<{ queryId: string }>();
   const navigate = useNavigate();
   const { username, logout } = useAuth();
-  const [chat, setChat] = useState<BackendChat | null>(null);
+  const [chat, setChat] = useState<BackendChatWithMessages | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -138,9 +139,45 @@ export function GPQueryDetailPage() {
                   <span className="font-medium">{username || 'GP User'}</span>
                   <span>•</span>
                   <span>{new Date(chat.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  {chat.specialty && (
+                    <>
+                      <span>•</span>
+                      <span className="capitalize">{chat.specialty}</span>
+                    </>
+                  )}
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+                {chat.severity && <SeverityBadge severity={chat.severity} />}
+                <StatusBadge status={chat.status} />
+              </div>
             </div>
+
+            {/* Specialist review status banner */}
+            {chat.status === 'submitted' && (
+              <div className="mt-4 flex items-center gap-2 bg-amber-50 text-amber-800 px-4 py-3 rounded-lg border border-amber-200">
+                <ClipboardCheck className="w-5 h-5 shrink-0" />
+                <p className="text-sm">This consultation has been submitted for specialist review. You will be notified once a specialist responds.</p>
+              </div>
+            )}
+            {(chat.status === 'assigned' || chat.status === 'reviewing') && (
+              <div className="mt-4 flex items-center gap-2 bg-blue-50 text-blue-800 px-4 py-3 rounded-lg border border-blue-200">
+                <ClipboardCheck className="w-5 h-5 shrink-0" />
+                <p className="text-sm">A specialist is currently reviewing this consultation.</p>
+              </div>
+            )}
+            {chat.status === 'approved' && (
+              <div className="mt-4 flex items-center gap-2 bg-green-50 text-green-800 px-4 py-3 rounded-lg border border-green-200">
+                <ClipboardCheck className="w-5 h-5 shrink-0" />
+                <p className="text-sm">A specialist has approved the AI response.{chat.review_feedback ? ` Feedback: ${chat.review_feedback}` : ''}</p>
+              </div>
+            )}
+            {chat.status === 'rejected' && (
+              <div className="mt-4 flex items-center gap-2 bg-red-50 text-red-800 px-4 py-3 rounded-lg border border-red-200">
+                <ClipboardCheck className="w-5 h-5 shrink-0" />
+                <p className="text-sm">A specialist has requested changes.{chat.review_feedback ? ` Feedback: ${chat.review_feedback}` : ''}</p>
+              </div>
+            )}
           </div>
 
           {/* Error */}

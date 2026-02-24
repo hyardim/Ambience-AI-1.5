@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from src.db.session import get_db
-from src.db.models import Chat, ChatStatus, User, UserRole, AuditLog
+from src.db.models import Chat, ChatStatus, User, UserRole, AuditLog, Message
 from src.core import security
-from src.schemas.chat import ChatResponse, AssignRequest, ReviewRequest
+from src.schemas.chat import ChatResponse, ChatWithMessages, MessageResponse, AssignRequest, ReviewRequest
 
 router = APIRouter()
 
@@ -94,6 +94,51 @@ def get_assigned(
         .all()
     )
     return [_chat_to_response(c) for c in chats]
+
+
+# ---------------------------------------------------------------------------
+# GET /specialist/chats/{chat_id}  — chat detail with messages (for specialist)
+# ---------------------------------------------------------------------------
+
+def _msg_to_response(m: Message) -> MessageResponse:
+    return MessageResponse(
+        id=m.id,
+        content=m.content,
+        sender=m.sender,
+        created_at=m.created_at.isoformat() if m.created_at else "",
+        citations=m.citations,
+    )
+
+
+@router.get("/chats/{chat_id}", response_model=ChatWithMessages)
+def get_specialist_chat_detail(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    specialist: User = Depends(get_specialist_user),
+):
+    """
+    Return a single chat with messages.
+    Accessible if the chat is in the specialist's queue (SUBMITTED + matching
+    specialty) or already assigned to this specialist.
+    """
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Access control: either in queue or assigned to this specialist
+    in_queue = (
+        chat.status == ChatStatus.SUBMITTED
+        and (not specialist.specialty or chat.specialty == specialist.specialty)
+    )
+    assigned_to_me = chat.specialist_id == specialist.id
+
+    if not (in_queue or assigned_to_me):
+        raise HTTPException(status_code=403, detail="You do not have access to this chat")
+
+    messages = db.query(Message).filter(Message.chat_id == chat.id).order_by(Message.created_at).all()
+    resp = ChatWithMessages(**_chat_to_response(chat).model_dump())
+    resp.messages = [_msg_to_response(m) for m in messages]
+    return resp
 
 
 # ---------------------------------------------------------------------------
