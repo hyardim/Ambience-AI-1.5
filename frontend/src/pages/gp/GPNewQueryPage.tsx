@@ -45,8 +45,8 @@ export function GPNewQueryPage() {
         messageContent = `[Patient age: ${formData.patientAge}]\n\n${formData.message}`;
       }
 
-      // 3. Send the first message (backend auto-generates AI response
-      //    and auto-submits the chat for specialist review)
+      // 3. Send the first message. The backend auto-generates an AI response
+      //    and auto-submits the chat for specialist review.
       await sendMessage(chat.id, messageContent);
 
       // 4. Navigate to the chat detail page
