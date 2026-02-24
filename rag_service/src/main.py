@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -37,13 +37,13 @@ class SearchResult(BaseModel):
     text: str
     source: str
     score: float
-    doc_id: Optional[str] = None
-    chunk_id: Optional[int] = None
-    chunk_index: Optional[int] = None
-    page_start: Optional[int] = None
-    page_end: Optional[int] = None
-    section_path: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    doc_id: str | None = None
+    chunk_id: int | None = None
+    chunk_index: int | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    section_path: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class AnswerRequest(QueryRequest):
@@ -52,7 +52,7 @@ class AnswerRequest(QueryRequest):
 
 class AnswerResponse(BaseModel):
     answer: str
-    citations: List[SearchResult]
+    citations: list[SearchResult]
 
 
 @app.get("/health")
@@ -60,7 +60,7 @@ async def health_check():
     return {"status": "ready", "model": "Med42-OpenVINO"}
 
 
-@app.post("/query", response_model=List[SearchResult])
+@app.post("/query", response_model=list[SearchResult])
 async def clinical_query(request: QueryRequest):
     """Embed the query and return the top-k nearest chunks."""
     try:
