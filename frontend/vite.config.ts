@@ -26,7 +26,15 @@ export default defineConfig({
         target: backendUrl,
         changeOrigin: true,
       },
-      '/specialist': {
+      '/specialist/queue': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/specialist/assigned': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/specialist/chats': {
         target: backendUrl,
         changeOrigin: true,
       },

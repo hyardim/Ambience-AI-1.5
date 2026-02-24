@@ -46,6 +46,7 @@ rag_data/*
 .cache/
 .cache/huggingface/
 postgres_data/
+postgres_data_v2/
 .mypy_cache/
 .pytest_cache/
 .coverage

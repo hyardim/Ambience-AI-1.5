@@ -50,8 +50,7 @@ export function RegisterPage() {
     setIsSubmitting(true);
     try {
       const registeredRole = await register({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
+        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email,
         password: formData.password,
         role: formData.role,

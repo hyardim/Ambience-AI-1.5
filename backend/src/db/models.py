@@ -32,8 +32,8 @@ class User(Base):
     specialty = Column(String, nullable=True)   # e.g. "neurology", "rheumatology"
     is_active = Column(Boolean, default=True)
 
-    chats = relationship("Chat", back_populates="owner")
-    assigned_chats = relationship("Chat", back_populates="specialist", foreign_keys="Chat.specialist_id")
+    chats = relationship("Chat", back_populates="owner", foreign_keys="[Chat.user_id]")
+    assigned_chats = relationship("Chat", back_populates="specialist", foreign_keys="[Chat.specialist_id]")
     audit_logs = relationship("AuditLog", back_populates="user")
     files = relationship("FileAttachment", back_populates="uploader")
 

@@ -1,10 +1,15 @@
 import type {
   BackendChat,
+  BackendChatWithMessages,
   BackendMessage,
   LoginResponse,
   RegisterRequest,
   ChatCreateRequest,
   MessageCreateRequest,
+  ProfileUpdateRequest,
+  UserProfile,
+  AssignRequest,
+  ReviewRequest,
 } from '../types/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -72,7 +77,25 @@ export async function register(payload: RegisterRequest): Promise<LoginResponse>
   return handleResponse<LoginResponse>(res);
 }
 
-// ── Chats ────────────────────────────────────────────────────────────────
+// ── Profile ──────────────────────────────────────────────────────────────
+
+export async function getProfile(): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<UserProfile>(res);
+}
+
+export async function updateProfile(data: ProfileUpdateRequest): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/auth/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<UserProfile>(res);
+}
+
+// ── Chats (GP) ───────────────────────────────────────────────────────────
 
 export async function getChats(skip = 0, limit = 100): Promise<BackendChat[]> {
   const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
@@ -82,11 +105,11 @@ export async function getChats(skip = 0, limit = 100): Promise<BackendChat[]> {
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getChat(chatId: number): Promise<BackendChat> {
+export async function getChat(chatId: number): Promise<BackendChatWithMessages> {
   const res = await fetch(`${API_BASE}/chats/${chatId}`, {
     headers: authHeaders(),
   });
-  return handleResponse<BackendChat>(res);
+  return handleResponse<BackendChatWithMessages>(res);
 }
 
 export async function createChat(data: ChatCreateRequest): Promise<BackendChat> {
@@ -106,6 +129,14 @@ export async function deleteChat(chatId: number): Promise<void> {
   return handleResponse<void>(res);
 }
 
+export async function submitForReview(chatId: number): Promise<BackendChat> {
+  const res = await fetch(`${API_BASE}/chats/${chatId}/submit`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  return handleResponse<BackendChat>(res);
+}
+
 export async function sendMessage(
   chatId: number,
   content: string,
@@ -117,6 +148,53 @@ export async function sendMessage(
     body: JSON.stringify(body),
   });
   return handleResponse<BackendMessage>(res);
+}
+
+// ── Specialist ───────────────────────────────────────────────────────────
+
+export async function getSpecialistQueue(): Promise<BackendChat[]> {
+  const res = await fetch(`${API_BASE}/specialist/queue`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<BackendChat[]>(res);
+}
+
+export async function getAssignedChats(): Promise<BackendChat[]> {
+  const res = await fetch(`${API_BASE}/specialist/assigned`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<BackendChat[]>(res);
+}
+
+export async function getSpecialistChatDetail(chatId: number): Promise<BackendChatWithMessages> {
+  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<BackendChatWithMessages>(res);
+}
+
+export async function assignChat(chatId: number, specialistId: number): Promise<BackendChat> {
+  const body: AssignRequest = { specialist_id: specialistId };
+  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return handleResponse<BackendChat>(res);
+}
+
+export async function reviewChat(
+  chatId: number,
+  action: 'approve' | 'reject',
+  feedback?: string,
+): Promise<BackendChat> {
+  const body: ReviewRequest = { action, feedback };
+  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return handleResponse<BackendChat>(res);
 }
 
 // ── Health ────────────────────────────────────────────────────────────────

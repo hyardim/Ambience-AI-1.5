@@ -27,3 +27,10 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    """Returned by login & register — token plus basic user info."""
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut

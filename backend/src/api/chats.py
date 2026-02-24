@@ -23,7 +23,7 @@ def get_current_user_obj(
 ) -> User:
     user = db.query(User).filter(User.email == email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="User not found")
     return user
 
 
@@ -243,6 +243,16 @@ def send_message(
         citations=[],
     )
     db.add(ai_msg)
+
+    # Auto-submit for specialist review once the AI has responded
+    if chat.status == ChatStatus.OPEN:
+        chat.status = ChatStatus.SUBMITTED
+        db.add(AuditLog(
+            user_id=current_user.id,
+            action="AUTO_SUBMIT_FOR_REVIEW",
+            details=f"Chat {chat_id} auto-submitted for specialist review after AI response",
+        ))
+
     db.commit()
 
     return {"status": "Message sent", "ai_response": ai_msg.content}
