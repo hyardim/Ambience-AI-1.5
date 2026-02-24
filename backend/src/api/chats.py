@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import os
 
 from src.db.session import get_db
 from src.db.models import User, Chat, Message
 from src.schemas.chat import ChatCreate, ChatResponse, MessageCreate, MessageResponse
 from src.core.security import get_current_user
+from src.services.model_router import generate_ai_response
 
 router = APIRouter()
 
@@ -111,7 +113,7 @@ def send_message(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Saves user message and returns a Mock AI response.
+    Saves user message and returns an AI response routed to local/cloud models.
     """
     # 1. Validate User owns the chat
     user = _get_user_by_email_or_404(db, current_user["email"])
@@ -124,8 +126,30 @@ def send_message(
     db.add(user_msg)
     db.commit()
 
-    # 3. Generate Mock Response (We will hook up RAG here later)
-    ai_content = f"I received: '{message.content}'. (RAG Brain coming soon!)"
+    # 3. Build short chat history for model context
+    recent_messages = (
+        db.query(Message)
+        .filter(Message.chat_id == chat.id)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+    chat_history = [
+        {"role": item.role, "content": item.content}
+        for item in recent_messages
+    ]
+
+    # 4. Route request to local 7B or cloud 80B endpoint
+    ai_content, model_used, route_reason = generate_ai_response(
+        user_message=message.content,
+        chat_history=chat_history,
+    )
+
+    # Optional debug metadata in message text for early integration validation
+    if os.getenv("MODEL_ROUTER_APPEND_DEBUG", "true").lower() == "true":
+        ai_content = (
+            f"{ai_content}\n\n"
+            f"[model: {model_used} | route: {route_reason}]"
+        )
 
     ai_msg = Message(chat_id=chat.id, role="assistant", content=ai_content)
     db.add(ai_msg)

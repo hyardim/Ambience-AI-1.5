@@ -32,3 +32,28 @@ The system follows a decoupled microservices topology:
 * **Grounded Generation:** Every response is grounded in retrieved text chunks from verified PDF guidelines (RAG).
 * **HPU Accelerated:** Optimized for the unique memory architecture of the Habana Gaudi 2.
 * **Clinical Safety:** Includes adversarial defense mechanisms and mandatory disclaimer injection.
+
+## 🤖 Model Routing (7B Local + 80B Cloud)
+
+The backend now supports automatic model selection for assistant responses:
+
+- **Local target (`local`)** for lower-latency routine queries (e.g. Med42-7B)
+- **Cloud target (`cloud`)** for higher-complexity queries (e.g. Med42-80B)
+
+Configure via environment variables:
+
+- `MODEL_ROUTER_FORCE_TARGET=auto|local|cloud`
+- `MODEL_ROUTER_CLOUD_MIN_TOKENS=500`
+- `MODEL_ROUTER_CLOUD_MIN_COMPLEXITY=2`
+- `MODEL_LOCAL_URL=http://host.docker.internal:80/generate`
+- `MODEL_LOCAL_API_STYLE=tgi|openai`
+- `MODEL_LOCAL_NAME=med42-7b`
+- `MODEL_CLOUD_URL=<your-cloud-endpoint>`
+- `MODEL_CLOUD_API_STYLE=tgi|openai`
+- `MODEL_CLOUD_NAME=med42-80b`
+- `MODEL_CLOUD_API_KEY=<optional bearer token>`
+- `MODEL_MAX_NEW_TOKENS=512`
+- `MODEL_TEMPERATURE=0.1`
+- `MODEL_TIMEOUT_SECONDS=60`
+
+If the selected target fails, backend attempts automatic fallback to the other target.

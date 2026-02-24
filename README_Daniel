@@ -1,0 +1,261 @@
+# README_Daniel
+
+## Model Selection Logic (Local 7B vs Cloud 80B)
+
+This document explains exactly how the backend chooses which AI model endpoint to call for a GP chat message.
+
+---
+
+## Where the logic lives
+
+- Routing and endpoint invocation: `backend/src/services/model_router.py`
+- Chat endpoint using the router: `backend/src/api/chats.py`
+
+---
+
+## High-level flow
+
+For every new user message:
+
+1. Backend saves the user message to the DB.
+2. Backend loads recent chat history.
+3. Backend builds one routing prompt from:
+   - system prompt
+   - last up to 8 conversation turns
+   - latest user message
+4. Router decides target (`local` or `cloud`) using rules below.
+5. Backend calls the chosen endpoint.
+6. If chosen endpoint fails, backend automatically retries the other endpoint.
+7. If both fail, backend returns a safe fallback message.
+
+---
+
+## Decision order (exact priority)
+
+### 1) Forced target override (highest priority)
+
+Environment variable:
+
+- `MODEL_ROUTER_FORCE_TARGET=auto|local|cloud`
+
+Behavior:
+
+- If `local`, always call local endpoint.
+- If `cloud`, always call cloud endpoint.
+- If `auto` (default), run heuristic routing.
+
+This is useful for testing or emergency operations.
+
+---
+
+### 2) Heuristic routing in auto mode
+
+In `auto` mode, router computes two signals from the built prompt:
+
+- Estimated token count
+- Complexity score
+
+If **either** signal crosses threshold, route to `cloud`; otherwise route to `local`.
+
+Rule:
+
+- Route to cloud if:
+  - `estimated_tokens >= MODEL_ROUTER_CLOUD_MIN_TOKENS`
+  - OR
+  - `complexity_score >= MODEL_ROUTER_CLOUD_MIN_COMPLEXITY`
+
+Defaults:
+
+- `MODEL_ROUTER_CLOUD_MIN_TOKENS=500`
+- `MODEL_ROUTER_CLOUD_MIN_COMPLEXITY=2`
+
+---
+
+## Signal A: Estimated token count
+
+Token estimate function:
+
+- `estimated_tokens = max(1, len(prompt_text) // 4)`
+
+This is a lightweight heuristic (not exact tokenizer), but good enough for routing.
+
+Interpretation:
+
+- Bigger prompt/context tends to require larger model capacity.
+- Long conversation history pushes the request toward cloud.
+
+---
+
+## Signal B: Complexity score
+
+The complexity score starts at `0`, then increases with the following checks.
+
+### Clinical term matches (+1 each)
+
+If prompt contains any of these terms, +1 per term found:
+
+- `differential diagnosis`
+- `contraindication`
+- `drug interaction`
+- `comorbidity`
+- `refractory`
+- `autoimmune`
+- `red flag`
+- `urgent`
+- `escalation`
+- `rare`
+- `multisystem`
+- `pregnancy`
+- `renal impairment`
+- `hepatotoxic`
+
+### Multi-question check (+1)
+
+- If prompt includes at least 2 question marks (`?`), +1.
+
+### Length bump (+1 or +2)
+
+- If text length >= 900 chars: +1
+- If text length >= 1600 chars: +2 (instead of +1)
+
+---
+
+## Endpoint invocation behavior
+
+The router supports two API styles:
+
+- `tgi` style (expects `generated_text`)
+- `openai` style (expects `choices[0].message.content`)
+
+Configured separately for each target:
+
+### Local target (7B)
+
+- `MODEL_LOCAL_URL`
+- `MODEL_LOCAL_API_STYLE=tgi|openai`
+- `MODEL_LOCAL_NAME`
+- `MODEL_LOCAL_API_KEY` (optional)
+
+### Cloud target (80B)
+
+- `MODEL_CLOUD_URL`
+- `MODEL_CLOUD_API_STYLE=tgi|openai`
+- `MODEL_CLOUD_NAME`
+- `MODEL_CLOUD_API_KEY` (optional)
+
+Shared generation knobs:
+
+- `MODEL_MAX_NEW_TOKENS`
+- `MODEL_TEMPERATURE`
+- `MODEL_TIMEOUT_SECONDS`
+
+---
+
+## Fallback logic
+
+If selected target fails:
+
+1. Router catches the error.
+2. Router retries on opposite target.
+3. If second attempt succeeds, result is returned.
+4. If both fail, safe fallback text is returned:
+   - asks user to retry or escalate for manual review.
+
+This gives resilience when one model service is down.
+
+---
+
+## Practical examples
+
+### Example 1: likely local (7B)
+
+Prompt:
+
+- short question, limited context
+- no high-complexity terms
+
+Result:
+
+- tokens below threshold
+- complexity below threshold
+- routes to `local`
+
+### Example 2: likely cloud (80B)
+
+Prompt:
+
+- long multi-part case
+- includes terms like `contraindication`, `drug interaction`
+
+Result:
+
+- complexity >= 2 and/or tokens >= 500
+- routes to `cloud`
+
+### Example 3: cloud endpoint outage
+
+Prompt routes to cloud, cloud call fails.
+
+Result:
+
+- automatic retry to local endpoint
+- local response returned (if available)
+
+---
+
+## Tuning guidance
+
+If too many requests go to cloud (high cost):
+
+- increase `MODEL_ROUTER_CLOUD_MIN_TOKENS`
+- increase `MODEL_ROUTER_CLOUD_MIN_COMPLEXITY`
+
+If too many hard cases stay on local (quality risk):
+
+- decrease those thresholds
+- add more complexity keywords
+
+A safe starting path:
+
+1. Start with defaults.
+2. Log route decisions for 100–200 real prompts.
+3. Review misroutes.
+4. Adjust thresholds in small steps.
+
+---
+
+## Known limitations
+
+1. Token estimate is approximate (`len/4`), not exact tokenizer count.
+2. Complexity score is keyword-based, not learned intent classification.
+3. No specialty-aware routing yet (neurology vs rheumatology profile).
+4. No confidence-based reroute yet (e.g., run 7B first and escalate if low confidence).
+
+---
+
+## Optional debug output
+
+If enabled:
+
+- `MODEL_ROUTER_APPEND_DEBUG=true`
+
+The assistant message includes routing metadata suffix:
+
+- selected model target
+- routing reason string
+
+Disable in production UI by setting:
+
+- `MODEL_ROUTER_APPEND_DEBUG=false`
+
+---
+
+## Summary
+
+Current model choice is deterministic and transparent:
+
+- Force override if requested.
+- Otherwise route by token estimate + complexity score.
+- Prefer local for simple/short queries.
+- Escalate to cloud for long/complex queries.
+- Always attempt fallback if first endpoint fails.

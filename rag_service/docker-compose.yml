@@ -37,6 +37,20 @@ services:
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB}
+      - MODEL_ROUTER_FORCE_TARGET=auto
+      - MODEL_ROUTER_CLOUD_MIN_TOKENS=500
+      - MODEL_ROUTER_CLOUD_MIN_COMPLEXITY=2
+      - MODEL_LOCAL_URL=http://host.docker.internal:80/generate
+      - MODEL_LOCAL_API_STYLE=tgi
+      - MODEL_LOCAL_NAME=med42-7b
+      - MODEL_CLOUD_URL=
+      - MODEL_CLOUD_API_STYLE=tgi
+      - MODEL_CLOUD_NAME=med42-80b
+      - MODEL_CLOUD_API_KEY=
+      - MODEL_MAX_NEW_TOKENS=512
+      - MODEL_TEMPERATURE=0.1
+      - MODEL_TIMEOUT_SECONDS=60
+      - MODEL_ROUTER_APPEND_DEBUG=true
     ports:
       - "8000:8000"
     depends_on:
