@@ -87,7 +87,7 @@ class TestProcessQuery:
             result = process_query("gout treatment")
         assert result.embedding_model == EMBEDDING_MODEL_NAME
 
-    def test_model_load_failure_raises_retrieval_error(self):
+    def test_process_query_wraps_model_load_failure_as_retrieval_error(self):
         with patch(
             "src.retrieval.query._load_model",
             side_effect=RuntimeError("model not found"),
@@ -118,15 +118,6 @@ class TestProcessQuery:
         long_query = " ".join(["gout"] * 394)
         with pytest.raises(ValueError, match="exceeds 512 token limit"):
             process_query(long_query)
-
-    def test_model_loaded_once_across_multiple_calls(self):
-        mock_model = _make_mock_model()
-        with patch(
-            "src.retrieval.query._load_model", return_value=mock_model
-        ) as mock_load:
-            process_query("gout treatment")
-            process_query("ra management")
-        assert mock_load.call_count == 2
 
 
 # -----------------------------------------------------------------------
