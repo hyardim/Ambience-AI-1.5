@@ -25,3 +25,36 @@ class VectorSearchResult(BaseModel):
     text: str
     score: float
     metadata: dict[str, Any]
+
+# -----------------------------------------------------------------------
+# Main function
+# -----------------------------------------------------------------------
+
+
+def vector_search(
+    query_embedding: list[float],
+    db_url: str,
+    top_k: int = 20,
+    specialty: str | None = None,
+    source_name: str | None = None,
+    doc_type: str | None = None,
+) -> list[VectorSearchResult]:
+    """
+    Retrieve top-k most similar chunks via pgvector cosine similarity.
+
+    Args:
+        query_embedding: 384-dimensional normalised query vector
+        db_url: Postgres connection string
+        top_k: Maximum number of results to return
+        specialty: Optional metadata filter
+        source_name: Optional metadata filter
+        doc_type: Optional metadata filter
+
+    Returns:
+        List of VectorSearchResult ordered by similarity descending
+
+    Raises:
+        RetrievalError: On DB connection failure, missing pgvector extension,
+                        or invalid embedding dimensions
+    """
+    pass
