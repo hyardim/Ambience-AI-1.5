@@ -333,9 +333,7 @@ class TestVectorSearch:
                     "src.retrieval.vector_search.psycopg2.extras.register_default_jsonb"
                 ) as mock_jsonb_reg:
                     vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
-        mock_jsonb_reg.assert_called_once_with(
-            mock_conn, globally=False, loads=__import__("json").loads
-        )
+        mock_jsonb_reg.assert_called_once_with(mock_conn)
 
     def test_zero_top_k_raises_retrieval_error(self):
         with pytest.raises(RetrievalError) as exc_info:
