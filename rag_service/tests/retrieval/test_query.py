@@ -122,7 +122,7 @@ class TestProcessQuery:
 
     def test_expanded_query_exceeding_token_limit_raises_value_error(self):
         # Patch _expand_query to return a very long string
-        # # simulating expansion pushing query over the limit
+        # simulating expansion pushing query over the limit
         long_expansion = "gout " + " ".join(["urate"] * 400)
         mock_model = _make_mock_model()
         with patch("src.retrieval.query._load_model", return_value=mock_model):
