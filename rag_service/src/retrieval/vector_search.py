@@ -146,8 +146,8 @@ def _run_query(
             metadata->>'content_type'       AS content_type,
             metadata->>'section_title'      AS section_title,
             metadata->>'title'              AS title,
-            (metadata->>'page_start')::int  AS page_start,
-            (metadata->>'page_end')::int    AS page_end,
+            (COALESCE(metadata->>'page_start'))::int  AS page_start,
+            (COALESCE(metadata->>'page_end'))::int    AS page_end,
             metadata->'section_path'        AS section_path
         FROM rag_chunks
         WHERE

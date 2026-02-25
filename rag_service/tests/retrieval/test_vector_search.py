@@ -346,3 +346,18 @@ class TestVectorSearch:
             vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=-1)
         assert exc_info.value.stage == "VECTOR_SEARCH"
         assert "top_k" in exc_info.value.message
+
+    def test_null_page_values_default_to_zero(self):
+        # simulate a row where page_start and page_end are NULL in the DB
+        row = make_row()
+        # replace page_start (index 11) and page_end (index 12) with None
+        row = row[:11] + (None, None) + row[13:]
+        mock_conn = make_mock_conn([row])
+        with patch(
+            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        ):
+            with patch("src.retrieval.vector_search.register_vector"):
+                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+
+        assert results[0].metadata["page_start"] == 0
+        assert results[0].metadata["page_end"] == 0
