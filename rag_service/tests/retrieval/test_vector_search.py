@@ -214,9 +214,9 @@ class TestVectorSearch:
                 ) as mock_run:
                     vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         args = mock_run.call_args[0]
-        assert args[2] is None  # specialty
-        assert args[3] is None  # source_name
-        assert args[4] is None  # doc_type
+        assert args[3] is None  # specialty
+        assert args[4] is None  # source_name
+        assert args[5] is None  # doc_type
 
     def test_empty_result_returns_empty_list(self):
         mock_conn = make_mock_conn([])
