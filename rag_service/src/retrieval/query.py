@@ -45,3 +45,15 @@ def _load_model() -> SentenceTransformer:
         logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
         _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _MODEL
+
+# -----------------------------------------------------------------------
+# Dataclass
+# -----------------------------------------------------------------------
+
+@dataclass
+class ProcessedQuery:
+    original: str
+    expanded: str           # same as original if expansion disabled
+    embedding: list[float]  # 384-dimensional vector
+    embedding_model: str
+
