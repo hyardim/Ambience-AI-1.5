@@ -80,7 +80,46 @@ def process_query(
         ValueError: If query is empty, whitespace only, or exceeds 512 tokens
         RetrievalError: If model fails to load or embedding fails
     """
-    pass
+    if not query or not query.strip():
+        raise ValueError("Query must not be empty")
+
+    _validate_token_length(query)
+
+    logger.debug(f'Processing query: "{query}"')
+
+    expanded = _expand_query(query) if expand else query
+    if expand and expanded != query:
+        logger.debug(f'Query expanded: "{expanded}"')
+
+    try:
+        model = _load_model()
+    except Exception as e:
+        raise RetrievalError(
+            stage="QUERY",
+            query=query,
+            message=f"Failed to load embedding model: {e}",
+        ) from e
+
+    try:
+        start = time.perf_counter()
+        embedding = _embed(model, expanded)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.debug(
+            f"Embedding complete in {elapsed_ms:.0f}ms, dimensions={len(embedding)}"
+        )
+    except Exception as e:
+        raise RetrievalError(
+            stage="QUERY",
+            query=query,
+            message=f"Failed to embed query: {e}",
+        ) from e
+
+    return ProcessedQuery(
+        original=query,
+        expanded=expanded,
+        embedding=embedding,
+        embedding_model=EMBEDDING_MODEL_NAME,
+    )
 
 # -----------------------------------------------------------------------
 # Helpers
