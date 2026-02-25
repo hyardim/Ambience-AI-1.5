@@ -26,6 +26,7 @@ def _make_mock_model(embedding: np.ndarray = MOCK_EMBEDDING) -> MagicMock:
     mock.encode.return_value = embedding
     return mock
 
+
 # -----------------------------------------------------------------------
 # Tests — process_query()
 # -----------------------------------------------------------------------
@@ -102,6 +103,7 @@ class TestProcessQuery:
                 process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
+
 # -----------------------------------------------------------------------
 # Tests — _expand_query()
 # -----------------------------------------------------------------------
@@ -135,6 +137,7 @@ class TestExpandQuery:
 # -----------------------------------------------------------------------
 # Tests — RetrievalError
 # -----------------------------------------------------------------------
+
 
 class TestRetrievalError:
     def test_retrieval_error_has_stage(self):
