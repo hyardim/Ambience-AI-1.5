@@ -140,7 +140,6 @@ class TestVectorSearch:
         ):
             with patch("src.retrieval.vector_search.register_vector"):
                 vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=5)
-        # verify LIMIT value passed to cursor.execute — last positional param is top_k
         execute_args = mock_conn.cursor.return_value.execute.call_args[0][1]
         assert execute_args[-1] == 5
 
@@ -171,7 +170,9 @@ class TestVectorSearch:
                     "src.retrieval.vector_search._run_query", return_value=[]
                 ) as mock_run:
                     vector_search(
-                        VALID_EMBEDDING, db_url="postgresql://fake", source_name="NICE"
+                        VALID_EMBEDDING,
+                        db_url="postgresql://fake",
+                        source_name="NICE",
                     )
         args = mock_run.call_args[0]
         assert "NICE" in args
@@ -348,9 +349,7 @@ class TestVectorSearch:
         assert "top_k" in exc_info.value.message
 
     def test_null_page_values_default_to_zero(self):
-        # simulate a row where page_start and page_end are NULL in the DB
         row = make_row()
-        # replace page_start (index 11) and page_end (index 12) with None
         row = row[:11] + (None, None) + row[13:]
         mock_conn = make_mock_conn([row])
         with patch(
@@ -358,6 +357,5 @@ class TestVectorSearch:
         ):
             with patch("src.retrieval.vector_search.register_vector"):
                 results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
-
         assert results[0].metadata["page_start"] == 0
         assert results[0].metadata["page_end"] == 0

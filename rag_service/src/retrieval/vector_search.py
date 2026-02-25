@@ -45,7 +45,7 @@ def vector_search(
     Retrieve top-k most similar chunks via pgvector cosine similarity.
 
     Args:
-        query_embedding: normalised query vector
+        query_embedding: Normalised query vector
         db_url: Postgres connection string
         top_k: Maximum number of results to return
         specialty: Optional metadata filter
@@ -57,7 +57,7 @@ def vector_search(
 
     Raises:
         RetrievalError: On DB connection failure, missing pgvector extension,
-                        or invalid embedding dimensions
+                        invalid embedding dimensions, or invalid top_k
     """
     if len(query_embedding) != EMBEDDING_DIMENSIONS:
         raise RetrievalError(
@@ -138,17 +138,17 @@ def _run_query(
             chunk_id,
             doc_id,
             text,
-            1 - (embedding <=> %s::vector) AS score,
-            metadata->>'specialty'          AS specialty,
-            metadata->>'source_name'        AS source_name,
-            metadata->>'doc_type'           AS doc_type,
-            metadata->>'source_url'         AS source_url,
-            metadata->>'content_type'       AS content_type,
-            metadata->>'section_title'      AS section_title,
-            metadata->>'title'              AS title,
-            (COALESCE(metadata->>'page_start'))::int  AS page_start,
-            (COALESCE(metadata->>'page_end'))::int    AS page_end,
-            metadata->'section_path'        AS section_path
+            1 - (embedding <=> %s::vector)                AS score,
+            metadata->>'specialty'                         AS specialty,
+            metadata->>'source_name'                       AS source_name,
+            metadata->>'doc_type'                          AS doc_type,
+            metadata->>'source_url'                        AS source_url,
+            metadata->>'content_type'                      AS content_type,
+            metadata->>'section_title'                     AS section_title,
+            metadata->>'title'                             AS title,
+            (COALESCE(metadata->>'page_start', '0'))::int  AS page_start,
+            (COALESCE(metadata->>'page_end', '0'))::int    AS page_end,
+            metadata->'section_path'                       AS section_path
         FROM rag_chunks
         WHERE
             (%s::text IS NULL OR metadata->>'specialty'   = %s)
@@ -198,8 +198,8 @@ def _run_query(
                     "content_type": row[8],
                     "section_title": row[9],
                     "title": row[10],
-                    "page_start": row[11],
-                    "page_end": row[12],
+                    "page_start": row[11] if row[11] is not None else 0,
+                    "page_end": row[12] if row[12] is not None else 0,
                     "section_path": row[13],
                 },
             )
