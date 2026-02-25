@@ -113,6 +113,21 @@ class TestProcessQuery:
                 embedding_model="some-model",
             )
 
+    def test_query_exceeding_token_limit_raises_value_error(self):
+        # ~400 words * 1.3 = ~520 estimated tokens, exceeds 512 limit
+        long_query = " ".join(["gout"] * 400)
+        with pytest.raises(ValueError, match="exceeds 512 token limit"):
+            process_query(long_query)
+
+    def test_model_loaded_once_across_multiple_calls(self):
+        mock_model = _make_mock_model()
+        with patch(
+            "src.retrieval.query._load_model", return_value=mock_model
+        ) as mock_load:
+            process_query("gout treatment")
+            process_query("ra management")
+        assert mock_load.call_count == 1
+
 
 # -----------------------------------------------------------------------
 # Tests — _expand_query()
