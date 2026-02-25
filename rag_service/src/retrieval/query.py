@@ -180,7 +180,7 @@ def _embed(model: SentenceTransformer, text: str) -> list[float]:
 
 # -----------------------------------------------------------------------
 # RetrievalError — defined here to avoid circular imports.
-# All other stage files import it from here or from retrieve.py
+# All other retrieval stage files import it from this module.
 # -----------------------------------------------------------------------
 
 
