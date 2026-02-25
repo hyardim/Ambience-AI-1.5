@@ -58,3 +58,18 @@ def vector_search(
                         or invalid embedding dimensions
     """
     pass
+
+# -----------------------------------------------------------------------
+# Query execution
+# -----------------------------------------------------------------------
+
+
+def _run_query(
+    conn: Any,
+    query_embedding: list[float],
+    top_k: int,
+    specialty: str | None,
+    source_name: str | None,
+    doc_type: str | None,
+) -> list[VectorSearchResult]:
+    """Execute the vector similarity query and return results."""
