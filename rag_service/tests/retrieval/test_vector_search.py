@@ -62,6 +62,18 @@ def make_mock_conn(rows: list[tuple]) -> MagicMock:
 
 
 # -----------------------------------------------------------------------
+# Auto-mock register_default_jsonb for all tests
+# -----------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mock_jsonb():
+    """Mock register_default_jsonb for all tests — requires a real connection."""
+    with patch("src.retrieval.vector_search.psycopg2.extras.register_default_jsonb"):
+        yield
+
+
+# -----------------------------------------------------------------------
 # Tests
 # -----------------------------------------------------------------------
 
@@ -87,7 +99,6 @@ class TestVectorSearch:
             with patch("src.retrieval.vector_search.register_vector"):
                 results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert isinstance(results[0], VectorSearchResult)
-        # pydantic models support attribute access and .model_dump()
         assert hasattr(results[0], "model_dump")
 
     def test_results_ordered_by_score_descending(self):
@@ -295,7 +306,33 @@ class TestVectorSearch:
                 ):
                     with pytest.raises(RetrievalError) as exc_info:
                         vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
-
-        # must be the exact same error — not re-wrapped
         assert exc_info.value is original_error
         assert exc_info.value.message == "something specific failed"
+
+    def test_section_path_is_list_not_string(self):
+        rows = [make_row(section_path=["Treatment", "First-line therapy"])]
+        mock_conn = make_mock_conn(rows)
+        with patch(
+            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        ):
+            with patch("src.retrieval.vector_search.register_vector"):
+                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+        assert isinstance(results[0].metadata["section_path"], list)
+        assert results[0].metadata["section_path"] == [
+            "Treatment",
+            "First-line therapy",
+        ]
+
+    def test_register_default_jsonb_called_on_connection(self):
+        mock_conn = make_mock_conn([])
+        with patch(
+            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        ):
+            with patch("src.retrieval.vector_search.register_vector"):
+                with patch(
+                    "src.retrieval.vector_search.psycopg2.extras.register_default_jsonb"
+                ) as mock_jsonb_reg:
+                    vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+        mock_jsonb_reg.assert_called_once_with(
+            mock_conn, globally=False, loads=__import__("json").loads
+        )

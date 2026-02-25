@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -92,6 +93,7 @@ def vector_search(
 
     try:
         register_vector(conn)
+        psycopg2.extras.register_default_jsonb(conn, globally=False, loads=json.loads)
         results = _run_query(
             conn, query_embedding, top_k, specialty, source_name, doc_type
         )
