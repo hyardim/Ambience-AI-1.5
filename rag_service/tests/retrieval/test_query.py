@@ -27,6 +27,36 @@ def _make_mock_model(embedding: np.ndarray = MOCK_EMBEDDING) -> MagicMock:
     return mock
 
 # -----------------------------------------------------------------------
+# Tests — _expand_query()
+# -----------------------------------------------------------------------
+
+
+class TestExpandQuery:
+    def test_gout_expansion(self):
+        result = _expand_query("gout")
+        assert "urate" in result
+        assert "hyperuricemia" in result
+        assert "uric acid" in result
+
+    def test_ra_expansion(self):
+        result = _expand_query("RA treatment")
+        assert "rheumatoid arthritis" in result
+
+    def test_oa_expansion(self):
+        result = _expand_query("OA management")
+        assert "osteoarthritis" in result
+
+    def test_no_duplicate_synonyms_added(self):
+        result = _expand_query("gout urate management")
+        assert result.count("urate") == 1
+
+    def test_unknown_term_returns_original(self):
+        query = "fibromyalgia management"
+        result = _expand_query(query)
+        assert result == query
+
+
+# -----------------------------------------------------------------------
 # Tests — RetrievalError
 # -----------------------------------------------------------------------
 
