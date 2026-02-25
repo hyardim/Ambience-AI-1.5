@@ -57,7 +57,12 @@ def vector_search(
         RetrievalError: On DB connection failure, missing pgvector extension,
                         or invalid embedding dimensions
     """
-    pass
+    if len(query_embedding) != 384:
+        raise RetrievalError(
+            stage="VECTOR_SEARCH",
+            query="",
+            message=f"Invalid embedding dimensions: expected 384, got {len(query_embedding)}",
+        )
 
 # -----------------------------------------------------------------------
 # Query execution
