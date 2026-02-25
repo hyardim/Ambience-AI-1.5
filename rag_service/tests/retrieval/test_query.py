@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.retrieval.query import (
+    EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL_NAME,
     ProcessedQuery,
     RetrievalError,
@@ -109,7 +110,7 @@ class TestProcessQuery:
             ProcessedQuery(
                 original="test",
                 expanded="test",
-                embedding=[0.1] * 100,  # wrong dimensions
+                embedding=[0.1] * (EMBEDDING_DIMENSIONS - 1),  # one short
                 embedding_model="some-model",
             )
 

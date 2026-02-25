@@ -56,7 +56,9 @@ def _load_model() -> SentenceTransformer:
 class ProcessedQuery(BaseModel):
     original: str
     expanded: str
-    embedding: list[float] = Field(min_length=384, max_length=384)
+    embedding: list[float] = Field(
+        min_length=EMBEDDING_DIMENSIONS, max_length=EMBEDDING_DIMENSIONS
+    )
     embedding_model: str
 
 
