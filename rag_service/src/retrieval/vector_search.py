@@ -99,3 +99,15 @@ def _run_query(
         ORDER BY embedding <=> %s::vector ASC
         LIMIT %s;
     """
+    start = time.perf_counter()
+    with conn.cursor() as cur:
+        cur.execute(sql, (
+            embedding_array,
+            specialty, specialty,
+            source_name, source_name,
+            doc_type, doc_type,
+            embedding_array,
+            top_k,
+        ))
+        rows = cur.fetchall()
+    elapsed_ms = (time.perf_counter() - start) * 1000
