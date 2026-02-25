@@ -10,6 +10,11 @@ import type {
   UserProfile,
   AssignRequest,
   ReviewRequest,
+  NotificationResponse,
+  UserUpdateAdmin,
+  AdminChatResponse,
+  AuditLogResponse,
+  ChatUpdateRequest,
 } from '../types/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -202,4 +207,158 @@ export async function reviewChat(
 export async function healthCheck(): Promise<{ status: string; system: string }> {
   const res = await fetch(`${API_BASE}/health`);
   return handleResponse<{ status: string; system: string }>(res);
+}
+
+// ── Specialist messaging ─────────────────────────────────────────────────
+
+export async function sendSpecialistMessage(
+  chatId: number,
+  content: string,
+): Promise<{ status: string; message_id: number }> {
+  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ content }),
+  });
+  return handleResponse<{ status: string; message_id: number }>(res);
+}
+
+// ── Notifications ────────────────────────────────────────────────────────
+
+export async function getNotifications(
+  unreadOnly = false,
+): Promise<NotificationResponse[]> {
+  const params = new URLSearchParams();
+  if (unreadOnly) params.set('unread_only', 'true');
+  const res = await fetch(`${API_BASE}/notifications/?${params}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<NotificationResponse[]>(res);
+}
+
+export async function markNotificationRead(
+  notificationId: number,
+): Promise<NotificationResponse> {
+  const res = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+  });
+  return handleResponse<NotificationResponse>(res);
+}
+
+export async function markAllNotificationsRead(): Promise<{ marked_read: number }> {
+  const res = await fetch(`${API_BASE}/notifications/read-all`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+  });
+  return handleResponse<{ marked_read: number }>(res);
+}
+
+// ── Admin: Users ─────────────────────────────────────────────────────────
+
+export async function adminGetUsers(role?: string): Promise<UserProfile[]> {
+  const params = new URLSearchParams();
+  if (role) params.set('role', role);
+  const res = await fetch(`${API_BASE}/admin/users?${params}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<UserProfile[]>(res);
+}
+
+export async function adminGetUser(userId: number): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<UserProfile>(res);
+}
+
+export async function adminUpdateUser(
+  userId: number,
+  payload: UserUpdateAdmin,
+): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<UserProfile>(res);
+}
+
+export async function adminDeactivateUser(userId: number): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleResponse<UserProfile>(res);
+}
+
+// ── Admin: Chats ─────────────────────────────────────────────────────────
+
+export async function adminGetChats(filters?: {
+  status?: string;
+  specialty?: string;
+  user_id?: number;
+  specialist_id?: number;
+  skip?: number;
+  limit?: number;
+}): Promise<AdminChatResponse[]> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.specialty) params.set('specialty', filters.specialty);
+  if (filters?.user_id) params.set('user_id', String(filters.user_id));
+  if (filters?.specialist_id) params.set('specialist_id', String(filters.specialist_id));
+  if (filters?.skip) params.set('skip', String(filters.skip));
+  if (filters?.limit) params.set('limit', String(filters.limit));
+  const res = await fetch(`${API_BASE}/admin/chats?${params}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<AdminChatResponse[]>(res);
+}
+
+export async function adminGetChat(chatId: number): Promise<BackendChatWithMessages> {
+  const res = await fetch(`${API_BASE}/admin/chats/${chatId}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<BackendChatWithMessages>(res);
+}
+
+export async function adminUpdateChat(
+  chatId: number,
+  payload: ChatUpdateRequest,
+): Promise<AdminChatResponse> {
+  const res = await fetch(`${API_BASE}/admin/chats/${chatId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<AdminChatResponse>(res);
+}
+
+export async function adminDeleteChat(chatId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/chats/${chatId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleResponse<void>(res);
+}
+
+// ── Admin: Audit Logs ────────────────────────────────────────────────────
+
+export async function adminGetLogs(filters?: {
+  action?: string;
+  user_id?: number;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+}): Promise<AuditLogResponse[]> {
+  const params = new URLSearchParams();
+  if (filters?.action) params.set('action', filters.action);
+  if (filters?.user_id) params.set('user_id', String(filters.user_id));
+  if (filters?.date_from) params.set('date_from', filters.date_from);
+  if (filters?.date_to) params.set('date_to', filters.date_to);
+  if (filters?.limit) params.set('limit', String(filters.limit));
+  const res = await fetch(`${API_BASE}/admin/logs?${params}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<AuditLogResponse[]>(res);
 }

@@ -14,6 +14,7 @@ import {
   getProfile,
   assignChat,
   reviewChat,
+  sendSpecialistMessage,
 } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
 import type { Message } from '../../types';
@@ -126,18 +127,27 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
-  const handleSendMessage = (content: string) => {
-    // Specialist comments are added optimistically (local only — backend
-    // doesn't yet have a specialist-message endpoint, but we keep the UX).
-    const newMessage: Message = {
-      id: `local-${Date.now()}`,
+  const handleSendMessage = async (content: string) => {
+    if (!chat) return;
+    // Optimistically add the specialist message
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Message = {
+      id: tempId,
       senderId: 'specialist',
       senderName: username || 'Specialist User',
       senderType: 'specialist',
       content,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, newMessage]);
+    setMessages(prev => [...prev, optimistic]);
+
+    try {
+      await sendSpecialistMessage(chat.id, content);
+    } catch (err) {
+      // Remove the optimistic message on failure
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setError(err instanceof Error ? err.message : 'Failed to send message');
+    }
   };
 
   // ── Derived state ────────────────────────────────────────────
