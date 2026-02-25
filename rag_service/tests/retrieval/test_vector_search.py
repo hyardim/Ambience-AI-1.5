@@ -336,3 +336,15 @@ class TestVectorSearch:
         mock_jsonb_reg.assert_called_once_with(
             mock_conn, globally=False, loads=__import__("json").loads
         )
+
+    def test_zero_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=0)
+        assert exc_info.value.stage == "VECTOR_SEARCH"
+        assert "top_k" in exc_info.value.message
+
+    def test_negative_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=-1)
+        assert exc_info.value.stage == "VECTOR_SEARCH"
+        assert "top_k" in exc_info.value.message
