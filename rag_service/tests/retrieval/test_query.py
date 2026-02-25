@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from src.retrieval.query import (
     EMBEDDING_MODEL_NAME,
@@ -33,7 +34,7 @@ def _make_mock_model(embedding: np.ndarray = MOCK_EMBEDDING) -> MagicMock:
 
 
 class TestProcessQuery:
-    def test_returns_processed_query_dataclass(self):
+    def test_returns_processed_query_pydantic_model(self):
         mock_model = _make_mock_model()
         with patch("src.retrieval.query._load_model", return_value=mock_model):
             result = process_query("gout treatment")
@@ -102,6 +103,15 @@ class TestProcessQuery:
             with pytest.raises(RetrievalError) as exc_info:
                 process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
+
+    def test_wrong_embedding_dimensions_raises_validation_error(self):
+        with pytest.raises(ValidationError):
+            ProcessedQuery(
+                original="test",
+                expanded="test",
+                embedding=[0.1] * 100,  # wrong dimensions
+                embedding_model="some-model",
+            )
 
 
 # -----------------------------------------------------------------------

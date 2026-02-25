@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
 
 from ..utils.logger import setup_logger
@@ -57,6 +57,7 @@ class ProcessedQuery(BaseModel):
     expanded: str
     embedding: list[float] = Field(min_length=384, max_length=384)
     embedding_model: str
+
 
 # -----------------------------------------------------------------------
 # Main function
