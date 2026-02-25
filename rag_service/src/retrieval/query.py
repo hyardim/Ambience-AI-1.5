@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 
 from sentence_transformers import SentenceTransformer
 
@@ -48,17 +48,15 @@ def _load_model() -> SentenceTransformer:
 
 
 # -----------------------------------------------------------------------
-# Dataclass
+# Processed Query Model
 # -----------------------------------------------------------------------
 
 
-@dataclass
-class ProcessedQuery:
+class ProcessedQuery(BaseModel):
     original: str
-    expanded: str  # same as original if expansion disabled
-    embedding: list[float]  # 384-dimensional vector
+    expanded: str
+    embedding: list[float] = Field(min_length=384, max_length=384)
     embedding_model: str
-
 
 # -----------------------------------------------------------------------
 # Main function
