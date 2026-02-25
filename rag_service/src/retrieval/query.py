@@ -117,6 +117,15 @@ def _expand_query(query: str) -> str:
 
     return query + " " + " ".join(additions)
 
+def _embed(model: SentenceTransformer, text: str) -> list[float]:
+    """Embed text and return normalised float vector.
+
+    Normalisation required for cosine similarity to work correctly
+    with pgvector's <=> operator.
+    """
+    vector = model.encode([text], normalize_embeddings=True, show_progress_bar=False)
+    return vector[0].tolist()
+
 # -----------------------------------------------------------------------
 # RetrievalError — defined here to avoid circular imports.
 # All other stage files import it from here or from retrieve.py
