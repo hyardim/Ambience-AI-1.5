@@ -111,3 +111,36 @@ def _run_query(
         ))
         rows = cur.fetchall()
     elapsed_ms = (time.perf_counter() - start) * 1000
+
+    if not rows:
+        logger.debug("Vector search returned 0 results")
+        return []
+
+    results = []
+    for row in rows:
+        score = max(float(row[3]), 0.0)
+        results.append(VectorSearchResult(
+            chunk_id=row[0],
+            doc_id=row[1],
+            text=row[2],
+            score=score,
+            metadata={
+                "specialty": row[4],
+                "source_name": row[5],
+                "doc_type": row[6],
+                "source_url": row[7],
+                "content_type": row[8],
+                "section_title": row[9],
+                "title": row[10],
+                "page_start": row[11],
+                "page_end": row[12],
+                "section_path": row[13],
+            },
+        ))
+
+    logger.debug(
+        f"Vector search returned {len(results)} results in {elapsed_ms:.0f}ms"
+    )
+    logger.debug(
+        f"Top score: {results[0].score:.2f}, bottom score: {results[-1].score:.2f}"
+    )
