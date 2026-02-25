@@ -57,3 +57,17 @@ class ProcessedQuery:
     embedding: list[float]  # 384-dimensional vector
     embedding_model: str
 
+
+# -----------------------------------------------------------------------
+# RetrievalError — defined here to avoid circular imports.
+# All other stage files import it from here or from retrieve.py
+# -----------------------------------------------------------------------
+
+class RetrievalError(Exception):
+    """Raised when a retrieval pipeline stage fails."""
+
+    def __init__(self, stage: str, query: str, message: str) -> None:
+        self.stage = stage
+        self.query = query
+        self.message = message
+        super().__init__(f"{stage} | {query} | {message}")
