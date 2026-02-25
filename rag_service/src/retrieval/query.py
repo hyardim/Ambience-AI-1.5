@@ -148,14 +148,18 @@ def _expand_query(query: str) -> str:
     Appends synonyms for any matched terms. Original terms always preserved.
     """
     words = query.lower().split()
+    query_lower = query.lower()
     additions: list[str] = []
+    added: set[str] = set()
 
     for word in words:
         clean_word = word.rstrip(".,;:?!")
         if clean_word in EXPANSION_DICT:
             for synonym in EXPANSION_DICT[clean_word]:
-                if synonym.lower() not in query.lower():
+                synonym_lower = synonym.lower()
+                if synonym_lower not in query_lower and synonym_lower not in added:
                     additions.append(synonym)
+                    added.add(synonym_lower)
 
     if not additions:
         return query

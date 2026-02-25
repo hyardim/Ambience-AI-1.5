@@ -190,6 +190,11 @@ class TestExpandQuery:
         result = _expand_query(query)
         assert result == query
 
+    def test_overlapping_expansions_do_not_produce_duplicates(self):
+        # both "dmard" and "methotrexate" map to "disease modifying antirheumatic drug"
+        result = _expand_query("methotrexate dmard dosage")
+        assert result.count("disease modifying antirheumatic drug") == 1
+
 
 # -----------------------------------------------------------------------
 # Tests — RetrievalError
