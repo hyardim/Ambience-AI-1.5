@@ -10,7 +10,7 @@ from pgvector.psycopg2 import register_vector
 from pydantic import BaseModel
 
 from ..utils.logger import setup_logger
-from .query import RetrievalError
+from .query import EMBEDDING_DIMENSIONS, RetrievalError
 
 logger = setup_logger(__name__)
 
@@ -59,7 +59,7 @@ def vector_search(
         RetrievalError: On DB connection failure, missing pgvector extension,
                         or invalid embedding dimensions
     """
-    if len(query_embedding) != 384:
+    if len(query_embedding) != EMBEDDING_DIMENSIONS:
         raise RetrievalError(
             stage="VECTOR_SEARCH",
             query="",

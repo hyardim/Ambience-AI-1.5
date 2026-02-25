@@ -4,15 +4,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.retrieval.query import RetrievalError
+from src.retrieval.query import EMBEDDING_DIMENSIONS, RetrievalError
 from src.retrieval.vector_search import VectorSearchResult, vector_search
 
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
 
-VALID_EMBEDDING = [0.1] * 384
-WRONG_EMBEDDING = [0.1] * 100
+VALID_EMBEDDING = [0.1] * EMBEDDING_DIMENSIONS
+WRONG_EMBEDDING = [0.1] * (EMBEDDING_DIMENSIONS - 284)
 
 
 def make_row(
