@@ -83,7 +83,8 @@ def process_query(
 
     Raises:
         ValueError: If query is empty, whitespace only, or exceeds 512 tokens
-        RetrievalError: If model fails to load or embedding fails
+        RetrievalError: If model fails to load, embedding fails, or
+            ProcessedQuery construction fails
     """
     if not query or not query.strip():
         raise ValueError("Query must not be empty")
@@ -120,12 +121,19 @@ def process_query(
             message=f"Failed to embed query: {e}",
         ) from e
 
-    return ProcessedQuery(
-        original=query,
-        expanded=expanded,
-        embedding=embedding,
-        embedding_model=EMBEDDING_MODEL_NAME,
-    )
+    try:
+        return ProcessedQuery(
+            original=query,
+            expanded=expanded,
+            embedding=embedding,
+            embedding_model=EMBEDDING_MODEL_NAME,
+        )
+    except Exception as e:
+        raise RetrievalError(
+            stage="QUERY",
+            query=query,
+            message=f"Failed to construct ProcessedQuery: {e}",
+        ) from e
 
 
 # -----------------------------------------------------------------------

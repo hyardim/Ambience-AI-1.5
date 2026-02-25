@@ -132,6 +132,16 @@ class TestProcessQuery:
                 with pytest.raises(ValueError, match="exceeds 512 token limit"):
                     process_query("gout", expand=True)
 
+    def test_invalid_embedding_wraps_as_retrieval_error(self):
+        # Force _embed to return wrong dimensions so ProcessedQuery construction fails
+        mock_model = _make_mock_model(
+            embedding=np.array([[0.1] * 100], dtype=np.float32)  # wrong dims
+        )
+        with patch("src.retrieval.query._load_model", return_value=mock_model):
+            with pytest.raises(RetrievalError) as exc_info:
+                process_query("gout treatment")
+        assert exc_info.value.stage == "QUERY"
+
 
 # -----------------------------------------------------------------------
 # Tests — _load_model()
