@@ -46,16 +46,19 @@ def _load_model() -> SentenceTransformer:
         _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _MODEL
 
+
 # -----------------------------------------------------------------------
 # Dataclass
 # -----------------------------------------------------------------------
 
+
 @dataclass
 class ProcessedQuery:
     original: str
-    expanded: str           # same as original if expansion disabled
+    expanded: str  # same as original if expansion disabled
     embedding: list[float]  # 384-dimensional vector
     embedding_model: str
+
 
 # -----------------------------------------------------------------------
 # Main function
@@ -121,6 +124,7 @@ def process_query(
         embedding_model=EMBEDDING_MODEL_NAME,
     )
 
+
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
@@ -135,6 +139,8 @@ def _validate_token_length(query: str) -> None:
             f"Query exceeds {MAX_TOKENS} token limit "
             f"(estimated {estimated_tokens} tokens)"
         )
+
+
 def _expand_query(query: str) -> str:
     """Apply rule-based medical term expansion to query.
 
@@ -156,6 +162,7 @@ def _expand_query(query: str) -> str:
 
     return query + " " + " ".join(additions)
 
+
 def _embed(model: SentenceTransformer, text: str) -> list[float]:
     """Embed text and return normalised float vector.
 
@@ -165,10 +172,12 @@ def _embed(model: SentenceTransformer, text: str) -> list[float]:
     vector = model.encode([text], normalize_embeddings=True, show_progress_bar=False)
     return vector[0].tolist()
 
+
 # -----------------------------------------------------------------------
 # RetrievalError — defined here to avoid circular imports.
 # All other stage files import it from here or from retrieve.py
 # -----------------------------------------------------------------------
+
 
 class RetrievalError(Exception):
     """Raised when a retrieval pipeline stage fails."""
