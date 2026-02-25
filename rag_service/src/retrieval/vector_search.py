@@ -69,6 +69,32 @@ def vector_search(
         "source_name": source_name,
         "doc_type": doc_type,
     }.items() if v is not None}
+    logger.debug(f"Running vector search, top_k={top_k}, filters={filters}")
+
+    try:
+        conn = psycopg2.connect(db_url)
+    except Exception as e:
+        raise RetrievalError(
+            stage="VECTOR_SEARCH",
+            query="",
+            message=f"DB connection failed: {e}",
+        ) from e
+
+    try:
+        register_vector(conn)
+        results = _run_query(conn, query_embedding, top_k, specialty, source_name, doc_type)
+    except RetrievalError:
+        raise
+    except Exception as e:
+        raise RetrievalError(
+            stage="VECTOR_SEARCH",
+            query="",
+            message=f"Vector search failed: {e}",
+        ) from e
+    finally:
+        conn.close()
+
+    return results
 
 # -----------------------------------------------------------------------
 # Query execution
