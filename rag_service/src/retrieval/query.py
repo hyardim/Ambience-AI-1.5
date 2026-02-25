@@ -96,6 +96,26 @@ def _validate_token_length(query: str) -> None:
             f"Query exceeds {MAX_TOKENS} token limit "
             f"(estimated {estimated_tokens} tokens)"
         )
+def _expand_query(query: str) -> str:
+    """Apply rule-based medical term expansion to query.
+
+    Checks each word against EXPANSION_DICT (case-insensitive).
+    Appends synonyms for any matched terms. Original terms always preserved.
+    """
+    words = query.lower().split()
+    additions: list[str] = []
+
+    for word in words:
+        clean_word = word.rstrip(".,;:?!")
+        if clean_word in EXPANSION_DICT:
+            for synonym in EXPANSION_DICT[clean_word]:
+                if synonym.lower() not in query.lower():
+                    additions.append(synonym)
+
+    if not additions:
+        return query
+
+    return query + " " + " ".join(additions)
 
 # -----------------------------------------------------------------------
 # RetrievalError — defined here to avoid circular imports.
