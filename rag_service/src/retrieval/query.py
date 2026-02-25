@@ -83,6 +83,21 @@ def process_query(
     pass
 
 # -----------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------
+
+
+def _validate_token_length(query: str) -> None:
+    """Raise ValueError if query exceeds MAX_TOKENS tokens."""
+    word_count = len(query.split())
+    estimated_tokens = int(word_count * 1.3)
+    if estimated_tokens > MAX_TOKENS:
+        raise ValueError(
+            f"Query exceeds {MAX_TOKENS} token limit "
+            f"(estimated {estimated_tokens} tokens)"
+        )
+
+# -----------------------------------------------------------------------
 # RetrievalError — defined here to avoid circular imports.
 # All other stage files import it from here or from retrieve.py
 # -----------------------------------------------------------------------
