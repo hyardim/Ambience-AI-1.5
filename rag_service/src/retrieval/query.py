@@ -57,6 +57,30 @@ class ProcessedQuery:
     embedding: list[float]  # 384-dimensional vector
     embedding_model: str
 
+# -----------------------------------------------------------------------
+# Main function
+# -----------------------------------------------------------------------
+
+
+def process_query(
+    query: str,
+    expand: bool = False,
+) -> ProcessedQuery:
+    """
+    Process a raw query string into an embedding vector.
+
+    Args:
+        query: Raw natural language query string
+        expand: Whether to apply rule-based medical term expansion
+
+    Returns:
+        ProcessedQuery with original, expanded, embedding, and model name
+
+    Raises:
+        ValueError: If query is empty, whitespace only, or exceeds 512 tokens
+        RetrievalError: If model fails to load or embedding fails
+    """
+    pass
 
 # -----------------------------------------------------------------------
 # RetrievalError — defined here to avoid circular imports.
