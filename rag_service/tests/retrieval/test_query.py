@@ -12,3 +12,16 @@ from src.retrieval.query import (
     _expand_query,
     process_query,
 )
+
+# -----------------------------------------------------------------------
+# Fixtures
+# -----------------------------------------------------------------------
+
+MOCK_EMBEDDING = np.array([[0.1] * 384], dtype=np.float32)
+
+
+def _make_mock_model(embedding: np.ndarray = MOCK_EMBEDDING) -> MagicMock:
+    """Return a mock SentenceTransformer that returns a fixed embedding."""
+    mock = MagicMock()
+    mock.encode.return_value = embedding
+    return mock
