@@ -132,17 +132,17 @@ class TestVectorSearch:
                 results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results[0].score == 0.0
 
-    def test_top_k_limits_result_count(self):
+    def test_top_k_passed_as_limit_to_sql(self):
         rows = [make_row(chunk_id=f"c{i}") for i in range(10)]
         mock_conn = make_mock_conn(rows)
         with patch(
             "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
         ):
             with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(
-                    VALID_EMBEDDING, db_url="postgresql://fake", top_k=5
-                )
-        assert len(results) <= 10
+                vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=5)
+        # verify LIMIT value passed to cursor.execute — last positional param is top_k
+        execute_args = mock_conn.cursor.return_value.execute.call_args[0][1]
+        assert execute_args[-1] == 5
 
     def test_specialty_filter_passed_to_query(self):
         with patch(
