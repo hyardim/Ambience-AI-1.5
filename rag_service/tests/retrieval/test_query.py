@@ -114,8 +114,8 @@ class TestProcessQuery:
             )
 
     def test_query_exceeding_token_limit_raises_value_error(self):
-        # ~400 words * 1.3 = ~520 estimated tokens, exceeds 512 limit
-        long_query = " ".join(["gout"] * 400)
+        # math.ceil(394 * 1.3) = ceil(512.2) = 513 — correctly exceeds limit
+        long_query = " ".join(["gout"] * 394)
         with pytest.raises(ValueError, match="exceeds 512 token limit"):
             process_query(long_query)
 

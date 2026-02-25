@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 
 from pydantic import BaseModel, Field
@@ -132,7 +133,7 @@ def process_query(
 def _validate_token_length(query: str) -> None:
     """Raise ValueError if query exceeds MAX_TOKENS tokens."""
     word_count = len(query.split())
-    estimated_tokens = int(word_count * 1.3)
+    estimated_tokens = math.ceil(word_count * 1.3)
     if estimated_tokens > MAX_TOKENS:
         raise ValueError(
             f"Query exceeds {MAX_TOKENS} token limit "
