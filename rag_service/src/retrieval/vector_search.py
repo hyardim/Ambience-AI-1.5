@@ -63,6 +63,12 @@ def vector_search(
             query="",
             message=f"Invalid embedding dimensions: expected 384, got {len(query_embedding)}",
         )
+    
+    filters = {k: v for k, v in {
+        "specialty": specialty,
+        "source_name": source_name,
+        "doc_type": doc_type,
+    }.items() if v is not None}
 
 # -----------------------------------------------------------------------
 # Query execution
