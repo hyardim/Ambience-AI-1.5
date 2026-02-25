@@ -37,3 +37,14 @@ def make_row(
         content_type, section_title, title, page_start,
         page_end, section_path or ["Treatment"],
     )
+
+def make_mock_conn(rows: list[tuple]) -> MagicMock:
+    """Return a mock psycopg2 connection that returns given rows."""
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = rows
+    mock_cursor.__enter__ = lambda s: s
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    return mock_conn
