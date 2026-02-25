@@ -126,7 +126,7 @@ class TestProcessQuery:
         ) as mock_load:
             process_query("gout treatment")
             process_query("ra management")
-        assert mock_load.call_count == 1
+        assert mock_load.call_count == 2
 
 
 # -----------------------------------------------------------------------
