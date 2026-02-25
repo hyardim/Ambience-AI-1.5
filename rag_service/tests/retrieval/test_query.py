@@ -130,6 +130,38 @@ class TestProcessQuery:
 
 
 # -----------------------------------------------------------------------
+# Tests — _load_model()
+# -----------------------------------------------------------------------
+
+
+class TestLoadModel:
+    def setup_method(self):
+        # Reset the module-level cache before each test
+        import src.retrieval.query as q
+
+        q._MODEL = None
+
+    def test_load_model_instantiates_sentence_transformer(self):
+        with patch("src.retrieval.query.SentenceTransformer") as mock_st:
+            mock_st.return_value = MagicMock()
+            from src.retrieval.query import _load_model
+
+            result = _load_model()
+        mock_st.assert_called_once_with(EMBEDDING_MODEL_NAME)
+        assert result is not None
+
+    def test_load_model_caches_after_first_call(self):
+        with patch("src.retrieval.query.SentenceTransformer") as mock_st:
+            mock_st.return_value = MagicMock()
+            from src.retrieval.query import _load_model
+
+            _load_model()
+            _load_model()
+        # SentenceTransformer() should only be instantiated once
+        mock_st.assert_called_once()
+
+
+# -----------------------------------------------------------------------
 # Tests — _expand_query()
 # -----------------------------------------------------------------------
 
