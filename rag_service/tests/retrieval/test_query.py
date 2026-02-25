@@ -119,6 +119,14 @@ class TestProcessQuery:
         with pytest.raises(ValueError, match="exceeds 512 token limit"):
             process_query(long_query)
 
+    def test_expanded_query_exceeding_token_limit_raises_value_error(self):
+        # Patch _expand_query to return a very long string
+        # # simulating expansion pushing query over the limit
+        long_expansion = "gout " + " ".join(["urate"] * 400)
+        with patch("src.retrieval.query._expand_query", return_value=long_expansion):
+            with pytest.raises(ValueError, match="exceeds 512 token limit"):
+                process_query("gout", expand=True)
+
 
 # -----------------------------------------------------------------------
 # Tests — _load_model()

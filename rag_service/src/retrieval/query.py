@@ -93,6 +93,7 @@ def process_query(
     expanded = _expand_query(query) if expand else query
     if expand and expanded != query:
         logger.debug(f'Query expanded: "{expanded}"')
+        _validate_token_length(query)  # validate again after expansion
 
     try:
         model = _load_model()
