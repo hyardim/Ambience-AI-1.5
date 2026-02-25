@@ -277,3 +277,25 @@ class TestVectorSearch:
                     with pytest.raises(RetrievalError):
                         vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         mock_conn.close.assert_called_once()
+
+    def test_retrieval_error_from_run_query_propagates_unchanged(self):
+        mock_conn = make_mock_conn([])
+        original_error = RetrievalError(
+            stage="VECTOR_SEARCH",
+            query="",
+            message="something specific failed",
+        )
+        with patch(
+            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        ):
+            with patch("src.retrieval.vector_search.register_vector"):
+                with patch(
+                    "src.retrieval.vector_search._run_query",
+                    side_effect=original_error,
+                ):
+                    with pytest.raises(RetrievalError) as exc_info:
+                        vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+
+        # must be the exact same error — not re-wrapped
+        assert exc_info.value is original_error
+        assert exc_info.value.message == "something specific failed"
