@@ -19,7 +19,7 @@ from src.retrieval.query import (
 # Fixtures
 # -----------------------------------------------------------------------
 
-MOCK_EMBEDDING = np.array([[0.1] * 384], dtype=np.float32)
+MOCK_EMBEDDING = np.array([[0.1] * EMBEDDING_DIMENSIONS], dtype=np.float32)
 
 
 def _make_mock_model(embedding: np.ndarray = MOCK_EMBEDDING) -> MagicMock:
@@ -45,7 +45,7 @@ class TestProcessQuery:
         mock_model = _make_mock_model()
         with patch("src.retrieval.query._load_model", return_value=mock_model):
             result = process_query("gout treatment")
-        assert len(result.embedding) == 384
+        assert len(result.embedding) == EMBEDDING_DIMENSIONS
 
     def test_empty_query_raises_value_error(self):
         with pytest.raises(ValueError, match="must not be empty"):
