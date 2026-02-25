@@ -46,7 +46,7 @@ def vector_search(
     Retrieve top-k most similar chunks via pgvector cosine similarity.
 
     Args:
-        query_embedding: 384-dimensional normalised query vector
+        query_embedding: normalised query vector
         db_url: Postgres connection string
         top_k: Maximum number of results to return
         specialty: Optional metadata filter
@@ -65,7 +65,7 @@ def vector_search(
             stage="VECTOR_SEARCH",
             query="",
             message=(
-                f"Invalid embedding dimensions: expected 384, "
+                f"Invalid embedding dimensions: expected {EMBEDDING_DIMENSIONS}, "
                 f"got {len(query_embedding)}"
             ),
         )
