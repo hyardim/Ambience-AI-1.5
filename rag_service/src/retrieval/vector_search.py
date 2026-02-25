@@ -70,6 +70,13 @@ def vector_search(
             ),
         )
 
+    if not isinstance(top_k, int) or top_k <= 0:
+        raise RetrievalError(
+            stage="VECTOR_SEARCH",
+            query="",
+            message=f"top_k must be a positive integer, got {top_k!r}",
+        )
+
     filters = {
         k: v
         for k, v in {
