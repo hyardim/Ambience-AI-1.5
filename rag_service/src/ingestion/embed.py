@@ -133,13 +133,17 @@ def _embed_batch(
         attempt: Current attempt number (0-indexed)
 
     Returns:
-        List of embedding vectors
+        List of normalised embedding vectors
 
     Raises:
         Exception: On final failure so caller can fall back to per-chunk
     """
     try:
-        vectors = model.encode(texts, show_progress_bar=False)
+        vectors = model.encode(
+            texts,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
         return [v.tolist() for v in vectors]
     except Exception as e:
         if attempt < MAX_RETRIES - 1:
@@ -162,10 +166,14 @@ def _embed_single(
     Embed a single text with retry + backoff.
 
     Returns:
-        (embedding, error_message) — error_message is None on success
+        (normalised embedding, error_message) — error_message is None on success
     """
     try:
-        vector = model.encode([text], show_progress_bar=False)
+        vector = model.encode(
+            [text],
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
         return vector[0].tolist(), None
     except Exception as e:
         if attempt < MAX_RETRIES - 1:
