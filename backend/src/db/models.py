@@ -11,6 +11,12 @@ class UserRole(enum.Enum):
     SPECIALIST = "specialist"
     ADMIN = "admin"
 
+class NotificationType(enum.Enum):
+    CHAT_ASSIGNED  = "chat_assigned"   # GP: chat was assigned to a specialist
+    SPECIALIST_MSG = "specialist_msg"  # GP: specialist sent a message
+    CHAT_APPROVED  = "chat_approved"   # GP: specialist approved the chat
+    CHAT_REJECTED  = "chat_rejected"   # GP: specialist rejected the chat
+
 class ChatStatus(enum.Enum):
     OPEN = "open"
     SUBMITTED = "submitted"      # GP submitted for specialist review
@@ -36,6 +42,7 @@ class User(Base):
     assigned_chats = relationship("Chat", back_populates="specialist", foreign_keys="[Chat.specialist_id]")
     audit_logs = relationship("AuditLog", back_populates="user")
     files = relationship("FileAttachment", back_populates="uploader")
+    notifications = relationship("Notification", back_populates="user")
 
 # --- 2. Compliance (Audit) ---
 class AuditLog(Base):
@@ -91,7 +98,22 @@ class Message(Base):
     chat_id = Column(Integer, ForeignKey("chats.id"))
     chat = relationship("Chat", back_populates="messages")
 
-# --- 4. File Uploads ---
+# --- 4. Notifications ---
+class Notification(Base):
+    __tablename__ = "notifications"
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    type       = Column(SQLEnum(NotificationType, native_enum=False), nullable=False)
+    title      = Column(String, nullable=False)
+    body       = Column(String, nullable=True)
+    chat_id    = Column(Integer, ForeignKey("chats.id"), nullable=True)
+    is_read    = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="notifications")
+    chat = relationship("Chat")
+
+# --- 5. File Uploads ---
 class FileAttachment(Base):
     __tablename__ = "file_attachments"
     id = Column(Integer, primary_key=True, index=True)

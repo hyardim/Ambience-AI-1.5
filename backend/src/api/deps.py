@@ -17,6 +17,21 @@ def get_current_user_obj(
     return user
 
 
+def get_admin_user(
+    db: Session = Depends(get_db),
+    email: str = Depends(security.get_current_user),
+) -> User:
+    user = user_repository.get_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can access this endpoint",
+        )
+    return user
+
+
 def get_specialist_user(
     db: Session = Depends(get_db),
     email: str = Depends(security.get_current_user),
