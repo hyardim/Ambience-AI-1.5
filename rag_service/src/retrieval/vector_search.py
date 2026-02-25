@@ -9,10 +9,11 @@ import psycopg2.extras
 from pgvector.psycopg2 import register_vector
 from pydantic import BaseModel
 
-from .query import RetrievalError
 from ..utils.logger import setup_logger
+from .query import RetrievalError
 
 logger = setup_logger(__name__)
+
 
 # -----------------------------------------------------------------------
 # Pydantic model
@@ -25,6 +26,7 @@ class VectorSearchResult(BaseModel):
     text: str
     score: float
     metadata: dict[str, Any]
+
 
 # -----------------------------------------------------------------------
 # Main function
@@ -61,14 +63,22 @@ def vector_search(
         raise RetrievalError(
             stage="VECTOR_SEARCH",
             query="",
-            message=f"Invalid embedding dimensions: expected 384, got {len(query_embedding)}",
+            message=(
+                f"Invalid embedding dimensions: expected 384, "
+                f"got {len(query_embedding)}"
+            ),
         )
-    
-    filters = {k: v for k, v in {
-        "specialty": specialty,
-        "source_name": source_name,
-        "doc_type": doc_type,
-    }.items() if v is not None}
+
+    filters = {
+        k: v
+        for k, v in {
+            "specialty": specialty,
+            "source_name": source_name,
+            "doc_type": doc_type,
+        }.items()
+        if v is not None
+    }
+
     logger.debug(f"Running vector search, top_k={top_k}, filters={filters}")
 
     try:
@@ -82,7 +92,9 @@ def vector_search(
 
     try:
         register_vector(conn)
-        results = _run_query(conn, query_embedding, top_k, specialty, source_name, doc_type)
+        results = _run_query(
+            conn, query_embedding, top_k, specialty, source_name, doc_type
+        )
     except RetrievalError:
         raise
     except Exception as e:
@@ -95,6 +107,7 @@ def vector_search(
         conn.close()
 
     return results
+
 
 # -----------------------------------------------------------------------
 # Query execution
@@ -136,16 +149,23 @@ def _run_query(
         ORDER BY embedding <=> %s::vector ASC
         LIMIT %s;
     """
+
     start = time.perf_counter()
     with conn.cursor() as cur:
-        cur.execute(sql, (
-            embedding_array,
-            specialty, specialty,
-            source_name, source_name,
-            doc_type, doc_type,
-            embedding_array,
-            top_k,
-        ))
+        cur.execute(
+            sql,
+            (
+                embedding_array,
+                specialty,
+                specialty,
+                source_name,
+                source_name,
+                doc_type,
+                doc_type,
+                embedding_array,
+                top_k,
+            ),
+        )
         rows = cur.fetchall()
     elapsed_ms = (time.perf_counter() - start) * 1000
 
@@ -156,28 +176,30 @@ def _run_query(
     results = []
     for row in rows:
         score = max(float(row[3]), 0.0)
-        results.append(VectorSearchResult(
-            chunk_id=row[0],
-            doc_id=row[1],
-            text=row[2],
-            score=score,
-            metadata={
-                "specialty": row[4],
-                "source_name": row[5],
-                "doc_type": row[6],
-                "source_url": row[7],
-                "content_type": row[8],
-                "section_title": row[9],
-                "title": row[10],
-                "page_start": row[11],
-                "page_end": row[12],
-                "section_path": row[13],
-            },
-        ))
+        results.append(
+            VectorSearchResult(
+                chunk_id=row[0],
+                doc_id=row[1],
+                text=row[2],
+                score=score,
+                metadata={
+                    "specialty": row[4],
+                    "source_name": row[5],
+                    "doc_type": row[6],
+                    "source_url": row[7],
+                    "content_type": row[8],
+                    "section_title": row[9],
+                    "title": row[10],
+                    "page_start": row[11],
+                    "page_end": row[12],
+                    "section_path": row[13],
+                },
+            )
+        )
 
-    logger.debug(
-        f"Vector search returned {len(results)} results in {elapsed_ms:.0f}ms"
-    )
+    logger.debug(f"Vector search returned {len(results)} results in {elapsed_ms:.0f}ms")
     logger.debug(
         f"Top score: {results[0].score:.2f}, bottom score: {results[-1].score:.2f}"
     )
+
+    return results
