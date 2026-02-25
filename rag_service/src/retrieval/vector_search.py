@@ -73,3 +73,29 @@ def _run_query(
     doc_type: str | None,
 ) -> list[VectorSearchResult]:
     """Execute the vector similarity query and return results."""
+    embedding_array = np.array(query_embedding, dtype=np.float32)
+
+    sql = """
+        SELECT
+            chunk_id,
+            doc_id,
+            text,
+            1 - (embedding <=> %s::vector) AS score,
+            metadata->>'specialty'          AS specialty,
+            metadata->>'source_name'        AS source_name,
+            metadata->>'doc_type'           AS doc_type,
+            metadata->>'source_url'         AS source_url,
+            metadata->>'content_type'       AS content_type,
+            metadata->>'section_title'      AS section_title,
+            metadata->>'title'              AS title,
+            (metadata->>'page_start')::int  AS page_start,
+            (metadata->>'page_end')::int    AS page_end,
+            metadata->'section_path'        AS section_path
+        FROM rag_chunks
+        WHERE
+            (%s::text IS NULL OR metadata->>'specialty'   = %s)
+            AND (%s::text IS NULL OR metadata->>'source_name' = %s)
+            AND (%s::text IS NULL OR metadata->>'doc_type'    = %s)
+        ORDER BY embedding <=> %s::vector ASC
+        LIMIT %s;
+    """
