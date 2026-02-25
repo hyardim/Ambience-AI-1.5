@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass
+
+from sentence_transformers import SentenceTransformer
+
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -25,3 +30,18 @@ EXPANSION_DICT: dict[str, list[str]] = {
     "nsaid": ["non-steroidal anti-inflammatory", "anti-inflammatory"],
     "methotrexate": ["mtx", "disease modifying antirheumatic drug"],
 }
+
+# -----------------------------------------------------------------------
+# Model — loaded once at module level
+# -----------------------------------------------------------------------
+
+_MODEL: SentenceTransformer | None = None
+
+
+def _load_model() -> SentenceTransformer:
+    """Load and return the embedding model. Cached after first call."""
+    global _MODEL
+    if _MODEL is None:
+        logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
+        _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    return _MODEL
