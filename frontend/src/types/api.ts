@@ -99,3 +99,60 @@ export interface ReviewRequest {
   action: 'approve' | 'reject';
   feedback?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+export interface NotificationResponse {
+  id: number;
+  type: string;       // "chat_assigned" | "specialist_msg" | "chat_approved" | "chat_rejected"
+  title: string;
+  body: string | null;
+  chat_id: number | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Admin
+// ---------------------------------------------------------------------------
+
+export interface UserUpdateAdmin {
+  full_name?: string | null;
+  specialty?: string | null;
+  role?: string | null;
+  is_active?: boolean | null;
+}
+
+export interface AdminChatResponse {
+  id: number;
+  title: string;
+  status: string;
+  specialty: string | null;
+  severity: string | null;
+  user_id: number;
+  owner_name: string | null;
+  specialist_id: number | null;
+  specialist_name: string | null;
+  assigned_at: string | null;
+  reviewed_at: string | null;
+  review_feedback: string | null;
+  created_at: string;
+}
+
+export interface AuditLogResponse {
+  id: number;
+  user_id: number | null;
+  user_email: string | null;
+  action: string;
+  details: string | null;
+  timestamp: string;
+}
+
+export interface ChatUpdateRequest {
+  title?: string | null;
+  status?: string | null;
+  specialty?: string | null;
+  severity?: string | null;
+}
