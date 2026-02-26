@@ -30,7 +30,7 @@ class MessageResponse(BaseModel):
 
 class ChatCreate(BaseModel):
     title: str = "New Chat"
-    specialty: Optional[str] = None
+    specialty: str
     severity: Optional[str] = None
 
 class ChatUpdate(BaseModel):
