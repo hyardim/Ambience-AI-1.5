@@ -429,6 +429,7 @@ def build_citation(
     return {
         "doc_id": doc_meta.get("doc_id", ""),
         "source_name": doc_meta.get("source_name", ""),
+        "doc_type": doc_meta.get("doc_type", ""),
         "specialty": doc_meta.get("specialty", ""),
         "title": doc_meta.get("title", ""),
         "author_org": doc_meta.get("author_org", ""),
