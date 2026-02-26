@@ -10,6 +10,8 @@ export function AdminLogsPage() {
   const [error, setError] = useState('');
 
   // Filters
+  const [searchFilter, setSearchFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [userIdFilter, setUserIdFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -25,6 +27,8 @@ export function AdminLogsPage() {
     setError('');
     try {
       const data = await adminGetLogs({
+        search: searchFilter || undefined,
+        category: categoryFilter || undefined,
         action: actionFilter || undefined,
         user_id: userIdFilter ? Number(userIdFilter) : undefined,
         date_from: dateFrom || undefined,
@@ -53,13 +57,25 @@ export function AdminLogsPage() {
   const ACTION_STYLES: Record<string, string> = {
     LOGIN: 'bg-blue-100 text-blue-800',
     REGISTER: 'bg-blue-100 text-blue-800',
+    LOGOUT: 'bg-blue-100 text-blue-800',
+    UPDATE_PROFILE: 'bg-blue-100 text-blue-800',
     ASSIGN_SPECIALIST: 'bg-purple-100 text-purple-800',
     REVIEW_APPROVE: 'bg-green-100 text-green-800',
     REVIEW_REJECT: 'bg-red-100 text-red-800',
     SPECIALIST_MESSAGE: 'bg-indigo-100 text-indigo-800',
     SUBMIT_FOR_REVIEW: 'bg-amber-100 text-amber-800',
+    AUTO_SUBMIT_FOR_REVIEW: 'bg-amber-100 text-amber-800',
     CREATE_CHAT: 'bg-gray-100 text-gray-800',
-    SEND_MESSAGE: 'bg-gray-100 text-gray-800',
+    UPDATE_CHAT: 'bg-gray-100 text-gray-800',
+    DELETE_CHAT: 'bg-gray-100 text-gray-800',
+    VIEW_CHAT: 'bg-gray-100 text-gray-800',
+  };
+
+  const CATEGORY_STYLES: Record<string, string> = {
+    AUTH:       'bg-sky-100 text-sky-700',
+    CHAT:       'bg-amber-100 text-amber-700',
+    SPECIALIST: 'bg-purple-100 text-purple-700',
+    OTHER:      'bg-gray-100 text-gray-600',
   };
 
   return (
@@ -80,18 +96,39 @@ export function AdminLogsPage() {
         </div>
 
         {/* Filter Controls */}
-        <form onSubmit={handleApplyFilters} className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <form onSubmit={handleApplyFilters} className="bg-white rounded-xl shadow-sm p-4 mb-6 space-y-3">
+          {/* Row 1: Search + Category + Action */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Action (e.g. LOGIN)"
-                value={actionFilter}
-                onChange={e => setActionFilter(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                placeholder="Search action or details…"
+                value={searchFilter}
+                onChange={e => setSearchFilter(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
               />
             </div>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
+            >
+              <option value="">All categories</option>
+              <option value="AUTH">AUTH</option>
+              <option value="CHAT">CHAT</option>
+              <option value="SPECIALIST">SPECIALIST</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Exact action (e.g. LOGIN)"
+              value={actionFilter}
+              onChange={e => setActionFilter(e.target.value)}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+            />
+          </div>
+          {/* Row 2: User ID + Dates + Limit + Apply */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
               type="number"
               placeholder="User ID"
@@ -113,24 +150,22 @@ export function AdminLogsPage() {
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
               title="To date"
             />
-            <div className="flex gap-2">
-              <select
-                value={limitFilter}
-                onChange={e => setLimitFilter(Number(e.target.value))}
-                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
-              >
-                <option value={50}>50 rows</option>
-                <option value={100}>100 rows</option>
-                <option value={200}>200 rows</option>
-                <option value={500}>500 rows</option>
-              </select>
-              <button
-                type="submit"
-                className="px-4 py-2.5 bg-[#005eb8] text-white rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors"
-              >
-                Apply
-              </button>
-            </div>
+            <select
+              value={limitFilter}
+              onChange={e => setLimitFilter(Number(e.target.value))}
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
+            >
+              <option value={50}>50 rows</option>
+              <option value={100}>100 rows</option>
+              <option value={200}>200 rows</option>
+              <option value={500}>500 rows</option>
+            </select>
+            <button
+              type="submit"
+              className="px-4 py-2.5 bg-[#005eb8] text-white rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors"
+            >
+              Apply
+            </button>
           </div>
         </form>
 
@@ -156,6 +191,7 @@ export function AdminLogsPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Timestamp</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Category</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Action</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">User</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Details</th>
@@ -166,6 +202,15 @@ export function AdminLogsPage() {
                   <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                       {formatTimestamp(log.timestamp)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 text-xs font-medium rounded-full ${
+                          CATEGORY_STYLES[log.category] || 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {log.category}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <span
@@ -186,7 +231,7 @@ export function AdminLogsPage() {
                 ))}
                 {logs.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                       No audit logs found.
                     </td>
                   </tr>

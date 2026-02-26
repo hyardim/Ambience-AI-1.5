@@ -346,6 +346,8 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
 
 export async function adminGetLogs(filters?: {
   action?: string;
+  category?: string;
+  search?: string;
   user_id?: number;
   date_from?: string;
   date_to?: string;
@@ -353,6 +355,8 @@ export async function adminGetLogs(filters?: {
 }): Promise<AuditLogResponse[]> {
   const params = new URLSearchParams();
   if (filters?.action) params.set('action', filters.action);
+  if (filters?.category) params.set('category', filters.category);
+  if (filters?.search) params.set('search', filters.search);
   if (filters?.user_id) params.set('user_id', String(filters.user_id));
   if (filters?.date_from) params.set('date_from', filters.date_from);
   if (filters?.date_to) params.set('date_to', filters.date_to);
