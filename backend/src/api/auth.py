@@ -29,6 +29,14 @@ def me(current_user: User = Depends(get_current_user_obj)):
     return current_user
 
 
+@router.post("/logout")
+def logout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_obj),
+):
+    return auth_service.logout(db, current_user)
+
+
 @router.patch("/profile", response_model=UserOut)
 def update_profile(
     payload: ProfileUpdate,
