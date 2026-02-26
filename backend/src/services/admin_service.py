@@ -2,6 +2,7 @@ from typing import Optional
 from datetime import datetime
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from src.db.models import AuditLog, Chat, ChatStatus, User, UserRole
@@ -160,15 +161,34 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
 # Audit log viewing
 # ---------------------------------------------------------------------------
 
+_ACTION_CATEGORIES: dict[str, set[str]] = {
+    "AUTH":       {"LOGIN", "LOGOUT", "REGISTER", "UPDATE_PROFILE"},
+    "CHAT":       {"CREATE_CHAT", "VIEW_CHAT", "UPDATE_CHAT", "DELETE_CHAT", "SUBMIT_FOR_REVIEW", "AUTO_SUBMIT_FOR_REVIEW"},
+    "SPECIALIST": {"ASSIGN_SPECIALIST", "REVIEW_APPROVE", "REVIEW_REJECT", "SPECIALIST_MESSAGE"},
+}
+
+
+def _action_category(action: str) -> str:
+    for cat, actions in _ACTION_CATEGORIES.items():
+        if action in actions:
+            return cat
+    return "OTHER"
+
+
 def list_audit_logs(
     db: Session,
     action: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
     user_id: Optional[int] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     limit: int = 200,
 ) -> list[dict]:
     query = db.query(AuditLog)
+    if category:
+        allowed = _ACTION_CATEGORIES.get(category.upper(), set())
+        query = query.filter(AuditLog.action.in_(allowed))
     if action:
         query = query.filter(AuditLog.action == action.upper())
     if user_id:
@@ -177,6 +197,9 @@ def list_audit_logs(
         query = query.filter(AuditLog.timestamp >= date_from)
     if date_to:
         query = query.filter(AuditLog.timestamp <= date_to)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(or_(AuditLog.action.ilike(term), AuditLog.details.ilike(term)))
 
     logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
     return [
@@ -185,6 +208,7 @@ def list_audit_logs(
             "user_id": log.user_id,
             "user_email": log.user.email if log.user else None,
             "action": log.action,
+            "category": _action_category(log.action),
             "details": log.details,
             "timestamp": log.timestamp,
         }
