@@ -10,8 +10,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# SQLite has no native JSONB type. Teach the SQLite type compiler to render
+# JSONB columns as plain JSON so that Base.metadata.create_all() works against
+# the in-memory test database without modifying production models.
+SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
 from src.db.base import Base
 from src.db.session import get_db
