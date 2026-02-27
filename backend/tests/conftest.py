@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 
 from src.db.base import Base
 from src.db.session import get_db
-from src.api import auth, chats
+from src.api import auth, chats, specialist, admin, notifications
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine (no file, no external service required)
@@ -39,8 +39,11 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def _build_app() -> FastAPI:
     """Create a minimal FastAPI app with only the routers under test."""
     app = FastAPI()
-    app.include_router(auth.router, prefix="/auth", tags=["auth"])
-    app.include_router(chats.router, prefix="/chats", tags=["chats"])
+    app.include_router(auth.router,          prefix="/auth",          tags=["auth"])
+    app.include_router(chats.router,         prefix="/chats",         tags=["chats"])
+    app.include_router(specialist.router,    prefix="/specialist",    tags=["specialist"])
+    app.include_router(admin.router,         prefix="/admin",         tags=["admin"])
+    app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 
     @app.get("/health")
     def health_check():
@@ -110,6 +113,17 @@ def specialist_user_payload():
 
 
 @pytest.fixture()
+def admin_user_payload():
+    return {
+        "first_name": "Admin",
+        "last_name": "User",
+        "email": "admin@nhs.uk",
+        "password": "AdminPass123!",
+        "role": "admin",
+    }
+
+
+@pytest.fixture()
 def second_gp_payload():
     return {
         "first_name": "Carol",
@@ -141,6 +155,14 @@ def registered_specialist(client, specialist_user_payload):
 
 
 @pytest.fixture()
+def registered_admin(client, admin_user_payload):
+    """Register an admin user and return the full AuthResponse JSON."""
+    resp = client.post("/auth/register", json=admin_user_payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+@pytest.fixture()
 def registered_second_gp(client, second_gp_payload):
     """Register a second GP user (for ownership isolation tests)."""
     resp = client.post("/auth/register", json=second_gp_payload)
@@ -161,6 +183,12 @@ def specialist_headers(registered_specialist):
 
 
 @pytest.fixture()
+def admin_headers(registered_admin):
+    """Bearer token headers for the admin user."""
+    return {"Authorization": f"Bearer {registered_admin['access_token']}"}
+
+
+@pytest.fixture()
 def second_gp_headers(registered_second_gp):
     """Bearer token headers for the second GP user."""
     return {"Authorization": f"Bearer {registered_second_gp['access_token']}"}
@@ -173,6 +201,21 @@ def second_gp_headers(registered_second_gp):
 @pytest.fixture()
 def created_chat(client, gp_headers):
     """Create a chat owned by the GP user and return the ChatResponse JSON."""
-    resp = client.post("/chats/", json={"title": "Test Chat"}, headers=gp_headers)
+    resp = client.post("/chats/", json={"title": "Test Chat", "specialty": "neurology"}, headers=gp_headers)
     assert resp.status_code == 200, resp.text
     return resp.json()
+
+
+@pytest.fixture()
+def submitted_chat(client, gp_headers):
+    """Create a neurology chat and auto-submit it by sending a message."""
+    chat = client.post(
+        "/chats/", json={"title": "Submitted Chat", "specialty": "neurology"}, headers=gp_headers
+    ).json()
+    client.post(
+        f"/chats/{chat['id']}/message",
+        json={"role": "user", "content": "Patient has wrist pain and swelling."},
+        headers=gp_headers,
+    )
+    # Sending the first message auto-submits the chat to SUBMITTED status.
+    return client.get(f"/chats/{chat['id']}", headers=gp_headers).json()
