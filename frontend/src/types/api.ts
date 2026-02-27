@@ -87,6 +87,11 @@ export interface MessageCreateRequest {
   content: string;
 }
 
+export interface GPMessageResponse {
+  status: string;
+  ai_response: string;
+}
+
 // ---------------------------------------------------------------------------
 // Specialist workflow
 // ---------------------------------------------------------------------------
