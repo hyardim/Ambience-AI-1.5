@@ -25,21 +25,12 @@ def _make_auth_response(user: User) -> AuthResponse:
 
 def login(db: Session, email: str, password: str) -> AuthResponse:
     user = user_repository.get_by_email(db, email)
-    if not user:
-        user = user_repository.create(
-            db,
-            email=email,
-            hashed_password=security.get_password_hash(password),
-            full_name="New User",
-            role=UserRole.GP,
+    if not user or not security.verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    else:
-        if not security.verify_password(password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
     audit_repository.log(db, user_id=user.id, action="LOGIN", details=user.email)
     return _make_auth_response(user)
 

@@ -59,10 +59,9 @@ class TestRegister:
         resp = client.post("/auth/register", json={"email": "test@nhs.uk"})
         assert resp.status_code == 422
 
-    def test_register_full_name_is_concatenated(self, client):
+    def test_register_full_name_is_stored(self, client):
         resp = client.post("/auth/register", json={
-            "first_name": "  John  ",
-            "last_name": "  Doe  ",
+            "full_name": "John Doe",
             "email": "john.doe@nhs.uk",
             "password": "pass123",
             "role": "gp",

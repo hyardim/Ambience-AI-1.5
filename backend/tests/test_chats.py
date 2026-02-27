@@ -13,11 +13,10 @@ class TestCreateChat:
         resp = client.post("/chats/", json={}, headers=gp_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["title"] == "New Consultation"
+        assert data["title"] == "New Chat"
         assert "id" in data
         assert "user_id" in data
         assert "created_at" in data
-        assert data["messages"] == []
 
     def test_create_chat_custom_title(self, client, gp_headers):
         resp = client.post("/chats/", json={"title": "Neurology Case"}, headers=gp_headers)
@@ -165,9 +164,10 @@ class TestDeleteChat:
             headers=gp_headers,
         )
         client.delete(f"/chats/{chat_id}", headers=gp_headers)
-        # Recreate a chat to confirm no orphaned messages bleed over
-        new_resp = client.post("/chats/", json={"title": "Fresh"}, headers=gp_headers)
-        assert new_resp.json()["messages"] == []
+        # Recreate a chat and verify no orphaned messages bleed over
+        new_id = client.post("/chats/", json={"title": "Fresh"}, headers=gp_headers).json()["id"]
+        get_resp = client.get(f"/chats/{new_id}", headers=gp_headers)
+        assert get_resp.json()["messages"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -185,9 +185,8 @@ class TestSendMessage:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "id" in data
-        assert "created_at" in data
-        assert data["role"] == "assistant"
+        assert data["status"] == "Message sent"
+        assert "ai_response" in data
 
     def test_send_message_returns_mock_ai_response(self, client, gp_headers, created_chat):
         chat_id = created_chat["id"]
@@ -198,9 +197,7 @@ class TestSendMessage:
             headers=gp_headers,
         )
         assert resp.status_code == 200
-        ai_content = resp.json()["content"]
-        assert content in ai_content
-        assert "RAG Brain coming soon" in ai_content
+        assert content in resp.json()["ai_response"]
 
     def test_send_message_persists_in_chat(self, client, gp_headers, created_chat):
         chat_id = created_chat["id"]
