@@ -100,6 +100,7 @@ def gp_user_payload():
     return {
         "first_name": "Alice",
         "last_name": "GP",
+        "full_name": "Alice GP",
         "email": "alice.gp@nhs.uk",
         "password": "SecurePass123!",
         "role": "gp",
