@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { login as apiLogin, register as apiRegister } from '../services/api';
+import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/api';
 import type { RegisterRequest } from '../types/api';
 import type { UserRole } from '../types';
 
@@ -78,6 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    void apiLogout().catch(() => {
+      // Best-effort server-side logout; local session is still cleared below.
+    });
     localStorage.removeItem('access_token');
     localStorage.removeItem('username');
     localStorage.removeItem('user_email');

@@ -1,7 +1,7 @@
 import type {
   BackendChat,
   BackendChatWithMessages,
-  BackendMessage,
+  GPMessageResponse,
   LoginResponse,
   RegisterRequest,
   ChatCreateRequest,
@@ -82,6 +82,14 @@ export async function register(payload: RegisterRequest): Promise<LoginResponse>
   return handleResponse<LoginResponse>(res);
 }
 
+export async function logout(): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  return handleResponse<{ success: boolean }>(res);
+}
+
 // ── Profile ──────────────────────────────────────────────────────────────
 
 export async function getProfile(): Promise<UserProfile> {
@@ -134,6 +142,18 @@ export async function deleteChat(chatId: number): Promise<void> {
   return handleResponse<void>(res);
 }
 
+export async function updateChat(
+  chatId: number,
+  payload: ChatUpdateRequest,
+): Promise<BackendChat> {
+  const res = await fetch(`${API_BASE}/chats/${chatId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<BackendChat>(res);
+}
+
 export async function submitForReview(chatId: number): Promise<BackendChat> {
   const res = await fetch(`${API_BASE}/chats/${chatId}/submit`, {
     method: 'POST',
@@ -145,14 +165,14 @@ export async function submitForReview(chatId: number): Promise<BackendChat> {
 export async function sendMessage(
   chatId: number,
   content: string,
-): Promise<BackendMessage> {
+): Promise<GPMessageResponse> {
   const body: MessageCreateRequest = { role: 'user', content };
   const res = await fetch(`${API_BASE}/chats/${chatId}/message`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
-  return handleResponse<BackendMessage>(res);
+  return handleResponse<GPMessageResponse>(res);
 }
 
 // ── Specialist ───────────────────────────────────────────────────────────
