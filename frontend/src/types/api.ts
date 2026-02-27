@@ -146,6 +146,7 @@ export interface AuditLogResponse {
   user_id: number | null;
   user_email: string | null;
   action: string;
+  category: string;   // "AUTH" | "CHAT" | "SPECIALIST" | "OTHER"
   details: string | null;
   timestamp: string;
 }

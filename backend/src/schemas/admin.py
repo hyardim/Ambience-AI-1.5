@@ -31,5 +31,6 @@ class AuditLogResponse(BaseModel):
     user_id: Optional[int] = None
     user_email: Optional[str] = None
     action: str
+    category: str
     details: Optional[str] = None
     timestamp: datetime

@@ -113,6 +113,8 @@ def delete_any_chat(
 @router.get("/logs", response_model=List[AuditLogResponse])
 def list_audit_logs(
     action: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
     user_id: Optional[int] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
@@ -121,6 +123,6 @@ def list_audit_logs(
     _admin: User = Depends(get_admin_user),
 ):
     return admin_service.list_audit_logs(
-        db, action=action, user_id=user_id,
-        date_from=date_from, date_to=date_to, limit=limit,
+        db, action=action, category=category, search=search,
+        user_id=user_id, date_from=date_from, date_to=date_to, limit=limit,
     )

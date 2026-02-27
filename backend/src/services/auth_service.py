@@ -68,6 +68,11 @@ def register(db: Session, payload: UserRegister) -> AuthResponse:
     return _make_auth_response(user)
 
 
+def logout(db: Session, user: User) -> dict:
+    audit_repository.log(db, user_id=user.id, action="LOGOUT", details=user.email)
+    return {"message": "Logged out successfully"}
+
+
 def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
     fields: dict = {}
 
