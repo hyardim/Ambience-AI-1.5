@@ -228,3 +228,11 @@ class TestReciprocalRankFusion:
         results = reciprocal_rank_fusion(vector, [], k=0)
         expected = 1.0 / (0 + 1)
         assert abs(results[0].rrf_score - expected) < 1e-9
+
+    def test_bool_k_raises_value_error(self):
+        with pytest.raises(ValueError, match="k"):
+            reciprocal_rank_fusion([make_vector_result("c1")], [], k=True)
+
+    def test_bool_top_k_raises_value_error(self):
+        with pytest.raises(ValueError, match="top_k"):
+            reciprocal_rank_fusion([make_vector_result("c1")], [], top_k=True)

@@ -60,10 +60,10 @@ def reciprocal_rank_fusion(
     if not vector_results and not keyword_results:
         return []
 
-    if not isinstance(k, int) or k < 0:
+    if not isinstance(k, int) or isinstance(k, bool) or k < 0:
         raise ValueError(f"k must be a non-negative integer, got {k!r}")
 
-    if not isinstance(top_k, int) or top_k <= 0:
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
         raise ValueError(f"top_k must be a positive integer, got {top_k!r}")
 
     if not vector_results:
