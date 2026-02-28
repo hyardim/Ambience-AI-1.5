@@ -66,6 +66,9 @@ _REQUIRED_FIELDS = (
     "source_url",
     "content_type",
     "section_title",
+    "section_path",
+    "page_start",
+    "page_end",
 )
 
 
@@ -166,11 +169,14 @@ def _build_citation(result: RankedResult) -> Citation:
     metadata: dict[str, Any] = result.metadata
 
     for field in _REQUIRED_FIELDS:
-        value = metadata.get(field)
-        if value is None or (isinstance(value, str) and not value.strip()):
+        if field not in metadata:
+            raise CitationError(chunk_id=result.chunk_id, missing_field=field)
+        value = metadata[field]
+        if isinstance(value, str) and not value.strip():
             raise CitationError(chunk_id=result.chunk_id, missing_field=field)
 
-    if "section_path" not in metadata or not metadata["section_path"]:
+    # Fallback: key present but empty list
+    if not metadata["section_path"]:
         logger.warning(
             f"Empty section_path for chunk '{result.chunk_id}' "
             f"— falling back to ['Unknown section']"
@@ -179,7 +185,8 @@ def _build_citation(result: RankedResult) -> Citation:
     else:
         section_path = metadata["section_path"]
 
-    if "page_start" not in metadata or metadata["page_start"] is None:
+    # Fallback: key present but None
+    if metadata["page_start"] is None:
         logger.warning(
             f"None page_start for chunk '{result.chunk_id}' — falling back to 0"
         )
@@ -187,7 +194,7 @@ def _build_citation(result: RankedResult) -> Citation:
     else:
         page_start = metadata["page_start"]
 
-    if "page_end" not in metadata or metadata["page_end"] is None:
+    if metadata["page_end"] is None:
         logger.warning(
             f"None page_end for chunk '{result.chunk_id}' — falling back to 0"
         )

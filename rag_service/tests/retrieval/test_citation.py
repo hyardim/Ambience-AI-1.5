@@ -175,12 +175,14 @@ class TestAssembleCitations:
         output = assemble_citations([result])
         assert output[0].citation.section_path == ["Unknown section"]
 
-    def test_missing_section_path_key_uses_fallback(self):
+    def test_missing_section_path_key_raises_citation_error(self):
         metadata = make_metadata()
         del metadata["section_path"]
-        result = make_ranked_result(metadata=metadata)
-        output = assemble_citations([result])
-        assert output[0].citation.section_path == ["Unknown section"]
+        result = make_ranked_result(chunk_id="c1", metadata=metadata)
+        with pytest.raises(CitationError) as exc_info:
+            assemble_citations([result])
+        assert exc_info.value.chunk_id == "c1"
+        assert exc_info.value.missing_field == "section_path"
 
     def test_none_page_start_uses_fallback(self):
         metadata = make_metadata(page_start=None)
@@ -188,12 +190,14 @@ class TestAssembleCitations:
         output = assemble_citations([result])
         assert output[0].citation.page_start == 0
 
-    def test_missing_page_start_key_uses_fallback(self):
+    def test_missing_page_start_key_raises_citation_error(self):
         metadata = make_metadata()
         del metadata["page_start"]
-        result = make_ranked_result(metadata=metadata)
-        output = assemble_citations([result])
-        assert output[0].citation.page_start == 0
+        result = make_ranked_result(chunk_id="c1", metadata=metadata)
+        with pytest.raises(CitationError) as exc_info:
+            assemble_citations([result])
+        assert exc_info.value.chunk_id == "c1"
+        assert exc_info.value.missing_field == "page_start"
 
     def test_none_page_end_uses_fallback(self):
         metadata = make_metadata(page_end=None)
@@ -201,12 +205,14 @@ class TestAssembleCitations:
         output = assemble_citations([result])
         assert output[0].citation.page_end == 0
 
-    def test_missing_page_end_key_uses_fallback(self):
+    def test_missing_page_end_key_raises_citation_error(self):
         metadata = make_metadata()
         del metadata["page_end"]
-        result = make_ranked_result(metadata=metadata)
-        output = assemble_citations([result])
-        assert output[0].citation.page_end == 0
+        result = make_ranked_result(chunk_id="c1", metadata=metadata)
+        with pytest.raises(CitationError) as exc_info:
+            assemble_citations([result])
+        assert exc_info.value.chunk_id == "c1"
+        assert exc_info.value.missing_field == "page_end"
 
     def test_none_page_values_use_fallback(self):
         metadata = make_metadata(page_start=None, page_end=None)
