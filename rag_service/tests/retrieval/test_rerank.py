@@ -237,6 +237,24 @@ class TestRerank:
         assert exc_info.value.stage == "RERANK"
         assert "scoring" in exc_info.value.message.lower()
 
+    def test_zero_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            rerank(QUERY, [make_fused_result("c1")], top_k=0)
+        assert exc_info.value.stage == "RERANK"
+        assert "top_k" in exc_info.value.message
+
+    def test_negative_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            rerank(QUERY, [make_fused_result("c1")], top_k=-1)
+        assert exc_info.value.stage == "RERANK"
+        assert "top_k" in exc_info.value.message
+
+    def test_bool_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            rerank(QUERY, [make_fused_result("c1")], top_k=True)
+        assert exc_info.value.stage == "RERANK"
+        assert "top_k" in exc_info.value.message
+
 
 # -----------------------------------------------------------------------
 # deduplicate() tests

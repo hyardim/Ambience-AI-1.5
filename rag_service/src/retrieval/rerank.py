@@ -71,6 +71,13 @@ def rerank(
     if not results:
         return []
 
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
+        raise RetrievalError(
+            stage="RERANK",
+            query=query,
+            message=f"top_k must be a positive integer, got {top_k!r}",
+        )
+
     if len(results) > LARGE_INPUT_WARNING_THRESHOLD:
         logger.warning(
             f"Reranking {len(results)} candidates — "
