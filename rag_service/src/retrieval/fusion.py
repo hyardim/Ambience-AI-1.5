@@ -83,6 +83,16 @@ def reciprocal_rank_fusion(
             "metadata": result.metadata,
         }
 
+    for rank, result in enumerate(keyword_results, start=1):
+        scores[result.chunk_id] = scores.get(result.chunk_id, 0.0) + 1 / (k + rank)
+        keyword_ranks[result.chunk_id] = result.rank
+        if result.chunk_id not in chunk_data:
+            chunk_data[result.chunk_id] = {
+                "doc_id": result.doc_id,
+                "text": result.text,
+                "metadata": result.metadata,
+            }
+
 
 
 # -----------------------------------------------------------------------
