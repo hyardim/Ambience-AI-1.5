@@ -142,7 +142,7 @@ def format_citation(citation: Citation) -> str:
     Produce a human-readable citation string.
 
     Args:
-        citation: Citation dataclass with source attribution fields
+        citation: Citation Pydantic model with source attribution fields
 
     Returns:
         Multi-line citation string
