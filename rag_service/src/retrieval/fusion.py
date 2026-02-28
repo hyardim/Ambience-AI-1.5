@@ -51,7 +51,23 @@ def reciprocal_rank_fusion(
         List of FusedResult ordered by RRF score descending
 
     """
-    pass
+    if not vector_results and not keyword_results:
+        return []
+
+    if not vector_results:
+        logger.warning("Vector results are empty — fusing keyword results only")
+    if not keyword_results:
+        logger.warning("Keyword results are empty — fusing vector results only")
+
+    logger.debug(
+        f"Fusing {len(vector_results)} vector results + "
+        f"{len(keyword_results)} keyword results"
+    )
+
+    # Deduplicate each input list by keeping highest-ranked (lowest index) occurrence
+    vector_results = _deduplicate(vector_results, list_name="vector")
+    keyword_results = _deduplicate(keyword_results, list_name="keyword")
+
 
 # -----------------------------------------------------------------------
 # Helpers
