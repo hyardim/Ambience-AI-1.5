@@ -68,6 +68,22 @@ def reciprocal_rank_fusion(
     vector_results = _deduplicate(vector_results, list_name="vector")
     keyword_results = _deduplicate(keyword_results, list_name="keyword")
 
+    # chunk_id → accumulated RRF score and metadata
+    scores: dict[str, float] = {}
+    vector_scores: dict[str, float] = {}
+    keyword_ranks: dict[str, float] = {}
+    chunk_data: dict[str, dict[str, Any]] = {}
+
+    for rank, result in enumerate(vector_results, start=1):
+        scores[result.chunk_id] = scores.get(result.chunk_id, 0.0) + 1 / (k + rank)
+        vector_scores[result.chunk_id] = result.score
+        chunk_data[result.chunk_id] = {
+            "doc_id": result.doc_id,
+            "text": result.text,
+            "metadata": result.metadata,
+        }
+
+
 
 # -----------------------------------------------------------------------
 # Helpers
