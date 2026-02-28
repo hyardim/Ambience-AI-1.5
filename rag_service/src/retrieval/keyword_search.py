@@ -85,9 +85,7 @@ def keyword_search(
         if v is not None
     }
 
-    logger.debug(
-        f"Running keyword search for query: '{query}', top_k={top_k}, filters={filters}"
-    )
+    logger.debug(f"Running keyword search, top_k={top_k}, filters={filters}")
 
     try:
         conn = psycopg2.connect(db_url)
@@ -153,7 +151,7 @@ def _run_query(
     """Execute the full-text search query and return results."""
     if _is_stopword_only_query(conn, query):
         logger.warning("Query consists entirely of stopwords — returning empty results")
-        logger.debug(f"Stopword-only query text: '{query}'")
+        logger.debug("Stopword-only query detected; full text omitted from logs")
         return []
 
     sql = """

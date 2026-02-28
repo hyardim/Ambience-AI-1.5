@@ -67,10 +67,10 @@ def reciprocal_rank_fusion(
         raise ValueError(f"top_k must be a positive integer, got {top_k!r}")
 
     if not vector_results:
-        logger.warning("Vector results empty — fusing keyword results only")
+        logger.debug("Vector results empty — fusing keyword results only")
 
     if not keyword_results:
-        logger.warning("Keyword results empty — fusing vector results only")
+        logger.debug("Keyword results empty — fusing vector results only")
 
     logger.debug(
         f"Fusing {len(vector_results)} vector results + "

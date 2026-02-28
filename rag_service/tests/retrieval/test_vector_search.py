@@ -53,8 +53,8 @@ def make_mock_conn(rows: list[tuple]) -> MagicMock:
     """Return a mock psycopg2 connection that returns given rows."""
     mock_cursor = MagicMock()
     mock_cursor.fetchall.return_value = rows
-    mock_cursor.__enter__ = lambda s: s
-    mock_cursor.__exit__ = MagicMock(return_value=False)
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.__exit__.return_value = False
 
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
