@@ -63,14 +63,14 @@ def make_mock_conn(
     # cursor 1: stopword check
     stop_cursor = MagicMock()
     stop_cursor.fetchone.return_value = (tsquery_result,)
-    stop_cursor.__enter__ = lambda s: s
-    stop_cursor.__exit__ = MagicMock(return_value=False)
+    stop_cursor.__enter__.return_value = stop_cursor
+    stop_cursor.__exit__.return_value = False
 
     # cursor 2: main query
     query_cursor = MagicMock()
     query_cursor.fetchall.return_value = rows
-    query_cursor.__enter__ = lambda s: s
-    query_cursor.__exit__ = MagicMock(return_value=False)
+    query_cursor.__enter__.return_value = query_cursor
+    query_cursor.__exit__.return_value = False
 
     mock_conn = MagicMock()
     mock_conn.cursor.side_effect = [stop_cursor, query_cursor]
