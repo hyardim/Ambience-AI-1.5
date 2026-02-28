@@ -90,3 +90,22 @@ def assemble_citations(
         CitationError: If a required metadata field is missing for any result
     """
     pass
+
+# -----------------------------------------------------------------------
+# Public helpers
+# -----------------------------------------------------------------------
+
+
+def format_section_path(section_path: list[str]) -> str:
+    """
+    Join section path list with ' > ' for display.
+
+    Args:
+        section_path: Ordered list of section hierarchy strings
+
+    Returns:
+        Human-readable section path string, or "Unknown section" if empty
+    """
+    if not section_path:
+        return "Unknown section"
+    return " > ".join(section_path)
