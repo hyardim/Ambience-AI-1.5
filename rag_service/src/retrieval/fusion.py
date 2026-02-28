@@ -10,6 +10,7 @@ from .vector_search import VectorSearchResult
 
 logger = setup_logger(__name__)
 
+
 # -----------------------------------------------------------------------
 # Pydantic model
 # -----------------------------------------------------------------------
@@ -23,6 +24,7 @@ class FusedResult(BaseModel):
     vector_score: float | None
     keyword_rank: float | None
     metadata: dict[str, Any]
+
 
 # -----------------------------------------------------------------------
 # Main function
@@ -93,7 +95,7 @@ def reciprocal_rank_fusion(
                 "metadata": result.metadata,
             }
 
-        logger.debug(f"Unique chunks after fusion: {len(scores)}")
+    logger.debug(f"Unique chunks after fusion: {len(scores)}")
 
     fused = []
     for chunk_id, rrf_score in scores.items():
@@ -120,7 +122,6 @@ def reciprocal_rank_fusion(
         )
 
     return fused
-
 
 
 # -----------------------------------------------------------------------
