@@ -9,6 +9,7 @@ logger = setup_logger(__name__)
 
 VALID_CONTENT_TYPES = {"text", "table"}
 
+
 # -----------------------------------------------------------------------
 # Config model
 # -----------------------------------------------------------------------
@@ -111,8 +112,7 @@ def _validate_config(config: FilterConfig) -> None:
     """Raise ValueError for invalid FilterConfig values."""
     if config.score_threshold < 0 or config.score_threshold > 1:
         raise ValueError(
-            f"score_threshold must be between 0 and 1, "
-            f"got {config.score_threshold!r}"
+            f"score_threshold must be between 0 and 1, got {config.score_threshold!r}"
         )
     if config.content_types is not None:
         invalid = set(config.content_types) - VALID_CONTENT_TYPES
@@ -122,6 +122,7 @@ def _validate_config(config: FilterConfig) -> None:
                 f"Must be one of {VALID_CONTENT_TYPES}"
             )
 
+
 def _passes_metadata_filters(result: FusedResult, config: FilterConfig) -> bool:
     """Return True if result passes all metadata filters."""
     meta = result.metadata
@@ -129,10 +130,7 @@ def _passes_metadata_filters(result: FusedResult, config: FilterConfig) -> bool:
     if config.specialty is not None and meta.get("specialty") != config.specialty:
         return False
 
-    if (
-        config.source_name is not None
-        and meta.get("source_name") != config.source_name
-    ):
+    if config.source_name is not None and meta.get("source_name") != config.source_name:
         return False
 
     if config.doc_type is not None and meta.get("doc_type") != config.doc_type:
