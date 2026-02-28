@@ -11,3 +11,15 @@ from ..utils.logger import setup_logger
 from .query import RetrievalError
 
 logger = setup_logger(__name__)
+
+# -----------------------------------------------------------------------
+# Pydantic model
+# -----------------------------------------------------------------------
+
+
+class KeywordSearchResult(BaseModel):
+    chunk_id: str
+    doc_id: str
+    text: str
+    rank: float
+    metadata: dict[str, Any]
