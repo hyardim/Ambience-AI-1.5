@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import sys
 from math import exp
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -316,20 +318,38 @@ class TestDeduplicate:
         assert len(output) == 1
         assert output[0].chunk_id == "c1"
 
-    def test_deduplicate_skips_already_dropped_result_in_inner_loop(self):
-        text_unique = "hydroxychloroquine lupus nephritis treatment protocol"
-        text_dup_a = "methotrexate rheumatoid arthritis dosage weekly oral"
-        text_dup_b = "methotrexate rheumatoid arthritis dosage weekly oral dose"
+    def test_deduplicate_inner_loop_skips_result_b_already_dropped(self):
+        text_c1 = "methotrexate rheumatoid arthritis treatment dosage weekly"
+        text_c2 = "methotrexate rheumatoid arthritis treatment dosage weekly oral"
+        text_c3 = "hydroxychloroquine lupus nephritis treatment protocol"  # unique
+        text_c4 = "biologics TNF inhibitors psoriatic arthritis management"  # unique
         results = [
-            make_ranked_result("c1", text=text_unique, rerank_score=0.95),
-            make_ranked_result("c2", text=text_dup_a, rerank_score=0.6),
-            make_ranked_result("c3", text=text_dup_b, rerank_score=0.8),
+            make_ranked_result("c1", text=text_c1, rerank_score=0.9),
+            make_ranked_result("c2", text=text_c2, rerank_score=0.6),
+            make_ranked_result("c3", text=text_c3, rerank_score=0.5),
+            make_ranked_result("c4", text=text_c4, rerank_score=0.4),
         ]
         output = deduplicate(results, similarity_threshold=0.7)
         chunk_ids = [r.chunk_id for r in output]
         assert "c1" in chunk_ids
-        assert "c3" in chunk_ids
         assert "c2" not in chunk_ids
+        assert "c3" in chunk_ids
+        assert "c4" in chunk_ids
+
+    def test_deduplicate_outer_loop_skips_dropped_result_a(self):
+        text_c1 = "methotrexate rheumatoid arthritis treatment dosage"
+        text_c2 = "hydroxychloroquine lupus nephritis treatment protocol"
+        text_c3 = "methotrexate rheumatoid arthritis treatment dosage weekly"
+        results = [
+            make_ranked_result("c1", text=text_c1, rerank_score=0.9),
+            make_ranked_result("c2", text=text_c2, rerank_score=0.7),
+            make_ranked_result("c3", text=text_c3, rerank_score=0.5),  # dropped by c1
+        ]
+        output = deduplicate(results, similarity_threshold=0.7)
+        chunk_ids = [r.chunk_id for r in output]
+        assert "c1" in chunk_ids
+        assert "c2" in chunk_ids
+        assert "c3" not in chunk_ids
 
 
 # -----------------------------------------------------------------------
@@ -398,3 +418,9 @@ class TestLoadModel:
             result = rerank_module._load_model("cross-encoder/ms-marco-MiniLM-L-6-v2")
         assert result is mock_model
         mock_cls.assert_not_called()
+
+    def test_crossencoder_import_error_sets_none(self):
+        with patch.dict(sys.modules, {"sentence_transformers": None}):
+            importlib.reload(rerank_module)
+        assert rerank_module._CrossEncoder is None
+        importlib.reload(rerank_module)  # restore for subsequent tests
