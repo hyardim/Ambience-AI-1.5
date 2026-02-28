@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.retrieval.query import RetrievalError
 from src.retrieval.keyword_search import KeywordSearchResult, keyword_search
+from src.retrieval.query import RetrievalError
 
 # -----------------------------------------------------------------------
 # Helpers
@@ -48,6 +47,7 @@ def make_row(
         section_path or ["Treatment"],
     )
 
+
 def make_mock_conn(
     rows: list[tuple],
     tsquery_result: str = "methotrexate & dosage",
@@ -65,7 +65,9 @@ def make_mock_conn(
 
     # cursor 1: tsvector column check
     col_cursor = MagicMock()
-    col_cursor.fetchone.return_value = ("text_search_vector",) if tsvector_exists else None
+    col_cursor.fetchone.return_value = (
+        ("text_search_vector",) if tsvector_exists else None
+    )
     col_cursor.__enter__ = lambda s: s
     col_cursor.__exit__ = MagicMock(return_value=False)
     cursors.append(col_cursor)
@@ -88,6 +90,7 @@ def make_mock_conn(
     mock_conn.cursor.side_effect = cursors
     return mock_conn
 
+
 # -----------------------------------------------------------------------
 # Auto-mock register_default_jsonb for all tests
 # -----------------------------------------------------------------------
@@ -96,10 +99,9 @@ def make_mock_conn(
 @pytest.fixture(autouse=True)
 def mock_jsonb():
     """Mock register_default_jsonb — requires a real connection otherwise."""
-    with patch(
-        "src.retrieval.keyword_search.psycopg2.extras.register_default_jsonb"
-    ):
+    with patch("src.retrieval.keyword_search.psycopg2.extras.register_default_jsonb"):
         yield
+
 
 # -----------------------------------------------------------------------
 # Tests
@@ -179,9 +181,7 @@ class TestKeywordSearch:
             with patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
             ) as mock_run:
-                keyword_search(
-                    QUERY, db_url="postgresql://fake", doc_type="guideline"
-                )
+                keyword_search(QUERY, db_url="postgresql://fake", doc_type="guideline")
         args = mock_run.call_args[0]
         assert "guideline" in args
 
@@ -317,7 +317,9 @@ class TestKeywordSearch:
         mock_conn.close.assert_called_once()
 
     def test_metadata_fields_populated(self):
-        rows = [make_row(specialty="rheumatology", source_name="NICE", title="RA Guide")]
+        rows = [
+            make_row(specialty="rheumatology", source_name="NICE", title="RA Guide")
+        ]
         mock_conn = make_mock_conn(rows)
         with patch(
             "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
@@ -346,4 +348,7 @@ class TestKeywordSearch:
         ):
             results = keyword_search(QUERY, db_url="postgresql://fake")
         assert isinstance(results[0].metadata["section_path"], list)
-        assert results[0].metadata["section_path"] == ["Treatment", "First-line therapy"]
+        assert results[0].metadata["section_path"] == [
+            "Treatment",
+            "First-line therapy",
+        ]
