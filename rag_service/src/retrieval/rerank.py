@@ -17,6 +17,7 @@ _model_name_loaded: str | None = None
 
 LARGE_INPUT_WARNING_THRESHOLD = 50
 
+
 # -----------------------------------------------------------------------
 # Pydantic model
 # -----------------------------------------------------------------------
@@ -31,6 +32,7 @@ class RankedResult(BaseModel):
     vector_score: float | None
     keyword_rank: float | None
     metadata: dict[str, Any]
+
 
 # -----------------------------------------------------------------------
 # Main functions
@@ -66,11 +68,12 @@ def rerank(
 
     if len(results) > LARGE_INPUT_WARNING_THRESHOLD:
         logger.warning(
-            f"Reranking {len(results)} candidates — expected ≤{LARGE_INPUT_WARNING_THRESHOLD}. "
+            f"Reranking {len(results)} candidates — "
+            f"expected ≤{LARGE_INPUT_WARNING_THRESHOLD}. "
             f"Consider tightening fusion/filter top_k to reduce reranking cost."
         )
 
-    logger.debug(f"Reranking {len(results)} candidates for query: \"{query}\"")
+    logger.debug(f'Reranking {len(results)} candidates for query: "{query}"')
 
     model = _load_model(model_name)
 
@@ -78,6 +81,7 @@ def rerank(
 
     try:
         import time
+
         start = time.perf_counter()
         logits = model.predict(pairs)
         elapsed_ms = (time.perf_counter() - start) * 1000
@@ -89,7 +93,7 @@ def rerank(
         ) from e
 
     ranked: list[RankedResult] = []
-    for result, logit in zip(results, logits):
+    for result, logit in zip(results, logits, strict=True):
         try:
             score = _sigmoid(float(logit))
         except Exception as e:
@@ -123,6 +127,7 @@ def rerank(
     logger.debug(f"Returning top {len(ranked)} after reranking")
 
     return ranked
+
 
 def deduplicate(
     results: list[RankedResult],
@@ -161,10 +166,13 @@ def deduplicate(
     for i, result_a in enumerate(results):
         if result_a.chunk_id in dropped:
             continue
-        for result_b in results[i + 1:]:
+        for result_b in results[i + 1 :]:
             if result_b.chunk_id in dropped:
                 continue
-            if _jaccard_similarity(result_a.text, result_b.text) >= similarity_threshold:
+            if (
+                _jaccard_similarity(result_a.text, result_b.text)
+                >= similarity_threshold
+            ):
                 # keep higher rerank_score, drop the other
                 if result_a.rerank_score >= result_b.rerank_score:
                     dropped.add(result_b.chunk_id)
@@ -197,6 +205,7 @@ def _load_model(model_name: str) -> Any:
 
     try:
         from sentence_transformers import CrossEncoder
+
         _model = CrossEncoder(model_name)
         _model_name_loaded = model_name
         logger.debug(f"Loaded cross-encoder model: {model_name}")
@@ -209,9 +218,11 @@ def _load_model(model_name: str) -> Any:
 
     return _model
 
+
 def _sigmoid(logit: float) -> float:
     """Normalise a logit to [0, 1] via sigmoid."""
     return 1.0 / (1.0 + exp(-logit))
+
 
 def _jaccard_similarity(text_a: str, text_b: str) -> float:
     """Compute token-level Jaccard similarity between two strings."""
