@@ -93,3 +93,11 @@ def _load_model(model_name: str) -> Any:
 def _sigmoid(logit: float) -> float:
     """Normalise a logit to [0, 1] via sigmoid."""
     return 1.0 / (1.0 + exp(-logit))
+
+def _jaccard_similarity(text_a: str, text_b: str) -> float:
+    """Compute token-level Jaccard similarity between two strings."""
+    tokens_a = set(text_a.lower().split())
+    tokens_b = set(text_b.lower().split())
+    if not tokens_a and not tokens_b:
+        return 1.0
+    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
