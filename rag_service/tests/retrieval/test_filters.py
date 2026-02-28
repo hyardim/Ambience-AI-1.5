@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -43,6 +42,7 @@ def make_result(
             "section_path": ["Treatment"],
         },
     )
+
 
 # -----------------------------------------------------------------------
 # Tests
@@ -188,9 +188,7 @@ class TestApplyFilters:
 
     def test_invalid_content_type_raises_value_error(self):
         with pytest.raises(ValueError, match="content_type"):
-            apply_filters(
-                [make_result()], FilterConfig(content_types=["image"])
-            )
+            apply_filters([make_result()], FilterConfig(content_types=["image"]))
 
     def test_zero_threshold_keeps_all_results(self):
         results = [
