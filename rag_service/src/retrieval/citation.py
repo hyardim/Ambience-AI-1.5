@@ -109,3 +109,21 @@ def format_section_path(section_path: list[str]) -> str:
     if not section_path:
         return "Unknown section"
     return " > ".join(section_path)
+
+def format_citation(citation: Citation) -> str:
+    """
+    Produce a human-readable citation string.
+
+    Args:
+        citation: Citation dataclass with source attribution fields
+
+    Returns:
+        Multi-line citation string
+    """
+    section = format_section_path(citation.section_path)
+    return (
+        f"{citation.title} — {citation.source_name} ({citation.specialty})\n"
+        f"Section: {section}\n"
+        f"Pages: {citation.page_start}–{citation.page_end}\n"
+        f"Source: {citation.source_url}"
+    )
