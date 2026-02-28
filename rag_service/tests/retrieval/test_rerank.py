@@ -68,3 +68,16 @@ def make_mock_model(logits: list[float]) -> MagicMock:
 
 QUERY = "methotrexate dosage rheumatoid arthritis"
 
+# -----------------------------------------------------------------------
+# Fixture: reset module-level model cache between tests
+# -----------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def reset_model_cache():
+    import src.retrieval.rerank as rerank_module
+    rerank_module._model = None
+    rerank_module._model_name_loaded = None
+    yield
+    rerank_module._model = None
+    rerank_module._model_name_loaded = None
