@@ -31,3 +31,34 @@ class RankedResult(BaseModel):
     vector_score: float | None
     keyword_rank: float | None
     metadata: dict[str, Any]
+
+# -----------------------------------------------------------------------
+# Main functions
+# -----------------------------------------------------------------------
+
+
+def rerank(
+    query: str,
+    results: list[FusedResult],
+    top_k: int = 10,
+    model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+) -> list[RankedResult]:
+    """
+    Rerank fused candidates using a cross-encoder model.
+
+    Scores each (query, chunk_text) pair using a cross-encoder, normalises
+    logits to [0, 1] via sigmoid, and returns the top_k results by score.
+
+    Args:
+        query: Raw query string
+        results: Fused candidates from reciprocal_rank_fusion / apply_filters
+        top_k: Maximum number of results to return
+        model_name: HuggingFace cross-encoder model identifier
+
+    Returns:
+        List of RankedResult ordered by rerank_score descending
+
+    Raises:
+        RetrievalError: If the model fails to load
+    """
+    pass
