@@ -124,6 +124,30 @@ def rerank(
 
     return ranked
 
+def deduplicate(
+    results: list[RankedResult],
+    similarity_threshold: float = 0.85,
+) -> list[RankedResult]:
+    """
+    Remove near-duplicate results using token-level Jaccard similarity.
+
+    For each pair of results with Jaccard similarity above similarity_threshold,
+    keeps the higher-scoring result and drops the other.
+
+    Runs in O(n²) — acceptable for typical input sizes (≤30 results).
+
+    Args:
+        results: Reranked results from rerank()
+        similarity_threshold: Jaccard similarity above which results are
+                              considered duplicates (default 0.85)
+
+    Returns:
+        Deduplicated list preserving original ordering of kept results
+
+    Raises:
+        ValueError: If similarity_threshold is outside [0, 1]
+    """
+    pass
 
 # -----------------------------------------------------------------------
 # Helpers
