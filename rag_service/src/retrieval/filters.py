@@ -51,3 +51,24 @@ def apply_filters(
                     contains invalid values
     """
     pass
+
+
+# -----------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------
+
+
+def _validate_config(config: FilterConfig) -> None:
+    """Raise ValueError for invalid FilterConfig values."""
+    if config.score_threshold < 0 or config.score_threshold > 1:
+        raise ValueError(
+            f"score_threshold must be between 0 and 1, "
+            f"got {config.score_threshold!r}"
+        )
+    if config.content_types is not None:
+        invalid = set(config.content_types) - VALID_CONTENT_TYPES
+        if invalid:
+            raise ValueError(
+                f"Invalid content_type(s): {invalid}. "
+                f"Must be one of {VALID_CONTENT_TYPES}"
+            )
