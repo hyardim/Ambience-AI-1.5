@@ -276,6 +276,7 @@ class TestKeywordSearch:
                 keyword_search(QUERY, db_url="postgresql://fake")
         assert exc_info.value.stage == "KEYWORD_SEARCH"
         assert "migration" in exc_info.value.message
+        assert exc_info.value.query == QUERY
 
     def test_retrieval_error_from_run_query_propagates_unchanged(self):
         mock_conn = make_mock_conn([])
