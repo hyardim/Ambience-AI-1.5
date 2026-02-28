@@ -68,6 +68,7 @@ def make_mock_model(logits: list[float]) -> MagicMock:
 
 QUERY = "methotrexate dosage rheumatoid arthritis"
 
+
 # -----------------------------------------------------------------------
 # Fixture: reset module-level model cache between tests
 # -----------------------------------------------------------------------
@@ -76,11 +77,13 @@ QUERY = "methotrexate dosage rheumatoid arthritis"
 @pytest.fixture(autouse=True)
 def reset_model_cache():
     import src.retrieval.rerank as rerank_module
+
     rerank_module._model = None
     rerank_module._model_name_loaded = None
     yield
     rerank_module._model = None
     rerank_module._model_name_loaded = None
+
 
 # -----------------------------------------------------------------------
 # rerank() tests
@@ -187,7 +190,9 @@ class TestRerank:
     def test_large_input_logs_warning(self):
         results = [make_fused_result(f"c{i}") for i in range(51)]
         logits = [1.0] * 51
-        with patch("src.retrieval.rerank._load_model", return_value=make_mock_model(logits)):
+        with patch(
+            "src.retrieval.rerank._load_model", return_value=make_mock_model(logits)
+        ):
             with patch("src.retrieval.rerank.logger") as mock_logger:
                 rerank(QUERY, results)
         warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
@@ -204,24 +209,32 @@ class TestRerank:
 
     def test_model_loaded_once_across_multiple_calls(self):
         results = [make_fused_result("c1")]
-        with patch("src.retrieval.rerank._load_model", return_value=make_mock_model([1.0])) as mock_load:
+        with patch(
+            "src.retrieval.rerank._load_model", return_value=make_mock_model([1.0])
+        ) as mock_load:
             rerank(QUERY, results)
             rerank(QUERY, results)
-        # _load_model called twice but CrossEncoder constructor should only be called once
+        # _load_model called twice but CrossEncoder constructor should be called once
         # — cache tested via the module-level fixture + direct cache test below
         assert mock_load.call_count == 2  # _load_model itself handles caching
 
     def test_model_cache_prevents_reload(self):
         import src.retrieval.rerank as rerank_module
+
         with patch("src.retrieval.rerank.CrossEncoder", create=True) as mock_cls:
             mock_cls.return_value = make_mock_model([1.0])
-            with patch("src.retrieval.rerank._load_model", wraps=rerank_module._load_model):
+            with patch(
+                "src.retrieval.rerank._load_model", wraps=rerank_module._load_model
+            ):
                 # Manually populate cache
                 rerank_module._model = make_mock_model([1.0, 1.0])
-                rerank_module._model_name_loaded = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+                rerank_module._model_name_loaded = (
+                    "cross-encoder/ms-marco-MiniLM-L-6-v2"
+                )
                 results = [make_fused_result("c1"), make_fused_result("c2")]
                 rerank(QUERY, results)
             mock_cls.assert_not_called()
+
 
 # -----------------------------------------------------------------------
 # deduplicate() tests
@@ -254,8 +267,12 @@ class TestDeduplicate:
     def test_deduplicate_preserves_unique_results(self):
         results = [
             make_ranked_result("c1", text="methotrexate dosage rheumatoid arthritis"),
-            make_ranked_result("c2", text="hydroxychloroquine lupus treatment protocol"),
-            make_ranked_result("c3", text="biologics TNF inhibitors psoriatic arthritis"),
+            make_ranked_result(
+                "c2", text="hydroxychloroquine lupus treatment protocol"
+            ),
+            make_ranked_result(
+                "c3", text="biologics TNF inhibitors psoriatic arthritis"
+            ),
         ]
         output = deduplicate(results, similarity_threshold=0.85)
         assert len(output) == 3
@@ -287,6 +304,7 @@ class TestDeduplicate:
         # low threshold — treated as duplicates, one dropped
         output_loose = deduplicate(results, similarity_threshold=0.5)
         assert len(output_loose) == 1
+
 
 # -----------------------------------------------------------------------
 # _jaccard_similarity() tests
