@@ -99,7 +99,7 @@ def keyword_search(
 
     try:
         psycopg2.extras.register_default_jsonb(conn)
-        _check_tsvector_column(conn)
+        _check_tsvector_column(conn, query)
         results = _run_query(conn, query, top_k, specialty, source_name, doc_type)
     except RetrievalError:
         raise
@@ -120,7 +120,7 @@ def keyword_search(
 # -----------------------------------------------------------------------
 
 
-def _check_tsvector_column(conn: Any) -> None:
+def _check_tsvector_column(conn: Any, query: str) -> None:
     """Raise RetrievalError if text_search_vector column is missing.
 
     Constrains to current_schema() to avoid false positives when multiple
@@ -139,7 +139,7 @@ def _check_tsvector_column(conn: Any) -> None:
     if row is None:
         raise RetrievalError(
             stage="KEYWORD_SEARCH",
-            query="",
+            query=query,
             message=(
                 "text_search_vector column not found on rag_chunks — "
                 "run migration 003_add_text_search_vector.sql"
