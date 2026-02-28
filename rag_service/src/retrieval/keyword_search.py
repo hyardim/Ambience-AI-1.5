@@ -67,7 +67,7 @@ def keyword_search(
             message="Query must not be empty",
         )
 
-    if not isinstance(top_k, int) or top_k <= 0:
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
         raise RetrievalError(
             stage="KEYWORD_SEARCH",
             query=query,

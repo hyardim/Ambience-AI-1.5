@@ -69,7 +69,7 @@ def vector_search(
             ),
         )
 
-    if not isinstance(top_k, int) or top_k <= 0:
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
         raise RetrievalError(
             stage="VECTOR_SEARCH",
             query="",
