@@ -112,4 +112,33 @@ def _run_query(
     doc_type: str | None,
 ) -> list[KeywordSearchResult]:
     """Execute the full-text search query and return results."""
-    pass
+    if _is_stopword_only_query(conn, query):
+        logger.warning(
+            f"Query '{query}' consists entirely of stopwords — returning empty results"
+        )
+        return []
+    sql = """
+        SELECT
+            chunk_id,
+            doc_id,
+            text,
+            ts_rank(text_search_vector, plainto_tsquery('english', %s)) AS rank,
+            metadata->>'specialty'                                        AS specialty,
+            metadata->>'source_name'                                      AS source_name,
+            metadata->>'doc_type'                                         AS doc_type,
+            metadata->>'source_url'                                       AS source_url,
+            metadata->>'content_type'                                     AS content_type,
+            metadata->>'section_title'                                    AS section_title,
+            metadata->>'title'                                            AS title,
+            (COALESCE(metadata->>'page_start', '0'))::int                 AS page_start,
+            (COALESCE(metadata->>'page_end', '0'))::int                   AS page_end,
+            metadata->'section_path'                                      AS section_path
+        FROM rag_chunks
+        WHERE
+            text_search_vector @@ plainto_tsquery('english', %s)
+            AND (%s::text IS NULL OR metadata->>'specialty'   = %s)
+            AND (%s::text IS NULL OR metadata->>'source_name' = %s)
+            AND (%s::text IS NULL OR metadata->>'doc_type'    = %s)
+        ORDER BY rank DESC
+        LIMIT %s;
+    """
