@@ -47,3 +47,43 @@ def make_row(
         page_end,
         section_path or ["Treatment"],
     )
+
+def make_mock_conn(
+    rows: list[tuple],
+    tsquery_result: str = "methotrexate & dosage",
+    tsvector_exists: bool = True,
+) -> MagicMock:
+    """
+    Return a mock psycopg2 connection.
+
+    Handles three cursor.execute calls in order:
+      1. _check_tsvector_column — returns column row or None
+      2. _is_stopword_only_query — returns tsquery string
+      3. _run_query — returns search result rows
+    """
+    cursors = []
+
+    # cursor 1: tsvector column check
+    col_cursor = MagicMock()
+    col_cursor.fetchone.return_value = ("text_search_vector",) if tsvector_exists else None
+    col_cursor.__enter__ = lambda s: s
+    col_cursor.__exit__ = MagicMock(return_value=False)
+    cursors.append(col_cursor)
+
+    # cursor 2: stopword check
+    stop_cursor = MagicMock()
+    stop_cursor.fetchone.return_value = (tsquery_result,)
+    stop_cursor.__enter__ = lambda s: s
+    stop_cursor.__exit__ = MagicMock(return_value=False)
+    cursors.append(stop_cursor)
+
+    # cursor 3: main query
+    query_cursor = MagicMock()
+    query_cursor.fetchall.return_value = rows
+    query_cursor.__enter__ = lambda s: s
+    query_cursor.__exit__ = MagicMock(return_value=False)
+    cursors.append(query_cursor)
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.side_effect = cursors
+    return mock_conn
