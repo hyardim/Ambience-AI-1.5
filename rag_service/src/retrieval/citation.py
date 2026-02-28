@@ -50,3 +50,17 @@ class CitedResult(BaseModel):
     vector_score: float | None
     keyword_rank: float | None
     citation: Citation
+
+# -----------------------------------------------------------------------
+# Required fields — missing any of these raises CitationError
+# -----------------------------------------------------------------------
+
+_REQUIRED_FIELDS = (
+    "title",
+    "source_name",
+    "specialty",
+    "doc_type",
+    "source_url",
+    "content_type",
+    "section_title",
+)
