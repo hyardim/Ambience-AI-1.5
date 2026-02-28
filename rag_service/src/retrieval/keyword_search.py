@@ -176,9 +176,8 @@ def _run_query(
 ) -> list[KeywordSearchResult]:
     """Execute the full-text search query and return results."""
     if _is_stopword_only_query(conn, query):
-        logger.warning(
-            f"Query '{query}' consists entirely of stopwords — returning empty results"
-        )
+        logger.warning("Query consists entirely of stopwords — returning empty results")
+        logger.debug(f"Stopword-only query text: '{query}'")
         return []
 
     sql = """
