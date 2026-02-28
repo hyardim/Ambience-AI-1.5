@@ -208,3 +208,7 @@ class TestApplyFilters:
         output = apply_filters(results, config)
         assert len(output) == 1
         assert output[0].chunk_id == "c1"
+
+    def test_invalid_config_raises_even_on_empty_input(self):
+        with pytest.raises(ValueError, match="score_threshold"):
+            apply_filters([], FilterConfig(score_threshold=-0.1))

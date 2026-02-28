@@ -51,10 +51,11 @@ def apply_filters(
         ValueError: If score_threshold is outside [0, 1] or content_types
                     contains invalid values
     """
-    if not results:
-        return []
 
     _validate_config(config)
+
+    if not results:
+        return []
 
     logger.debug(
         f"Applying filters: specialty={config.specialty}, "
