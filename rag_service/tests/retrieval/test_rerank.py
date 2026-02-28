@@ -449,4 +449,18 @@ class TestLoadModel:
         with patch.dict(sys.modules, {"sentence_transformers": None}):
             importlib.reload(rerank_module)
         assert rerank_module._CrossEncoder is None
-        importlib.reload(rerank_module)  # restore for subsequent tests
+        importlib.reload(rerank_module)
+
+    def test_load_model_raises_when_crossencoder_not_installed(self):
+        original = rerank_module._CrossEncoder
+        try:
+            rerank_module._CrossEncoder = None
+            rerank_module._model = None
+            rerank_module._model_name_loaded = None
+            with pytest.raises(RetrievalError) as exc_info:
+                rerank_module._load_model("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        finally:
+            rerank_module._CrossEncoder = original
+
+        assert exc_info.value.stage == "RERANK"
+        assert "sentence-transformers" in exc_info.value.message

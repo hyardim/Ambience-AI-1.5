@@ -225,6 +225,16 @@ def _load_model(model_name: str) -> Any:
     if _model is not None and _model_name_loaded == model_name:
         return _model
 
+    if _CrossEncoder is None:
+        raise RetrievalError(
+            stage="RERANK",
+            query="",
+            message=(
+                "sentence-transformers is not installed. "
+                "Run: pip install sentence-transformers"
+            ),
+        )
+
     try:
         _model = _CrossEncoder(model_name)
         _model_name_loaded = model_name
