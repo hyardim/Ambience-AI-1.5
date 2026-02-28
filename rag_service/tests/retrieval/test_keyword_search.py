@@ -355,9 +355,9 @@ class TestKeywordSearch:
             "First-line therapy",
         ]
 
-    def test_tsvector_column_check_scoped_to_current_schema(self):
+    def test_tsvector_column_check_uses_regclass_resolution(self):
         col_cursor = MagicMock()
-        col_cursor.fetchone.return_value = None  # column not found
+        col_cursor.fetchone.return_value = None
         col_cursor.__enter__ = lambda s: s
         col_cursor.__exit__ = MagicMock(return_value=False)
 
@@ -371,4 +371,5 @@ class TestKeywordSearch:
                 keyword_search(QUERY, db_url="postgresql://fake")
 
         executed_sql = col_cursor.execute.call_args[0][0]
-        assert "current_schema()" in executed_sql
+        assert "to_regclass" in executed_sql
+        assert "pg_attribute" in executed_sql
