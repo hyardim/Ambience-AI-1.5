@@ -9,6 +9,7 @@ from .rerank import RankedResult
 
 logger = setup_logger(__name__)
 
+
 # -----------------------------------------------------------------------
 # Exceptions
 # -----------------------------------------------------------------------
@@ -21,6 +22,7 @@ class CitationError(Exception):
         super().__init__(
             f"Missing citation field '{missing_field}' for chunk {chunk_id}"
         )
+
 
 # -----------------------------------------------------------------------
 # Pydantic models
@@ -51,6 +53,7 @@ class CitedResult(BaseModel):
     keyword_rank: float | None
     citation: Citation
 
+
 # -----------------------------------------------------------------------
 # Required fields — missing any of these raises CitationError
 # -----------------------------------------------------------------------
@@ -64,6 +67,7 @@ _REQUIRED_FIELDS = (
     "content_type",
     "section_title",
 )
+
 
 # -----------------------------------------------------------------------
 # Main function
@@ -112,6 +116,7 @@ def assemble_citations(
     logger.debug("Citation assembly complete")
     return cited
 
+
 # -----------------------------------------------------------------------
 # Public helpers
 # -----------------------------------------------------------------------
@@ -130,6 +135,7 @@ def format_section_path(section_path: list[str]) -> str:
     if not section_path:
         return "Unknown section"
     return " > ".join(section_path)
+
 
 def format_citation(citation: Citation) -> str:
     """
