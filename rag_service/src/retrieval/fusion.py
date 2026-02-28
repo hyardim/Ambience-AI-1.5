@@ -52,3 +52,26 @@ def reciprocal_rank_fusion(
 
     """
     pass
+
+# -----------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------
+
+
+def _deduplicate(
+    results: list[VectorSearchResult] | list[KeywordSearchResult],
+    list_name: str,
+) -> list:
+    """Deduplicate by chunk_id, keeping highest-ranked (first) occurrence."""
+    seen: set[str] = set()
+    deduped = []
+    for result in results:
+        if result.chunk_id in seen:
+            logger.warning(
+                f"Duplicate chunk_id '{result.chunk_id}' in {list_name} results — "
+                f"keeping highest-ranked occurrence"
+            )
+            continue
+        seen.add(result.chunk_id)
+        deduped.append(result)
+    return deduped
