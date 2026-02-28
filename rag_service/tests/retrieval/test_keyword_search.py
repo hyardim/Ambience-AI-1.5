@@ -353,3 +353,21 @@ class TestKeywordSearch:
             "Treatment",
             "First-line therapy",
         ]
+
+    def test_tsvector_column_check_scoped_to_current_schema(self):
+        col_cursor = MagicMock()
+        col_cursor.fetchone.return_value = None  # column not found
+        col_cursor.__enter__ = lambda s: s
+        col_cursor.__exit__ = MagicMock(return_value=False)
+
+        mock_conn = MagicMock()
+        mock_conn.cursor.side_effect = [col_cursor]
+
+        with patch(
+            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+        ):
+            with pytest.raises(RetrievalError):
+                keyword_search(QUERY, db_url="postgresql://fake")
+
+        executed_sql = col_cursor.execute.call_args[0][0]
+        assert "current_schema()" in executed_sql
