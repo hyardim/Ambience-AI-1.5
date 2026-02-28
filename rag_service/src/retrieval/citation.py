@@ -89,7 +89,28 @@ def assemble_citations(
     Raises:
         CitationError: If a required metadata field is missing for any result
     """
-    pass
+    if not results:
+        return []
+
+    logger.debug(f"Assembling citations for {len(results)} results")
+
+    cited: list[CitedResult] = []
+    for result in results:
+        citation = _build_citation(result)
+        cited.append(
+            CitedResult(
+                chunk_id=result.chunk_id,
+                text=result.text,
+                rerank_score=result.rerank_score,
+                rrf_score=result.rrf_score,
+                vector_score=result.vector_score,
+                keyword_rank=result.keyword_rank,
+                citation=citation,
+            )
+        )
+
+    logger.debug("Citation assembly complete")
+    return cited
 
 # -----------------------------------------------------------------------
 # Public helpers
