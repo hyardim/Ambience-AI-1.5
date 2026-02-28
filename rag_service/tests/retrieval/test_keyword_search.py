@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from psycopg2 import errors as pg_errors
 
 from src.retrieval.keyword_search import KeywordSearchResult, keyword_search
 from src.retrieval.query import RetrievalError
@@ -51,43 +52,28 @@ def make_row(
 def make_mock_conn(
     rows: list[tuple],
     tsquery_result: str = "methotrexate & dosage",
-    tsvector_exists: bool = True,
 ) -> MagicMock:
     """
     Return a mock psycopg2 connection.
 
-    Handles three cursor.execute calls in order:
-      1. _check_tsvector_column — returns column row or None
-      2. _is_stopword_only_query — returns tsquery string
-      3. _run_query — returns search result rows
+    Handles two cursor.execute calls in order:
+      1. _is_stopword_only_query — returns tsquery string
+      2. _run_query — returns search result rows
     """
-    cursors = []
-
-    # cursor 1: tsvector column check
-    col_cursor = MagicMock()
-    col_cursor.fetchone.return_value = (
-        ("text_search_vector",) if tsvector_exists else None
-    )
-    col_cursor.__enter__ = lambda s: s
-    col_cursor.__exit__ = MagicMock(return_value=False)
-    cursors.append(col_cursor)
-
-    # cursor 2: stopword check
+    # cursor 1: stopword check
     stop_cursor = MagicMock()
     stop_cursor.fetchone.return_value = (tsquery_result,)
     stop_cursor.__enter__ = lambda s: s
     stop_cursor.__exit__ = MagicMock(return_value=False)
-    cursors.append(stop_cursor)
 
-    # cursor 3: main query
+    # cursor 2: main query
     query_cursor = MagicMock()
     query_cursor.fetchall.return_value = rows
     query_cursor.__enter__ = lambda s: s
     query_cursor.__exit__ = MagicMock(return_value=False)
-    cursors.append(query_cursor)
 
     mock_conn = MagicMock()
-    mock_conn.cursor.side_effect = cursors
+    mock_conn.cursor.side_effect = [stop_cursor, query_cursor]
     return mock_conn
 
 
@@ -258,6 +244,12 @@ class TestKeywordSearch:
         assert exc_info.value.stage == "KEYWORD_SEARCH"
         assert "top_k" in exc_info.value.message
 
+    def test_bool_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            keyword_search(QUERY, db_url="postgresql://fake", top_k=True)
+        assert exc_info.value.stage == "KEYWORD_SEARCH"
+        assert "top_k" in exc_info.value.message
+
     def test_db_connection_failure_raises_retrieval_error(self):
         with patch(
             "src.retrieval.keyword_search.psycopg2.connect",
@@ -267,16 +259,20 @@ class TestKeywordSearch:
                 keyword_search(QUERY, db_url="postgresql://fake")
         assert exc_info.value.stage == "KEYWORD_SEARCH"
 
-    def test_missing_tsvector_column_raises_retrieval_error(self):
-        mock_conn = make_mock_conn([], tsvector_exists=False)
+    def test_undefined_column_raises_retrieval_error_with_migration_hint(self):
+        mock_conn = make_mock_conn([])
         with patch(
             "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                keyword_search(QUERY, db_url="postgresql://fake")
+            with patch(
+                "src.retrieval.keyword_search._run_query",
+                side_effect=pg_errors.UndefinedColumn("column does not exist"),
+            ):
+                with pytest.raises(RetrievalError) as exc_info:
+                    keyword_search(QUERY, db_url="postgresql://fake")
         assert exc_info.value.stage == "KEYWORD_SEARCH"
-        assert "migration" in exc_info.value.message
         assert exc_info.value.query == QUERY
+        assert "migration" in exc_info.value.message
 
     def test_retrieval_error_from_run_query_propagates_unchanged(self):
         mock_conn = make_mock_conn([])
@@ -355,21 +351,13 @@ class TestKeywordSearch:
             "First-line therapy",
         ]
 
-    def test_tsvector_column_check_uses_regclass_resolution(self):
-        col_cursor = MagicMock()
-        col_cursor.fetchone.return_value = None
-        col_cursor.__enter__ = lambda s: s
-        col_cursor.__exit__ = MagicMock(return_value=False)
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.side_effect = [col_cursor]
-
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
-        ):
-            with pytest.raises(RetrievalError):
-                keyword_search(QUERY, db_url="postgresql://fake")
-
-        executed_sql = col_cursor.execute.call_args[0][0]
-        assert "to_regclass" in executed_sql
-        assert "pg_attribute" in executed_sql
+    def test_stopword_only_warning_does_not_leak_query_text(self):
+        mock_conn = make_mock_conn([], tsquery_result="")
+        with patch("src.retrieval.keyword_search.logger") as mock_logger:
+            with patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=mock_conn,
+            ):
+                keyword_search("the a is", db_url="postgresql://fake")
+        warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
+        assert not any("the a is" in c for c in warning_calls)

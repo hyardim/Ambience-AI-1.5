@@ -5,6 +5,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
+from psycopg2 import errors as pg_errors
 from pydantic import BaseModel
 
 from ..utils.logger import setup_logger
@@ -67,7 +68,7 @@ def keyword_search(
             message="Query must not be empty",
         )
 
-    if not isinstance(top_k, int) or top_k <= 0:
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
         raise RetrievalError(
             stage="KEYWORD_SEARCH",
             query=query,
@@ -99,10 +100,18 @@ def keyword_search(
 
     try:
         psycopg2.extras.register_default_jsonb(conn)
-        _check_tsvector_column(conn, query)
         results = _run_query(conn, query, top_k, specialty, source_name, doc_type)
     except RetrievalError:
         raise
+    except pg_errors.UndefinedColumn as e:
+        raise RetrievalError(
+            stage="KEYWORD_SEARCH",
+            query=query,
+            message=(
+                "text_search_vector column not found on rag_chunks — "
+                "run migration 003_add_text_search_vector.sql"
+            ),
+        ) from e
     except Exception as e:
         raise RetrievalError(
             stage="KEYWORD_SEARCH",
@@ -113,39 +122,6 @@ def keyword_search(
         conn.close()
 
     return results
-
-
-# -----------------------------------------------------------------------
-# Column check
-# -----------------------------------------------------------------------
-
-
-def _check_tsvector_column(conn: Any, query: str) -> None:
-    """Raise RetrievalError if text_search_vector column is missing.
-
-    Uses to_regclass + pg_attribute to resolve rag_chunks the same way
-    the main query does — respecting search_path rather than assuming
-    current_schema().
-    """
-    sql = """
-        SELECT attname
-        FROM pg_attribute
-        WHERE attrelid = to_regclass('rag_chunks')
-        AND attname = 'text_search_vector'
-        AND attisdropped = false;
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        row = cur.fetchone()
-    if row is None:
-        raise RetrievalError(
-            stage="KEYWORD_SEARCH",
-            query=query,
-            message=(
-                "text_search_vector column not found on rag_chunks — "
-                "run migration 003_add_text_search_vector.sql"
-            ),
-        )
 
 
 # -----------------------------------------------------------------------
