@@ -69,6 +69,7 @@ def make_ranked_result(
         metadata=metadata if metadata is not None else make_metadata(),
     )
 
+
 # -----------------------------------------------------------------------
 # assemble_citations() tests
 # -----------------------------------------------------------------------
@@ -186,6 +187,7 @@ class TestAssembleCitations:
         assert "title" in str(exc_info.value)
         assert "chunk_abc" in str(exc_info.value)
 
+
 # -----------------------------------------------------------------------
 # format_section_path() tests
 # -----------------------------------------------------------------------
@@ -207,6 +209,7 @@ class TestFormatSectionPath:
     def test_format_section_path_two_elements(self):
         result = format_section_path(["Treatment", "Urate-lowering therapy"])
         assert result == "Treatment > Urate-lowering therapy"
+
 
 # -----------------------------------------------------------------------
 # format_citation() tests
