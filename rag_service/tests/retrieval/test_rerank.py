@@ -177,15 +177,18 @@ class TestRerank:
         mock_model.predict.return_value = [2.0, float("inf")]
 
         with patch("src.retrieval.rerank._load_model", return_value=mock_model):
-            with patch(
-                "src.retrieval.rerank._sigmoid",
-                side_effect=[0.88, Exception("sigmoid failed")],
-            ):
-                output = rerank(QUERY, results)
+            output = rerank(QUERY, results)
 
         scores = {r.chunk_id: r.rerank_score for r in output}
         assert scores["c2"] == 0.0
-        assert scores["c1"] == 0.88
+        assert scores["c1"] > 0
+
+    def test_nan_logit_assigns_zero_score(self):
+        results = [make_fused_result("c1")]
+        mock_model = make_mock_model([float("nan")])
+        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
+            output = rerank(QUERY, results)
+        assert output[0].rerank_score == 0.0
 
     def test_large_input_logs_warning(self):
         results = [make_fused_result(f"c{i}") for i in range(51)]

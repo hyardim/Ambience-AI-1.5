@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import exp
+from math import exp, isfinite
 from typing import Any
 
 try:
@@ -118,6 +118,9 @@ def rerank(
 
     for result, logit in zip(results, logits, strict=False):
         try:
+            logit_f = float(logit)
+            if not isfinite(logit_f):
+                raise ValueError(f"non-finite logit: {logit_f}")
             score = _sigmoid(float(logit))
         except Exception as e:
             logger.warning(
