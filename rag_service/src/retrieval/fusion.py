@@ -21,8 +21,8 @@ class FusedResult(BaseModel):
     doc_id: str
     text: str
     rrf_score: float
-    vector_score: float | None
-    keyword_rank: float | None
+    vector_score: float | None  # None if chunk only in keyword results
+    keyword_rank: float | None  # None if chunk only in vector results
     metadata: dict[str, Any]
 
 
@@ -40,77 +40,80 @@ def reciprocal_rank_fusion(
     """
     Combine vector and keyword search results using Reciprocal Rank Fusion.
 
-    Combines ranked lists by position rather than score, making it robust
+    RRF combines ranked lists by position rather than score, making it robust
     to incompatible score scales between cosine similarity and ts_rank.
 
+    For each chunk in either list:
+        rrf_score += 1 / (k + rank)
+
+    Chunks appearing in both lists accumulate contributions from each.
+
     Args:
-        vector_results: Ranked results from vector search
-        keyword_results: Ranked results from keyword search
+        vector_results: Ranked results from vector search stage
+        keyword_results: Ranked results from keyword search stage
         k: RRF constant — dampens advantage of top ranks (default 60)
-        top_k: Maximum number of results to return
+        top_k: Maximum number of fused results to return
 
     Returns:
         List of FusedResult ordered by RRF score descending
-
     """
     if not vector_results and not keyword_results:
         return []
 
     if not vector_results:
-        logger.warning("Vector results are empty — fusing keyword results only")
+        logger.warning("Vector results empty — fusing keyword results only")
+
     if not keyword_results:
-        logger.warning("Keyword results are empty — fusing vector results only")
+        logger.warning("Keyword results empty — fusing vector results only")
 
     logger.debug(
         f"Fusing {len(vector_results)} vector results + "
         f"{len(keyword_results)} keyword results"
     )
 
-    # Deduplicate each input list by keeping highest-ranked (lowest index) occurrence
-    vector_results = _deduplicate(vector_results, list_name="vector")
-    keyword_results = _deduplicate(keyword_results, list_name="keyword")
+    deduped_vector = _deduplicate_vector(vector_results)
+    deduped_keyword = _deduplicate_keyword(keyword_results)
 
-    # chunk_id → accumulated RRF score and metadata
-    scores: dict[str, float] = {}
+    rrf_scores: dict[str, float] = {}
     vector_scores: dict[str, float] = {}
     keyword_ranks: dict[str, float] = {}
     chunk_data: dict[str, dict[str, Any]] = {}
 
-    for rank, result in enumerate(vector_results, start=1):
-        scores[result.chunk_id] = scores.get(result.chunk_id, 0.0) + 1 / (k + rank)
-        vector_scores[result.chunk_id] = result.score
-        chunk_data[result.chunk_id] = {
-            "doc_id": result.doc_id,
-            "text": result.text,
-            "metadata": result.metadata,
+    for rank, vr in enumerate(deduped_vector, start=1):
+        cid = vr.chunk_id
+        rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 1.0 / (k + rank)
+        vector_scores[cid] = vr.score
+        chunk_data[cid] = {
+            "doc_id": vr.doc_id,
+            "text": vr.text,
+            "metadata": vr.metadata,
         }
 
-    for rank, result in enumerate(keyword_results, start=1):
-        scores[result.chunk_id] = scores.get(result.chunk_id, 0.0) + 1 / (k + rank)
-        keyword_ranks[result.chunk_id] = result.rank
-        if result.chunk_id not in chunk_data:
-            chunk_data[result.chunk_id] = {
-                "doc_id": result.doc_id,
-                "text": result.text,
-                "metadata": result.metadata,
+    for rank, kr in enumerate(deduped_keyword, start=1):
+        cid = kr.chunk_id
+        rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 1.0 / (k + rank)
+        keyword_ranks[cid] = kr.rank
+        if cid not in chunk_data:
+            chunk_data[cid] = {
+                "doc_id": kr.doc_id,
+                "text": kr.text,
+                "metadata": kr.metadata,
             }
 
-    logger.debug(f"Unique chunks after fusion: {len(scores)}")
+    logger.debug(f"Unique chunks after fusion: {len(rrf_scores)}")
 
-    fused = []
-    for chunk_id, rrf_score in scores.items():
-        data = chunk_data[chunk_id]
-        fused.append(
-            FusedResult(
-                chunk_id=chunk_id,
-                doc_id=data["doc_id"],
-                text=data["text"],
-                rrf_score=rrf_score,
-                vector_score=vector_scores.get(chunk_id),
-                keyword_rank=keyword_ranks.get(chunk_id),
-                metadata=data["metadata"],
-            )
+    fused: list[FusedResult] = [
+        FusedResult(
+            chunk_id=cid,
+            doc_id=chunk_data[cid]["doc_id"],
+            text=chunk_data[cid]["text"],
+            rrf_score=score,
+            vector_score=vector_scores.get(cid),
+            keyword_rank=keyword_ranks.get(cid),
+            metadata=chunk_data[cid]["metadata"],
         )
+        for cid, score in rrf_scores.items()
+    ]
 
     fused.sort(key=lambda r: r.rrf_score, reverse=True)
     fused = fused[:top_k]
@@ -129,20 +132,37 @@ def reciprocal_rank_fusion(
 # -----------------------------------------------------------------------
 
 
-def _deduplicate(
-    results: list[VectorSearchResult] | list[KeywordSearchResult],
-    list_name: str,
-) -> list:
-    """Deduplicate by chunk_id, keeping highest-ranked (first) occurrence."""
+def _deduplicate_vector(
+    results: list[VectorSearchResult],
+) -> list[VectorSearchResult]:
+    """Keep first (highest-ranked) occurrence of each chunk_id."""
     seen: set[str] = set()
-    deduped = []
-    for result in results:
-        if result.chunk_id in seen:
+    deduped: list[VectorSearchResult] = []
+    for vr in results:
+        if vr.chunk_id in seen:
             logger.warning(
-                f"Duplicate chunk_id '{result.chunk_id}' in {list_name} results — "
-                f"keeping highest-ranked occurrence"
+                f"Duplicate chunk_id '{vr.chunk_id}' found in vector "
+                f"results — keeping highest-ranked occurrence"
             )
             continue
-        seen.add(result.chunk_id)
-        deduped.append(result)
+        seen.add(vr.chunk_id)
+        deduped.append(vr)
+    return deduped
+
+
+def _deduplicate_keyword(
+    results: list[KeywordSearchResult],
+) -> list[KeywordSearchResult]:
+    """Keep first (highest-ranked) occurrence of each chunk_id."""
+    seen: set[str] = set()
+    deduped: list[KeywordSearchResult] = []
+    for kr in results:
+        if kr.chunk_id in seen:
+            logger.warning(
+                f"Duplicate chunk_id '{kr.chunk_id}' found in keyword "
+                f"results — keeping highest-ranked occurrence"
+            )
+            continue
+        seen.add(kr.chunk_id)
+        deduped.append(kr)
     return deduped
