@@ -153,8 +153,31 @@ class TestAssembleCitations:
         assert exc_info.value.chunk_id == "c1"
         assert exc_info.value.missing_field == "source_url"
 
+    def test_empty_string_required_field_raises_citation_error(self):
+        metadata = make_metadata(title="")
+        result = make_ranked_result(chunk_id="c1", metadata=metadata)
+        with pytest.raises(CitationError) as exc_info:
+            assemble_citations([result])
+        assert exc_info.value.chunk_id == "c1"
+        assert exc_info.value.missing_field == "title"
+
+    def test_whitespace_only_required_field_raises_citation_error(self):
+        metadata = make_metadata(source_name="   ")
+        result = make_ranked_result(chunk_id="c1", metadata=metadata)
+        with pytest.raises(CitationError) as exc_info:
+            assemble_citations([result])
+        assert exc_info.value.chunk_id == "c1"
+        assert exc_info.value.missing_field == "source_name"
+
     def test_empty_section_path_uses_fallback(self):
         metadata = make_metadata(section_path=[])
+        result = make_ranked_result(metadata=metadata)
+        output = assemble_citations([result])
+        assert output[0].citation.section_path == ["Unknown section"]
+
+    def test_missing_section_path_key_uses_fallback(self):
+        metadata = make_metadata()
+        del metadata["section_path"]
         result = make_ranked_result(metadata=metadata)
         output = assemble_citations([result])
         assert output[0].citation.section_path == ["Unknown section"]
@@ -165,8 +188,22 @@ class TestAssembleCitations:
         output = assemble_citations([result])
         assert output[0].citation.page_start == 0
 
+    def test_missing_page_start_key_uses_fallback(self):
+        metadata = make_metadata()
+        del metadata["page_start"]
+        result = make_ranked_result(metadata=metadata)
+        output = assemble_citations([result])
+        assert output[0].citation.page_start == 0
+
     def test_none_page_end_uses_fallback(self):
         metadata = make_metadata(page_end=None)
+        result = make_ranked_result(metadata=metadata)
+        output = assemble_citations([result])
+        assert output[0].citation.page_end == 0
+
+    def test_missing_page_end_key_uses_fallback(self):
+        metadata = make_metadata()
+        del metadata["page_end"]
         result = make_ranked_result(metadata=metadata)
         output = assemble_citations([result])
         assert output[0].citation.page_end == 0
