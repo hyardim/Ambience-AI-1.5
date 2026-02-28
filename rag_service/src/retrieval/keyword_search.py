@@ -97,3 +97,19 @@ def _is_stopword_only_query(conn: Any, query: str) -> bool:
         cur.execute("SELECT plainto_tsquery('english', %s)::text", (query,))
         row = cur.fetchone()
     return row is None or row[0] == ""
+
+# -----------------------------------------------------------------------
+# Query execution
+# -----------------------------------------------------------------------
+
+
+def _run_query(
+    conn: Any,
+    query: str,
+    top_k: int,
+    specialty: str | None,
+    source_name: str | None,
+    doc_type: str | None,
+) -> list[KeywordSearchResult]:
+    """Execute the full-text search query and return results."""
+    pass
