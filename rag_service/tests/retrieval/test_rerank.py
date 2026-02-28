@@ -207,7 +207,7 @@ class TestRerank:
         call_args = mock_model.predict.call_args[0][0]
         assert len(call_args) == 5
 
-    def test_model_loaded_once_across_multiple_calls(self):
+    def test_rerank_calls_load_model_on_every_invocation(self):
         results = [make_fused_result("c1")]
         with patch(
             "src.retrieval.rerank._load_model", return_value=make_mock_model([1.0])
