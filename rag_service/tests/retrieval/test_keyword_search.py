@@ -87,3 +87,16 @@ def make_mock_conn(
     mock_conn = MagicMock()
     mock_conn.cursor.side_effect = cursors
     return mock_conn
+
+# -----------------------------------------------------------------------
+# Auto-mock register_default_jsonb for all tests
+# -----------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mock_jsonb():
+    """Mock register_default_jsonb — requires a real connection otherwise."""
+    with patch(
+        "src.retrieval.keyword_search.psycopg2.extras.register_default_jsonb"
+    ):
+        yield
