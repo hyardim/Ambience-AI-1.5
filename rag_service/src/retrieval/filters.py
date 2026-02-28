@@ -118,8 +118,8 @@ def _validate_config(config: FilterConfig) -> None:
         invalid = set(config.content_types) - VALID_CONTENT_TYPES
         if invalid:
             raise ValueError(
-                f"Invalid content_type(s): {invalid}. "
-                f"Must be one of {VALID_CONTENT_TYPES}"
+                f"Invalid content_type(s): {sorted(invalid)}. "
+                f"Must be one of {sorted(VALID_CONTENT_TYPES)}"
             )
 
 
