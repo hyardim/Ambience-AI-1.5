@@ -127,3 +127,54 @@ def format_citation(citation: Citation) -> str:
         f"Pages: {citation.page_start}–{citation.page_end}\n"
         f"Source: {citation.source_url}"
     )
+
+
+# -----------------------------------------------------------------------
+# Private helpers
+# -----------------------------------------------------------------------
+
+
+def _build_citation(result: RankedResult) -> Citation:
+    """Extract and validate citation fields from result metadata."""
+    metadata: dict[str, Any] = result.metadata
+
+    for field in _REQUIRED_FIELDS:
+        if metadata.get(field) is None:
+            raise CitationError(chunk_id=result.chunk_id, missing_field=field)
+
+    section_path = metadata.get("section_path")
+    if not section_path:
+        logger.warning(
+            f"Empty section_path for chunk '{result.chunk_id}' "
+            f"— falling back to ['Unknown section']"
+        )
+        section_path = ["Unknown section"]
+
+    page_start = metadata.get("page_start")
+    if page_start is None:
+        logger.warning(
+            f"None page_start for chunk '{result.chunk_id}' — falling back to 0"
+        )
+        page_start = 0
+
+    page_end = metadata.get("page_end")
+    if page_end is None:
+        logger.warning(
+            f"None page_end for chunk '{result.chunk_id}' — falling back to 0"
+        )
+        page_end = 0
+
+    return Citation(
+        title=metadata["title"],
+        source_name=metadata["source_name"],
+        specialty=metadata["specialty"],
+        doc_type=metadata["doc_type"],
+        section_path=section_path,
+        section_title=metadata["section_title"],
+        page_start=page_start,
+        page_end=page_end,
+        source_url=metadata["source_url"],
+        doc_id=result.doc_id,
+        chunk_id=result.chunk_id,
+        content_type=metadata["content_type"],
+    )
