@@ -85,3 +85,15 @@ def _check_tsvector_column(conn: Any) -> None:
                 "run migration 003_add_text_search_vector.sql"
             ),
         )
+
+# -----------------------------------------------------------------------
+# Stopword check
+# -----------------------------------------------------------------------
+
+
+def _is_stopword_only_query(conn: Any, query: str) -> bool:
+    """Return True if plainto_tsquery produces an empty query (all stopwords)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT plainto_tsquery('english', %s)::text", (query,))
+        row = cur.fetchone()
+    return row is None or row[0] == ""
