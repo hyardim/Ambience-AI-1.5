@@ -62,3 +62,30 @@ def rerank(
         RetrievalError: If the model fails to load
     """
     pass
+
+
+# -----------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------
+
+
+def _load_model(model_name: str) -> Any:
+    """Load cross-encoder model, caching at module level."""
+    global _model, _model_name_loaded
+
+    if _model is not None and _model_name_loaded == model_name:
+        return _model
+
+    try:
+        from sentence_transformers import CrossEncoder
+        _model = CrossEncoder(model_name)
+        _model_name_loaded = model_name
+        logger.debug(f"Loaded cross-encoder model: {model_name}")
+    except Exception as e:
+        raise RetrievalError(
+            stage="RERANK",
+            query="",
+            message=f"Failed to load cross-encoder model '{model_name}': {e}",
+        ) from e
+
+    return _model
