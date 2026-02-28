@@ -61,7 +61,68 @@ def rerank(
     Raises:
         RetrievalError: If the model fails to load
     """
-    pass
+    if not results:
+        return []
+
+    if len(results) > LARGE_INPUT_WARNING_THRESHOLD:
+        logger.warning(
+            f"Reranking {len(results)} candidates — expected ≤{LARGE_INPUT_WARNING_THRESHOLD}. "
+            f"Consider tightening fusion/filter top_k to reduce reranking cost."
+        )
+
+    logger.debug(f"Reranking {len(results)} candidates for query: \"{query}\"")
+
+    model = _load_model(model_name)
+
+    pairs = [(query, result.text) for result in results]
+
+    try:
+        import time
+        start = time.perf_counter()
+        logits = model.predict(pairs)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+    except Exception as e:
+        raise RetrievalError(
+            stage="RERANK",
+            query=query,
+            message=f"Cross-encoder scoring failed: {e}",
+        ) from e
+
+    ranked: list[RankedResult] = []
+    for result, logit in zip(results, logits):
+        try:
+            score = _sigmoid(float(logit))
+        except Exception as e:
+            logger.warning(
+                f"Failed to compute rerank score for chunk '{result.chunk_id}': {e} "
+                f"— assigning score=0.0"
+            )
+            score = 0.0
+        ranked.append(
+            RankedResult(
+                chunk_id=result.chunk_id,
+                doc_id=result.doc_id,
+                text=result.text,
+                rerank_score=score,
+                rrf_score=result.rrf_score,
+                vector_score=result.vector_score,
+                keyword_rank=result.keyword_rank,
+                metadata=result.metadata,
+            )
+        )
+
+    ranked.sort(key=lambda r: r.rerank_score, reverse=True)
+    ranked = ranked[:top_k]
+
+    logger.debug(f"Reranking complete in {elapsed_ms:.0f}ms")
+    if ranked:
+        logger.debug(
+            f"Top rerank score: {ranked[0].rerank_score:.2f}, "
+            f"bottom: {ranked[-1].rerank_score:.2f}"
+        )
+    logger.debug(f"Returning top {len(ranked)} after reranking")
+
+    return ranked
 
 
 # -----------------------------------------------------------------------
