@@ -208,3 +208,52 @@ class TestFormatSectionPath:
         result = format_section_path(["Treatment", "Urate-lowering therapy"])
         assert result == "Treatment > Urate-lowering therapy"
 
+# -----------------------------------------------------------------------
+# format_citation() tests
+# -----------------------------------------------------------------------
+
+
+class TestFormatCitation:
+    def _make_citation(self, **kwargs: Any) -> Citation:
+        defaults: dict[str, Any] = {
+            "title": "Gout: diagnosis and management",
+            "source_name": "NICE",
+            "specialty": "rheumatology",
+            "doc_type": "guideline",
+            "section_path": ["Treatment", "Urate-lowering therapy"],
+            "section_title": "Urate-lowering therapy",
+            "page_start": 12,
+            "page_end": 13,
+            "source_url": "https://www.nice.org.uk/guidance/cg56",
+            "doc_id": "doc_001",
+            "chunk_id": "chunk_001",
+            "content_type": "text",
+        }
+        defaults.update(kwargs)
+        return Citation(**defaults)
+
+    def test_format_citation_produces_correct_string(self):
+        citation = self._make_citation()
+        result = format_citation(citation)
+        expected = (
+            "Gout: diagnosis and management — NICE (rheumatology)\n"
+            "Section: Treatment > Urate-lowering therapy\n"
+            "Pages: 12–13\n"
+            "Source: https://www.nice.org.uk/guidance/cg56"
+        )
+        assert result == expected
+
+    def test_format_citation_uses_format_section_path(self):
+        citation = self._make_citation(section_path=["A", "B", "C"])
+        result = format_citation(citation)
+        assert "A > B > C" in result
+
+    def test_format_citation_empty_section_path_shows_unknown(self):
+        citation = self._make_citation(section_path=[])
+        result = format_citation(citation)
+        assert "Unknown section" in result
+
+    def test_format_citation_zero_pages(self):
+        citation = self._make_citation(page_start=0, page_end=0)
+        result = format_citation(citation)
+        assert "Pages: 0–0" in result
