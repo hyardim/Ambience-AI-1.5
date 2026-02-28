@@ -121,12 +121,17 @@ def keyword_search(
 
 
 def _check_tsvector_column(conn: Any) -> None:
-    """Raise RetrievalError if text_search_vector column is missing."""
+    """Raise RetrievalError if text_search_vector column is missing.
+
+    Constrains to current_schema() to avoid false positives when multiple
+    schemas contain a rag_chunks table.
+    """
     sql = """
         SELECT column_name
         FROM information_schema.columns
         WHERE table_name = 'rag_chunks'
-        AND column_name = 'text_search_vector';
+        AND column_name = 'text_search_vector'
+        AND table_schema = current_schema();
     """
     with conn.cursor() as cur:
         cur.execute(sql)
