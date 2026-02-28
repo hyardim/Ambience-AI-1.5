@@ -89,3 +89,7 @@ def _load_model(model_name: str) -> Any:
         ) from e
 
     return _model
+
+def _sigmoid(logit: float) -> float:
+    """Normalise a logit to [0, 1] via sigmoid."""
+    return 1.0 / (1.0 + exp(-logit))
