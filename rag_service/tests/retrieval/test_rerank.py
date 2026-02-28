@@ -333,3 +333,20 @@ class TestJaccardSimilarity:
 
     def test_one_empty_string_returns_zero(self):
         assert _jaccard_similarity("hello world", "") == 0.0
+
+
+class TestLoadModel:
+    def test_load_model_failure_raises_retrieval_error(self):
+        import src.retrieval.rerank as rerank_module
+
+        rerank_module._model = None
+        rerank_module._model_name_loaded = None
+        with patch(
+            "src.retrieval.rerank.CrossEncoder",
+            side_effect=Exception("model not found"),
+            create=True,
+        ):
+            with pytest.raises(RetrievalError) as exc_info:
+                rerank_module._load_model("bad-model-name")
+        assert exc_info.value.stage == "RERANK"
+        assert "bad-model-name" in exc_info.value.message
