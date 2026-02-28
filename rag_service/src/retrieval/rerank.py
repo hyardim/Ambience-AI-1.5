@@ -17,7 +17,7 @@ from .query import RetrievalError
 logger = setup_logger(__name__)
 
 # Module-level model cache — loaded once on first call
-_model = None
+_model: Any | None = None
 _model_name_loaded: str | None = None
 
 LARGE_INPUT_WARNING_THRESHOLD = 50
