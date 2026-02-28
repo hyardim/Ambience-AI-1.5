@@ -58,7 +58,57 @@ def keyword_search(
     Raises:
         RetrievalError: On DB connection failure or missing tsvector column
     """
-    pass
+    if not query or not query.strip():
+        raise RetrievalError(
+            stage="KEYWORD_SEARCH",
+            query=query,
+            message="Query must not be empty",
+        )
+
+    if not isinstance(top_k, int) or top_k <= 0:
+        raise RetrievalError(
+            stage="KEYWORD_SEARCH",
+            query=query,
+            message=f"top_k must be a positive integer, got {top_k!r}",
+        )
+
+    filters = {
+        k: v
+        for k, v in {
+            "specialty": specialty,
+            "source_name": source_name,
+            "doc_type": doc_type,
+        }.items()
+        if v is not None
+    }
+
+    logger.debug(f"Running keyword search for query: '{query}', top_k={top_k}, filters={filters}")
+
+    try:
+        conn = psycopg2.connect(db_url)
+    except Exception as e:
+        raise RetrievalError(
+            stage="KEYWORD_SEARCH",
+            query=query,
+            message=f"DB connection failed: {e}",
+        ) from e
+
+    try:
+        psycopg2.extras.register_default_jsonb(conn)
+        _check_tsvector_column(conn)
+        results = _run_query(conn, query, top_k, specialty, source_name, doc_type)
+    except RetrievalError:
+        raise
+    except Exception as e:
+        raise RetrievalError(
+            stage="KEYWORD_SEARCH",
+            query=query,
+            message=f"Keyword search failed: {e}",
+        ) from e
+    finally:
+        conn.close()
+
+    return results
 
 # -----------------------------------------------------------------------
 # Column check
