@@ -185,3 +185,26 @@ class TestAssembleCitations:
             assemble_citations([result])
         assert "title" in str(exc_info.value)
         assert "chunk_abc" in str(exc_info.value)
+
+# -----------------------------------------------------------------------
+# format_section_path() tests
+# -----------------------------------------------------------------------
+
+
+class TestFormatSectionPath:
+    def test_format_section_path_joins_with_arrow(self):
+        result = format_section_path(["Treatment", "First-line therapy", "NSAIDs"])
+        assert result == "Treatment > First-line therapy > NSAIDs"
+
+    def test_format_section_path_single_element(self):
+        result = format_section_path(["Treatment"])
+        assert result == "Treatment"
+
+    def test_format_section_path_empty_returns_unknown(self):
+        result = format_section_path([])
+        assert result == "Unknown section"
+
+    def test_format_section_path_two_elements(self):
+        result = format_section_path(["Treatment", "Urate-lowering therapy"])
+        assert result == "Treatment > Urate-lowering therapy"
+
