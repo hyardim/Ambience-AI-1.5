@@ -147,7 +147,41 @@ def deduplicate(
     Raises:
         ValueError: If similarity_threshold is outside [0, 1]
     """
-    pass
+    if not results:
+        return []
+
+    if not 0.0 <= similarity_threshold <= 1.0:
+        raise ValueError(
+            f"similarity_threshold must be between 0 and 1, "
+            f"got {similarity_threshold!r}"
+        )
+
+    dropped: set[str] = set()
+
+    for i, result_a in enumerate(results):
+        if result_a.chunk_id in dropped:
+            continue
+        for result_b in results[i + 1:]:
+            if result_b.chunk_id in dropped:
+                continue
+            if _jaccard_similarity(result_a.text, result_b.text) >= similarity_threshold:
+                # keep higher rerank_score, drop the other
+                if result_a.rerank_score >= result_b.rerank_score:
+                    dropped.add(result_b.chunk_id)
+                else:
+                    dropped.add(result_a.chunk_id)
+                    break  # result_a is dropped — no point comparing it further
+
+    deduped = [r for r in results if r.chunk_id not in dropped]
+
+    if dropped:
+        logger.debug(
+            f"Deduplication: dropped {len(dropped)} near-duplicate results, "
+            f"{len(deduped)} remaining"
+        )
+
+    return deduped
+
 
 # -----------------------------------------------------------------------
 # Helpers
