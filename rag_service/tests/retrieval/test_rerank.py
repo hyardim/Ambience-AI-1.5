@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import src.retrieval.rerank as rerank_module
 from src.retrieval.fusion import FusedResult
 from src.retrieval.query import RetrievalError
 from src.retrieval.rerank import (
@@ -76,8 +77,6 @@ QUERY = "methotrexate dosage rheumatoid arthritis"
 
 @pytest.fixture(autouse=True)
 def reset_model_cache():
-    import src.retrieval.rerank as rerank_module
-
     rerank_module._model = None
     rerank_module._model_name_loaded = None
     yield
@@ -123,7 +122,7 @@ class TestRerank:
 
     def test_rerank_score_is_normalised_between_0_and_1(self):
         results = [make_fused_result("c1")]
-        with self._patch_model([5.0]):  # large logit
+        with self._patch_model([5.0]):
             output = rerank(QUERY, results)
         assert 0.0 <= output[0].rerank_score <= 1.0
 
@@ -173,7 +172,6 @@ class TestRerank:
     def test_single_pair_scoring_failure_assigns_zero_score(self):
         results = [make_fused_result("c1"), make_fused_result("c2")]
         mock_model = MagicMock()
-        # Return one valid logit and one that will fail sigmoid (non-numeric)
         mock_model.predict.return_value = [2.0, float("inf")]
 
         with patch("src.retrieval.rerank._load_model", return_value=mock_model):
@@ -214,26 +212,28 @@ class TestRerank:
         ) as mock_load:
             rerank(QUERY, results)
             rerank(QUERY, results)
-        # _load_model called twice but CrossEncoder constructor should be called once
-        # — cache tested via the module-level fixture + direct cache test below
-        assert mock_load.call_count == 2  # _load_model itself handles caching
+        assert mock_load.call_count == 2
 
     def test_model_cache_prevents_reload(self):
-        import src.retrieval.rerank as rerank_module
-
-        with patch("src.retrieval.rerank.CrossEncoder", create=True) as mock_cls:
+        with patch("src.retrieval.rerank._CrossEncoder") as mock_cls:
             mock_cls.return_value = make_mock_model([1.0])
+            rerank_module._model = make_mock_model([1.0, 1.0])
+            rerank_module._model_name_loaded = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+            results = [make_fused_result("c1"), make_fused_result("c2")]
             with patch(
                 "src.retrieval.rerank._load_model", wraps=rerank_module._load_model
             ):
-                # Manually populate cache
-                rerank_module._model = make_mock_model([1.0, 1.0])
-                rerank_module._model_name_loaded = (
-                    "cross-encoder/ms-marco-MiniLM-L-6-v2"
-                )
-                results = [make_fused_result("c1"), make_fused_result("c2")]
                 rerank(QUERY, results)
-            mock_cls.assert_not_called()
+        mock_cls.assert_not_called()
+
+    def test_scoring_failure_raises_retrieval_error(self):
+        mock_model = MagicMock()
+        mock_model.predict.side_effect = Exception("predict failed")
+        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
+            with pytest.raises(RetrievalError) as exc_info:
+                rerank(QUERY, [make_fused_result("c1")])
+        assert exc_info.value.stage == "RERANK"
+        assert "scoring" in exc_info.value.message.lower()
 
 
 # -----------------------------------------------------------------------
@@ -297,13 +297,39 @@ class TestDeduplicate:
             make_ranked_result("c1", text=text_a, rerank_score=0.9),
             make_ranked_result("c2", text=text_b, rerank_score=0.7),
         ]
-        # high threshold — similar but not duplicate, both kept
         output_strict = deduplicate(results, similarity_threshold=0.99)
         assert len(output_strict) == 2
 
-        # low threshold — treated as duplicates, one dropped
         output_loose = deduplicate(results, similarity_threshold=0.5)
         assert len(output_loose) == 1
+
+    def test_deduplicate_does_not_compare_already_dropped_result(self):
+        text_a = "methotrexate rheumatoid arthritis treatment dosage"
+        text_b = "methotrexate rheumatoid arthritis treatment dosage weekly"
+        text_c = "methotrexate rheumatoid arthritis treatment dosage monthly"
+        results = [
+            make_ranked_result("c1", text=text_a, rerank_score=0.9),
+            make_ranked_result("c2", text=text_b, rerank_score=0.7),
+            make_ranked_result("c3", text=text_c, rerank_score=0.5),
+        ]
+        output = deduplicate(results, similarity_threshold=0.7)
+        assert len(output) == 1
+        assert output[0].chunk_id == "c1"
+
+    def test_deduplicate_skips_already_dropped_result_in_inner_loop(self):
+        text_unique = "hydroxychloroquine lupus nephritis treatment protocol"
+        text_dup_a = "methotrexate rheumatoid arthritis dosage weekly oral"
+        text_dup_b = "methotrexate rheumatoid arthritis dosage weekly oral dose"
+        results = [
+            make_ranked_result("c1", text=text_unique, rerank_score=0.95),
+            make_ranked_result("c2", text=text_dup_a, rerank_score=0.6),
+            make_ranked_result("c3", text=text_dup_b, rerank_score=0.8),
+        ]
+        output = deduplicate(results, similarity_threshold=0.7)
+        chunk_ids = [r.chunk_id for r in output]
+        assert "c1" in chunk_ids
+        assert "c3" in chunk_ids
+        assert "c2" not in chunk_ids
 
 
 # -----------------------------------------------------------------------
@@ -335,18 +361,40 @@ class TestJaccardSimilarity:
         assert _jaccard_similarity("hello world", "") == 0.0
 
 
+# -----------------------------------------------------------------------
+# _load_model() tests
+# -----------------------------------------------------------------------
+
+
 class TestLoadModel:
     def test_load_model_failure_raises_retrieval_error(self):
-        import src.retrieval.rerank as rerank_module
-
         rerank_module._model = None
         rerank_module._model_name_loaded = None
         with patch(
-            "src.retrieval.rerank.CrossEncoder",
+            "src.retrieval.rerank._CrossEncoder",
             side_effect=Exception("model not found"),
-            create=True,
         ):
             with pytest.raises(RetrievalError) as exc_info:
                 rerank_module._load_model("bad-model-name")
         assert exc_info.value.stage == "RERANK"
         assert "bad-model-name" in exc_info.value.message
+
+    def test_load_model_returns_model_and_caches_name(self):
+        mock_model = make_mock_model([1.0])
+        with patch("src.retrieval.rerank._CrossEncoder", return_value=mock_model):
+            rerank_module._model = None
+            rerank_module._model_name_loaded = None
+            result = rerank_module._load_model("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        assert result is mock_model
+        assert (
+            rerank_module._model_name_loaded == "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        )
+
+    def test_load_model_returns_cached_model_on_second_call(self):
+        mock_model = make_mock_model([1.0])
+        rerank_module._model = mock_model
+        rerank_module._model_name_loaded = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        with patch("src.retrieval.rerank._CrossEncoder") as mock_cls:
+            result = rerank_module._load_model("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        assert result is mock_model
+        mock_cls.assert_not_called()

@@ -3,6 +3,11 @@ from __future__ import annotations
 from math import exp
 from typing import Any
 
+try:
+    from sentence_transformers import CrossEncoder as _CrossEncoder
+except ImportError:
+    _CrossEncoder = None  # type: ignore[assignment,misc]
+
 from pydantic import BaseModel
 
 from ..utils.logger import setup_logger
@@ -173,12 +178,11 @@ def deduplicate(
                 _jaccard_similarity(result_a.text, result_b.text)
                 >= similarity_threshold
             ):
-                # keep higher rerank_score, drop the other
                 if result_a.rerank_score >= result_b.rerank_score:
                     dropped.add(result_b.chunk_id)
                 else:
                     dropped.add(result_a.chunk_id)
-                    break  # result_a is dropped — no point comparing it further
+                    break
 
     deduped = [r for r in results if r.chunk_id not in dropped]
 
@@ -204,9 +208,7 @@ def _load_model(model_name: str) -> Any:
         return _model
 
     try:
-        from sentence_transformers import CrossEncoder
-
-        _model = CrossEncoder(model_name)
+        _model = _CrossEncoder(model_name)
         _model_name_loaded = model_name
         logger.debug(f"Loaded cross-encoder model: {model_name}")
     except Exception as e:
