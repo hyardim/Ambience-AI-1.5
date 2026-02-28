@@ -72,3 +72,25 @@ def _validate_config(config: FilterConfig) -> None:
                 f"Invalid content_type(s): {invalid}. "
                 f"Must be one of {VALID_CONTENT_TYPES}"
             )
+
+def _passes_metadata_filters(result: FusedResult, config: FilterConfig) -> bool:
+    """Return True if result passes all metadata filters."""
+    meta = result.metadata
+
+    if config.specialty is not None and meta.get("specialty") != config.specialty:
+        return False
+
+    if (
+        config.source_name is not None
+        and meta.get("source_name") != config.source_name
+    ):
+        return False
+
+    if config.doc_type is not None and meta.get("doc_type") != config.doc_type:
+        return False
+
+    if config.content_types is not None:
+        if meta.get("content_type") not in config.content_types:
+            return False
+
+    return True
