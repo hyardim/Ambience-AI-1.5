@@ -123,15 +123,16 @@ def keyword_search(
 def _check_tsvector_column(conn: Any, query: str) -> None:
     """Raise RetrievalError if text_search_vector column is missing.
 
-    Constrains to current_schema() to avoid false positives when multiple
-    schemas contain a rag_chunks table.
+    Uses to_regclass + pg_attribute to resolve rag_chunks the same way
+    the main query does — respecting search_path rather than assuming
+    current_schema().
     """
     sql = """
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_name = 'rag_chunks'
-        AND column_name = 'text_search_vector'
-        AND table_schema = current_schema();
+        SELECT attname
+        FROM pg_attribute
+        WHERE attrelid = to_regclass('rag_chunks')
+        AND attname = 'text_search_vector'
+        AND attisdropped = false;
     """
     with conn.cursor() as cur:
         cur.execute(sql)
