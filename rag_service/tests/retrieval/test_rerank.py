@@ -222,3 +222,68 @@ class TestRerank:
                 results = [make_fused_result("c1"), make_fused_result("c2")]
                 rerank(QUERY, results)
             mock_cls.assert_not_called()
+
+# -----------------------------------------------------------------------
+# deduplicate() tests
+# -----------------------------------------------------------------------
+
+
+class TestDeduplicate:
+    def test_deduplicate_drops_near_duplicates(self):
+        text_a = "methotrexate is used for rheumatoid arthritis treatment"
+        text_b = "methotrexate is used for rheumatoid arthritis treatment and more"
+        results = [
+            make_ranked_result("c1", text=text_a, rerank_score=0.9),
+            make_ranked_result("c2", text=text_b, rerank_score=0.7),
+        ]
+        output = deduplicate(results, similarity_threshold=0.7)
+        assert len(output) == 1
+        assert output[0].chunk_id == "c1"
+
+    def test_deduplicate_keeps_higher_scoring_result(self):
+        text_a = "methotrexate dosage for rheumatoid arthritis patients"
+        text_b = "methotrexate dosage for rheumatoid arthritis patients weekly"
+        results = [
+            make_ranked_result("c1", text=text_a, rerank_score=0.6),
+            make_ranked_result("c2", text=text_b, rerank_score=0.9),
+        ]
+        output = deduplicate(results, similarity_threshold=0.7)
+        assert len(output) == 1
+        assert output[0].chunk_id == "c2"
+
+    def test_deduplicate_preserves_unique_results(self):
+        results = [
+            make_ranked_result("c1", text="methotrexate dosage rheumatoid arthritis"),
+            make_ranked_result("c2", text="hydroxychloroquine lupus treatment protocol"),
+            make_ranked_result("c3", text="biologics TNF inhibitors psoriatic arthritis"),
+        ]
+        output = deduplicate(results, similarity_threshold=0.85)
+        assert len(output) == 3
+
+    def test_deduplicate_empty_input_returns_empty(self):
+        assert deduplicate([]) == []
+
+    def test_invalid_similarity_threshold_raises_value_error(self):
+        results = [make_ranked_result("c1")]
+        with pytest.raises(ValueError, match="similarity_threshold"):
+            deduplicate(results, similarity_threshold=1.5)
+
+    def test_invalid_negative_threshold_raises_value_error(self):
+        results = [make_ranked_result("c1")]
+        with pytest.raises(ValueError, match="similarity_threshold"):
+            deduplicate(results, similarity_threshold=-0.1)
+
+    def test_similarity_threshold_controls_aggressiveness(self):
+        text_a = "methotrexate treatment rheumatoid arthritis"
+        text_b = "methotrexate treatment rheumatoid arthritis weekly dose"
+        results = [
+            make_ranked_result("c1", text=text_a, rerank_score=0.9),
+            make_ranked_result("c2", text=text_b, rerank_score=0.7),
+        ]
+        # high threshold — similar but not duplicate, both kept
+        output_strict = deduplicate(results, similarity_threshold=0.99)
+        assert len(output_strict) == 2
+
+        # low threshold — treated as duplicates, one dropped
+        output_loose = deduplicate(results, similarity_threshold=0.5)
+        assert len(output_loose) == 1
