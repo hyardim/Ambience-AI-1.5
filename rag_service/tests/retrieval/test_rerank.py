@@ -255,6 +255,14 @@ class TestRerank:
         assert exc_info.value.stage == "RERANK"
         assert "top_k" in exc_info.value.message
 
+    def test_logits_length_mismatch_raises_retrieval_error(self):
+        mock_model = make_mock_model([1.0, 2.0])  # 2 logits for 1 result
+        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
+            with pytest.raises(RetrievalError) as exc_info:
+                rerank(QUERY, [make_fused_result("c1")])
+        assert exc_info.value.stage == "RERANK"
+        assert "logits" in exc_info.value.message
+
 
 # -----------------------------------------------------------------------
 # deduplicate() tests

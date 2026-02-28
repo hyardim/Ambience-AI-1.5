@@ -105,7 +105,18 @@ def rerank(
         ) from e
 
     ranked: list[RankedResult] = []
-    for result, logit in zip(results, logits, strict=True):
+
+    if len(logits) != len(results):
+        raise RetrievalError(
+            stage="RERANK",
+            query=query,
+            message=(
+                "Cross-encoder returned a different number of scores than inputs "
+                f"(logits={len(logits)}, results={len(results)})"
+            ),
+        )
+
+    for result, logit in zip(results, logits, strict=False):
         try:
             score = _sigmoid(float(logit))
         except Exception as e:
