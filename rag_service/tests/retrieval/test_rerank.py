@@ -287,3 +287,31 @@ class TestDeduplicate:
         # low threshold — treated as duplicates, one dropped
         output_loose = deduplicate(results, similarity_threshold=0.5)
         assert len(output_loose) == 1
+
+# -----------------------------------------------------------------------
+# _jaccard_similarity() tests
+# -----------------------------------------------------------------------
+
+
+class TestJaccardSimilarity:
+    def test_identical_strings_return_one(self):
+        assert _jaccard_similarity("hello world", "hello world") == 1.0
+
+    def test_completely_different_strings_return_zero(self):
+        assert _jaccard_similarity("hello world", "foo bar") == 0.0
+
+    def test_partial_overlap_computed_correctly(self):
+        # tokens_a = {a, b, c}, tokens_b = {b, c, d}
+        # intersection = {b, c}, union = {a, b, c, d}
+        # jaccard = 2/4 = 0.5
+        result = _jaccard_similarity("a b c", "b c d")
+        assert abs(result - 0.5) < 1e-9
+
+    def test_both_empty_strings_return_one(self):
+        assert _jaccard_similarity("", "") == 1.0
+
+    def test_case_insensitive(self):
+        assert _jaccard_similarity("Hello World", "hello world") == 1.0
+
+    def test_one_empty_string_returns_zero(self):
+        assert _jaccard_similarity("hello world", "") == 0.0
