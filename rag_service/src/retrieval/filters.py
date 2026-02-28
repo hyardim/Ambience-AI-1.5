@@ -50,7 +50,56 @@ def apply_filters(
         ValueError: If score_threshold is outside [0, 1] or content_types
                     contains invalid values
     """
-    pass
+    if not results:
+        return []
+
+    _validate_config(config)
+
+    logger.debug(
+        f"Applying filters: specialty={config.specialty}, "
+        f"source_name={config.source_name}, "
+        f"doc_type={config.doc_type}, "
+        f"content_types={config.content_types}, "
+        f"threshold={config.score_threshold}"
+    )
+
+    # Score threshold pass
+    after_threshold = []
+    threshold_dropped = 0
+    for result in results:
+        if (
+            result.vector_score is not None
+            and result.vector_score < config.score_threshold
+        ):
+            threshold_dropped += 1
+        else:
+            after_threshold.append(result)
+
+    if threshold_dropped:
+        logger.debug(f"Dropped {threshold_dropped} results below score threshold")
+
+    # Metadata filter pass
+    after_metadata = []
+    metadata_dropped = 0
+    for result in after_threshold:
+        if _passes_metadata_filters(result, config):
+            after_metadata.append(result)
+        else:
+            metadata_dropped += 1
+
+    if metadata_dropped:
+        logger.debug(f"Dropped {metadata_dropped} results by metadata filter")
+
+    if not after_metadata:
+        logger.warning(
+            "All results removed by filters — consider lowering score_threshold "
+            "or relaxing metadata filters"
+        )
+        return []
+
+    logger.debug(f"{len(after_metadata)} results remaining after filtering")
+
+    return after_metadata
 
 
 # -----------------------------------------------------------------------
