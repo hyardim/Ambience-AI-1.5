@@ -23,3 +23,32 @@ class FusedResult(BaseModel):
     vector_score: float | None
     keyword_rank: float | None
     metadata: dict[str, Any]
+
+# -----------------------------------------------------------------------
+# Main function
+# -----------------------------------------------------------------------
+
+
+def reciprocal_rank_fusion(
+    vector_results: list[VectorSearchResult],
+    keyword_results: list[KeywordSearchResult],
+    k: int = 60,
+    top_k: int = 20,
+) -> list[FusedResult]:
+    """
+    Combine vector and keyword search results using Reciprocal Rank Fusion.
+
+    Combines ranked lists by position rather than score, making it robust
+    to incompatible score scales between cosine similarity and ts_rank.
+
+    Args:
+        vector_results: Ranked results from vector search
+        keyword_results: Ranked results from keyword search
+        k: RRF constant — dampens advantage of top ranks (default 60)
+        top_k: Maximum number of results to return
+
+    Returns:
+        List of FusedResult ordered by RRF score descending
+
+    """
+    pass
