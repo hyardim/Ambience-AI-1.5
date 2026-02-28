@@ -93,6 +93,34 @@ def reciprocal_rank_fusion(
                 "metadata": result.metadata,
             }
 
+        logger.debug(f"Unique chunks after fusion: {len(scores)}")
+
+    fused = []
+    for chunk_id, rrf_score in scores.items():
+        data = chunk_data[chunk_id]
+        fused.append(
+            FusedResult(
+                chunk_id=chunk_id,
+                doc_id=data["doc_id"],
+                text=data["text"],
+                rrf_score=rrf_score,
+                vector_score=vector_scores.get(chunk_id),
+                keyword_rank=keyword_ranks.get(chunk_id),
+                metadata=data["metadata"],
+            )
+        )
+
+    fused.sort(key=lambda r: r.rrf_score, reverse=True)
+    fused = fused[:top_k]
+
+    if fused:
+        logger.debug(
+            f"Top RRF score: {fused[0].rrf_score:.4f}, "
+            f"bottom: {fused[-1].rrf_score:.4f}"
+        )
+
+    return fused
+
 
 
 # -----------------------------------------------------------------------
