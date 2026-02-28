@@ -59,3 +59,29 @@ def keyword_search(
         RetrievalError: On DB connection failure or missing tsvector column
     """
     pass
+
+# -----------------------------------------------------------------------
+# Column check
+# -----------------------------------------------------------------------
+
+
+def _check_tsvector_column(conn: Any) -> None:
+    """Raise RetrievalError if text_search_vector column is missing."""
+    sql = """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'rag_chunks'
+        AND column_name = 'text_search_vector';
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        row = cur.fetchone()
+    if row is None:
+        raise RetrievalError(
+            stage="KEYWORD_SEARCH",
+            query="",
+            message=(
+                "text_search_vector column not found on rag_chunks — "
+                "run migration 003_add_text_search_vector.sql"
+            ),
+        )
