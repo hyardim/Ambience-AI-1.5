@@ -373,3 +373,9 @@ class TestKeywordSearch:
         executed_sql = col_cursor.execute.call_args[0][0]
         assert "to_regclass" in executed_sql
         assert "pg_attribute" in executed_sql
+
+    def test_bool_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            keyword_search(QUERY, db_url="postgresql://fake", top_k=True)
+            assert exc_info.value.stage == "KEYWORD_SEARCH"
+            assert "top_k" in exc_info.value.message

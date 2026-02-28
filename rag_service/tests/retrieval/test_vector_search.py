@@ -359,3 +359,9 @@ class TestVectorSearch:
                 results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results[0].metadata["page_start"] == 0
         assert results[0].metadata["page_end"] == 0
+
+    def test_bool_top_k_raises_retrieval_error(self):
+        with pytest.raises(RetrievalError) as exc_info:
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=True)
+        assert exc_info.value.stage == "VECTOR_SEARCH"
+        assert "top_k" in exc_info.value.message
