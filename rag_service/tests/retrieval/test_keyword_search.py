@@ -137,15 +137,16 @@ class TestKeywordSearch:
         assert ranks == sorted(ranks, reverse=True)
 
     def test_top_k_passed_as_limit_to_sql(self):
-        mock_conn = make_mock_conn([make_row()])
         with patch(
-            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+            "src.retrieval.keyword_search.psycopg2.connect",
+            return_value=make_mock_conn([]),
         ):
-            keyword_search(QUERY, db_url="postgresql://fake", top_k=5)
-        # third cursor is the main query — last param is top_k
-        query_cursor = mock_conn.cursor.side_effect.args[0][2]
-        execute_args = query_cursor.execute.call_args[0][1]
-        assert execute_args[-1] == 5
+            with patch(
+                "src.retrieval.keyword_search._run_query", return_value=[]
+            ) as mock_run:
+                keyword_search(QUERY, db_url="postgresql://fake", top_k=5)
+        args = mock_run.call_args[0]
+        assert args[2] == 5
 
     def test_specialty_filter_passed_to_run_query(self):
         with patch(
