@@ -26,6 +26,7 @@ def make_vector_result(
         metadata=metadata or {"specialty": "rheumatology"},
     )
 
+
 def make_keyword_result(
     chunk_id: str = "chunk_001",
     doc_id: str = "doc_001",
@@ -40,6 +41,7 @@ def make_keyword_result(
         rank=rank,
         metadata=metadata or {"specialty": "rheumatology"},
     )
+
 
 # -----------------------------------------------------------------------
 # Tests
