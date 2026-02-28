@@ -25,3 +25,18 @@ def make_vector_result(
         score=score,
         metadata=metadata or {"specialty": "rheumatology"},
     )
+
+def make_keyword_result(
+    chunk_id: str = "chunk_001",
+    doc_id: str = "doc_001",
+    text: str = "Some clinical text.",
+    rank: float = 0.72,
+    metadata: dict[str, Any] | None = None,
+) -> KeywordSearchResult:
+    return KeywordSearchResult(
+        chunk_id=chunk_id,
+        doc_id=doc_id,
+        text=text,
+        rank=rank,
+        metadata=metadata or {"specialty": "rheumatology"},
+    )
