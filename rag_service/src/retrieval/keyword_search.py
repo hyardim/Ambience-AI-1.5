@@ -142,3 +142,54 @@ def _run_query(
         ORDER BY rank DESC
         LIMIT %s;
     """
+    start = time.perf_counter()
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                query,
+                query,
+                specialty, specialty,
+                source_name, source_name,
+                doc_type, doc_type,
+                top_k,
+            ),
+        )
+        rows = cur.fetchall()
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    if not rows:
+        logger.debug("Keyword search returned 0 results")
+        return []
+
+    results = []
+    for row in rows:
+        results.append(
+            KeywordSearchResult(
+                chunk_id=row[0],
+                doc_id=row[1],
+                text=row[2],
+                rank=float(row[3]),
+                metadata={
+                    "specialty": row[4],
+                    "source_name": row[5],
+                    "doc_type": row[6],
+                    "source_url": row[7],
+                    "content_type": row[8],
+                    "section_title": row[9],
+                    "title": row[10],
+                    "page_start": row[11] if row[11] is not None else 0,
+                    "page_end": row[12] if row[12] is not None else 0,
+                    "section_path": row[13],
+                },
+            )
+        )
+
+    logger.debug(
+        f"Keyword search returned {len(results)} results in {elapsed_ms:.0f}ms"
+    )
+    logger.debug(
+        f"Top rank: {results[0].rank:.2f}, bottom rank: {results[-1].rank:.2f}"
+    )
+
+    return results
