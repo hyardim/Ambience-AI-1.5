@@ -85,7 +85,7 @@ def assemble_citations(
 
     Extracts citation fields from result.metadata, applies fallbacks for
     empty section_path and None page values, and raises CitationError for
-    any other missing required field.
+    any missing required field or empty/whitespace string value.
 
     Args:
         results: Reranked results from rerank() / deduplicate()
@@ -94,7 +94,7 @@ def assemble_citations(
         List of CitedResult in original order
 
     Raises:
-        CitationError: If a required metadata field is missing for any result
+        CitationError: If a required metadata field is missing or blank
     """
     if not results:
         return []
