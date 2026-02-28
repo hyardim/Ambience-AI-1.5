@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from src.retrieval.fusion import FusedResult, reciprocal_rank_fusion
 from src.retrieval.keyword_search import KeywordSearchResult
 from src.retrieval.vector_search import VectorSearchResult
@@ -207,3 +209,22 @@ class TestReciprocalRankFusion:
         keyword = [make_keyword_result("c1", metadata=keyword_meta)]
         results = reciprocal_rank_fusion(vector, keyword)
         assert results[0].metadata == vector_meta
+
+    def test_negative_k_raises_value_error(self):
+        with pytest.raises(ValueError, match="k"):
+            reciprocal_rank_fusion([make_vector_result("c1")], [], k=-1)
+
+    def test_zero_top_k_raises_value_error(self):
+        with pytest.raises(ValueError, match="top_k"):
+            reciprocal_rank_fusion([make_vector_result("c1")], [], top_k=0)
+
+    def test_negative_top_k_raises_value_error(self):
+        with pytest.raises(ValueError, match="top_k"):
+            reciprocal_rank_fusion([make_vector_result("c1")], [], top_k=-1)
+
+    def test_zero_k_is_valid(self):
+        # k=0 is allowed — rank is 1-indexed so k+rank >= 1, no division by zero
+        vector = [make_vector_result("c1")]
+        results = reciprocal_rank_fusion(vector, [], k=0)
+        expected = 1.0 / (0 + 1)
+        assert abs(results[0].rrf_score - expected) < 1e-9
