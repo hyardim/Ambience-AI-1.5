@@ -21,3 +21,32 @@ class CitationError(Exception):
         super().__init__(
             f"Missing citation field '{missing_field}' for chunk {chunk_id}"
         )
+
+# -----------------------------------------------------------------------
+# Pydantic models
+# -----------------------------------------------------------------------
+
+
+class Citation(BaseModel):
+    title: str
+    source_name: str
+    specialty: str
+    doc_type: str
+    section_path: list[str]
+    section_title: str
+    page_start: int
+    page_end: int
+    source_url: str
+    doc_id: str
+    chunk_id: str
+    content_type: str
+
+
+class CitedResult(BaseModel):
+    chunk_id: str
+    text: str
+    rerank_score: float
+    rrf_score: float
+    vector_score: float | None
+    keyword_rank: float | None
+    citation: Citation
