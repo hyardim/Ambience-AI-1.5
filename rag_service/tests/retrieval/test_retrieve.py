@@ -37,3 +37,12 @@ def make_vector_result(chunk_id: str = "c1") -> VectorSearchResult:
         score=0.85,
         metadata={"specialty": "rheumatology"},
     )
+
+def make_keyword_result(chunk_id: str = "c1") -> KeywordSearchResult:
+    return KeywordSearchResult(
+        chunk_id=chunk_id,
+        doc_id="doc_001",
+        text="Some text about gout.",
+        rank=0.72,
+        metadata={"specialty": "rheumatology"},
+    )
