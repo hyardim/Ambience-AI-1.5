@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -321,3 +322,10 @@ class TestRetrieve:
             run_retrieve(mocks)
         info_calls = [str(c) for c in mock_logger.info.call_args_list]
         assert any("Retrieval complete" in c for c in info_calls)
+
+    def test_debug_artifacts_strip_embedding_from_query(self, tmp_path: Path):
+        mocks = make_all_stage_mocks()
+        with patch("src.retrieval.retrieve.DEBUG_ARTIFACT_DIR", tmp_path):
+            run_retrieve(mocks, write_debug_artifacts=True)
+        query_artifact = json.loads(next(tmp_path.rglob("01_query.json")).read_text())
+        assert "embedding" not in query_artifact

@@ -80,7 +80,7 @@ def retrieve(
             message=str(e),
         ) from e
     logger.debug(f"QUERY complete in {_ms(t)}ms")
-    artifacts["01_query"] = processed.model_dump()
+    artifacts["01_query"] = processed.model_dump(exclude={"embedding"})
 
     # ------------------------------------------------------------------
     # Stage 2: Vector search
