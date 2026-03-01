@@ -278,6 +278,57 @@ class TestRetrieve:
             run_retrieve(mocks)
         assert exc_info.value.stage == "CITATIONS"
 
+    def test_query_stage_does_not_double_wrap_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        inner = RetrievalError(stage="QUERY", query=QUERY, message="model load failed")
+        mocks["process_query"].side_effect = inner
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value is inner
+        assert exc_info.value.message == "model load failed"
+
+    def test_fusion_stage_does_not_double_wrap_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        inner = RetrievalError(stage="FUSION", query=QUERY, message="fusion failed")
+        mocks["reciprocal_rank_fusion"].side_effect = inner
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value is inner
+
+    def test_filters_stage_does_not_double_wrap_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        inner = RetrievalError(stage="FILTERS", query=QUERY, message="filter failed")
+        mocks["apply_filters"].side_effect = inner
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value is inner
+
+    def test_rerank_stage_does_not_double_wrap_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        inner = RetrievalError(stage="RERANK", query=QUERY, message="rerank failed")
+        mocks["rerank"].side_effect = inner
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value is inner
+
+    def test_dedup_stage_does_not_double_wrap_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        inner = RetrievalError(stage="DEDUP", query=QUERY, message="dedup failed")
+        mocks["deduplicate"].side_effect = inner
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value is inner
+
+    def test_citations_stage_does_not_double_wrap_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        inner = RetrievalError(
+            stage="CITATIONS", query=QUERY, message="citations failed"
+        )
+        mocks["assemble_citations"].side_effect = inner
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value is inner
+
     def test_debug_artifacts_written_when_flag_set(self, tmp_path: Path):
         mocks = make_all_stage_mocks()
         with patch("src.retrieval.retrieve.DEBUG_ARTIFACT_DIR", tmp_path):

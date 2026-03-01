@@ -73,6 +73,8 @@ def retrieve(
     t = time.perf_counter()
     try:
         processed = process_query(query, expand=expand_query)
+    except RetrievalError:
+        raise
     except Exception as e:
         raise RetrievalError(
             stage="QUERY",
@@ -144,6 +146,8 @@ def retrieve(
             vector_results=vector_results,
             keyword_results=keyword_results,
         )
+    except RetrievalError:
+        raise
     except Exception as e:
         raise RetrievalError(stage="FUSION", query=query, message=str(e)) from e
     logger.debug(f"FUSION complete in {_ms(t)}ms, {len(fused)} unique chunks")
@@ -161,6 +165,8 @@ def retrieve(
             doc_type=doc_type,
         )
         filtered = apply_filters(results=fused, config=config)
+    except RetrievalError:
+        raise
     except Exception as e:
         raise RetrievalError(stage="FILTERS", query=query, message=str(e)) from e
     logger.debug(f"FILTERS complete in {_ms(t)}ms, {len(filtered)} results remaining")
@@ -177,6 +183,8 @@ def retrieve(
     t = time.perf_counter()
     try:
         reranked = rerank(query=query, results=filtered, top_k=top_k * 2)
+    except RetrievalError:
+        raise
     except Exception as e:
         raise RetrievalError(stage="RERANK", query=query, message=str(e)) from e
     logger.debug(f"RERANK complete in {_ms(t)}ms")
@@ -193,6 +201,8 @@ def retrieve(
     t = time.perf_counter()
     try:
         deduped = deduplicate(reranked)
+    except RetrievalError:
+        raise
     except Exception as e:
         raise RetrievalError(stage="DEDUP", query=query, message=str(e)) from e
     dropped = len(reranked) - len(deduped)
@@ -205,6 +215,8 @@ def retrieve(
     t = time.perf_counter()
     try:
         cited = assemble_citations(deduped[:top_k])
+    except RetrievalError:
+        raise
     except Exception as e:
         raise RetrievalError(stage="CITATIONS", query=query, message=str(e)) from e
     logger.debug(f"CITATIONS complete in {_ms(t)}ms")
