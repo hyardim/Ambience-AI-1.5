@@ -15,6 +15,7 @@ logger = setup_logger(__name__)
 
 _SEPARATOR = "─" * 49
 
+
 def _resolve_db_url(db_url: str | None) -> str | None:
     if db_url:
         return db_url
@@ -22,6 +23,7 @@ def _resolve_db_url(db_url: str | None) -> str | None:
         return url
     load_dotenv()
     return os.environ.get("DATABASE_URL")
+
 
 @click.group()
 def main() -> None:
@@ -35,9 +37,15 @@ def main() -> None:
 @click.option("--specialty", default=None, help="Filter by specialty")
 @click.option("--source-name", default=None, help="Filter by source name")
 @click.option("--doc-type", default=None, help="Filter by document type")
-@click.option("--score-threshold", default=0.3, show_default=True, help="Min score threshold")
-@click.option("--expand-query", is_flag=True, default=False, help="Expand query with synonyms")
-@click.option("--write-debug-artifacts", is_flag=True, default=False, help="Write debug artifacts")
+@click.option(
+    "--score-threshold", default=0.3, show_default=True, help="Min score threshold"
+)
+@click.option(
+    "--expand-query", is_flag=True, default=False, help="Expand query with synonyms"
+)
+@click.option(
+    "--write-debug-artifacts", is_flag=True, default=False, help="Write debug artifacts"
+)
 def query(
     query: str,
     db_url: str | None,
@@ -88,6 +96,7 @@ def query(
         click.echo(f"    {format_citation(result.citation)}")
         click.echo(f"\n    {result.text[:300]}")
         click.echo()
+
 
 if __name__ == "__main__":  # pragma: no cover
     main()
