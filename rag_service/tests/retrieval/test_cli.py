@@ -160,3 +160,70 @@ class TestCLI:
     def test_main_entrypoint_is_callable(self):
         result = self.runner.invoke(main, ["--help"])
         assert result.exit_code == 0
+
+    def test_db_url_resolved_from_environment_variable(self):
+        with (
+            patch.dict(
+                "os.environ", {"DATABASE_URL": "postgresql://localhost/env_test"}
+            ),
+            patch(
+                "src.retrieval.cli.retrieve", return_value=[make_cited_result()]
+            ) as mock_retrieve,
+        ):
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment"],
+            )
+        assert result.exit_code == 0
+        _, kwargs = mock_retrieve.call_args
+        assert kwargs["db_url"] == "postgresql://localhost/env_test"
+
+    def test_db_url_resolved_from_dotenv_file(self):
+        call_count = {"n": 0}
+
+        def env_get(key: str, *args: object) -> str | None:
+            if key == "DATABASE_URL":
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    return None
+                return "postgresql://localhost/dotenv_test"
+            return None
+
+        with (
+            patch("src.retrieval.cli.os.environ.get", side_effect=env_get),
+            patch("src.retrieval.cli.load_dotenv") as mock_load_dotenv,
+            patch(
+                "src.retrieval.cli.retrieve", return_value=[make_cited_result()]
+            ) as mock_retrieve,
+        ):
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment"],
+            )
+        assert result.exit_code == 0
+        mock_load_dotenv.assert_called_once()
+        _, kwargs = mock_retrieve.call_args
+        assert kwargs["db_url"] == "postgresql://localhost/dotenv_test"
+
+    def test_db_url_flag_takes_precedence_over_env(self):
+        with (
+            patch.dict(
+                "os.environ", {"DATABASE_URL": "postgresql://localhost/env_test"}
+            ),
+            patch(
+                "src.retrieval.cli.retrieve", return_value=[make_cited_result()]
+            ) as mock_retrieve,
+        ):
+            result = self.runner.invoke(
+                main,
+                [
+                    "query",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/flag_test",
+                ],
+            )
+        assert result.exit_code == 0
+        _, kwargs = mock_retrieve.call_args
+        assert kwargs["db_url"] == "postgresql://localhost/flag_test"
