@@ -46,3 +46,14 @@ def make_keyword_result(chunk_id: str = "c1") -> KeywordSearchResult:
         rank=0.72,
         metadata={"specialty": "rheumatology"},
     )
+
+def make_fused_result(chunk_id: str = "c1") -> FusedResult:
+    return FusedResult(
+        chunk_id=chunk_id,
+        doc_id="doc_001",
+        text="Some text about gout.",
+        rrf_score=0.03,
+        vector_score=0.85,
+        keyword_rank=0.72,
+        metadata={"specialty": "rheumatology"},
+    )
