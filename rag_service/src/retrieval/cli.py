@@ -93,7 +93,9 @@ def query(
     for i, result in enumerate(results, start=1):
         click.echo(_SEPARATOR)
         click.echo(f"[{i}] Score: {result.rerank_score:.2f}")
-        click.echo(f"    {format_citation(result.citation)}")
+        click.echo(
+            f"    {format_citation(result.citation).replace(chr(10), chr(10) + '    ')}"
+        )
         click.echo(f"\n    {result.text[:300]}")
         click.echo()
 
