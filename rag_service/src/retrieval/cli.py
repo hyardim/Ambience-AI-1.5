@@ -50,4 +50,44 @@ def query(
     write_debug_artifacts: bool,
 ) -> None:
     """Run retrieval for a query and print results."""
-    pass
+    resolved_db_url = _resolve_db_url(db_url)
+    if not resolved_db_url:
+        click.echo(
+            "Error: No database URL found. "
+            "Provide --db-url, set DATABASE_URL env var, or add it to .env",
+            err=True,
+        )
+        sys.exit(1)
+
+    try:
+        results = retrieve(
+            query=query,
+            db_url=resolved_db_url,
+            top_k=top_k,
+            specialty=specialty,
+            source_name=source_name,
+            doc_type=doc_type,
+            score_threshold=score_threshold,
+            expand_query=expand_query,
+            write_debug_artifacts=write_debug_artifacts,
+        )
+    except RetrievalError as e:
+        click.echo(f"Retrieval error [{e.stage}]: {e.message}", err=True)
+        sys.exit(1)
+
+    if not results:
+        click.echo(f'No results found for query: "{query}"')
+        sys.exit(2)
+
+    click.echo(f'\nQuery: "{query}"')
+    click.echo(f"Results: {len(results)}\n")
+
+    for i, result in enumerate(results, start=1):
+        click.echo(_SEPARATOR)
+        click.echo(f"[{i}] Score: {result.rerank_score:.2f}")
+        click.echo(f"    {format_citation(result.citation)}")
+        click.echo(f"\n    {result.text[:300]}")
+        click.echo()
+
+if __name__ == "__main__":  # pragma: no cover
+    main()
