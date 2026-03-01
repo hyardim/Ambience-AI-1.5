@@ -15,6 +15,7 @@ from src.retrieval.vector_search import VectorSearchResult
 QUERY = "gout treatment options"
 DB_URL = "postgresql://localhost/test"
 
+
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
@@ -38,6 +39,7 @@ def make_vector_result(chunk_id: str = "c1") -> VectorSearchResult:
         metadata={"specialty": "rheumatology"},
     )
 
+
 def make_keyword_result(chunk_id: str = "c1") -> KeywordSearchResult:
     return KeywordSearchResult(
         chunk_id=chunk_id,
@@ -46,6 +48,7 @@ def make_keyword_result(chunk_id: str = "c1") -> KeywordSearchResult:
         rank=0.72,
         metadata={"specialty": "rheumatology"},
     )
+
 
 def make_fused_result(chunk_id: str = "c1") -> FusedResult:
     return FusedResult(
@@ -58,6 +61,7 @@ def make_fused_result(chunk_id: str = "c1") -> FusedResult:
         metadata={"specialty": "rheumatology"},
     )
 
+
 def make_ranked_result(chunk_id: str = "c1") -> RankedResult:
     return RankedResult(
         chunk_id=chunk_id,
@@ -69,6 +73,7 @@ def make_ranked_result(chunk_id: str = "c1") -> RankedResult:
         keyword_rank=0.72,
         metadata={"specialty": "rheumatology"},
     )
+
 
 def make_cited_result(chunk_id: str = "c1") -> CitedResult:
     return CitedResult(
@@ -94,6 +99,7 @@ def make_cited_result(chunk_id: str = "c1") -> CitedResult:
         ),
     )
 
+
 def make_all_stage_mocks(
     vector_results: list | None = None,
     keyword_results: list | None = None,
@@ -106,39 +112,61 @@ def make_all_stage_mocks(
     return {
         "process_query": MagicMock(return_value=make_processed_query()),
         "vector_search": MagicMock(
-            return_value=vector_results if vector_results is not None else [make_vector_result()]
+            return_value=vector_results
+            if vector_results is not None
+            else [make_vector_result()]
         ),
         "keyword_search": MagicMock(
-            return_value=keyword_results if keyword_results is not None else [make_keyword_result()]
+            return_value=keyword_results
+            if keyword_results is not None
+            else [make_keyword_result()]
         ),
         "reciprocal_rank_fusion": MagicMock(
-            return_value=fused_results if fused_results is not None else [make_fused_result()]
+            return_value=fused_results
+            if fused_results is not None
+            else [make_fused_result()]
         ),
         "apply_filters": MagicMock(
-            return_value=filtered_results if filtered_results is not None else [make_fused_result()]
+            return_value=filtered_results
+            if filtered_results is not None
+            else [make_fused_result()]
         ),
         "rerank": MagicMock(
-            return_value=reranked_results if reranked_results is not None else [make_ranked_result()]
+            return_value=reranked_results
+            if reranked_results is not None
+            else [make_ranked_result()]
         ),
         "deduplicate": MagicMock(
-            return_value=deduped_results if deduped_results is not None else [make_ranked_result()]
+            return_value=deduped_results
+            if deduped_results is not None
+            else [make_ranked_result()]
         ),
         "assemble_citations": MagicMock(
-            return_value=cited_results if cited_results is not None else [make_cited_result()]
+            return_value=cited_results
+            if cited_results is not None
+            else [make_cited_result()]
         ),
     }
 
+
 def run_retrieve(mocks: dict[str, MagicMock], **kwargs):
     from src.retrieval.retrieve import retrieve
-    with patch("src.retrieval.retrieve.process_query", mocks["process_query"]), \
-         patch("src.retrieval.retrieve.vector_search", mocks["vector_search"]), \
-         patch("src.retrieval.retrieve.keyword_search", mocks["keyword_search"]), \
-         patch("src.retrieval.retrieve.reciprocal_rank_fusion", mocks["reciprocal_rank_fusion"]), \
-         patch("src.retrieval.retrieve.apply_filters", mocks["apply_filters"]), \
-         patch("src.retrieval.retrieve.rerank", mocks["rerank"]), \
-         patch("src.retrieval.retrieve.deduplicate", mocks["deduplicate"]), \
-         patch("src.retrieval.retrieve.assemble_citations", mocks["assemble_citations"]):
+
+    with (
+        patch("src.retrieval.retrieve.process_query", mocks["process_query"]),
+        patch("src.retrieval.retrieve.vector_search", mocks["vector_search"]),
+        patch("src.retrieval.retrieve.keyword_search", mocks["keyword_search"]),
+        patch(
+            "src.retrieval.retrieve.reciprocal_rank_fusion",
+            mocks["reciprocal_rank_fusion"],
+        ),
+        patch("src.retrieval.retrieve.apply_filters", mocks["apply_filters"]),
+        patch("src.retrieval.retrieve.rerank", mocks["rerank"]),
+        patch("src.retrieval.retrieve.deduplicate", mocks["deduplicate"]),
+        patch("src.retrieval.retrieve.assemble_citations", mocks["assemble_citations"]),
+    ):
         return retrieve(QUERY, DB_URL, **kwargs)
+
 
 # -----------------------------------------------------------------------
 # Tests
@@ -233,7 +261,7 @@ class TestRetrieve:
         _, vkwargs = mocks["vector_search"].call_args
         assert vkwargs["top_k"] == 12  # top_k * 4
         _, rkwargs = mocks["rerank"].call_args
-        assert rkwargs["top_k"] == 6   # top_k * 2
+        assert rkwargs["top_k"] == 6  # top_k * 2
 
     def test_filters_passed_through_to_vector_and_keyword_search(self):
         mocks = make_all_stage_mocks()
