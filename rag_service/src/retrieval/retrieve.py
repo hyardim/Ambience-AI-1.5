@@ -63,3 +63,30 @@ def retrieve(
         RetrievalError: If a pipeline stage fails unrecoverably
     """
     pass
+
+# -----------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------
+
+
+def _ms(start: float) -> int:
+    return int((time.perf_counter() - start) * 1000)
+
+
+def _strip_embedding(d: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in d.items() if k != "embedding"}
+
+
+def _maybe_write_artifacts(
+    enabled: bool,
+    query_hash: str,
+    artifacts: dict[str, Any],
+) -> None:
+    if not enabled:
+        return
+    out_dir = DEBUG_ARTIFACT_DIR / query_hash
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, data in artifacts.items():
+        path = out_dir / f"{name}.json"
+        path.write_text(json.dumps(data, indent=2, default=str))
+    logger.debug(f"Debug artifacts written to {out_dir}")
