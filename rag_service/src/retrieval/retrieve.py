@@ -101,6 +101,31 @@ def retrieve(
         vector_failed = True
     artifacts["02_vector"] = [_strip_embedding(r.model_dump()) for r in vector_results]
 
+    # ------------------------------------------------------------------
+    # Stage 3: Keyword search
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    keyword_results = []
+    keyword_failed = False
+    try:
+        keyword_results = keyword_search(
+            processed=processed,
+            db_url=db_url,
+            top_k=top_k * 4,
+        )
+        logger.debug(f"KEYWORD_SEARCH complete in {_ms(t)}ms, {len(keyword_results)} results")
+    except Exception as e:
+        logger.warning(f"KEYWORD_SEARCH failed — falling back to vector only: {e}")
+        keyword_failed = True
+    artifacts["03_keyword"] = [r.model_dump() for r in keyword_results]
+
+    if vector_failed and keyword_failed:
+        raise RetrievalError(
+            stage="SEARCH",
+            query=query,
+            message="Both vector search and keyword search failed.",
+        )
+
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
