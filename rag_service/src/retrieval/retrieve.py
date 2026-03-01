@@ -67,7 +67,7 @@ def retrieve(
 
     query_hash = hashlib.md5(query.encode()).hexdigest()[:8]  # noqa: S324
     artifacts: dict[str, Any] = {}
-    
+
     # ------------------------------------------------------------------
     # Stage 1: Query processing
     # ------------------------------------------------------------------
@@ -82,6 +82,24 @@ def retrieve(
         ) from e
     logger.debug(f"QUERY complete in {_ms(t)}ms")
     artifacts["01_query"] = processed.model_dump()
+
+    # ------------------------------------------------------------------
+    # Stage 2: Vector search
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    vector_results = []
+    vector_failed = False
+    try:
+        vector_results = vector_search(
+            processed=processed,
+            db_url=db_url,
+            top_k=top_k * 4,
+        )
+        logger.debug(f"VECTOR_SEARCH complete in {_ms(t)}ms, {len(vector_results)} results")
+    except Exception as e:
+        logger.warning(f"VECTOR_SEARCH failed — falling back to keyword only: {e}")
+        vector_failed = True
+    artifacts["02_vector"] = [_strip_embedding(r.model_dump()) for r in vector_results]
 
 # -----------------------------------------------------------------------
 # Helpers
