@@ -141,6 +141,28 @@ def retrieve(
     logger.debug(f"FUSION complete in {_ms(t)}ms, {len(fused)} unique chunks")
     artifacts["04_fusion"] = [r.model_dump() for r in fused]
 
+    # ------------------------------------------------------------------
+    # Stage 5: Filters
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    try:
+        config = FilterConfig(
+            score_threshold=score_threshold,
+            specialty=specialty,
+            source_name=source_name,
+            doc_type=doc_type,
+        )
+        filtered = apply_filters(results=fused, config=config)
+    except Exception as e:
+        raise RetrievalError(stage="FILTERS", query=query, message=str(e)) from e
+    logger.debug(f"FILTERS complete in {_ms(t)}ms, {len(filtered)} results remaining")
+    artifacts["05_filters"] = [r.model_dump() for r in filtered]
+
+    if not filtered:
+        logger.warning(f'No results after filtering for query: "{query}"')
+        _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
+        return []
+
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
