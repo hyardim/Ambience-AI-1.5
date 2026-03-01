@@ -163,6 +163,22 @@ def retrieve(
         _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
         return []
 
+    # ------------------------------------------------------------------
+    # Stage 6: Rerank
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    try:
+        reranked = rerank(query=query, results=filtered, top_k=top_k * 2)
+    except Exception as e:
+        raise RetrievalError(stage="RERANK", query=query, message=str(e)) from e
+    logger.debug(f"RERANK complete in {_ms(t)}ms")
+    artifacts["06_rerank"] = [r.model_dump() for r in reranked]
+
+    if not reranked:
+        logger.warning(f'No results after reranking for query: "{query}"')
+        _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
+        return []
+    
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
