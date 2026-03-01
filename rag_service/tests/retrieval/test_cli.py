@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 from click.testing import CliRunner
 
 from src.retrieval.citation import Citation, CitedResult
@@ -49,10 +48,18 @@ class TestCLI:
         self.runner = CliRunner()
 
     def test_query_command_calls_retrieve(self):
-        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]) as mock_retrieve:
+        with patch(
+            "src.retrieval.cli.retrieve", return_value=[make_cited_result()]
+        ) as mock_retrieve:
             result = self.runner.invoke(
                 main,
-                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+                [
+                    "query",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/test",
+                ],
             )
         assert result.exit_code == 0
         mock_retrieve.assert_called_once()
@@ -69,7 +76,13 @@ class TestCLI:
         with patch("src.retrieval.cli.retrieve", return_value=[]):
             result = self.runner.invoke(
                 main,
-                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+                [
+                    "query",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/test",
+                ],
             )
         assert result.exit_code == 2
 
@@ -82,7 +95,13 @@ class TestCLI:
         ):
             result = self.runner.invoke(
                 main,
-                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+                [
+                    "query",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/test",
+                ],
             )
         assert result.exit_code == 1
 
@@ -90,20 +109,30 @@ class TestCLI:
         with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]):
             result = self.runner.invoke(
                 main,
-                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+                [
+                    "query",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/test",
+                ],
             )
         assert "0.94" in result.output
         assert "NICE" in result.output
         assert "rheumatology" in result.output
 
     def test_expand_query_flag_passed_to_retrieve(self):
-        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]) as mock_retrieve:
+        with patch(
+            "src.retrieval.cli.retrieve", return_value=[make_cited_result()]
+        ) as mock_retrieve:
             self.runner.invoke(
                 main,
                 [
                     "query",
-                    "--query", "gout treatment",
-                    "--db-url", "postgresql://localhost/test",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/test",
                     "--expand-query",
                 ],
             )
@@ -111,13 +140,17 @@ class TestCLI:
         assert kwargs["expand_query"] is True
 
     def test_write_debug_artifacts_flag_passed_to_retrieve(self):
-        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]) as mock_retrieve:
+        with patch(
+            "src.retrieval.cli.retrieve", return_value=[make_cited_result()]
+        ) as mock_retrieve:
             self.runner.invoke(
                 main,
                 [
                     "query",
-                    "--query", "gout treatment",
-                    "--db-url", "postgresql://localhost/test",
+                    "--query",
+                    "gout treatment",
+                    "--db-url",
+                    "postgresql://localhost/test",
                     "--write-debug-artifacts",
                 ],
             )
