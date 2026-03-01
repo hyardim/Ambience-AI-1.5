@@ -52,10 +52,6 @@ postgres_data/
 .vscode/
 .idea/
 
-# Old code
-old_code/
-setup.md
-
 # coverage
 .coverage
 htmlcov/
