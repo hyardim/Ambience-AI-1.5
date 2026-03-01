@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from .config import OLLAMA_MAX_TOKENS
 from .generation.client import generate_answer
 from .generation.prompts import build_grounded_prompt
-from .ingestion.embed import embed_chunks, get_vector_dim, load_embedder
+from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import init_db, search_similar_chunks
 
 app = FastAPI(title="Ambience Med42 RAG Service")
@@ -38,8 +38,10 @@ class SearchResult(BaseModel):
     source: str
     score: float
     doc_id: str | None = None
-    chunk_id: int | None = None
+    doc_version: str | None = None
+    chunk_id: str | None = None
     chunk_index: int | None = None
+    content_type: str | None = None
     page_start: int | None = None
     page_end: int | None = None
     section_path: str | None = None
@@ -64,8 +66,8 @@ async def health_check():
 async def clinical_query(request: QueryRequest):
     """Embed the query and return the top-k nearest chunks."""
     try:
-        embeddings_result = embed_chunks(model, [{"text": request.query}], batch_size=1)
-        query_embedding = embeddings_result[0]["embedding"]
+        embeddings_result = embed_text(model, [request.query], batch_size=1)
+        query_embedding = embeddings_result[0]
 
         raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
 
@@ -75,8 +77,10 @@ async def clinical_query(request: QueryRequest):
                 source=res.get("metadata", {}).get("filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
+                doc_version=res.get("doc_version"),
                 chunk_id=res.get("chunk_id"),
                 chunk_index=res.get("chunk_index"),
+                content_type=res.get("content_type"),
                 page_start=res.get("page_start"),
                 page_end=res.get("page_end"),
                 section_path=res.get("section_path"),
@@ -97,8 +101,8 @@ async def generate_clinical_answer(request: AnswerRequest):
     """Retrieve supporting chunks, build a grounded prompt, and call Ollama
     for an answer."""
     try:
-        embeddings_result = embed_chunks(model, [{"text": request.query}], batch_size=1)
-        query_embedding = embeddings_result[0]["embedding"]
+        embeddings_result = embed_text(model, [request.query], batch_size=1)
+        query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
         prompt = build_grounded_prompt(request.query, retrieved)
@@ -111,8 +115,10 @@ async def generate_clinical_answer(request: AnswerRequest):
                 source=res.get("metadata", {}).get("filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
+                doc_version=res.get("doc_version"),
                 chunk_id=res.get("chunk_id"),
                 chunk_index=res.get("chunk_index"),
+                content_type=res.get("content_type"),
                 page_start=res.get("page_start"),
                 page_end=res.get("page_end"),
                 section_path=res.get("section_path"),

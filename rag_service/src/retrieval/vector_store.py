@@ -1,13 +1,8 @@
-# We import typing helpers for clearer function signatures.
 from typing import Any
 
-# We import psycopg2 to connect to Postgres.
 import psycopg2
-
-# We import psycopg2 extras so we can insert dictionaries easily and fetch rows neatly.
 import psycopg2.extras
 
-# Import our DATABASE_URL from config.
 from src.config import DATABASE_URL, HNSW_EF_CONSTRUCTION, HNSW_M
 
 
@@ -27,113 +22,48 @@ def init_db(vector_dim: int) -> None:
     Creates pgvector extension, tables, and indexes if they don't exist.
     Uses HNSW for the embedding index.
     """
-    # Open a DB connection.
     conn = get_conn()
-
-    # Create a cursor to execute SQL commands.
     with conn.cursor() as cur:
-        # Ensure pgvector extension exists.
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                cur.execute(
+                        f"""
+                        CREATE TABLE IF NOT EXISTS rag_chunks (
+                                id            BIGSERIAL PRIMARY KEY,
+                                doc_id        TEXT        NOT NULL,
+                                doc_version   TEXT        NOT NULL,
+                                chunk_id      TEXT        NOT NULL,
+                                chunk_index   INT         NOT NULL,
+                                content_type  TEXT        NOT NULL,
+                                text          TEXT        NOT NULL,
+                                embedding     VECTOR({vector_dim}) NOT NULL,
+                                metadata      JSONB       NOT NULL,
+                                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-        # Create documents table to store document-level metadata.
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS documents (
-              doc_id TEXT PRIMARY KEY,
-              filename TEXT NOT NULL,
-              source_path TEXT NOT NULL,
-              specialty TEXT NOT NULL,
-              publisher TEXT NOT NULL,
-              title TEXT,
-              published_date DATE,
-              file_sha256 TEXT NOT NULL,
-              ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-            """
-        )
+                                CONSTRAINT rag_chunks_unique UNIQUE (doc_id, doc_version, chunk_id)
+                        );
+                        """
+                )
 
-        # Create chunks table to store text chunks + embeddings + chunk-level metadata.
-        cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS chunks (
-              chunk_id BIGSERIAL PRIMARY KEY,
-              doc_id TEXT NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
-              chunk_index INT NOT NULL,
-              page_start INT NOT NULL,
-              page_end INT NOT NULL,
-              section_path TEXT,
-              text TEXT NOT NULL,
-              text_hash TEXT NOT NULL,
-              embedding VECTOR({vector_dim}) NOT NULL,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-            """
-        )
+                cur.execute(
+                        f"""
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1
+                                FROM   pg_class c
+                                JOIN   pg_namespace n ON n.oid = c.relnamespace
+                                WHERE  c.relname = 'idx_rag_chunks_embedding_hnsw'
+                            ) THEN
+                                CREATE INDEX idx_rag_chunks_embedding_hnsw
+                                ON rag_chunks
+                                USING hnsw (embedding vector_cosine_ops)
+                                WITH (m = {HNSW_M}, ef_construction = {HNSW_EF_CONSTRUCTION});
+                            END IF;
+                        END $$;
+                        """
+                )
 
-        # Helpful index to quickly filter chunks by document.
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);")
-
-        # Helpful index to quickly deduplicate by text_hash.
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chunks_text_hash ON chunks(text_hash);"
-        )
-
-        # Create HNSW vector index for fast approximate nearest neighbor search.
-        # We use cosine distance ops because it’s common for sentence embeddings.
-        # If you prefer L2, swap vector_cosine_ops -> vector_l2_ops.
-        cur.execute(
-            f"""
-            DO $$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1
-                FROM   pg_class c
-                JOIN   pg_namespace n ON n.oid = c.relnamespace
-                WHERE  c.relname = 'idx_chunks_embedding_hnsw'
-              ) THEN
-                CREATE INDEX idx_chunks_embedding_hnsw
-                ON chunks
-                USING hnsw (embedding vector_cosine_ops)
-                WITH (m = {HNSW_M}, ef_construction = {HNSW_EF_CONSTRUCTION});
-              END IF;
-            END $$;
-            """
-        )
-
-    # Close the connection.
-    conn.close()
-
-
-def upsert_document(doc: dict[str, Any]) -> None:
-    """
-    Inserts a document row if missing; if present, updates metadata.
-    """
-    conn = get_conn()
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO documents (doc_id, filename, source_path, specialty, publisher, title, published_date, file_sha256)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (doc_id) DO UPDATE
-            SET filename = EXCLUDED.filename,
-                source_path = EXCLUDED.source_path,
-                specialty = EXCLUDED.specialty,
-                publisher = EXCLUDED.publisher,
-                title = EXCLUDED.title,
-                published_date = EXCLUDED.published_date,
-                file_sha256 = EXCLUDED.file_sha256;
-            """,
-            (
-                doc["doc_id"],
-                doc["filename"],
-                doc["source_path"],
-                doc["specialty"],
-                doc["publisher"],
-                doc.get("title"),
-                doc.get("published_date"),
-                doc["file_sha256"],
-            ),
-        )
     conn.close()
 
 
@@ -143,7 +73,7 @@ def delete_chunks_for_doc(doc_id: str) -> None:
     """
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM chunks WHERE doc_id = %s;", (doc_id,))
+                cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s;", (doc_id,))
     conn.close()
 
 
@@ -159,19 +89,35 @@ def insert_chunks(chunks: list[dict[str, Any]]) -> None:
         psycopg2.extras.execute_values(
             cur,
             """
-            INSERT INTO chunks (doc_id, chunk_index, page_start, page_end, section_path, text, text_hash, embedding)
+            INSERT INTO rag_chunks (
+                doc_id,
+                doc_version,
+                chunk_id,
+                chunk_index,
+                content_type,
+                text,
+                embedding,
+                metadata
+            )
             VALUES %s
+            ON CONFLICT (doc_id, doc_version, chunk_id) DO UPDATE SET
+                chunk_index = EXCLUDED.chunk_index,
+                content_type = EXCLUDED.content_type,
+                text = EXCLUDED.text,
+                embedding = EXCLUDED.embedding,
+                metadata = EXCLUDED.metadata,
+                updated_at = NOW()
             """,
             [
                 (
                     c["doc_id"],
+                    c["doc_version"],
+                    c["chunk_id"],
                     c["chunk_index"],
-                    c["page_start"],
-                    c["page_end"],
-                    c.get("section_path"),
+                    c.get("content_type", "text/plain"),
                     c["text"],
-                    c["text_hash"],
                     c["embedding"],
+                    c.get("metadata", {}),
                 )
                 for c in chunks
             ],
@@ -187,23 +133,20 @@ def search_similar_chunks(
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # Join chunk rows with document metadata and compute cosine similarity (1 - distance)
             cur.execute(
                 """
                 SELECT 
-                    c.chunk_id,
-                    c.doc_id,
-                    c.chunk_index,
-                    c.page_start,
-                    c.page_end,
-                    c.section_path,
-                    c.text,
-                    d.filename,
-                    d.specialty,
-                    (1 - (c.embedding <=> %s::vector)) AS score
-                FROM chunks c
-                JOIN documents d ON c.doc_id = d.doc_id
-                ORDER BY c.embedding <=> %s::vector ASC
+                    id,
+                    doc_id,
+                    doc_version,
+                    chunk_id,
+                    chunk_index,
+                    content_type,
+                    text,
+                    metadata,
+                    (1 - (embedding <=> %s::vector)) AS score
+                FROM rag_chunks
+                ORDER BY embedding <=> %s::vector ASC
                 LIMIT %s;
                 """,
                 (query_embedding, query_embedding, limit),
@@ -212,18 +155,18 @@ def search_similar_chunks(
 
         return [
             {
-                "chunk_id": row[0],
+                "id": row[0],
                 "doc_id": row[1],
-                "chunk_index": row[2],
-                "page_start": row[3],
-                "page_end": row[4],
-                "section_path": row[5],
+                "doc_version": row[2],
+                "chunk_id": row[3],
+                "chunk_index": row[4],
+                "content_type": row[5],
                 "text": row[6],
-                "metadata": {
-                    "filename": row[7],
-                    "specialty": row[8],
-                },
-                "score": float(row[9]),
+                "metadata": row[7] or {},
+                "score": float(row[8]),
+                "page_start": (row[7] or {}).get("page_start"),
+                "page_end": (row[7] or {}).get("page_end"),
+                "section_path": (row[7] or {}).get("section_path"),
             }
             for row in results
         ]
