@@ -7,7 +7,7 @@ from src.core import security
 from src.core.config import settings
 from src.db.models import User, UserRole
 from src.repositories import audit_repository, user_repository
-from src.schemas.auth import AuthResponse, ProfileUpdate, UserOut, UserRegister
+from src.schemas.auth import AuthResponse, PasswordResetRequest, ProfileUpdate, UserOut, UserRegister
 
 
 def _make_auth_response(user: User) -> AuthResponse:
@@ -57,6 +57,20 @@ def register(db: Session, payload: UserRegister) -> AuthResponse:
     )
     audit_repository.log(db, user_id=user.id, action="REGISTER", details=payload.email)
     return _make_auth_response(user)
+
+
+def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
+    user = user_repository.get_by_email(db, payload.email)
+    if not user:
+        # Return generic message to avoid leaking whether the email exists
+        return {"message": "If that email is registered, the password has been reset"}
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Account is deactivated")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    user_repository.update(db, user, hashed_password=security.get_password_hash(payload.new_password))
+    audit_repository.log(db, user_id=user.id, action="PASSWORD_RESET", details=user.email)
+    return {"message": "If that email is registered, the password has been reset"}
 
 
 def logout(db: Session, user: User) -> dict:
