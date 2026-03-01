@@ -127,3 +127,15 @@ def make_all_stage_mocks(
             return_value=cited_results if cited_results is not None else [make_cited_result()]
         ),
     }
+
+def run_retrieve(mocks: dict[str, MagicMock], **kwargs):
+    from src.retrieval.retrieve import retrieve
+    with patch("src.retrieval.retrieve.process_query", mocks["process_query"]), \
+         patch("src.retrieval.retrieve.vector_search", mocks["vector_search"]), \
+         patch("src.retrieval.retrieve.keyword_search", mocks["keyword_search"]), \
+         patch("src.retrieval.retrieve.reciprocal_rank_fusion", mocks["reciprocal_rank_fusion"]), \
+         patch("src.retrieval.retrieve.apply_filters", mocks["apply_filters"]), \
+         patch("src.retrieval.retrieve.rerank", mocks["rerank"]), \
+         patch("src.retrieval.retrieve.deduplicate", mocks["deduplicate"]), \
+         patch("src.retrieval.retrieve.assemble_citations", mocks["assemble_citations"]):
+        return retrieve(QUERY, DB_URL, **kwargs)
