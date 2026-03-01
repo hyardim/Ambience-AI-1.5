@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, CheckCircle, XCircle, RotateCcw, AlertTriangle,
+  ArrowLeft, CheckCircle, XCircle, AlertTriangle,
   Loader2, UserPlus,
 } from 'lucide-react';
 import { Header } from '../../components/Header';
@@ -30,6 +30,9 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
     senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
     content: msg.content,
     timestamp: new Date(msg.created_at),
+    reviewStatus: msg.review_status ?? null,
+    reviewFeedback: msg.review_feedback ?? null,
+    reviewedAt: msg.reviewed_at ?? null,
   };
 }
 
@@ -160,6 +163,12 @@ export function SpecialistQueryDetailPage() {
   const canAssign = isSubmitted;
   const canReview = isAssignedOrReviewing;
 
+  // Find the latest AI message that hasn't been reviewed yet
+  const latestUnreviewedAIId = (() => {
+    const aiMessages = messages.filter(m => m.senderType === 'ai' && !m.reviewStatus);
+    return aiMessages.length > 0 ? aiMessages[aiMessages.length - 1].id : null;
+  })();
+
   const formatSpecialty = (s: string | null) =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
 
@@ -257,26 +266,11 @@ export function SpecialistQueryDetailPage() {
                 </button>
               )}
 
-              {/* Review buttons */}
+              {/* Hint when reviewing — actions are on messages */}
               {canReview && (
-                <>
-                  <button
-                    onClick={() => setShowApproveConfirm(true)}
-                    disabled={actionLoading}
-                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
-                  >
-                    <CheckCircle className="w-5 h-5" />
-                    Approve Response
-                  </button>
-                  <button
-                    onClick={() => setShowRejectModal(true)}
-                    disabled={actionLoading}
-                    className="inline-flex items-center gap-2 bg-[#da291c] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#b52217] transition-colors disabled:opacity-50"
-                  >
-                    <XCircle className="w-5 h-5" />
-                    Request Changes
-                  </button>
-                </>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 bg-gray-50 border border-gray-200">
+                  Review actions are available on each AI response below.
+                </div>
               )}
 
               {/* Terminal status banner */}
@@ -287,9 +281,9 @@ export function SpecialistQueryDetailPage() {
                     : 'bg-red-50 text-red-700'
                 }`}>
                   {chatStatus === 'approved' ? (
-                    <><CheckCircle className="w-5 h-5" /> Approved</>
+                    <><CheckCircle className="w-5 h-5" /> Consultation Approved</>
                   ) : (
-                    <><XCircle className="w-5 h-5" /> Rejected</>
+                    <><XCircle className="w-5 h-5" /> Consultation Rejected</>
                   )}
                   {chat.review_feedback && (
                     <span className="ml-2 font-normal">— {chat.review_feedback}</span>
@@ -300,17 +294,31 @@ export function SpecialistQueryDetailPage() {
           </div>
 
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {messages.length === 0 ? (
               <p className="text-center text-gray-500 py-8">No messages yet.</p>
             ) : (
-              messages.map(message => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  isOwnMessage={message.senderType === 'specialist'}
-                />
-              ))
+              messages.map(message => {
+                // The latest AI message without a review status is the one the specialist should act on
+                const isLatestUnreviewedAI =
+                  canReview &&
+                  message.senderType === 'ai' &&
+                  !message.reviewStatus &&
+                  message.id === latestUnreviewedAIId;
+
+                return (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    isOwnMessage={message.senderType === 'specialist'}
+                    showReviewStatus={canReview || isTerminal}
+                    showReviewActions={isLatestUnreviewedAI}
+                    onApprove={() => setShowApproveConfirm(true)}
+                    onRequestChanges={() => setShowRejectModal(true)}
+                    actionLoading={actionLoading}
+                  />
+                );
+              })
             )}
             <div ref={messagesEndRef} />
           </div>

@@ -20,6 +20,9 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
     senderType: isAI ? 'ai' : 'gp',
     content: msg.content,
     timestamp: new Date(msg.created_at),
+    reviewStatus: msg.review_status ?? null,
+    reviewFeedback: msg.review_feedback ?? null,
+    reviewedAt: msg.reviewed_at ?? null,
   };
 }
 
@@ -262,13 +265,13 @@ export function GPQueryDetailPage() {
             {(chat.status === 'assigned' || chat.status === 'reviewing') && (
               <div className="mt-4 flex items-center gap-2 bg-blue-50 text-blue-800 px-4 py-3 rounded-lg border border-blue-200">
                 <ClipboardCheck className="w-5 h-5 shrink-0" />
-                <p className="text-sm">A specialist is currently reviewing this consultation.</p>
+                <p className="text-sm">A specialist is currently reviewing this consultation. Individual AI response statuses are shown on each message below.</p>
               </div>
             )}
             {chat.status === 'approved' && (
               <div className="mt-4 flex items-center gap-2 bg-green-50 text-green-800 px-4 py-3 rounded-lg border border-green-200">
                 <ClipboardCheck className="w-5 h-5 shrink-0" />
-                <p className="text-sm">A specialist has approved the AI response.{chat.review_feedback ? ` Feedback: ${chat.review_feedback}` : ''}</p>
+                <p className="text-sm">This consultation has been approved by a specialist. Approved AI responses are marked below.</p>
               </div>
             )}
             {chat.status === 'rejected' && (
@@ -287,14 +290,18 @@ export function GPQueryDetailPage() {
           )}
 
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map(message => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isOwnMessage={message.senderType === 'gp'}
-              />
-            ))}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {messages.map(message => {
+              const inReviewWorkflow = ['assigned', 'reviewing', 'approved', 'rejected'].includes(chat.status);
+              return (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isOwnMessage={message.senderType === 'gp'}
+                  showReviewStatus={inReviewWorkflow}
+                />
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
 

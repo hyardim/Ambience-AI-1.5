@@ -36,6 +36,9 @@ export interface Message {
   timestamp: Date;
   attachments?: FileAttachment[];
   guidelineReference?: GuidelineReference;
+  reviewStatus?: string | null;       // null | "approved" | "rejected"
+  reviewFeedback?: string | null;
+  reviewedAt?: string | null;
 }
 
 export interface Query {
