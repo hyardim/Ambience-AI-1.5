@@ -191,6 +191,22 @@ def retrieve(
     logger.debug(f"DEDUP complete in {_ms(t)}ms, dropped {dropped}")
     artifacts["07_dedup"] = [r.model_dump() for r in deduped]
 
+    # ------------------------------------------------------------------
+    # Stage 8: Citations
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    try:
+        cited = assemble_citations(deduped[:top_k])
+    except Exception as e:
+        raise RetrievalError(stage="CITATIONS", query=query, message=str(e)) from e
+    logger.debug(f"CITATIONS complete in {_ms(t)}ms")
+    artifacts["08_citations"] = [r.model_dump() for r in cited]
+
+    total_ms = _ms(total_start)
+    logger.info(f'Retrieval complete in {total_ms}ms, returning {len(cited)} results')
+
+    _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
+    return cited
     
 # -----------------------------------------------------------------------
 # Helpers
