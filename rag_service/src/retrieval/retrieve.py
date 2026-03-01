@@ -178,6 +178,19 @@ def retrieve(
         logger.warning(f'No results after reranking for query: "{query}"')
         _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
         return []
+
+    # ------------------------------------------------------------------
+    # Stage 7: Deduplication
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    try:
+        deduped = deduplicate(reranked)
+    except Exception as e:
+        raise RetrievalError(stage="DEDUP", query=query, message=str(e)) from e
+    dropped = len(reranked) - len(deduped)
+    logger.debug(f"DEDUP complete in {_ms(t)}ms, dropped {dropped}")
+    artifacts["07_dedup"] = [r.model_dump() for r in deduped]
+
     
 # -----------------------------------------------------------------------
 # Helpers
