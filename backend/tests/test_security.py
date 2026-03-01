@@ -7,13 +7,15 @@ from datetime import timedelta
 import jwt
 import pytest
 
+from src.core.config import settings
 from src.core.security import (
-    SECRET_KEY,
-    ALGORITHM,
     create_access_token,
     get_password_hash,
     verify_password,
 )
+
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
 
 
 # ---------------------------------------------------------------------------

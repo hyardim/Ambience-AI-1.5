@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { NHSLogo } from '../components/NHSLogo';
-import { Stethoscope, Users } from 'lucide-react';
+import { Stethoscope, Users, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function roleLabel(role: 'gp' | 'specialist' | 'admin' | null): string {
@@ -12,6 +12,7 @@ function roleLabel(role: 'gp' | 'specialist' | 'admin' | null): string {
 
 function homeRouteForRole(role: 'gp' | 'specialist' | 'admin' | null): string {
   if (role === 'specialist') return '/specialist/queries';
+  if (role === 'admin') return '/admin/users';
   return '/gp/queries';
 }
 
@@ -79,7 +80,7 @@ export function LandingPage() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 lg:gap-8 mb-16">
+        <div className={`grid gap-6 lg:gap-8 mb-16 ${role === 'admin' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           {/* GP Portal */}
           <Link
             to="/gp/queries"
@@ -123,6 +124,30 @@ export function LandingPage() {
               Enter as Specialist →
             </span>
           </Link>
+
+          {/* Admin Portal — only shown when logged in as admin */}
+          {role === 'admin' && (
+            <Link
+              to="/admin/users"
+              className="bg-white rounded-2xl shadow-lg p-8 lg:p-10 hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-[#da291c] hover:scale-[1.02] group"
+            >
+              <div className="flex items-center justify-center w-16 h-16 bg-[#da291c] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
+                <Shield className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">
+                Admin Panel
+              </h2>
+              <p className="text-gray-600 mb-4 leading-relaxed">
+                Manage users, review all consultations, and audit system activity logs.
+              </p>
+              <p className="text-sm text-gray-500 mb-3">
+                Access: Admin accounts only
+              </p>
+              <span className="text-[#da291c] font-medium group-hover:underline">
+                Open Admin Panel →
+              </span>
+            </Link>
+          )}
         </div>
 
         {/* Info section */}

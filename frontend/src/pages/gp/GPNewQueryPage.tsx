@@ -29,13 +29,19 @@ export function GPNewQueryPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!formData.specialty) {
+      setError('Please select a specialty before submitting. Without it, the consultation cannot be routed to a specialist.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       // 1. Create the chat with specialty + severity as proper fields
       const chat = await createChat({
         title: formData.title || 'New Consultation',
-        specialty: formData.specialty || undefined,
+        specialty: formData.specialty,
         severity: formData.severity || undefined,
       });
 
@@ -122,7 +128,7 @@ export function GPNewQueryPage() {
                 </div>
                 <div>
                   <label htmlFor="specialty" className="block text-sm font-medium text-gray-700 mb-2">
-                    Specialty <span className="text-gray-400 font-normal">(optional)</span>
+                    Specialty <span className="text-red-500">*</span>
                   </label>
                   <select
                     id="specialty"
@@ -130,6 +136,7 @@ export function GPNewQueryPage() {
                     value={formData.specialty}
                     onChange={handleChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    required
                   >
                     <option value="">Select specialty...</option>
                     <option value="neurology">Neurology</option>

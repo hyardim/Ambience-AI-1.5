@@ -7,6 +7,7 @@ import type { UserRole } from '../../types';
 
 function routeForRole(role: UserRole | null): string {
   if (role === 'specialist') return '/specialist/queries';
+  if (role === 'admin') return '/admin/users';
   return '/gp/queries';
 }
 

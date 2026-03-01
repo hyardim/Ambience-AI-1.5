@@ -19,6 +19,9 @@ class MessageResponse(BaseModel):
     sender: str
     created_at: str
     citations: Optional[List] = None
+    review_status: Optional[str] = None
+    review_feedback: Optional[str] = None
+    reviewed_at: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -30,7 +33,7 @@ class MessageResponse(BaseModel):
 
 class ChatCreate(BaseModel):
     title: str = "New Chat"
-    specialty: Optional[str] = None
+    specialty: str
     severity: Optional[str] = None
 
 class ChatUpdate(BaseModel):
@@ -72,5 +75,5 @@ class AssignRequest(BaseModel):
     specialist_id: int
 
 class ReviewRequest(BaseModel):
-    action: str          # "approve" | "reject"
+    action: str          # "approve" | "reject" | "request_changes"
     feedback: Optional[str] = None

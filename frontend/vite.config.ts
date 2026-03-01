@@ -38,6 +38,14 @@ export default defineConfig({
         target: backendUrl,
         changeOrigin: true,
       },
+      '/notifications': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/admin': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
       '/search': {
         target: backendUrl,
         changeOrigin: true,

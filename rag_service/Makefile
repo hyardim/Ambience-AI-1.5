@@ -59,6 +59,7 @@ db-migrate:
 	@test -n "$(DATABASE_URL)" || (echo "ERROR: DATABASE_URL is not set. Check your .env file." && exit 1)
 	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
 	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/migrations/003_add_text_search_vector.sql
 	@echo "Migrations applied."
 
 db-migrate-reset:
@@ -68,6 +69,7 @@ db-migrate-reset:
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
 	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
 	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/migrations/003_add_text_search_vector.sql
 	@echo "Migration reset complete."
 
 test:

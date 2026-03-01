@@ -155,6 +155,12 @@ class TestEmbedBatch:
         assert isinstance(result[0], list)
         assert all(isinstance(x, float) for x in result[0])
 
+    def test_normalize_embeddings_true_passed_to_encode(self) -> None:
+        model = make_mock_model()
+        _embed_batch(model, ["text"])
+        _, kwargs = model.encode.call_args
+        assert kwargs.get("normalize_embeddings") is True
+
     def test_retries_on_failure(self) -> None:
         model = MagicMock()
         call_count = 0
@@ -198,6 +204,12 @@ class TestEmbedSingle:
         assert isinstance(vector, list)
         assert len(vector) == EMBEDDING_DIMENSIONS
         assert error is None
+
+    def test_normalize_embeddings_true_passed_to_encode(self) -> None:
+        model = make_mock_model()
+        _embed_single(model, "text")
+        _, kwargs = model.encode.call_args
+        assert kwargs.get("normalize_embeddings") is True
 
     def test_returns_none_after_max_retries(self) -> None:
         model = make_mock_model(fail=True)
@@ -391,3 +403,22 @@ class TestEmbedChunks:
 
         assert result is mock_model
         embed_module._MODEL = None  # reset after test
+
+
+# -----------------------------------------------------------------------
+# Normalisation
+# -----------------------------------------------------------------------
+
+
+class TestNormalisation:
+    def test_normalize_embeddings_passed_in_batch(self) -> None:
+        model = make_mock_model()
+        _embed_batch(model, ["text one", "text two"])
+        _, kwargs = model.encode.call_args
+        assert kwargs.get("normalize_embeddings") is True
+
+    def test_normalize_embeddings_passed_in_single(self) -> None:
+        model = make_mock_model()
+        _embed_single(model, "text")
+        _, kwargs = model.encode.call_args
+        assert kwargs.get("normalize_embeddings") is True
