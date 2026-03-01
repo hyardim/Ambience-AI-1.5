@@ -382,3 +382,9 @@ class TestRetrieve:
             run_retrieve(mocks, write_debug_artifacts=True)
         query_artifact = json.loads(next(tmp_path.rglob("01_query.json")).read_text())
         assert "embedding" not in query_artifact
+
+    def test_score_threshold_passed_through_to_filters(self):
+        mocks = make_all_stage_mocks()
+        run_retrieve(mocks, score_threshold=0.7)
+        _, fkwargs = mocks["apply_filters"].call_args
+        assert fkwargs["config"].score_threshold == 0.7
