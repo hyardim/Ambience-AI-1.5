@@ -347,6 +347,8 @@ class TestRetrieve:
         run_retrieve(mocks, top_k=3)
         _, vkwargs = mocks["vector_search"].call_args
         assert vkwargs["top_k"] == 12  # top_k * 4
+        _, kkwargs = mocks["keyword_search"].call_args
+        assert kkwargs["top_k"] == 12  # top_k * 4
         _, rkwargs = mocks["rerank"].call_args
         assert rkwargs["top_k"] == 6  # top_k * 2
 
