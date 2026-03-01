@@ -10,7 +10,7 @@ Tests for /chats endpoints: create, list, get, delete, and send message.
 class TestCreateChat:
 
     def test_create_chat_default_title(self, client, gp_headers):
-        resp = client.post("/chats/", json={}, headers=gp_headers)
+        resp = client.post("/chats/", json={"specialty": "neurology"}, headers=gp_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "New Chat"
@@ -19,7 +19,7 @@ class TestCreateChat:
         assert "created_at" in data
 
     def test_create_chat_custom_title(self, client, gp_headers):
-        resp = client.post("/chats/", json={"title": "Neurology Case"}, headers=gp_headers)
+        resp = client.post("/chats/", json={"title": "Neurology Case", "specialty": "neurology"}, headers=gp_headers)
         assert resp.status_code == 200
         assert resp.json()["title"] == "Neurology Case"
 
@@ -33,7 +33,7 @@ class TestCreateChat:
 
     def test_create_multiple_chats(self, client, gp_headers):
         for i in range(3):
-            resp = client.post("/chats/", json={"title": f"Chat {i}"}, headers=gp_headers)
+            resp = client.post("/chats/", json={"title": f"Chat {i}", "specialty": "neurology"}, headers=gp_headers)
             assert resp.status_code == 200
 
 
@@ -49,8 +49,8 @@ class TestListChats:
         assert resp.json() == []
 
     def test_list_chats_returns_own_chats(self, client, gp_headers):
-        client.post("/chats/", json={"title": "Chat A"}, headers=gp_headers)
-        client.post("/chats/", json={"title": "Chat B"}, headers=gp_headers)
+        client.post("/chats/", json={"title": "Chat A", "specialty": "neurology"}, headers=gp_headers)
+        client.post("/chats/", json={"title": "Chat B", "specialty": "neurology"}, headers=gp_headers)
         resp = client.get("/chats/", headers=gp_headers)
         assert resp.status_code == 200
         titles = [c["title"] for c in resp.json()]
@@ -60,7 +60,7 @@ class TestListChats:
     def test_list_chats_does_not_return_other_users_chats(
         self, client, gp_headers, second_gp_headers
     ):
-        client.post("/chats/", json={"title": "Alice Chat"}, headers=gp_headers)
+        client.post("/chats/", json={"title": "Alice Chat", "specialty": "neurology"}, headers=gp_headers)
         resp = client.get("/chats/", headers=second_gp_headers)
         assert resp.status_code == 200
         assert resp.json() == []
@@ -69,7 +69,7 @@ class TestListChats:
         # Ordering by created_at DESC is unreliable in SQLite when inserts happen
         # within the same second. This test verifies all chats are returned.
         for title in ("First", "Second", "Third"):
-            client.post("/chats/", json={"title": title}, headers=gp_headers)
+            client.post("/chats/", json={"title": title, "specialty": "neurology"}, headers=gp_headers)
         resp = client.get("/chats/", headers=gp_headers)
         assert resp.status_code == 200
         titles = {c["title"] for c in resp.json()}
@@ -165,7 +165,7 @@ class TestDeleteChat:
         )
         client.delete(f"/chats/{chat_id}", headers=gp_headers)
         # Recreate a chat and verify no orphaned messages bleed over
-        new_id = client.post("/chats/", json={"title": "Fresh"}, headers=gp_headers).json()["id"]
+        new_id = client.post("/chats/", json={"title": "Fresh", "specialty": "neurology"}, headers=gp_headers).json()["id"]
         get_resp = client.get(f"/chats/{new_id}", headers=gp_headers)
         assert get_resp.json()["messages"] == []
 
@@ -248,3 +248,22 @@ class TestSendMessage:
         chat_resp = client.get(f"/chats/{chat_id}", headers=gp_headers)
         # Each user message gets an AI reply, so 3 messages → 6 total
         assert len(chat_resp.json()["messages"]) == 6
+
+    def test_send_message_after_assignment_fails(
+        self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
+    ):
+        # Assign specialist to the chat
+        specialist_id = registered_specialist["user"]["id"]
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/assign",
+            json={"specialist_id": specialist_id},
+            headers=specialist_headers,
+        )
+        # GP tries to send a message — should fail
+        resp = client.post(
+            f"/chats/{submitted_chat['id']}/message",
+            json={"role": "user", "content": "More info"},
+            headers=gp_headers,
+        )
+        assert resp.status_code == 400
+        assert "assigned" in resp.json()["detail"].lower()

@@ -75,6 +75,20 @@ class TestNotifications:
         notif_types = [n["type"] for n in client.get("/notifications/", headers=gp_headers).json()]
         assert "chat_rejected" in notif_types
 
+    def test_notification_on_request_changes(
+        self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
+    ):
+        specialist_id = registered_specialist["user"]["id"]
+        _assign(client, specialist_headers, submitted_chat["id"], specialist_id)
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/review",
+            json={"action": "request_changes", "feedback": "More detail needed"},
+            headers=specialist_headers,
+        )
+
+        notif_types = [n["type"] for n in client.get("/notifications/", headers=gp_headers).json()]
+        assert "chat_revision" in notif_types
+
     def test_list_unread_only(
         self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
     ):

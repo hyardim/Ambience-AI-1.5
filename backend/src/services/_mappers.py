@@ -31,4 +31,7 @@ def msg_to_response(m: Message) -> MessageResponse:
         sender=m.sender,
         created_at=m.created_at.isoformat() if m.created_at else "",
         citations=m.citations,
+        review_status=m.review_status,
+        review_feedback=m.review_feedback,
+        reviewed_at=m.reviewed_at.isoformat() if m.reviewed_at else None,
     )
