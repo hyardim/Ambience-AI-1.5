@@ -82,6 +82,18 @@ export async function register(payload: RegisterRequest): Promise<LoginResponse>
   return handleResponse<LoginResponse>(res);
 }
 
+export async function resetPassword(
+  email: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, new_password: newPassword }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
 export async function logout(): Promise<{ success: boolean }> {
   const res = await fetch(`${API_BASE}/auth/logout`, {
     method: 'POST',
