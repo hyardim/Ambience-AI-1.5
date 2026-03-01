@@ -242,6 +242,41 @@ class TestRetrieve:
             run_retrieve(mocks)
         assert exc_info.value.stage == "FUSION"
 
+    def test_query_stage_failure_raises_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        mocks["process_query"].side_effect = Exception("query error")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "QUERY"
+
+    def test_filters_stage_failure_raises_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        mocks["apply_filters"].side_effect = Exception("filter error")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "FILTERS"
+
+    def test_rerank_stage_failure_raises_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        mocks["rerank"].side_effect = Exception("rerank error")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "RERANK"
+
+    def test_dedup_stage_failure_raises_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        mocks["deduplicate"].side_effect = Exception("dedup error")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "DEDUP"
+
+    def test_citations_stage_failure_raises_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        mocks["assemble_citations"].side_effect = Exception("citations error")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "CITATIONS"
+
     def test_debug_artifacts_written_when_flag_set(self, tmp_path: Path):
         mocks = make_all_stage_mocks()
         with patch("src.retrieval.retrieve.DEBUG_ARTIFACT_DIR", tmp_path):
