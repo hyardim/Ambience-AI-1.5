@@ -16,6 +16,7 @@ class NotificationType(enum.Enum):
     SPECIALIST_MSG = "specialist_msg"  # GP: specialist sent a message
     CHAT_APPROVED  = "chat_approved"   # GP: specialist approved the chat
     CHAT_REJECTED  = "chat_rejected"   # GP: specialist rejected the chat
+    CHAT_REVISION  = "chat_revision"   # GP: specialist requested changes to AI response
 
 class ChatStatus(enum.Enum):
     OPEN = "open"
@@ -94,6 +95,11 @@ class Message(Base):
     
     # The "Magic Box" for RAG evidence
     citations = Column(JSONB, nullable=True) 
+
+    # Specialist review (AI messages only)
+    review_status = Column(String, nullable=True)     # null | "approved" | "rejected"
+    review_feedback = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
     
     chat_id = Column(Integer, ForeignKey("chats.id"))
     chat = relationship("Chat", back_populates="messages")

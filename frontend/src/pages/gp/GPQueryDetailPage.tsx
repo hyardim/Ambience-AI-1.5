@@ -274,7 +274,7 @@ export function GPQueryDetailPage() {
             {chat.status === 'rejected' && (
               <div className="mt-4 flex items-center gap-2 bg-red-50 text-red-800 px-4 py-3 rounded-lg border border-red-200">
                 <ClipboardCheck className="w-5 h-5 shrink-0" />
-                <p className="text-sm">A specialist has requested changes.{chat.review_feedback ? ` Feedback: ${chat.review_feedback}` : ''}</p>
+                <p className="text-sm">This consultation has been rejected by a specialist.{chat.review_feedback ? ` Feedback: ${chat.review_feedback}` : ''}</p>
               </div>
             )}
           </div>
@@ -298,10 +298,12 @@ export function GPQueryDetailPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Chat Input */}
-          <div className="border-t border-gray-200 p-4">
-            <ChatInput onSendMessage={handleSendMessage} disabled={sending} />
-          </div>
+          {/* Chat Input — only available before specialist picks up the chat */}
+          {(chat.status === 'open' || chat.status === 'submitted') && (
+            <div className="border-t border-gray-200 p-4">
+              <ChatInput onSendMessage={handleSendMessage} disabled={sending} />
+            </div>
+          )}
         </div>
       </main>
     </div>

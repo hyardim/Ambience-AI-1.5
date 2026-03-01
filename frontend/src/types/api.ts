@@ -10,6 +10,9 @@ export interface BackendMessage {
   sender: string;          // "user" | "ai" | "specialist"
   created_at: string;
   citations?: unknown[] | null;
+  review_status?: string | null;
+  review_feedback?: string | null;
+  reviewed_at?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +104,7 @@ export interface AssignRequest {
 }
 
 export interface ReviewRequest {
-  action: 'approve' | 'reject';
+  action: 'approve' | 'reject' | 'request_changes';
   feedback?: string | null;
 }
 

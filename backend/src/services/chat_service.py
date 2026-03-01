@@ -87,6 +87,13 @@ def update_chat(
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
+    # Block metadata edits after specialist assignment
+    if chat.status not in (ChatStatus.OPEN, ChatStatus.SUBMITTED):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot edit chat details after specialist assignment (current: {chat.status.value})",
+        )
+
     fields: dict = {}
     if payload.title is not None:
         fields["title"] = payload.title
@@ -130,6 +137,13 @@ def send_message(db: Session, user: User, chat_id: int, content: str) -> dict:
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    # GP can only send messages before a specialist picks up the chat
+    if chat.status not in (ChatStatus.OPEN, ChatStatus.SUBMITTED):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot send messages in {chat.status.value} state",
+        )
 
     message_repository.create(db, chat_id=chat.id, content=content, sender="user")
     ai_msg = message_repository.create(

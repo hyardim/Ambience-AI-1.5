@@ -111,17 +111,18 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
-  const handleReject = async () => {
+  const handleRequestChanges = async () => {
     if (!chat || !rejectReason.trim()) return;
     setActionLoading(true);
     setError('');
     try {
-      const updated = await reviewChat(chat.id, 'reject', rejectReason.trim());
-      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+      await reviewChat(chat.id, 'request_changes', rejectReason.trim());
       setShowRejectModal(false);
       setRejectReason('');
+      // Reload full chat data to see the regenerated AI response
+      await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reject');
+      setError(err instanceof Error ? err.message : 'Failed to request changes');
     } finally {
       setActionLoading(false);
     }
@@ -386,7 +387,7 @@ export function SpecialistQueryDetailPage() {
                 Cancel
               </button>
               <button
-                onClick={handleReject}
+                onClick={handleRequestChanges}
                 disabled={!rejectReason.trim() || actionLoading}
                 className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >

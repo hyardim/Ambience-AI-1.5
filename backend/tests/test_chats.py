@@ -248,3 +248,22 @@ class TestSendMessage:
         chat_resp = client.get(f"/chats/{chat_id}", headers=gp_headers)
         # Each user message gets an AI reply, so 3 messages → 6 total
         assert len(chat_resp.json()["messages"]) == 6
+
+    def test_send_message_after_assignment_fails(
+        self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
+    ):
+        # Assign specialist to the chat
+        specialist_id = registered_specialist["user"]["id"]
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/assign",
+            json={"specialist_id": specialist_id},
+            headers=specialist_headers,
+        )
+        # GP tries to send a message — should fail
+        resp = client.post(
+            f"/chats/{submitted_chat['id']}/message",
+            json={"role": "user", "content": "More info"},
+            headers=gp_headers,
+        )
+        assert resp.status_code == 400
+        assert "assigned" in resp.json()["detail"].lower()

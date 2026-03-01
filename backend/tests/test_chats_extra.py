@@ -37,6 +37,25 @@ class TestUpdateChat:
         resp = client.patch(f"/chats/{created_chat['id']}", json={"title": "No Auth"})
         assert resp.status_code == 401
 
+    def test_update_after_assignment_fails(
+        self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
+    ):
+        # Assign a specialist to the chat
+        specialist_id = registered_specialist["user"]["id"]
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/assign",
+            json={"specialist_id": specialist_id},
+            headers=specialist_headers,
+        )
+        # GP tries to update metadata — should be blocked
+        resp = client.patch(
+            f"/chats/{submitted_chat['id']}",
+            json={"title": "Changed title"},
+            headers=gp_headers,
+        )
+        assert resp.status_code == 400
+        assert "specialist assignment" in resp.json()["detail"].lower()
+
 
 # ---------------------------------------------------------------------------
 # POST /chats/{chat_id}/submit

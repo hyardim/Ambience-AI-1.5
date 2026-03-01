@@ -210,7 +210,7 @@ export async function assignChat(chatId: number, specialistId: number): Promise<
 
 export async function reviewChat(
   chatId: number,
-  action: 'approve' | 'reject',
+  action: 'approve' | 'reject' | 'request_changes',
   feedback?: string,
 ): Promise<BackendChat> {
   const body: ReviewRequest = { action, feedback };
