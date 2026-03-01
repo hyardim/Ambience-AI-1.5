@@ -62,7 +62,26 @@ def retrieve(
     Raises:
         RetrievalError: If a pipeline stage fails unrecoverably
     """
-    pass
+    logger.info(f'Retrieving for query: "{query}", top_k={top_k}')
+    total_start = time.perf_counter()
+
+    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]  # noqa: S324
+    artifacts: dict[str, Any] = {}
+    
+    # ------------------------------------------------------------------
+    # Stage 1: Query processing
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    try:
+        processed = process_query(query, expand=expand_query)
+    except Exception as e:
+        raise RetrievalError(
+            stage="QUERY",
+            query=query,
+            message=str(e),
+        ) from e
+    logger.debug(f"QUERY complete in {_ms(t)}ms")
+    artifacts["01_query"] = processed.model_dump()
 
 # -----------------------------------------------------------------------
 # Helpers
