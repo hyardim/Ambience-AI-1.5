@@ -37,3 +37,93 @@ def make_cited_result(chunk_id: str = "c1") -> CitedResult:
             content_type="text",
         ),
     )
+
+
+# -----------------------------------------------------------------------
+# Tests
+# -----------------------------------------------------------------------
+
+
+class TestCLI:
+    def setup_method(self):
+        self.runner = CliRunner()
+
+    def test_query_command_calls_retrieve(self):
+        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]) as mock_retrieve:
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+            )
+        assert result.exit_code == 0
+        mock_retrieve.assert_called_once()
+
+    def test_missing_db_url_exits_with_code_1(self):
+        with patch("src.retrieval.cli._resolve_db_url", return_value=None):
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment"],
+            )
+        assert result.exit_code == 1
+
+    def test_no_results_exits_with_code_2(self):
+        with patch("src.retrieval.cli.retrieve", return_value=[]):
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+            )
+        assert result.exit_code == 2
+
+    def test_retrieval_error_exits_with_code_1(self):
+        with patch(
+            "src.retrieval.cli.retrieve",
+            side_effect=RetrievalError(
+                stage="RERANK", query="gout treatment", message="model failed"
+            ),
+        ):
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+            )
+        assert result.exit_code == 1
+
+    def test_output_contains_score_and_citation(self):
+        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]):
+            result = self.runner.invoke(
+                main,
+                ["query", "--query", "gout treatment", "--db-url", "postgresql://localhost/test"],
+            )
+        assert "0.94" in result.output
+        assert "NICE" in result.output
+        assert "rheumatology" in result.output
+
+    def test_expand_query_flag_passed_to_retrieve(self):
+        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]) as mock_retrieve:
+            self.runner.invoke(
+                main,
+                [
+                    "query",
+                    "--query", "gout treatment",
+                    "--db-url", "postgresql://localhost/test",
+                    "--expand-query",
+                ],
+            )
+        _, kwargs = mock_retrieve.call_args
+        assert kwargs["expand_query"] is True
+
+    def test_write_debug_artifacts_flag_passed_to_retrieve(self):
+        with patch("src.retrieval.cli.retrieve", return_value=[make_cited_result()]) as mock_retrieve:
+            self.runner.invoke(
+                main,
+                [
+                    "query",
+                    "--query", "gout treatment",
+                    "--db-url", "postgresql://localhost/test",
+                    "--write-debug-artifacts",
+                ],
+            )
+        _, kwargs = mock_retrieve.call_args
+        assert kwargs["write_debug_artifacts"] is True
+
+    def test_main_entrypoint_is_callable(self):
+        result = self.runner.invoke(main, ["--help"])
+        assert result.exit_code == 0
