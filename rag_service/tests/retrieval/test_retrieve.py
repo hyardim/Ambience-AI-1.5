@@ -93,3 +93,37 @@ def make_cited_result(chunk_id: str = "c1") -> CitedResult:
             content_type="text",
         ),
     )
+
+def make_all_stage_mocks(
+    vector_results: list | None = None,
+    keyword_results: list | None = None,
+    fused_results: list | None = None,
+    filtered_results: list | None = None,
+    reranked_results: list | None = None,
+    deduped_results: list | None = None,
+    cited_results: list | None = None,
+) -> dict[str, MagicMock]:
+    return {
+        "process_query": MagicMock(return_value=make_processed_query()),
+        "vector_search": MagicMock(
+            return_value=vector_results if vector_results is not None else [make_vector_result()]
+        ),
+        "keyword_search": MagicMock(
+            return_value=keyword_results if keyword_results is not None else [make_keyword_result()]
+        ),
+        "reciprocal_rank_fusion": MagicMock(
+            return_value=fused_results if fused_results is not None else [make_fused_result()]
+        ),
+        "apply_filters": MagicMock(
+            return_value=filtered_results if filtered_results is not None else [make_fused_result()]
+        ),
+        "rerank": MagicMock(
+            return_value=reranked_results if reranked_results is not None else [make_ranked_result()]
+        ),
+        "deduplicate": MagicMock(
+            return_value=deduped_results if deduped_results is not None else [make_ranked_result()]
+        ),
+        "assemble_citations": MagicMock(
+            return_value=cited_results if cited_results is not None else [make_cited_result()]
+        ),
+    }
