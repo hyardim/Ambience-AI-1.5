@@ -14,3 +14,16 @@ from src.retrieval.vector_search import VectorSearchResult
 
 QUERY = "gout treatment options"
 DB_URL = "postgresql://localhost/test"
+
+# -----------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------
+
+
+def make_processed_query() -> ProcessedQuery:
+    return ProcessedQuery(
+        original="gout treatment options",
+        expanded="gout treatment options urate hyperuricemia",
+        embedding=[0.1] * 384,
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    )
