@@ -139,3 +139,122 @@ def run_retrieve(mocks: dict[str, MagicMock], **kwargs):
          patch("src.retrieval.retrieve.deduplicate", mocks["deduplicate"]), \
          patch("src.retrieval.retrieve.assemble_citations", mocks["assemble_citations"]):
         return retrieve(QUERY, DB_URL, **kwargs)
+
+# -----------------------------------------------------------------------
+# Tests
+# -----------------------------------------------------------------------
+
+
+class TestRetrieve:
+    def test_returns_list_of_cited_results(self):
+        mocks = make_all_stage_mocks()
+        output = run_retrieve(mocks)
+        assert isinstance(output, list)
+        assert all(isinstance(r, CitedResult) for r in output)
+
+    def test_all_stages_called_in_order(self):
+        mocks = make_all_stage_mocks()
+        call_order: list[str] = []
+        for name, mock in mocks.items():
+            mock.side_effect = lambda *a, _n=name, **kw: (
+                call_order.append(_n) or mocks[_n].return_value
+            )
+        run_retrieve(mocks)
+        assert call_order == [
+            "process_query",
+            "vector_search",
+            "keyword_search",
+            "reciprocal_rank_fusion",
+            "apply_filters",
+            "rerank",
+            "deduplicate",
+            "assemble_citations",
+        ]
+
+    def test_vector_search_failure_falls_back_to_keyword_only(self):
+        mocks = make_all_stage_mocks()
+        mocks["vector_search"].side_effect = Exception("vector db down")
+        output = run_retrieve(mocks)
+        assert isinstance(output, list)
+        mocks["keyword_search"].assert_called_once()
+        mocks["reciprocal_rank_fusion"].assert_called_once()
+
+    def test_keyword_search_failure_falls_back_to_vector_only(self):
+        mocks = make_all_stage_mocks()
+        mocks["keyword_search"].side_effect = Exception("keyword db down")
+        output = run_retrieve(mocks)
+        assert isinstance(output, list)
+        mocks["vector_search"].assert_called_once()
+        mocks["reciprocal_rank_fusion"].assert_called_once()
+
+    def test_both_search_failures_raises_retrieval_error(self):
+        mocks = make_all_stage_mocks()
+        mocks["vector_search"].side_effect = Exception("vector down")
+        mocks["keyword_search"].side_effect = Exception("keyword down")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "SEARCH"
+
+    def test_empty_results_after_filtering_returns_empty_list(self):
+        mocks = make_all_stage_mocks(filtered_results=[])
+        output = run_retrieve(mocks)
+        assert output == []
+        mocks["rerank"].assert_not_called()
+
+    def test_empty_results_after_reranking_returns_empty_list(self):
+        mocks = make_all_stage_mocks(reranked_results=[])
+        output = run_retrieve(mocks)
+        assert output == []
+        mocks["deduplicate"].assert_not_called()
+
+    def test_stage_failure_raises_retrieval_error_with_stage_label(self):
+        mocks = make_all_stage_mocks()
+        mocks["reciprocal_rank_fusion"].side_effect = Exception("fusion error")
+        with pytest.raises(RetrievalError) as exc_info:
+            run_retrieve(mocks)
+        assert exc_info.value.stage == "FUSION"
+
+    def test_debug_artifacts_written_when_flag_set(self, tmp_path: Path):
+        mocks = make_all_stage_mocks()
+        with patch("src.retrieval.retrieve.DEBUG_ARTIFACT_DIR", tmp_path):
+            run_retrieve(mocks, write_debug_artifacts=True)
+        written = list(tmp_path.rglob("*.json"))
+        assert len(written) == 8
+
+    def test_debug_artifacts_not_written_by_default(self, tmp_path: Path):
+        mocks = make_all_stage_mocks()
+        with patch("src.retrieval.retrieve.DEBUG_ARTIFACT_DIR", tmp_path):
+            run_retrieve(mocks)
+        assert not list(tmp_path.rglob("*.json"))
+
+    def test_top_k_passed_through_to_stages(self):
+        mocks = make_all_stage_mocks()
+        run_retrieve(mocks, top_k=3)
+        _, vkwargs = mocks["vector_search"].call_args
+        assert vkwargs["top_k"] == 12  # top_k * 4
+        _, rkwargs = mocks["rerank"].call_args
+        assert rkwargs["top_k"] == 6   # top_k * 2
+
+    def test_filters_passed_through_to_vector_and_keyword_search(self):
+        mocks = make_all_stage_mocks()
+        run_retrieve(
+            mocks,
+            specialty="rheumatology",
+            source_name="NICE",
+            doc_type="guideline",
+        )
+        _, vkwargs = mocks["vector_search"].call_args
+        assert vkwargs["specialty"] == "rheumatology"
+        assert vkwargs["source_name"] == "NICE"
+        assert vkwargs["doc_type"] == "guideline"
+        _, kkwargs = mocks["keyword_search"].call_args
+        assert kkwargs["specialty"] == "rheumatology"
+        assert kkwargs["source_name"] == "NICE"
+        assert kkwargs["doc_type"] == "guideline"
+
+    def test_total_timing_logged(self):
+        mocks = make_all_stage_mocks()
+        with patch("src.retrieval.retrieve.logger") as mock_logger:
+            run_retrieve(mocks)
+        info_calls = [str(c) for c in mock_logger.info.call_args_list]
+        assert any("Retrieval complete" in c for c in info_calls)
