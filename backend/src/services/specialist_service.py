@@ -176,6 +176,111 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
     return chat_to_response(chat)
 
 
+def review_message(
+    db: Session, specialist: User, chat_id: int, message_id: int, body: ReviewRequest,
+) -> ChatResponse:
+    """Review a specific AI message. Auto-approve the chat when all AI messages are reviewed."""
+    if body.action not in ("approve", "reject", "request_changes"):
+        raise HTTPException(
+            status_code=400,
+            detail="action must be 'approve', 'reject', or 'request_changes'",
+        )
+
+    chat = db.query(Chat).filter(
+        Chat.id == chat_id, Chat.specialist_id == specialist.id
+    ).first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found or not assigned to you")
+
+    if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chat must be ASSIGNED or REVIEWING to review (current: {chat.status.value})",
+        )
+
+    # Find and validate the target message
+    target = db.query(Message).filter(
+        Message.id == message_id, Message.chat_id == chat_id, Message.sender == "ai",
+    ).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="AI message not found in this chat")
+
+    # Mark the specific message
+    _mark_message(db, target, body)
+
+    if body.action == "request_changes":
+        _regenerate_ai_response(db, chat, body.feedback)
+        chat = chat_repository.update(
+            db, chat,
+            status=ChatStatus.REVIEWING,
+            review_feedback=body.feedback,
+        )
+        audit_repository.log(
+            db, user_id=specialist.id,
+            action="REVIEW_REQUEST_CHANGES",
+            details=f"Chat {chat_id} msg {message_id} revision requested. Feedback: {body.feedback or 'none'}",
+        )
+        notification_repository.create(
+            db, user_id=chat.user_id,
+            type=NotificationType.CHAT_REVISION,
+            title="AI response is being revised",
+            body=(
+                f"A specialist is iterating on the AI response for '{chat.title}'. "
+                f"Feedback: {body.feedback or 'none'}"
+            ),
+            chat_id=chat.id,
+        )
+    else:
+        # approve or reject for this message — check if all AI messages are now reviewed
+        audit_action = "REVIEW_APPROVE" if body.action == "approve" else "REVIEW_REJECT"
+        audit_repository.log(
+            db, user_id=specialist.id,
+            action=audit_action,
+            details=f"Chat {chat_id} msg {message_id} {body.action}d. Feedback: {body.feedback or 'none'}",
+        )
+
+        unreviewed_count = (
+            db.query(Message)
+            .filter(
+                Message.chat_id == chat_id,
+                Message.sender == "ai",
+                Message.review_status.is_(None),
+            )
+            .count()
+        )
+
+        if unreviewed_count == 0:
+            # All AI messages have been reviewed → approve the consultation
+            chat = chat_repository.update(
+                db, chat,
+                status=ChatStatus.APPROVED,
+                reviewed_at=datetime.utcnow(),
+                review_feedback=body.feedback,
+            )
+            notification_repository.create(
+                db, user_id=chat.user_id,
+                type=NotificationType.CHAT_APPROVED,
+                title="Chat approved",
+                body=f"Your chat '{chat.title}' was approved by {specialist.full_name or specialist.email}.",
+                chat_id=chat.id,
+            )
+        else:
+            # Still messages to review — ensure status is REVIEWING
+            if chat.status != ChatStatus.REVIEWING:
+                chat = chat_repository.update(db, chat, status=ChatStatus.REVIEWING)
+
+    return chat_to_response(chat)
+
+
+def _mark_message(db: Session, msg: Message, body: ReviewRequest) -> None:
+    """Mark a specific AI message with the specialist's review outcome."""
+    msg.review_status = "approved" if body.action == "approve" else "rejected"
+    msg.review_feedback = body.feedback
+    msg.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(msg)
+
+
 def _mark_last_ai_message(db: Session, chat_id: int, body: ReviewRequest) -> None:
     """Mark the most recent AI message with the specialist's review outcome."""
     last_ai = (
@@ -185,11 +290,7 @@ def _mark_last_ai_message(db: Session, chat_id: int, body: ReviewRequest) -> Non
         .first()
     )
     if last_ai:
-        last_ai.review_status = "approved" if body.action == "approve" else "rejected"
-        last_ai.review_feedback = body.feedback
-        last_ai.reviewed_at = datetime.utcnow()
-        db.commit()
-        db.refresh(last_ai)
+        _mark_message(db, last_ai, body)
 
 
 def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) -> Message:

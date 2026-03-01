@@ -222,6 +222,21 @@ export async function reviewChat(
   return handleResponse<BackendChat>(res);
 }
 
+export async function reviewMessage(
+  chatId: number,
+  messageId: number,
+  action: 'approve' | 'reject' | 'request_changes',
+  feedback?: string,
+): Promise<BackendChat> {
+  const body: ReviewRequest = { action, feedback };
+  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/messages/${messageId}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return handleResponse<BackendChat>(res);
+}
+
 // ── Health ────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string; system: string }> {

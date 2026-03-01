@@ -57,6 +57,17 @@ def review_chat(
     return specialist_service.review(db, specialist, chat_id, body)
 
 
+@router.post("/chats/{chat_id}/messages/{message_id}/review", response_model=ChatResponse)
+def review_message(
+    chat_id: int,
+    message_id: int,
+    body: ReviewRequest,
+    db: Session = Depends(get_db),
+    specialist: User = Depends(get_specialist_user),
+):
+    return specialist_service.review_message(db, specialist, chat_id, message_id, body)
+
+
 @router.post("/chats/{chat_id}/message")
 def send_message(
     chat_id: int,

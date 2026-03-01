@@ -277,7 +277,7 @@ export function GPQueryDetailPage() {
             {chat.status === 'rejected' && (
               <div className="mt-4 flex items-center gap-2 bg-red-50 text-red-800 px-4 py-3 rounded-lg border border-red-200">
                 <ClipboardCheck className="w-5 h-5 shrink-0" />
-                <p className="text-sm">This consultation has been rejected by a specialist.{chat.review_feedback ? ` Feedback: ${chat.review_feedback}` : ''}</p>
+                <p className="text-sm">This consultation has been rejected by a specialist. See the messages below for details.</p>
               </div>
             )}
           </div>
@@ -292,7 +292,7 @@ export function GPQueryDetailPage() {
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {messages.map(message => {
-              const inReviewWorkflow = ['assigned', 'reviewing', 'approved', 'rejected'].includes(chat.status);
+              const inReviewWorkflow = ['submitted', 'assigned', 'reviewing', 'approved', 'rejected'].includes(chat.status);
               return (
                 <ChatMessage
                   key={message.id}

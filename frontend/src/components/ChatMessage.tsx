@@ -1,4 +1,4 @@
-import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw } from 'lucide-react';
+import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare } from 'lucide-react';
 import type { Message } from '../types';
 
 interface ChatMessageProps {
@@ -12,6 +12,8 @@ interface ChatMessageProps {
   onApprove?: () => void;
   /** Callback when specialist clicks "Request Changes" on this message */
   onRequestChanges?: () => void;
+  /** Callback when specialist clicks "Approve with Comment" on this message */
+  onApproveWithComment?: () => void;
   /** Whether an action is currently loading */
   actionLoading?: boolean;
 }
@@ -23,6 +25,7 @@ export function ChatMessage({
   showReviewActions = false,
   onApprove,
   onRequestChanges,
+  onApproveWithComment,
   actionLoading = false,
 }: ChatMessageProps) {
   const formatTime = (date: Date) => {
@@ -179,6 +182,14 @@ export function ChatMessage({
                 >
                   <CheckCircle className="w-4 h-4" />
                   Approve
+                </button>
+                <button
+                  onClick={onApproveWithComment}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-1.5 bg-[#005eb8] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Approve with Comment
                 </button>
                 <button
                   onClick={onRequestChanges}

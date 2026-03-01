@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, CheckCircle, XCircle, AlertTriangle,
-  Loader2, UserPlus,
+  Loader2, UserPlus, MessageSquare,
 } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
@@ -13,7 +13,7 @@ import {
   getSpecialistChatDetail,
   getProfile,
   assignChat,
-  reviewChat,
+  reviewMessage,
   sendSpecialistMessage,
 } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
@@ -48,8 +48,13 @@ export function SpecialistQueryDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [showApproveWithCommentModal, setShowApproveWithCommentModal] = useState(false);
+  const [approveComment, setApproveComment] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Which message the current modal action targets
+  const [reviewTargetMessageId, setReviewTargetMessageId] = useState<number | null>(null);
 
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
@@ -100,13 +105,32 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleApprove = async () => {
-    if (!chat) return;
+    if (!chat || reviewTargetMessageId === null) return;
     setActionLoading(true);
     setError('');
     try {
-      const updated = await reviewChat(chat.id, 'approve');
-      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+      await reviewMessage(chat.id, reviewTargetMessageId, 'approve');
       setShowApproveConfirm(false);
+      setReviewTargetMessageId(null);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveWithComment = async () => {
+    if (!chat || !approveComment.trim() || reviewTargetMessageId === null) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      await sendSpecialistMessage(chat.id, approveComment.trim());
+      await reviewMessage(chat.id, reviewTargetMessageId, 'approve', approveComment.trim());
+      setShowApproveWithCommentModal(false);
+      setApproveComment('');
+      setReviewTargetMessageId(null);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve');
     } finally {
@@ -115,14 +139,14 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleRequestChanges = async () => {
-    if (!chat || !rejectReason.trim()) return;
+    if (!chat || !rejectReason.trim() || reviewTargetMessageId === null) return;
     setActionLoading(true);
     setError('');
     try {
-      await reviewChat(chat.id, 'request_changes', rejectReason.trim());
+      await reviewMessage(chat.id, reviewTargetMessageId, 'request_changes', rejectReason.trim());
       setShowRejectModal(false);
       setRejectReason('');
-      // Reload full chat data to see the regenerated AI response
+      setReviewTargetMessageId(null);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to request changes');
@@ -163,11 +187,10 @@ export function SpecialistQueryDetailPage() {
   const canAssign = isSubmitted;
   const canReview = isAssignedOrReviewing;
 
-  // Find the latest AI message that hasn't been reviewed yet
-  const latestUnreviewedAIId = (() => {
-    const aiMessages = messages.filter(m => m.senderType === 'ai' && !m.reviewStatus);
-    return aiMessages.length > 0 ? aiMessages[aiMessages.length - 1].id : null;
-  })();
+  // IDs of all unreviewed AI messages (specialist can act on any of them)
+  const unreviewedAIIds = new Set(
+    messages.filter(m => m.senderType === 'ai' && !m.reviewStatus).map(m => m.id)
+  );
 
   const formatSpecialty = (s: string | null) =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
@@ -285,9 +308,6 @@ export function SpecialistQueryDetailPage() {
                   ) : (
                     <><XCircle className="w-5 h-5" /> Consultation Rejected</>
                   )}
-                  {chat.review_feedback && (
-                    <span className="ml-2 font-normal">— {chat.review_feedback}</span>
-                  )}
                 </div>
               )}
             </div>
@@ -299,12 +319,7 @@ export function SpecialistQueryDetailPage() {
               <p className="text-center text-gray-500 py-8">No messages yet.</p>
             ) : (
               messages.map(message => {
-                // The latest AI message without a review status is the one the specialist should act on
-                const isLatestUnreviewedAI =
-                  canReview &&
-                  message.senderType === 'ai' &&
-                  !message.reviewStatus &&
-                  message.id === latestUnreviewedAIId;
+                const isUnreviewedAI = canReview && unreviewedAIIds.has(message.id);
 
                 return (
                   <ChatMessage
@@ -312,9 +327,19 @@ export function SpecialistQueryDetailPage() {
                     message={message}
                     isOwnMessage={message.senderType === 'specialist'}
                     showReviewStatus={canReview || isTerminal}
-                    showReviewActions={isLatestUnreviewedAI}
-                    onApprove={() => setShowApproveConfirm(true)}
-                    onRequestChanges={() => setShowRejectModal(true)}
+                    showReviewActions={isUnreviewedAI}
+                    onApprove={() => {
+                      setReviewTargetMessageId(Number(message.id));
+                      setShowApproveConfirm(true);
+                    }}
+                    onApproveWithComment={() => {
+                      setReviewTargetMessageId(Number(message.id));
+                      setShowApproveWithCommentModal(true);
+                    }}
+                    onRequestChanges={() => {
+                      setReviewTargetMessageId(Number(message.id));
+                      setShowRejectModal(true);
+                    }}
                     actionLoading={actionLoading}
                   />
                 );
@@ -360,6 +385,47 @@ export function SpecialistQueryDetailPage() {
                 className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
               >
                 {actionLoading ? 'Approving…' : 'Confirm Approval'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve with Comment Modal */}
+      {showApproveWithCommentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 text-[#005eb8] mb-4">
+              <MessageSquare className="w-8 h-8" />
+              <h2 className="text-xl font-bold">Approve with Comment</h2>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Your comment will be sent as a message to the GP before the consultation is approved.
+            </p>
+            <textarea
+              value={approveComment}
+              onChange={(e) => setApproveComment(e.target.value)}
+              rows={4}
+              autoFocus
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none mb-6"
+              placeholder="Add your comment for the GP..."
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowApproveWithCommentModal(false);
+                  setApproveComment('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApproveWithComment}
+                disabled={!approveComment.trim() || actionLoading}
+                className="px-4 py-2 bg-[#005eb8] text-white rounded-lg font-medium hover:bg-[#003087] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading ? 'Approving…' : 'Send & Approve'}
               </button>
             </div>
           </div>
