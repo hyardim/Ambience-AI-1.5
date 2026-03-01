@@ -27,3 +27,13 @@ def make_processed_query() -> ProcessedQuery:
         embedding=[0.1] * 384,
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
     )
+
+
+def make_vector_result(chunk_id: str = "c1") -> VectorSearchResult:
+    return VectorSearchResult(
+        chunk_id=chunk_id,
+        doc_id="doc_001",
+        text="Some text about gout.",
+        score=0.85,
+        metadata={"specialty": "rheumatology"},
+    )
