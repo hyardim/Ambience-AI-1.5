@@ -125,6 +125,21 @@ def retrieve(
             query=query,
             message="Both vector search and keyword search failed.",
         )
+    
+    # ------------------------------------------------------------------
+    # Stage 4: Fusion
+    # ------------------------------------------------------------------
+    t = time.perf_counter()
+    try:
+        fused = reciprocal_rank_fusion(
+            vector_results=vector_results,
+            keyword_results=keyword_results,
+            lambda_param=lambda_param,
+        )
+    except Exception as e:
+        raise RetrievalError(stage="FUSION", query=query, message=str(e)) from e
+    logger.debug(f"FUSION complete in {_ms(t)}ms, {len(fused)} unique chunks")
+    artifacts["04_fusion"] = [r.model_dump() for r in fused]
 
 # -----------------------------------------------------------------------
 # Helpers
