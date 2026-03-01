@@ -69,3 +69,27 @@ def make_ranked_result(chunk_id: str = "c1") -> RankedResult:
         keyword_rank=0.72,
         metadata={"specialty": "rheumatology"},
     )
+
+def make_cited_result(chunk_id: str = "c1") -> CitedResult:
+    return CitedResult(
+        chunk_id=chunk_id,
+        text="Some text about gout.",
+        rerank_score=0.91,
+        rrf_score=0.03,
+        vector_score=0.85,
+        keyword_rank=0.72,
+        citation=Citation(
+            title="Gout: diagnosis and management",
+            source_name="NICE",
+            specialty="rheumatology",
+            doc_type="guideline",
+            section_path=["Treatment"],
+            section_title="Treatment",
+            page_start=12,
+            page_end=13,
+            source_url="https://www.nice.org.uk/guidance/cg56",
+            doc_id="doc_001",
+            chunk_id=chunk_id,
+            content_type="text",
+        ),
+    )
