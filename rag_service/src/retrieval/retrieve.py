@@ -19,6 +19,7 @@ logger = setup_logger(__name__)
 
 DEBUG_ARTIFACT_DIR = Path("data/debug/retrieval")
 
+
 def retrieve(
     query: str,
     db_url: str,
@@ -28,7 +29,6 @@ def retrieve(
     doc_type: str | None = None,
     score_threshold: float = 0.3,
     expand_query: bool = False,
-    lambda_param: float = 0.5,
     write_debug_artifacts: bool = False,
 ) -> list[CitedResult]:
     """
@@ -51,9 +51,8 @@ def retrieve(
         specialty: Optional filter by specialty
         source_name: Optional filter by source name
         doc_type: Optional filter by document type
-        score_threshold: Minimum RRF score threshold for filtering
+        score_threshold: Minimum score threshold for filtering
         expand_query: Whether to expand query with synonyms
-        lambda_param: RRF lambda parameter
         write_debug_artifacts: Write per-stage JSON to data/debug/retrieval/
 
     Returns:
@@ -91,15 +90,20 @@ def retrieve(
     vector_failed = False
     try:
         vector_results = vector_search(
-            processed=processed,
+            query_embedding=processed.embedding,
             db_url=db_url,
             top_k=top_k * 4,
+            specialty=specialty,
+            source_name=source_name,
+            doc_type=doc_type,
         )
-        logger.debug(f"VECTOR_SEARCH complete in {_ms(t)}ms, {len(vector_results)} results")
+        logger.debug(
+            f"VECTOR_SEARCH complete in {_ms(t)}ms, {len(vector_results)} results"
+        )
     except Exception as e:
         logger.warning(f"VECTOR_SEARCH failed — falling back to keyword only: {e}")
         vector_failed = True
-    artifacts["02_vector"] = [_strip_embedding(r.model_dump()) for r in vector_results]
+    artifacts["02_vector"] = [r.model_dump() for r in vector_results]
 
     # ------------------------------------------------------------------
     # Stage 3: Keyword search
@@ -109,11 +113,16 @@ def retrieve(
     keyword_failed = False
     try:
         keyword_results = keyword_search(
-            processed=processed,
+            query=processed.expanded,
             db_url=db_url,
             top_k=top_k * 4,
+            specialty=specialty,
+            source_name=source_name,
+            doc_type=doc_type,
         )
-        logger.debug(f"KEYWORD_SEARCH complete in {_ms(t)}ms, {len(keyword_results)} results")
+        logger.debug(
+            f"KEYWORD_SEARCH complete in {_ms(t)}ms, {len(keyword_results)} results"
+        )
     except Exception as e:
         logger.warning(f"KEYWORD_SEARCH failed — falling back to vector only: {e}")
         keyword_failed = True
@@ -125,7 +134,7 @@ def retrieve(
             query=query,
             message="Both vector search and keyword search failed.",
         )
-    
+
     # ------------------------------------------------------------------
     # Stage 4: Fusion
     # ------------------------------------------------------------------
@@ -134,7 +143,6 @@ def retrieve(
         fused = reciprocal_rank_fusion(
             vector_results=vector_results,
             keyword_results=keyword_results,
-            lambda_param=lambda_param,
         )
     except Exception as e:
         raise RetrievalError(stage="FUSION", query=query, message=str(e)) from e
@@ -203,11 +211,12 @@ def retrieve(
     artifacts["08_citations"] = [r.model_dump() for r in cited]
 
     total_ms = _ms(total_start)
-    logger.info(f'Retrieval complete in {total_ms}ms, returning {len(cited)} results')
+    logger.info(f"Retrieval complete in {total_ms}ms, returning {len(cited)} results")
 
     _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
     return cited
-    
+
+
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
@@ -215,10 +224,6 @@ def retrieve(
 
 def _ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)
-
-
-def _strip_embedding(d: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in d.items() if k != "embedding"}
 
 
 def _maybe_write_artifacts(
