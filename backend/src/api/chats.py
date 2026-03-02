@@ -7,7 +7,11 @@ from src.api.deps import get_current_user_obj
 from src.db.models import User
 from src.db.session import get_db
 from src.schemas.chat import (
-    ChatCreate, ChatResponse, ChatUpdate, ChatWithMessages, MessageCreate,
+    ChatCreate,
+    ChatResponse,
+    ChatUpdate,
+    ChatWithMessages,
+    MessageCreate,
 )
 from src.services import chat_service
 
@@ -32,7 +36,14 @@ def list_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
-    return chat_service.list_chats(db, current_user, skip=skip, limit=limit, status=status, specialty=specialty)
+    return chat_service.list_chats(
+        db,
+        current_user,
+        skip=skip,
+        limit=limit,
+        status=status,
+        specialty=specialty,
+    )
 
 
 @router.get("/{chat_id}", response_model=ChatWithMessages)

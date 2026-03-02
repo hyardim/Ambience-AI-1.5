@@ -180,12 +180,14 @@ def _upsert_chunk(
 def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
     """Extract and return the metadata jsonb payload from a chunk."""
     citation = chunk.get("citation", {})
+    source_path = chunk.get("source_path", "")
     return {
         "source_name": citation.get("source_name", ""),
         "title": citation.get("title", ""),
         "specialty": citation.get("specialty", ""),
         "doc_type": citation.get("doc_type", ""),
         "source_url": citation.get("source_url", ""),
+        "source_path": source_path,
         "content_type": chunk.get("content_type", "text"),
         "section_path": chunk.get("section_path", []),
         "section_title": chunk.get("section_title", ""),

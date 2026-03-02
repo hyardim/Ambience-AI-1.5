@@ -34,6 +34,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      - RAG_SERVICE_URL=http://rag_service:8001
+
     ports:
       - "8000:8000"
     depends_on:
@@ -55,10 +57,18 @@ services:
     volumes:
       # ✅ Fixed: Maps local 'src' to container's '/app/src'
       - ./rag_service/src:/app/src
+      # Mount data and configs so /docs/{doc_id} can serve PDFs and ingestion sees updated sources
+      - ./rag_service/data:/app/data
+      - ./rag_service/configs:/app/configs
     environment:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
       # Allow connection to host Ollama (Mac)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=thewindmom/llama3-med42-8b
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     networks:
       - ambience_net
 

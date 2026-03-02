@@ -11,3 +11,10 @@ BSR:
   specialty: rheumatology
   doc_type: guideline
   source_url: https://www.rheumatology.org.uk
+
+NICE_NEURO:
+  source_name: NICE_NEURO
+  author_org: National Institute for Health and Care Excellence
+  specialty: neurology
+  doc_type: guideline
+  source_url: https://www.nice.org.uk
