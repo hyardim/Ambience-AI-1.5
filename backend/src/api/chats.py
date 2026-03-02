@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user_obj
@@ -78,10 +78,17 @@ def delete_chat(
 def send_message(
     chat_id: int,
     message: MessageCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
-    return chat_service.send_message(db, current_user, chat_id, message.content)
+    return chat_service.send_message(
+        db,
+        current_user,
+        chat_id,
+        message.content,
+        background_tasks,
+    )
 
 
 @router.post("/{chat_id}/submit", response_model=ChatResponse)

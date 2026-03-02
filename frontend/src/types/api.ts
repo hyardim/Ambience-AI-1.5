@@ -93,6 +93,7 @@ export interface MessageCreateRequest {
 export interface GPMessageResponse {
   status: string;
   ai_response: string;
+  ai_generating?: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -101,10 +101,25 @@ export function SpecialistQueryDetailPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const loadData = async () => {
+  const hasPendingAIResponse =
+    messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
+
+  useEffect(() => {
+    if (!queryId || !hasPendingAIResponse) return;
+
+    const intervalId = window.setInterval(() => {
+      loadData({ silent: true });
+    }, 2000);
+
+    return () => window.clearInterval(intervalId);
+  }, [queryId, hasPendingAIResponse]);
+
+  const loadData = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
-    setLoading(true);
-    setError('');
+    if (!options?.silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const [profile, chatData] = await Promise.all([
         getProfile(),
@@ -114,9 +129,13 @@ export function SpecialistQueryDetailPage() {
       setChat(chatData);
       setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User')));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load consultation');
+      if (!options?.silent) {
+        setError(err instanceof Error ? err.message : 'Failed to load consultation');
+      }
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -427,6 +446,21 @@ export function SpecialistQueryDetailPage() {
                   />
                 );
               })
+            )}
+            {hasPendingAIResponse && (
+              <div className="flex gap-4">
+                <div className="shrink-0">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />
+                  </div>
+                </div>
+                <div className="flex-1 max-w-3xl">
+                  <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
+                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
+                    <div className="text-gray-700 text-sm sm:text-base">Generating response...</div>
+                  </div>
+                </div>
+              </div>
             )}
             <div ref={messagesEndRef} />
           </div>

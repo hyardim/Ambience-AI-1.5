@@ -140,7 +140,7 @@ export function ChatMessage({
     }
     if (reviewStatus === 'rejected') {
       return (
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">
           <RotateCcw className="w-3.5 h-3.5" />
           Changes Requested
         </span>
