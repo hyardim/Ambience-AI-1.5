@@ -1,4 +1,4 @@
-import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare } from 'lucide-react';
+import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare, PenLine } from 'lucide-react';
 import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
@@ -14,6 +14,8 @@ interface ChatMessageProps {
   onRequestChanges?: () => void;
   /** Callback when specialist clicks "Approve with Comment" on this message */
   onApproveWithComment?: () => void;
+  /** Callback when specialist clicks "Manual Response" on this message */
+  onManualResponse?: () => void;
   /** Whether an action is currently loading */
   actionLoading?: boolean;
 }
@@ -26,6 +28,7 @@ export function ChatMessage({
   onApprove,
   onRequestChanges,
   onApproveWithComment,
+  onManualResponse,
   actionLoading = false,
 }: ChatMessageProps) {
   const formatTime = (date: Date) => {
@@ -115,7 +118,7 @@ export function ChatMessage({
   const getAIBorderClass = () => {
     if (!isAI) return '';
     if (reviewStatus === 'approved') return 'border-l-4 border-[#007f3b]';
-    if (reviewStatus === 'rejected') return 'border-l-4 border-[#da291c]';
+    if (reviewStatus === 'rejected' || reviewStatus === 'replaced') return 'border-l-4 border-[#da291c]';
     if (showReviewStatus && !reviewStatus) return 'border-l-4 border-amber-400';
     return 'border-l-4 border-[#005eb8]';
   };
@@ -137,9 +140,17 @@ export function ChatMessage({
     }
     if (reviewStatus === 'rejected') {
       return (
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">
-          <XCircle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+          <RotateCcw className="w-3.5 h-3.5" />
           Changes Requested
+        </span>
+      );
+    }
+    if (reviewStatus === 'replaced') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">
+          <PenLine className="w-3.5 h-3.5" />
+          Replaced by Specialist
         </span>
       );
     }
@@ -160,7 +171,7 @@ export function ChatMessage({
           message.senderType === 'ai'
             ? reviewStatus === 'approved'
               ? 'bg-green-100'
-              : reviewStatus === 'rejected'
+              : reviewStatus === 'rejected' || reviewStatus === 'replaced'
                 ? 'bg-red-100'
                 : 'bg-blue-100'
             : 'bg-gray-100'
@@ -219,8 +230,8 @@ export function ChatMessage({
 
           {renderCitations()}
 
-          {/* Review feedback (shown on rejected AI messages) */}
-          {isAI && reviewStatus === 'rejected' && message.reviewFeedback && (
+          {/* Review feedback (shown on rejected/replaced AI messages) */}
+          {isAI && (reviewStatus === 'rejected' || reviewStatus === 'replaced') && message.reviewFeedback && (
             <div className="mt-4 bg-red-50 rounded-lg px-4 py-3 border border-red-200">
               <p className="text-xs font-semibold text-red-700 mb-1">Specialist Feedback</p>
               <p className="text-sm text-red-800">{message.reviewFeedback}</p>
@@ -255,6 +266,14 @@ export function ChatMessage({
                 >
                   <RotateCcw className="w-4 h-4" />
                   Request Changes
+                </button>
+                <button
+                  onClick={onManualResponse}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-1.5 bg-[#da291c] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#b51f14] transition-colors disabled:opacity-50"
+                >
+                  <PenLine className="w-4 h-4" />
+                  Manual Response
                 </button>
               </div>
             </div>

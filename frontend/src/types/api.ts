@@ -104,8 +104,9 @@ export interface AssignRequest {
 }
 
 export interface ReviewRequest {
-  action: 'approve' | 'reject' | 'request_changes';
+  action: 'approve' | 'reject' | 'request_changes' | 'manual_response';
   feedback?: string | null;
+  replacement_content?: string | null;
 }
 
 // ---------------------------------------------------------------------------

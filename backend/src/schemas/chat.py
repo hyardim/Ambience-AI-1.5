@@ -75,5 +75,6 @@ class AssignRequest(BaseModel):
     specialist_id: int
 
 class ReviewRequest(BaseModel):
-    action: str          # "approve" | "reject" | "request_changes"
+    action: str          # "approve" | "reject" | "request_changes" | "manual_response"
     feedback: Optional[str] = None
+    replacement_content: Optional[str] = None  # required when action == "manual_response"

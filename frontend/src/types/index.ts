@@ -48,7 +48,7 @@ export interface Message {
   attachments?: FileAttachment[];
   guidelineReference?: GuidelineReference;
   citations?: Citation[] | null;
-  reviewStatus?: string | null;       // null | "approved" | "rejected"
+  reviewStatus?: string | null;       // null | "approved" | "rejected" | "replaced"
   reviewFeedback?: string | null;
   reviewedAt?: string | null;
 }

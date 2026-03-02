@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, CheckCircle, XCircle, AlertTriangle,
-  Loader2, UserPlus, MessageSquare,
+  Loader2, UserPlus, MessageSquare, PenLine, Lock,
 } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
@@ -13,6 +13,7 @@ import {
   getSpecialistChatDetail,
   getProfile,
   assignChat,
+  reviewChat,
   reviewMessage,
   sendSpecialistMessage,
 } from '../../services/api';
@@ -80,6 +81,9 @@ export function SpecialistQueryDetailPage() {
   const [approveComment, setApproveComment] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [showManualResponseModal, setShowManualResponseModal] = useState(false);
+  const [manualResponseContent, setManualResponseContent] = useState('');
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Which message the current modal action targets
   const [reviewTargetMessageId, setReviewTargetMessageId] = useState<number | null>(null);
@@ -183,6 +187,38 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
+  const handleManualResponse = async () => {
+    if (!chat || !manualResponseContent.trim() || reviewTargetMessageId === null) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      await reviewMessage(chat.id, reviewTargetMessageId, 'manual_response', undefined, manualResponseContent.trim());
+      setShowManualResponseModal(false);
+      setManualResponseContent('');
+      setReviewTargetMessageId(null);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit manual response');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCloseAndApprove = async () => {
+    if (!chat) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      await reviewChat(chat.id, 'approve');
+      setShowCloseConfirm(false);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to close consultation');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleSendMessage = async (content: string) => {
     if (!chat) return;
     // Optimistically add the specialist message
@@ -219,6 +255,10 @@ export function SpecialistQueryDetailPage() {
   const unreviewedAIIds = new Set(
     messages.filter(m => m.senderType === 'ai' && !m.reviewStatus).map(m => m.id)
   );
+
+  // Whether every AI message has been reviewed (approved or rejected)
+  const aiMessages = messages.filter(m => m.senderType === 'ai');
+  const allAIReviewed = aiMessages.length > 0 && unreviewedAIIds.size === 0;
 
   const formatSpecialty = (s: string | null) =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
@@ -319,9 +359,20 @@ export function SpecialistQueryDetailPage() {
 
               {/* Hint when reviewing — actions are on messages */}
               {canReview && (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 bg-gray-50 border border-gray-200">
-                  Review actions are available on each AI response below.
-                </div>
+                <>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 bg-gray-50 border border-gray-200">
+                    Review actions are available on each AI response below.
+                  </div>
+                  <button
+                    onClick={() => setShowCloseConfirm(true)}
+                    disabled={actionLoading || !allAIReviewed}
+                    title={!allAIReviewed ? 'All AI responses must be reviewed before closing' : undefined}
+                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Lock className="w-5 h-5" />
+                    Close &amp; Approve Consultation
+                  </button>
+                </>
               )}
 
               {/* Terminal status banner */}
@@ -368,6 +419,10 @@ export function SpecialistQueryDetailPage() {
                       setReviewTargetMessageId(Number(message.id));
                       setShowRejectModal(true);
                     }}
+                    onManualResponse={() => {
+                      setReviewTargetMessageId(Number(message.id));
+                      setShowManualResponseModal(true);
+                    }}
                     actionLoading={actionLoading}
                   />
                 );
@@ -375,6 +430,24 @@ export function SpecialistQueryDetailPage() {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {/* All reviewed — bottom close banner */}
+          {canReview && allAIReviewed && (
+            <div className="border-t border-gray-200 bg-green-50 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+                <CheckCircle className="w-5 h-5" />
+                All AI responses have been reviewed.
+              </div>
+              <button
+                onClick={() => setShowCloseConfirm(true)}
+                disabled={actionLoading}
+                className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
+              >
+                <Lock className="w-5 h-5" />
+                Close &amp; Approve Consultation
+              </button>
+            </div>
+          )}
 
           {/* Chat Input (disabled for terminal states) */}
           {!isTerminal && (
@@ -494,6 +567,79 @@ export function SpecialistQueryDetailPage() {
                 className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionLoading ? 'Submitting…' : 'Submit Feedback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Response Modal */}
+      {showManualResponseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 text-purple-600 mb-4">
+              <PenLine className="w-8 h-8" />
+              <h2 className="text-xl font-bold">Manual Response</h2>
+            </div>
+            <p className="text-gray-600 mb-4">
+              The AI response will be rejected. Type your replacement response below —
+              it will be sent to the GP as a specialist message.
+            </p>
+            <textarea
+              value={manualResponseContent}
+              onChange={(e) => setManualResponseContent(e.target.value)}
+              rows={6}
+              autoFocus
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none mb-6"
+              placeholder="Type your replacement response..."
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowManualResponseModal(false);
+                  setManualResponseContent('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualResponse}
+                disabled={!manualResponseContent.trim() || actionLoading}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading ? 'Sending…' : 'Send Manual Response'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close & Approve Confirmation Modal */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 text-[#007f3b] mb-4">
+              <Lock className="w-8 h-8" />
+              <h2 className="text-xl font-bold">Close & Approve Consultation</h2>
+            </div>
+            <p className="text-gray-600 mb-6">
+              This will close the consultation and mark it as approved. The GP will be
+              notified that the review is complete. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowCloseConfirm(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloseAndApprove}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
+              >
+                {actionLoading ? 'Closing…' : 'Confirm Close & Approve'}
               </button>
             </div>
           </div>

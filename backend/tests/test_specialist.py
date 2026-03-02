@@ -331,6 +331,167 @@ class TestSpecialistReview:
         assert resp2.status_code == 200
         assert resp2.json()["status"] == "approved"
 
+    def test_manual_response_not_allowed_on_chat_review(self, client, specialist_headers, submitted_chat, registered_specialist):
+        """manual_response action is only valid on per-message review, not whole-chat review."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/review",
+            json={"action": "manual_response", "replacement_content": "My manual answer."},
+            headers=specialist_headers,
+        )
+        assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /specialist/chats/{id}/messages/{msg_id}/review
+# ---------------------------------------------------------------------------
+
+
+class TestSpecialistPerMessageReview:
+
+    def _assign(self, client, specialist_headers, chat_id, specialist_id):
+        client.post(
+            f"/specialist/chats/{chat_id}/assign",
+            json={"specialist_id": specialist_id},
+            headers=specialist_headers,
+        )
+
+    def _get_first_ai_message_id(self, client, headers, chat_id):
+        detail = client.get(f"/specialist/chats/{chat_id}", headers=headers).json()
+        for m in detail["messages"]:
+            if m["sender"] == "ai":
+                return m["id"]
+        return None
+
+    def test_approve_message_keeps_reviewing(self, client, specialist_headers, submitted_chat, registered_specialist):
+        """Approving all AI messages should NOT auto-close the consultation."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+        resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "approve"},
+            headers=specialist_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "reviewing"
+
+    def test_manual_response_rejects_ai_and_sends_specialist_message(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        """manual_response should reject the AI message and add a specialist message."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+
+        detail_before = client.get(f"/specialist/chats/{submitted_chat['id']}", headers=specialist_headers).json()
+        msgs_before = len(detail_before["messages"])
+
+        resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "manual_response", "replacement_content": "Here is my manual answer."},
+            headers=specialist_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "reviewing"
+
+        detail_after = client.get(f"/specialist/chats/{submitted_chat['id']}", headers=specialist_headers).json()
+        # Should have one extra message (the specialist replacement)
+        assert len(detail_after["messages"]) == msgs_before + 1
+        new_msg = detail_after["messages"][-1]
+        assert new_msg["sender"] == "specialist"
+        assert new_msg["content"] == "Here is my manual answer."
+
+        # The AI message should be marked replaced
+        ai_msg = next(m for m in detail_after["messages"] if m["id"] == msg_id)
+        assert ai_msg["review_status"] == "replaced"
+
+    def test_manual_response_no_regeneration(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        """manual_response should NOT generate a new AI message (unlike request_changes)."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "manual_response", "replacement_content": "My answer."},
+            headers=specialist_headers,
+        )
+
+        detail = client.get(f"/specialist/chats/{submitted_chat['id']}", headers=specialist_headers).json()
+        ai_messages = [m for m in detail["messages"] if m["sender"] == "ai"]
+        # Should still have only the original AI message (no new AI regeneration)
+        assert len(ai_messages) == 1
+
+    def test_manual_response_requires_content(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        """manual_response without replacement_content should fail."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+        resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "manual_response"},
+            headers=specialist_headers,
+        )
+        assert resp.status_code == 400
+
+    def test_approve_all_then_manually_close(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        """After approving all messages, specialist must manually close via whole-chat review."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+
+        # Approve the AI message — chat stays in reviewing
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "approve"},
+            headers=specialist_headers,
+        )
+        detail = client.get(f"/specialist/chats/{submitted_chat['id']}", headers=specialist_headers).json()
+        assert detail["status"] == "reviewing"
+
+        # Now manually close & approve via whole-chat review
+        resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/review",
+            json={"action": "approve"},
+            headers=specialist_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "approved"
+
+    def test_close_does_not_overwrite_replaced_status(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        """Closing a consultation must not overwrite a 'replaced' AI message back to 'approved'."""
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+
+        # Replace the AI message with a manual response
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "manual_response", "replacement_content": "My manual answer."},
+            headers=specialist_headers,
+        )
+
+        # Close & approve the consultation
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/review",
+            json={"action": "approve"},
+            headers=specialist_headers,
+        )
+
+        detail = client.get(f"/specialist/chats/{submitted_chat['id']}", headers=specialist_headers).json()
+        ai_msg = next(m for m in detail["messages"] if m["id"] == msg_id)
+        # Should still be "replaced", not overwritten to "approved"
+        assert ai_msg["review_status"] == "replaced"
+
 
 # ---------------------------------------------------------------------------
 # POST /specialist/chats/{id}/message
