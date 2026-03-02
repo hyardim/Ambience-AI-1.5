@@ -1,0 +1,92 @@
+import pytest
+
+from src.rag.generate import GenerationError, RAGResponse, generate
+from src.retrieval.citation import Citation, CitedResult
+
+
+def _context() -> list[CitedResult]:
+    citation = Citation(
+        title="Guide",
+        source_name="NICE",
+        specialty="Cardiology",
+        doc_type="guideline",
+        section_path=["Intro"],
+        section_title="Intro",
+        page_start=1,
+        page_end=1,
+        source_url="https://example.com",
+        doc_id="doc-1",
+        chunk_id="chunk-1",
+        content_type="text",
+    )
+    return [
+        CitedResult(
+            chunk_id="chunk-1",
+            text="context text",
+            rerank_score=0.5,
+            rrf_score=0.4,
+            vector_score=0.3,
+            keyword_rank=0.2,
+            citation=citation,
+        )
+    ]
+
+
+def test_generate_returns_response(monkeypatch) -> None:
+    captured = {}
+    expected_json = {
+        "choices": [
+            {
+                "message": {
+                    "content": "answer",
+                }
+            }
+        ]
+    }
+
+    class FakeResponse:
+        def __init__(self, url: str, headers: dict, payload: dict) -> None:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["payload"] = payload
+
+        def raise_for_status(self) -> None:  # noqa: D401
+            return None
+
+        def json(self):  # noqa: D401
+            return expected_json
+
+    def fake_post(url: str, json: dict, headers: dict, timeout: float):
+        captured["timeout"] = timeout
+        return FakeResponse(url, headers, json)
+
+    monkeypatch.setattr("src.rag.generate.httpx.post", fake_post)
+
+    class DummySettings:
+        llm_base_url = "http://localhost:1234"
+        llm_api_key = "key"
+        llm_model = "model-x"
+        llm_max_tokens = 12
+        llm_temperature = 0.5
+
+    response = generate(query="q", context=_context(), settings=DummySettings)
+
+    assert isinstance(response, RAGResponse)
+    assert response.answer == "answer"
+    assert response.model == "model-x"
+    assert captured["url"] == "http://localhost:1234/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer key"
+    assert captured["payload"]["model"] == "model-x"
+    assert captured["payload"]["max_tokens"] == 12
+    assert captured["payload"]["temperature"] == 0.5
+    assert captured["timeout"] == 30.0
+
+
+def test_generate_raises_generation_error(monkeypatch) -> None:
+    def boom(*_, **__):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("src.rag.generate.httpx.post", boom)
+
+    with pytest.raises(GenerationError):
+        generate(query="q", context=_context())

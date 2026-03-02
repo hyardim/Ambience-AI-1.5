@@ -88,6 +88,21 @@ class GenerationConfig(BaseSettings):
     ollama_max_tokens: int = Field(default=512)
 
 
+class LLMConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    llm_base_url: str = Field(default="http://localhost:11434/v1")
+    llm_model: str = Field(default="thewindmom/llama3-med42-8b")
+    llm_api_key: str = Field(default="ollama")
+    llm_max_tokens: int = Field(default=1024)
+    llm_temperature: float = Field(default=0.1)
+
+
 class PathConfig:
     def __init__(self) -> None:
         self.root: Path = Path(__file__).parent.parent
@@ -103,6 +118,7 @@ chunk_config = ChunkingConfig()
 vector_config = VectorIndexConfig()
 logging_config = LoggingConfig()
 generation_config = GenerationConfig()
+llm_config = LLMConfig()
 path_config = PathConfig()
 
 # Compatibility shims for existing codepaths
@@ -116,6 +132,11 @@ HNSW_EF_CONSTRUCTION = vector_config.hnsw_ef_construction
 OLLAMA_BASE_URL = generation_config.ollama_base_url
 OLLAMA_MODEL = generation_config.ollama_model
 OLLAMA_MAX_TOKENS = generation_config.ollama_max_tokens
+LLM_BASE_URL = llm_config.llm_base_url
+LLM_MODEL = llm_config.llm_model
+LLM_API_KEY = llm_config.llm_api_key
+LLM_MAX_TOKENS = llm_config.llm_max_tokens
+LLM_TEMPERATURE = llm_config.llm_temperature
 db_config = DatabaseConfig()
 embed_config = EmbeddingConfig()
 chunk_config = ChunkingConfig()
