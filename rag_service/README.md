@@ -92,6 +92,12 @@ LOG_FILE=logs/rag.log
 
 ## Development
 
+### Citation links (what to expect)
+
+- The RAG service now caps citations to the top 3 retrieved chunks and tells the model to only cite passages it actually used, so you should not see unused citation numbers.
+- Source links in the UI point to `http://localhost:8001/docs/{doc_id}#page={page}` and open inline in the browser PDF viewer (no forced download) as long as `rag_service` is running.
+- To refresh citations after code changes, re-run ingestion so chunk metadata (including `source_path`) is stored in Postgres, then retest a chat message.
+
 ### Common Commands
 
 ```bash
