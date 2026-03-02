@@ -26,9 +26,9 @@ def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
     instructions = (
         "You are a cautious clinical assistant. Use only the provided context to "
         "answer the clinician's question. "
-        "Cite supporting passages with bracketed numbers like [1], [2]. If the "
-        "context does not contain the answer, state that you do not have enough "
-        "information instead of guessing. Keep the response concise and factual."
+        "Cite supporting passages with the bracket numbers given in the context (e.g., [1], [2]) and only cite passages you actually use. "
+        "If the context does not contain the answer, state that you do not have enough information instead of guessing. "
+        "Keep the response concise and factual."
     )
 
     return (

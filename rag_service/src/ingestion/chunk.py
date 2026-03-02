@@ -200,6 +200,7 @@ def make_table_chunk(
         "block_uids": [block.get("block_uid", "")],
         "token_count": count_tokens(text),
         "citation": citation,
+        "source_path": doc_meta.get("source_path", ""),
         "_source_order": block.get("block_id", 0),
     }
 
@@ -401,6 +402,7 @@ def _build_text_chunk(
         "block_uids": block_uids,
         "token_count": count_tokens(text),
         "citation": citation,
+        "source_path": doc_meta.get("source_path", ""),
         "_source_order": min(b.get("block_id", 0) for b in contributing_blocks),
     }
 

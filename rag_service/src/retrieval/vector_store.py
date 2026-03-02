@@ -77,6 +77,26 @@ def delete_chunks_for_doc(doc_id: str) -> None:
     conn.close()
 
 
+def get_source_path_for_doc(doc_id: str) -> str | None:
+    """Return the source_path for a given doc_id, if present in metadata."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT metadata->>'source_path'
+                FROM rag_chunks
+                WHERE doc_id = %s
+                LIMIT 1;
+                """,
+                (doc_id,),
+            )
+            row = cur.fetchone()
+            return row[0] if row and row[0] else None
+    finally:
+        conn.close()
+
+
 def insert_chunks(chunks: list[dict[str, Any]]) -> None:
     """
     Bulk-inserts chunk rows.

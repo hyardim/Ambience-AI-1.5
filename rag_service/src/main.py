@@ -1,13 +1,19 @@
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_MAX_TOKENS
+from .config import OLLAMA_MAX_TOKENS, path_config
 from .generation.client import generate_answer
 from .generation.prompts import build_grounded_prompt
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
-from .retrieval.vector_store import init_db, search_similar_chunks
+from .retrieval.vector_store import (
+    get_source_path_for_doc,
+    init_db,
+    search_similar_chunks,
+)
 
 app = FastAPI(title="Ambience Med42 RAG Service")
 
@@ -50,6 +56,9 @@ class SearchResult(BaseModel):
 
 class AnswerRequest(QueryRequest):
     max_tokens: int = OLLAMA_MAX_TOKENS
+
+
+MAX_CITATIONS = 3
 
 
 class AnswerResponse(BaseModel):
@@ -105,7 +114,7 @@ async def generate_clinical_answer(request: AnswerRequest):
         query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
-        prompt = build_grounded_prompt(request.query, retrieved)
+        prompt = build_grounded_prompt(request.query, retrieved[:MAX_CITATIONS])
 
         answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
 
@@ -124,7 +133,7 @@ async def generate_clinical_answer(request: AnswerRequest):
                 section_path=res.get("section_path"),
                 metadata=res.get("metadata"),
             )
-            for res in retrieved
+            for res in retrieved[:MAX_CITATIONS]
         ]
 
         return AnswerResponse(answer=answer_text, citations=citations)
@@ -134,3 +143,29 @@ async def generate_clinical_answer(request: AnswerRequest):
             status_code=500,
             detail=f"RAG Answer Error: {str(e)}"
         ) from e
+
+
+@app.get("/docs/{doc_id}")
+async def fetch_document(doc_id: str):
+    """Stream the source PDF for a given doc_id (for citation deep links)."""
+    source_path = get_source_path_for_doc(doc_id)
+    if not source_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = Path(source_path)
+    data_root = (path_config.root / "data").resolve()
+
+    try:
+        resolved = file_path.resolve(strict=True)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Document file missing")
+
+    if data_root not in resolved.parents and resolved != data_root:
+        raise HTTPException(status_code=400, detail="Invalid document path")
+
+    return FileResponse(
+        resolved,
+        media_type="application/pdf",
+        filename=None,
+        headers={"Content-Disposition": f"inline; filename={resolved.name}"},
+    )
