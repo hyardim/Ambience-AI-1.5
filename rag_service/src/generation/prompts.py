@@ -1,6 +1,7 @@
 def _format_context(chunks: list[dict]) -> str:
+    """Render retrieved chunks for the prompt. Empty string when none."""
     if not chunks:
-        return "[1] No supporting passages found in the knowledge base."
+        return ""
 
     lines = []
     for idx, chunk in enumerate(chunks, start=1):
@@ -23,17 +24,23 @@ def _format_context(chunks: list[dict]) -> str:
 
 def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
     context_block = _format_context(chunks)
+    has_context = bool(chunks)
     instructions = (
         "You are a cautious clinical assistant. Use only the provided context to "
         "answer the clinician's question. "
         "Cite supporting passages with the bracket numbers given in the context (e.g., [1], [2]) and only cite passages you actually use. "
-        "If the context does not contain the answer, state that you do not have enough information instead of guessing. "
+        "If there is no relevant context, respond briefly that you do not have enough information and do not cite sources. "
         "Keep the response concise and factual."
+    )
+
+    context_section = "Context:\n" + (context_block if has_context else "(none)")
+    citation_hint = (
+        "Answer (with citations):" if has_context else "Answer (no citations):"
     )
 
     return (
         f"{instructions}\n\n"
-        f"Context:\n{context_block}\n\n"
+        f"{context_section}\n\n"
         f"Question: {question}\n\n"
-        "Answer (with citations):"
+        f"{citation_hint}"
     )

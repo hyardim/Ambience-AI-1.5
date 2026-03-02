@@ -59,6 +59,7 @@ class AnswerRequest(QueryRequest):
 
 
 MAX_CITATIONS = 3
+MIN_RELEVANCE = 0.25
 
 
 class AnswerResponse(BaseModel):
@@ -114,7 +115,12 @@ async def generate_clinical_answer(request: AnswerRequest):
         query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
-        prompt = build_grounded_prompt(request.query, retrieved[:MAX_CITATIONS])
+
+        # Filter out low-relevance hits; if nothing passes, treat as no context.
+        filtered = [r for r in retrieved if r.get("score", 0) >= MIN_RELEVANCE]
+        top_chunks = filtered[:MAX_CITATIONS]
+
+        prompt = build_grounded_prompt(request.query, top_chunks)
 
         answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
 
@@ -133,7 +139,7 @@ async def generate_clinical_answer(request: AnswerRequest):
                 section_path=res.get("section_path"),
                 metadata=res.get("metadata"),
             )
-            for res in retrieved[:MAX_CITATIONS]
+            for res in top_chunks
         ]
 
         return AnswerResponse(answer=answer_text, citations=citations)
