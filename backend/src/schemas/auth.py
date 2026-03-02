@@ -29,6 +29,11 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+
+
 class AuthResponse(BaseModel):
     """Returned by login & register — token plus basic user info."""
     access_token: str

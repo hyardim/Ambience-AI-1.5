@@ -112,7 +112,7 @@ class Notification(Base):
     type       = Column(SQLEnum(NotificationType, native_enum=False), nullable=False)
     title      = Column(String, nullable=False)
     body       = Column(String, nullable=True)
-    chat_id    = Column(Integer, ForeignKey("chats.id"), nullable=True)
+    chat_id    = Column(Integer, ForeignKey("chats.id", ondelete="SET NULL"), nullable=True)
     is_read    = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

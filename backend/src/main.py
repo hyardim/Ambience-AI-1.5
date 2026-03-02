@@ -26,6 +26,30 @@ def ensure_auth_columns() -> None:
 
 
 
+def ensure_notification_fk() -> None:
+    """Re-create notifications.chat_id FK with ON DELETE SET NULL.
+
+    The original constraint (created by create_all before this fix) has no
+    ondelete behaviour, which causes a FK violation when a chat is deleted
+    while notifications referencing it still exist.  Running this at startup
+    is idempotent — DROP IF EXISTS means a clean DB is unaffected.
+    """
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE notifications "
+                "DROP CONSTRAINT IF EXISTS notifications_chat_id_fkey"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE notifications "
+                "ADD CONSTRAINT notifications_chat_id_fkey "
+                "FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE SET NULL"
+            )
+        )
+
+
 def ensure_default_users() -> None:
     if os.getenv("AUTH_BOOTSTRAP_DEMO_USERS", "true").lower() != "true":
         return
@@ -75,6 +99,7 @@ def ensure_default_users() -> None:
 
 
 ensure_auth_columns()
+ensure_notification_fk()
 ensure_default_users()
 
 app = FastAPI(
