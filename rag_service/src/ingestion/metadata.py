@@ -61,22 +61,32 @@ def attach_metadata(
 
     inferred = infer_from_path(source_path)
 
-    # Prefer path-derived specialty/source when they conflict with provided metadata
-    if inferred.get("specialty") and source_info.get("specialty") != inferred["specialty"]:
-        logger.info(
-            "Overriding specialty from %s to %s based on path",
-            source_info.get("specialty", ""),
+    # Fill missing specialty/source_name from path; if both exist but differ, keep caller input
+    if not source_info.get("specialty") and inferred.get("specialty"):
+        source_info["specialty"] = inferred["specialty"]
+    elif (
+        inferred.get("specialty")
+        and source_info.get("specialty")
+        and source_info["specialty"] != inferred["specialty"]
+    ):
+        logger.warning(
+            "Specialty mismatch (provided=%s, inferred=%s); keeping provided value",
+            source_info["specialty"],
             inferred["specialty"],
         )
-        source_info["specialty"] = inferred["specialty"]
 
-    if inferred.get("source_name") and source_info.get("source_name") != inferred["source_name"]:
-        logger.info(
-            "Overriding source_name from %s to %s based on path",
-            source_info.get("source_name", ""),
+    if not source_info.get("source_name") and inferred.get("source_name"):
+        source_info["source_name"] = inferred["source_name"]
+    elif (
+        inferred.get("source_name")
+        and source_info.get("source_name")
+        and source_info["source_name"] != inferred["source_name"]
+    ):
+        logger.warning(
+            "Source name mismatch (provided=%s, inferred=%s); keeping provided value",
+            source_info["source_name"],
             inferred["source_name"],
         )
-        source_info["source_name"] = inferred["source_name"]
 
     # Step 2: validate source_info
     validate_source_info(source_info)
