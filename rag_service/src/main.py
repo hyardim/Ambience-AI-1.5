@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,66 @@ class AnswerRequest(QueryRequest):
 MAX_CITATIONS = 3
 MIN_RELEVANCE = 0.25
 
+# Tokens that are too generic to establish relevance on their own.
+GENERIC_TOKENS = {
+    "guideline",
+    "guidelines",
+    "recommendation",
+    "recommendations",
+    "committee",
+    "evidence",
+    "information",
+    "summary",
+    "overview",
+    "introduction",
+    "statement",
+    "data",
+    "supplementary",
+    "material",
+    "details",
+}
+
+
+def _has_query_overlap(question: str, chunk_text: str) -> bool:
+    """Basic lexical check to ensure the chunk mentions query terms.
+
+    Filters out boilerplate chunks that match semantically but lack shared terms,
+    which often leads to irrelevant citations.
+    """
+
+    def _tokens(text: str) -> set[str]:
+        tokens = {
+            t
+            for t in re.findall(r"[A-Za-z0-9]+", text.lower())
+            if len(t) >= 4 and t not in GENERIC_TOKENS
+        }
+        return tokens
+
+    q_tokens = _tokens(question)
+    c_tokens = _tokens(chunk_text)
+    overlap = q_tokens.intersection(c_tokens)
+    return bool(q_tokens and c_tokens and overlap)
+
+
+# Boilerplate phrases that are not helpful for answering clinical questions.
+BOILERPLATE_PATTERNS = [
+    "data availability",
+    "supplementary material",
+    "guideline committee",
+    "finding more information",
+    "evidence reviews",
+    "copyright",
+    "license",
+    "doi",
+    "manuscript",
+]
+
+
+def _is_boilerplate(chunk: dict[str, Any]) -> bool:
+    text = (chunk.get("text") or "").lower()
+    section = ((chunk.get("section_path") or "") or "").lower()
+    return any(pat in text or pat in section for pat in BOILERPLATE_PATTERNS)
+
 
 class AnswerResponse(BaseModel):
     answer: str
@@ -122,8 +183,20 @@ async def generate_clinical_answer(request: AnswerRequest):
             for r in retrieved
             if r.get("score", 0) >= MIN_RELEVANCE
             and (r.get("metadata") or {}).get("source_path")
+            and _has_query_overlap(request.query, r.get("text", ""))
+            and not _is_boilerplate(r)
         ]
         top_chunks = filtered[:MAX_CITATIONS]
+
+        if not top_chunks:
+            # Avoid making the model hallucinate when nothing relevant was retrieved.
+            return AnswerResponse(
+                answer=(
+                    "I couldn't find any guideline passage in the indexed sources "
+                    "that directly answers this question. Please rephrase or try a different query."
+                ),
+                citations=[],
+            )
 
         prompt = build_grounded_prompt(request.query, top_chunks)
 
