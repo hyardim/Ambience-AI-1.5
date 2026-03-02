@@ -57,6 +57,9 @@ services:
     volumes:
       # ✅ Fixed: Maps local 'src' to container's '/app/src'
       - ./rag_service/src:/app/src
+      # Mount data and configs so /docs/{doc_id} can serve PDFs and ingestion sees updated sources
+      - ./rag_service/data:/app/data
+      - ./rag_service/configs:/app/configs
     environment:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
       # Allow connection to host Ollama (Mac)

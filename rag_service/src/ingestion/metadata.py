@@ -13,9 +13,26 @@ from ..utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 VALID_SPECIALTIES = {"neurology", "rheumatology"}
-VALID_SOURCE_NAMES = {"NICE", "BSR", "Others"}
+VALID_SOURCE_NAMES = {"NICE", "BSR", "Others", "NICE_NEURO"}
 VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard"}
 TITLE_FONT_SIZE_THRESHOLD = 18
+
+
+def _derive_source_url(source_info: dict[str, Any]) -> str:
+    """Return a per-document source URL when we can infer it from the filename.
+
+    For NICE PDFs named like NG128.pdf, generate https://www.nice.org.uk/guidance/ng128.
+    Otherwise fall back to the provided source_url if present.
+    """
+
+    provided = source_info.get("source_url", "") or ""
+    source_path = Path(source_info.get("source_path", ""))
+    stem = source_path.stem.lower()
+
+    if "nice.org.uk" in provided and stem.startswith("ng") and stem[2:].isdigit():
+        return f"https://www.nice.org.uk/guidance/{stem}"
+
+    return provided
 
 
 class MetadataValidationError(Exception):
@@ -106,6 +123,9 @@ def attach_metadata(
     title = extract_title(table_aware_doc, pdf_metadata, source_info)
 
     # Step 7: create doc_meta
+    # Derive a more specific source_url when possible (e.g., NICE NG### PDFs).
+    inferred_url = _derive_source_url(source_info)
+
     doc_meta: dict[str, Any] = {
         "doc_id": doc_id,
         "doc_version": doc_version,
@@ -115,7 +135,7 @@ def attach_metadata(
         "doc_type": source_info["doc_type"],
         "specialty": source_info["specialty"],
         "author_org": source_info.get("author_org", ""),
-        "source_url": source_info.get("source_url", ""),
+        "source_url": inferred_url,
         "creation_date": pdf_metadata.get("creationDate", ""),
         "publish_date": source_info.get("publish_date", ""),
         "last_updated_date": source_info.get("last_updated_date", ""),

@@ -73,3 +73,24 @@ def test_ask_wires_retrieve_and_generate(monkeypatch) -> None:
     assert calls["generate"]["query"] == "q"
     assert calls["generate"]["context"] == context
     assert calls["generate"]["settings"] == {"k": "v"}
+
+
+def test_ask_returns_polite_when_no_context(monkeypatch) -> None:
+    calls: dict[str, dict] = {"retrieve": {}, "generate": {}}
+
+    def fake_retrieve(**kwargs):
+        calls["retrieve"] = kwargs
+        return []
+
+    def fake_generate(**kwargs):
+        calls["generate"] = kwargs
+        raise AssertionError("generate should not be called when no context")
+
+    monkeypatch.setattr("src.rag.pipeline.retrieve", fake_retrieve)
+    monkeypatch.setattr("src.rag.pipeline.generate", fake_generate)
+
+    result = ask(query="q", db_url="postgresql://x")
+
+    assert result.sources == []
+    assert "sufficient supporting sources" in result.answer.lower()
+    assert calls["generate"] == {}
