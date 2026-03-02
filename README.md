@@ -69,3 +69,22 @@ Set these variables (docker-compose already wires them through):
 - If `/answer` times out: confirm `ollama serve` is running and reachable from containers via `host.docker.internal`.
 - If citations are empty: ensure documents are ingested into pgvector; check RAG logs for ingestion errors.
 - If pgvector is missing: the RAG service will attempt to create the extension and schema on startup; check container logs for errors.
+
+## Quick start (docker compose)
+
+- Bring everything up: `docker compose up --build` (services: backend at 8000, frontend at 3000, rag_service at 8001, pgvector at 5432).
+- Log in (seed user): `gp@example.com` / `password123` via frontend or `POST /auth/login`.
+- Send a chat message: `POST /chats/{id}/message` with Bearer token; backend forwards to rag_service `/answer`.
+- View sources: UI “Sources” links hit `http://localhost:8001/docs/{doc_id}#page={page}` and open inline.
+
+## Ingestion quick reference
+
+- PDFs live in `rag_service/data/raw/{specialty}/{publisher}/...`.
+- Re-ingest after adding or updating PDFs:
+	- `docker compose exec rag_service python -m src.ingestion.cli ingest --input data/raw/neurology/NICE --source-name NICE --log-level INFO`
+- Ingestion writes chunk metadata (including `source_path`) to Postgres so citation links work.
+
+## Citation behavior (current)
+
+- RAG caps citations to the top 3 retrieved chunks and instructs the model to only cite passages it used; unused citation numbers should not appear.
+- Source links are served inline from `rag_service` via `/docs/{doc_id}`, so clicking opens the PDF in-browser.
