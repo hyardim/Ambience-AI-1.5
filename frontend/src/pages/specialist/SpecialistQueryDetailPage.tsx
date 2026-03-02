@@ -99,7 +99,7 @@ export function SpecialistQueryDetailPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
 
   const hasPendingAIResponse =
     messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
@@ -457,7 +457,11 @@ export function SpecialistQueryDetailPage() {
                 <div className="flex-1 max-w-3xl">
                   <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
                   <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
-                    <div className="text-gray-700 text-sm sm:text-base">Generating response...</div>
+                    <div className="flex items-center gap-1.5 py-1">
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                    </div>
                   </div>
                 </div>
               </div>

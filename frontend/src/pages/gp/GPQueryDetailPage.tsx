@@ -75,7 +75,7 @@ export function GPQueryDetailPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
 
   const hasPendingAIResponse =
     messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
@@ -347,7 +347,11 @@ export function GPQueryDetailPage() {
                 <div className="flex-1 max-w-3xl">
                   <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
                   <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
-                    <div className="text-gray-700 text-sm sm:text-base">Generating response...</div>
+                    <div className="flex items-center gap-1.5 py-1">
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -359,6 +363,20 @@ export function GPQueryDetailPage() {
           {(chat.status === 'open' || chat.status === 'submitted') && (
             <div className="border-t border-gray-200 p-4">
               <ChatInput onSendMessage={handleSendMessage} disabled={sending} />
+            </div>
+          )}
+
+          {/* Closed banner — bottom */}
+          {chat.status === 'approved' && (
+            <div className="border-t border-green-200 bg-green-50 px-6 py-3 flex items-center gap-2 text-green-800">
+              <ClipboardCheck className="w-4 h-4 shrink-0" />
+              <p className="text-sm">This consultation has been approved by a specialist.</p>
+            </div>
+          )}
+          {chat.status === 'rejected' && (
+            <div className="border-t border-red-200 bg-red-50 px-6 py-3 flex items-center gap-2 text-red-800">
+              <ClipboardCheck className="w-4 h-4 shrink-0" />
+              <p className="text-sm">This consultation has been rejected by a specialist.</p>
             </div>
           )}
         </div>
