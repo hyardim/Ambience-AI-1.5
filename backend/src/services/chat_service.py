@@ -1,5 +1,7 @@
+import os
 from typing import Optional
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,9 @@ from src.schemas.chat import (
     MessageResponse,
 )
 from src.services._mappers import chat_to_response, msg_to_response
+
+
+RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 
 
 # ---------------------------------------------------------------------------
@@ -146,12 +151,29 @@ def send_message(db: Session, user: User, chat_id: int, content: str) -> dict:
         )
 
     message_repository.create(db, chat_id=chat.id, content=content, sender="user")
+    rag_payload = {"query": content, "top_k": 4}
+
+    try:
+        rag_response = httpx.post(
+            f"{RAG_SERVICE_URL}/answer", json=rag_payload, timeout=60
+        )
+        rag_response.raise_for_status()
+        rag_json = rag_response.json()
+        ai_content = rag_json.get("answer", "")
+        citations = rag_json.get("citations", [])
+    except Exception as exc:  # pragma: no cover - network fallback
+        ai_content = (
+            "RAG service unavailable right now. Please try again later. "
+            f"(detail: {exc})"
+        )
+        citations = None
+
     ai_msg = message_repository.create(
         db,
         chat_id=chat.id,
-        content=f"I received: {content}",
+        content=ai_content,
         sender="ai",
-        citations=[],
+        citations=citations,
     )
 
     if chat.status == ChatStatus.OPEN:
