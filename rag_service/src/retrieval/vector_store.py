@@ -25,44 +25,44 @@ def init_db(vector_dim: int) -> None:
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                cur.execute(
-                        f"""
-                        CREATE TABLE IF NOT EXISTS rag_chunks (
-                                id            BIGSERIAL PRIMARY KEY,
-                                doc_id        TEXT        NOT NULL,
-                                doc_version   TEXT        NOT NULL,
-                                chunk_id      TEXT        NOT NULL,
-                                chunk_index   INT         NOT NULL,
-                                content_type  TEXT        NOT NULL,
-                                text          TEXT        NOT NULL,
-                                embedding     VECTOR({vector_dim}) NOT NULL,
-                                metadata      JSONB       NOT NULL,
-                                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                                updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        cur.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS rag_chunks (
+                id            BIGSERIAL PRIMARY KEY,
+                doc_id        TEXT        NOT NULL,
+                doc_version   TEXT        NOT NULL,
+                chunk_id      TEXT        NOT NULL,
+                chunk_index   INT         NOT NULL,
+                content_type  TEXT        NOT NULL,
+                text          TEXT        NOT NULL,
+                embedding     VECTOR({vector_dim}) NOT NULL,
+                metadata      JSONB       NOT NULL,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-                                CONSTRAINT rag_chunks_unique UNIQUE (doc_id, doc_version, chunk_id)
-                        );
-                        """
-                )
+                CONSTRAINT rag_chunks_unique UNIQUE (doc_id, doc_version, chunk_id)
+            );
+            """
+        )
 
-                cur.execute(
-                        f"""
-                        DO $$
-                        BEGIN
-                            IF NOT EXISTS (
-                                SELECT 1
-                                FROM   pg_class c
-                                JOIN   pg_namespace n ON n.oid = c.relnamespace
-                                WHERE  c.relname = 'idx_rag_chunks_embedding_hnsw'
-                            ) THEN
-                                CREATE INDEX idx_rag_chunks_embedding_hnsw
-                                ON rag_chunks
-                                USING hnsw (embedding vector_cosine_ops)
-                                WITH (m = {HNSW_M}, ef_construction = {HNSW_EF_CONSTRUCTION});
-                            END IF;
-                        END $$;
-                        """
-                )
+        cur.execute(
+            f"""
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1
+                FROM   pg_class c
+                JOIN   pg_namespace n ON n.oid = c.relnamespace
+                WHERE  c.relname = 'idx_rag_chunks_embedding_hnsw'
+              ) THEN
+                CREATE INDEX idx_rag_chunks_embedding_hnsw
+                ON rag_chunks
+                USING hnsw (embedding vector_cosine_ops)
+                WITH (m = {HNSW_M}, ef_construction = {HNSW_EF_CONSTRUCTION});
+              END IF;
+            END $$;
+            """
+        )
 
     conn.close()
 
@@ -73,7 +73,7 @@ def delete_chunks_for_doc(doc_id: str) -> None:
     """
     conn = get_conn()
     with conn.cursor() as cur:
-                cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s;", (doc_id,))
+        cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s;", (doc_id,))
     conn.close()
 
 
@@ -166,9 +166,19 @@ def search_similar_chunks(
                 "score": float(row[8]),
                 "page_start": (row[7] or {}).get("page_start"),
                 "page_end": (row[7] or {}).get("page_end"),
-                "section_path": (row[7] or {}).get("section_path"),
+                # section_path can be stored as a list in metadata; join for API compatibility.
+                "section_path": _normalize_section_path((row[7] or {}).get("section_path")),
             }
             for row in results
         ]
     finally:
         conn.close()
+
+
+def _normalize_section_path(section_path: Any) -> str | None:
+    """Return a string section path, tolerating list metadata."""
+    if section_path is None:
+        return None
+    if isinstance(section_path, list):
+        return " > ".join(str(part) for part in section_path) if section_path else None
+    return str(section_path)
