@@ -684,6 +684,12 @@ class TestChunkDocument:
         assert "pages" in result
         assert result["source_path"] == doc["source_path"]
 
+    def test_source_path_copied_to_all_chunks(self) -> None:
+        doc = make_metadata_doc()
+        result = chunk_document(doc)
+        for chunk in result["chunks"]:
+            assert chunk["source_path"] == doc["source_path"]
+
     def test_short_section_merged(self) -> None:
         pages = [
             {

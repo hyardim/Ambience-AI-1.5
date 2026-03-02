@@ -70,6 +70,14 @@ Set these variables (docker-compose already wires them through):
 - If citations are empty: ensure documents are ingested into pgvector; check RAG logs for ingestion errors.
 - If pgvector is missing: the RAG service will attempt to create the extension and schema on startup; check container logs for errors.
 
+### Local testing prerequisites (dev deps)
+
+- Before running pytest locally, install the dev extras for the RAG service so tests have all heavy dependencies (PyMuPDF, sentence-transformers, tiktoken, etc.):
+	- `cd rag_service && pip install -e .[dev]`
+	- `python -m nltk.downloader punkt punkt_tab` (needed for sentence splitting)
+- Backend tests only need the standard backend requirements (`pip install -r backend/requirements.txt`).
+- CI should do the same (use the `dev` extra) if you want the full rag_service test suite to run.
+
 ## Quick start (docker compose)
 
 - Bring everything up: `docker compose up --build` (services: backend at 8000, frontend at 3000, rag_service at 8001, pgvector at 5432).

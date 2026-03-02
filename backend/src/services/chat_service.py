@@ -2,17 +2,16 @@ import os
 from typing import Optional
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from src.db.models import Chat, ChatStatus, User
+from src.db.models import ChatStatus, User
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
     ChatCreate,
     ChatResponse,
     ChatUpdate,
     ChatWithMessages,
-    MessageResponse,
 )
 from src.services._mappers import chat_to_response, msg_to_response
 
@@ -23,6 +22,7 @@ RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 # ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
+
 
 def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
     chat = chat_repository.create(
@@ -41,6 +41,7 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
 # ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------
+
 
 def list_chats(
     db: Session,
@@ -67,6 +68,7 @@ def list_chats(
 # Get (with messages)
 # ---------------------------------------------------------------------------
 
+
 def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
@@ -84,6 +86,7 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
 # ---------------------------------------------------------------------------
 # Update
 # ---------------------------------------------------------------------------
+
 
 def update_chat(
     db: Session, user: User, chat_id: int, payload: ChatUpdate
@@ -110,7 +113,9 @@ def update_chat(
         try:
             fields["status"] = ChatStatus(payload.status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid status: {payload.status}"
+            )
 
     chat = chat_repository.update(db, chat, **fields)
     audit_repository.log(
@@ -122,6 +127,7 @@ def update_chat(
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------
+
 
 def delete_chat(db: Session, user: User, chat_id: int) -> None:
     chat = chat_repository.get(db, chat_id, user_id=user.id)
@@ -137,6 +143,7 @@ def delete_chat(db: Session, user: User, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 # Send message
 # ---------------------------------------------------------------------------
+
 
 def send_message(db: Session, user: User, chat_id: int, content: str) -> dict:
     chat = chat_repository.get(db, chat_id, user_id=user.id)
@@ -163,10 +170,10 @@ def send_message(db: Session, user: User, chat_id: int, content: str) -> dict:
         citations = rag_json.get("citations", [])
     except Exception as exc:  # pragma: no cover - network fallback
         ai_content = (
-            "RAG service unavailable right now. Please try again later. "
-            f"(detail: {exc})"
+            "RAG service unavailable right now. Echoing your question while the "
+            f"service recovers: {content} (detail: {exc})"
         )
-        citations = None
+        citations = []
 
     ai_msg = message_repository.create(
         db,
@@ -191,6 +198,7 @@ def send_message(db: Session, user: User, chat_id: int, content: str) -> dict:
 # ---------------------------------------------------------------------------
 # Submit for review
 # ---------------------------------------------------------------------------
+
 
 def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
     chat = chat_repository.get(db, chat_id, user_id=user.id)

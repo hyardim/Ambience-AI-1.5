@@ -134,6 +134,12 @@ class TestBuildMetadata:
         assert isinstance(metadata["citation"], dict)
         assert metadata["citation"]["doc_id"] == "doc123"
 
+    def test_source_path_preserved(self) -> None:
+        chunk = make_chunk()
+        chunk["source_path"] = "data/raw/neurology/test.pdf"
+        metadata = _build_metadata(chunk)
+        assert metadata["source_path"] == "data/raw/neurology/test.pdf"
+
 
 # -----------------------------------------------------------------------
 # _metadata_json
