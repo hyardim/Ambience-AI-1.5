@@ -29,8 +29,8 @@ def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
         "You are a cautious clinical assistant. Use only the provided context to "
         "answer the clinician's question. "
         "Cite supporting passages with the bracket numbers given in the context (e.g., [1], [2]) and only cite passages you actually use. "
-        "If there is no relevant context, respond briefly that you do not have enough information and do not cite sources. "
-        "Keep the response concise and factual."
+        "If there is no relevant context or the question appears non-medical/off-topic (e.g., small talk), politely state that you cannot provide clinical guidance without relevant medical context. "
+        "Do not fabricate context or cite sources when none are available. Keep the response concise and factual."
     )
 
     context_section = "Context:\n" + (context_block if has_context else "(none)")
