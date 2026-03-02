@@ -106,7 +106,7 @@ generation_config = GenerationConfig()
 path_config = PathConfig()
 
 # Compatibility shims for existing codepaths
-DATABASE_URL = db_config.connection_string
+DATABASE_URL = os.getenv("DATABASE_URL", db_config.connection_string)
 MODEL_NAME = embed_config.embedding_model
 RAG_DATA_DIR = os.getenv("RAG_DATA_DIR", str(path_config.data_raw))
 CHUNK_SIZE = chunk_config.chunk_size

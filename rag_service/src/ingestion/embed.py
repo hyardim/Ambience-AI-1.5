@@ -127,7 +127,7 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
 def embed_text(
     model: SentenceTransformer, texts: list[str], batch_size: int = EMBEDDING_BATCH_SIZE
 ) -> list[list[float]]:
-    """Embed arbitrary texts for retrieval or ranking queries."""
+    """Embed arbitrary texts (e.g., user queries) with normalization."""
     if not texts:
         return []
     vectors = model.encode(

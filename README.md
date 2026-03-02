@@ -36,6 +36,8 @@ The system follows a decoupled microservices topology:
 
 ### Environment
 
+- Python: 3.10+ (tested on 3.12). On macOS ARM, Python 3.12 avoids PyMuPDF build issues; use a 3.12 venv if pip install fails on earlier versions.
+
 Set these variables (docker-compose already wires them through):
 
 - `OLLAMA_BASE_URL`: `http://host.docker.internal:11434` on macOS when Ollama runs on the host.

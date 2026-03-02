@@ -24,7 +24,7 @@ PDF → Extract → Clean → Chunk → Embed → Store → Retrieve → Generat
 
 ## Tech Stack
 
-| Component        | Technology                          |
+| Component       | Technology                          |
 |-----------------|-------------------------------------|
 | Vector Database | PostgreSQL + pgvector (HNSW index)  |
 | Embeddings      | sentence-transformers (MiniLM-L6)   |
@@ -39,7 +39,7 @@ PDF → Extract → Clean → Chunk → Embed → Store → Retrieve → Generat
 ## Getting Started
 
 ### Prerequisites
-- Python 3.10+
+- Python 3.10+ (3.12 recommended on macOS to avoid PyMuPDF build issues)
 - Docker + Docker Compose
 
 ### Setup
