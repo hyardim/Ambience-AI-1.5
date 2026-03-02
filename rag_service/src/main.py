@@ -116,8 +116,13 @@ async def generate_clinical_answer(request: AnswerRequest):
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
 
-        # Filter out low-relevance hits; if nothing passes, treat as no context.
-        filtered = [r for r in retrieved if r.get("score", 0) >= MIN_RELEVANCE]
+        # Filter out low-relevance hits and chunks missing source_path (broken citations).
+        filtered = [
+            r
+            for r in retrieved
+            if r.get("score", 0) >= MIN_RELEVANCE
+            and (r.get("metadata") or {}).get("source_path")
+        ]
         top_chunks = filtered[:MAX_CITATIONS]
 
         prompt = build_grounded_prompt(request.query, top_chunks)
