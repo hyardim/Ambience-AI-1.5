@@ -27,6 +27,17 @@ export interface GuidelineReference {
   lastUpdated: string;
 }
 
+export interface Citation {
+  doc_id?: string;
+  title: string;
+  source_name: string;
+  specialty?: string;
+  section_path?: string | string[];
+  page_start?: number;
+  page_end?: number;
+  source_url?: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -36,6 +47,7 @@ export interface Message {
   timestamp: Date;
   attachments?: FileAttachment[];
   guidelineReference?: GuidelineReference;
+  citations?: Citation[] | null;
   reviewStatus?: string | null;       // null | "approved" | "rejected"
   reviewFeedback?: string | null;
   reviewedAt?: string | null;

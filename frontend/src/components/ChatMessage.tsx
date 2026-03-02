@@ -1,5 +1,5 @@
 import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare } from 'lucide-react';
-import type { Message } from '../types';
+import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
   message: Message;
@@ -55,6 +55,61 @@ export function ChatMessage({
 
   const isAI = message.senderType === 'ai';
   const reviewStatus = message.reviewStatus;
+
+  const renderCitations = () => {
+    if (!isAI) return null;
+    const citations = message.citations || [];
+    if (citations.length === 0) return null;
+
+    const formatSection = (c: Citation) => {
+      if (!c.section_path) return null;
+      if (Array.isArray(c.section_path)) return c.section_path.join(' > ');
+      return c.section_path;
+    };
+
+    const formatPage = (c: Citation) => {
+      if (c.page_start && c.page_end && c.page_start !== c.page_end) {
+        return `pages ${c.page_start}-${c.page_end}`;
+      }
+      if (c.page_start) return `page ${c.page_start}`;
+      return null;
+    };
+
+    return (
+      <div className="mt-4 border-t border-gray-200 pt-3">
+        <p className="text-xs font-semibold text-gray-700 mb-2">Sources</p>
+        <div className="space-y-2">
+          {citations.map((c, idx) => {
+            const page = formatPage(c);
+            const section = formatSection(c);
+            const href = c.doc_id ? `http://localhost:8001/docs/${c.doc_id}${c.page_start ? `#page=${c.page_start}` : ''}` : undefined;
+            return (
+              <div key={idx} className="text-sm text-gray-800 flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-600">[{idx + 1}]</span>
+                  {href ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#005eb8] hover:underline"
+                    >
+                      {c.title || 'Source'}
+                    </a>
+                  ) : (
+                    <span>{c.title || 'Source'}</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-600">
+                  {[c.source_name, page, section].filter(Boolean).join(' • ')}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   // Determine the border colour for AI messages based on review status
   const getAIBorderClass = () => {
@@ -161,6 +216,8 @@ export function ChatMessage({
               <p className="text-gray-500 text-xs italic mt-1">Last Updated: {message.guidelineReference.lastUpdated}</p>
             </div>
           )}
+
+          {renderCitations()}
 
           {/* Review feedback (shown on rejected AI messages) */}
           {isAI && reviewStatus === 'rejected' && message.reviewFeedback && (

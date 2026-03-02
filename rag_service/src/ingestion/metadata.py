@@ -60,10 +60,33 @@ def attach_metadata(
     source_info["source_path"] = source_path
 
     inferred = infer_from_path(source_path)
+
+    # Fill missing specialty/source_name from path; if both exist but differ, keep caller input
     if not source_info.get("specialty") and inferred.get("specialty"):
         source_info["specialty"] = inferred["specialty"]
+    elif (
+        inferred.get("specialty")
+        and source_info.get("specialty")
+        and source_info["specialty"] != inferred["specialty"]
+    ):
+        logger.warning(
+            "Specialty mismatch (provided=%s, inferred=%s); keeping provided value",
+            source_info["specialty"],
+            inferred["specialty"],
+        )
+
     if not source_info.get("source_name") and inferred.get("source_name"):
         source_info["source_name"] = inferred["source_name"]
+    elif (
+        inferred.get("source_name")
+        and source_info.get("source_name")
+        and source_info["source_name"] != inferred["source_name"]
+    ):
+        logger.warning(
+            "Source name mismatch (provided=%s, inferred=%s); keeping provided value",
+            source_info["source_name"],
+            inferred["source_name"],
+        )
 
     # Step 2: validate source_info
     validate_source_info(source_info)

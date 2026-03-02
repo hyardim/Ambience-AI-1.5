@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic import Field
@@ -74,6 +75,19 @@ class LoggingConfig(BaseSettings):
     log_file: str = Field(default="logs/rag.log")
 
 
+class GenerationConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    ollama_base_url: str = Field(default="http://localhost:11434")
+    ollama_model: str = Field(default="thewindmom/llama3-med42-8b")
+    ollama_max_tokens: int = Field(default=512)
+
+
 class PathConfig:
     def __init__(self) -> None:
         self.root: Path = Path(__file__).parent.parent
@@ -83,6 +97,25 @@ class PathConfig:
         self.logs: Path = self.root / "logs"
 
 
+db_config = DatabaseConfig()
+embed_config = EmbeddingConfig()
+chunk_config = ChunkingConfig()
+vector_config = VectorIndexConfig()
+logging_config = LoggingConfig()
+generation_config = GenerationConfig()
+path_config = PathConfig()
+
+# Compatibility shims for existing codepaths
+DATABASE_URL = os.getenv("DATABASE_URL", db_config.connection_string)
+MODEL_NAME = embed_config.embedding_model
+RAG_DATA_DIR = os.getenv("RAG_DATA_DIR", str(path_config.data_raw))
+CHUNK_SIZE = chunk_config.chunk_size
+CHUNK_OVERLAP = chunk_config.chunk_overlap
+HNSW_M = vector_config.hnsw_m
+HNSW_EF_CONSTRUCTION = vector_config.hnsw_ef_construction
+OLLAMA_BASE_URL = generation_config.ollama_base_url
+OLLAMA_MODEL = generation_config.ollama_model
+OLLAMA_MAX_TOKENS = generation_config.ollama_max_tokens
 db_config = DatabaseConfig()
 embed_config = EmbeddingConfig()
 chunk_config = ChunkingConfig()

@@ -12,6 +12,7 @@ build/
 
 # Virtual environments
 .venv/
+.venv312/
 venv/
 ENV/
 env/
@@ -47,6 +48,14 @@ rag_data/*
 .cache/huggingface/
 postgres_data/
 postgres_data_v2/
+.gitignore.swp
+.gitattributes.swp
+
+# Guideline documents (raw/processed)
+Medical/
+rag_service/data/raw/
+rag_service/data/processed/
+rag_service/data/debug/
 .mypy_cache/
 .pytest_cache/
 .coverage

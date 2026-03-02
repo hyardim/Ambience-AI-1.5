@@ -34,6 +34,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      - RAG_SERVICE_URL=http://rag_service:8001
+
     ports:
       - "8000:8000"
     depends_on:
@@ -59,6 +61,11 @@ services:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
       # Allow connection to host Ollama (Mac)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=thewindmom/llama3-med42-8b
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     networks:
       - ambience_net
 

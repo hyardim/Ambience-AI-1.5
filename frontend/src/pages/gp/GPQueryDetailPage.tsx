@@ -8,7 +8,34 @@ import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
-import type { Message } from '../../types';
+import type { Message, Citation } from '../../types';
+
+/** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
+function mapCitations(raw?: unknown[] | null): Citation[] {
+  if (!raw || !Array.isArray(raw)) return [];
+
+  return raw
+    .map((c: any) => {
+      if (!c || typeof c !== 'object') return null;
+      const meta = (c as any).metadata || {};
+      const docId = (c as any).doc_id ?? meta.doc_id;
+      const sectionPath = (c as any).section_path ?? meta.section_path;
+      const pageStart = (c as any).page_start ?? meta.page_start;
+      const pageEnd = (c as any).page_end ?? meta.page_end;
+
+      return {
+        doc_id: docId || undefined,
+        title: meta.title || meta.filename || (c as any).source || 'Source',
+        source_name: meta.source_name || (c as any).source || 'Source',
+        specialty: meta.specialty,
+        section_path: sectionPath,
+        page_start: typeof pageStart === 'number' ? pageStart : undefined,
+        page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
+        source_url: meta.source_url,
+      } satisfies Citation;
+    })
+    .filter(Boolean) as Citation[];
+}
 
 /** Map a backend message to the frontend Message shape */
 function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
@@ -20,6 +47,7 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
     senderType: isAI ? 'ai' : 'gp',
     content: msg.content,
     timestamp: new Date(msg.created_at),
+    citations: mapCitations(msg.citations),
     reviewStatus: msg.review_status ?? null,
     reviewFeedback: msg.review_feedback ?? null,
     reviewedAt: msg.reviewed_at ?? null,
@@ -80,22 +108,11 @@ export function GPQueryDetailPage() {
     setMessages(prev => [...prev, userMsg]);
 
     try {
-      // Backend returns { status, ai_response }
-      const aiResponse = await apiSendMessage(chat.id, content);
-      const aiMsg: Message = {
-        id: `ai-${Date.now()}`,
-        senderId: 'ai',
-        senderName: 'NHS AI Assistant',
-        senderType: 'ai',
-        content: aiResponse.ai_response,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, aiMsg]);
-      setChat(prev => {
-        if (!prev) return prev;
-        if (prev.status === 'open') return { ...prev, status: 'submitted' };
-        return prev;
-      });
+      // Backend returns { status, ai_response }; refetch chat to attach citations reliably
+      await apiSendMessage(chat.id, content);
+      const refreshed = await getChat(chat.id);
+      setChat(refreshed);
+      setMessages(refreshed.messages.map(m => toFrontendMessage(m, username || 'GP User')));
     } catch {
       setError('Failed to send message');
     } finally {
