@@ -19,6 +19,7 @@ class MessageResponse(BaseModel):
     sender: str
     created_at: str
     citations: Optional[List] = None
+    is_generating: bool = False
     review_status: Optional[str] = None
     review_feedback: Optional[str] = None
     reviewed_at: Optional[str] = None

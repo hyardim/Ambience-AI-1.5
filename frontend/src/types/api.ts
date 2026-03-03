@@ -10,6 +10,7 @@ export interface BackendMessage {
   sender: string;          // "user" | "ai" | "specialist"
   created_at: string;
   citations?: unknown[] | null;
+  is_generating?: boolean;
   review_status?: string | null;
   review_feedback?: string | null;
   reviewed_at?: string | null;

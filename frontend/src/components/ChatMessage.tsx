@@ -1,4 +1,4 @@
-import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare, PenLine } from 'lucide-react';
+import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
 import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
@@ -43,6 +43,9 @@ export function ChatMessage({
   };
 
   const getAvatarContent = () => {
+    if (isGenerating) {
+      return <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />;
+    }
     if (message.senderType === 'ai') {
       return <Bot className="w-5 h-5 text-[#005eb8]" />;
     }
@@ -57,6 +60,7 @@ export function ChatMessage({
   };
 
   const isAI = message.senderType === 'ai';
+  const isGenerating = isAI && message.isGenerating;
   const reviewStatus = message.reviewStatus;
 
   const renderCitations = () => {
@@ -155,6 +159,14 @@ export function ChatMessage({
       );
     }
     // Pending review (no review_status yet)
+    if (isGenerating) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Generating…
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
         <Clock className="w-3.5 h-3.5" />
@@ -198,7 +210,15 @@ export function ChatMessage({
               : 'bg-white shadow-sm'
         }`}>
           <div className="whitespace-pre-wrap text-gray-800 leading-relaxed text-sm sm:text-base">
-            {message.content}
+            {isGenerating ? (
+              <div className="flex items-center gap-1.5 py-1">
+                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+              </div>
+            ) : (
+              message.content
+            )}
           </div>
 
           {/* Attachments */}

@@ -59,6 +59,7 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
     content: msg.content,
     timestamp: new Date(msg.created_at),
     citations: mapCitations(msg.citations),
+    isGenerating: msg.is_generating ?? false,
     reviewStatus: msg.review_status ?? null,
     reviewFeedback: msg.review_feedback ?? null,
     reviewedAt: msg.reviewed_at ?? null,
@@ -104,15 +105,21 @@ export function SpecialistQueryDetailPage() {
   const hasPendingAIResponse =
     messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
 
+  // True when the last AI message is still being revised by the RAG service
+  const hasRevisionInProgress =
+    messages.length > 0 &&
+    messages[messages.length - 1].senderType === 'ai' &&
+    messages[messages.length - 1].isGenerating === true;
+
   useEffect(() => {
-    if (!queryId || !hasPendingAIResponse) return;
+    if (!queryId || (!hasPendingAIResponse && !hasRevisionInProgress)) return;
 
     const intervalId = window.setInterval(() => {
       loadData({ silent: true });
     }, 2000);
 
     return () => window.clearInterval(intervalId);
-  }, [queryId, hasPendingAIResponse]);
+  }, [queryId, hasPendingAIResponse, hasRevisionInProgress]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
@@ -271,13 +278,16 @@ export function SpecialistQueryDetailPage() {
   const canReview = isAssignedOrReviewing;
 
   // IDs of all unreviewed AI messages (specialist can act on any of them)
+  // Exclude messages still being generated — no actions should be shown on those.
   const unreviewedAIIds = new Set(
-    messages.filter(m => m.senderType === 'ai' && !m.reviewStatus).map(m => m.id)
+    messages.filter(m => m.senderType === 'ai' && !m.reviewStatus && !m.isGenerating).map(m => m.id)
   );
 
   // Whether every AI message has been reviewed (approved or rejected)
+  // Also prevent closing if any message is still being generated.
   const aiMessages = messages.filter(m => m.senderType === 'ai');
-  const allAIReviewed = aiMessages.length > 0 && unreviewedAIIds.size === 0;
+  const anyGenerating = aiMessages.some(m => m.isGenerating);
+  const allAIReviewed = aiMessages.length > 0 && unreviewedAIIds.size === 0 && !anyGenerating;
 
   const formatSpecialty = (s: string | null) =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
@@ -385,7 +395,7 @@ export function SpecialistQueryDetailPage() {
                   <button
                     onClick={() => setShowCloseConfirm(true)}
                     disabled={actionLoading || !allAIReviewed}
-                    title={!allAIReviewed ? 'All AI responses must be reviewed before closing' : undefined}
+                    title={anyGenerating ? 'Wait for AI response generation to finish' : !allAIReviewed ? 'All AI responses must be reviewed before closing' : undefined}
                     className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Lock className="w-5 h-5" />

@@ -49,6 +49,7 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
     content: msg.content,
     timestamp: new Date(msg.created_at),
     citations: mapCitations(msg.citations),
+    isGenerating: msg.is_generating ?? false,
     reviewStatus: msg.review_status ?? null,
     reviewFeedback: msg.review_feedback ?? null,
     reviewedAt: msg.reviewed_at ?? null,
@@ -80,15 +81,27 @@ export function GPQueryDetailPage() {
   const hasPendingAIResponse =
     messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
 
+  // Also poll when the latest AI message is still generating (revision in progress)
+  const hasRevisionInProgress =
+    messages.length > 0 &&
+    messages[messages.length - 1].senderType === 'ai' &&
+    messages[messages.length - 1].isGenerating === true;
+
+  // Poll when the chat is in a review workflow and the status may change
+  const chatStatus = chat?.status ?? '';
+  const isInReview = ['submitted', 'assigned', 'reviewing'].includes(chatStatus);
+
+  const shouldPoll = hasPendingAIResponse || hasRevisionInProgress || isInReview;
+
   useEffect(() => {
-    if (!queryId || !hasPendingAIResponse) return;
+    if (!queryId || !shouldPoll) return;
 
     const intervalId = window.setInterval(() => {
       fetchChat({ silent: true });
     }, 2000);
 
     return () => window.clearInterval(intervalId);
-  }, [queryId, hasPendingAIResponse]);
+  }, [queryId, shouldPoll]);
 
   const fetchChat = async (options?: { silent?: boolean }) => {
     if (!queryId) return;

@@ -44,3 +44,41 @@ def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
         f"Question: {question}\n\n"
         f"{citation_hint}"
     )
+
+
+def build_revision_prompt(
+    original_question: str,
+    previous_answer: str,
+    specialist_feedback: str,
+    chunks: list[dict],
+) -> str:
+    """Build a prompt that asks the model to revise a previous answer based on
+    specialist feedback, grounded in the same (or refreshed) retrieved context."""
+    context_block = _format_context(chunks)
+    has_context = bool(chunks)
+
+    instructions = (
+        "You are a cautious clinical assistant. A medical specialist has reviewed "
+        "your previous answer and requested changes. Revise your response according "
+        "to the specialist's feedback while staying grounded in the provided context.\n\n"
+        "Rules:\n"
+        "- Use only the provided context passages to support your revised answer.\n"
+        "- Cite supporting passages with the bracket numbers given in the context (e.g., [1], [2]) and only cite passages you actually use.\n"
+        "- Address every point raised in the specialist's feedback.\n"
+        "- Do not fabricate information or cite sources that are not provided.\n"
+        "- Keep the response concise and factual."
+    )
+
+    context_section = "Context:\n" + (context_block if has_context else "(none)")
+    citation_hint = (
+        "Revised answer (with citations):" if has_context else "Revised answer (no citations):"
+    )
+
+    return (
+        f"{instructions}\n\n"
+        f"{context_section}\n\n"
+        f"Original question: {original_question}\n\n"
+        f"Previous answer: {previous_answer}\n\n"
+        f"Specialist feedback: {specialist_feedback}\n\n"
+        f"{citation_hint}"
+    )

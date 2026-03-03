@@ -1,10 +1,13 @@
 from datetime import datetime
 from typing import Optional
+import os
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.db.models import Chat, ChatStatus, Message, NotificationType, User
+from src.db.session import SessionLocal
 from src.repositories import (
     audit_repository,
     chat_repository,
@@ -13,6 +16,9 @@ from src.repositories import (
 )
 from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, ReviewRequest
 from src.services._mappers import chat_to_response, msg_to_response
+
+
+RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 
 
 def get_queue(db: Session, specialist: User) -> list[ChatResponse]:
@@ -114,6 +120,19 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
             status_code=400,
             detail=f"Chat must be ASSIGNED or REVIEWING to review (current: {chat.status.value})",
         )
+
+    # Block approve/reject while any AI message is still being generated
+    if body.action in ("approve", "reject"):
+        generating = db.query(Message).filter(
+            Message.chat_id == chat_id,
+            Message.sender == "ai",
+            Message.is_generating == True,
+        ).first()
+        if generating:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot close the chat while an AI response is being generated",
+            )
 
     # Mark the latest AI message with the review outcome
     _mark_last_ai_message(db, chat.id, body)
@@ -309,22 +328,100 @@ def _mark_last_ai_message(db: Session, chat_id: int, body: ReviewRequest) -> Non
 
 
 def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) -> Message:
-    """Generate a new AI response incorporating the specialist's feedback."""
+    """Create a placeholder AI message and kick off a RAG revision.
+
+    When the database is SQLite (i.e. test / dev mode) the revision runs
+    synchronously so the caller sees the result immediately.  Otherwise a
+    background thread is spawned (matching the pattern used for initial AI
+    answers in chat_service).
+    """
     messages = message_repository.list_for_chat(db, chat.id)
     user_messages = [m for m in messages if m.sender == "user"]
-    last_user_content = user_messages[-1].content if user_messages else "consultation"
+    ai_messages = [m for m in messages if m.sender == "ai"]
 
-    new_content = (
-        f"[Revised after specialist feedback: {feedback or 'none'}] "
-        f"I received: {last_user_content}"
-    )
-    return message_repository.create(
+    original_query = user_messages[-1].content if user_messages else "consultation"
+    previous_answer = ai_messages[-1].content if ai_messages else ""
+
+    # Create a temporary placeholder message so the specialist sees immediate
+    # feedback (matches the "ai_generating" pattern used for initial answers).
+    placeholder = message_repository.create(
         db,
         chat_id=chat.id,
-        content=new_content,
+        content="Revising response based on specialist feedback…",
         sender="ai",
-        citations=[],
-    )
+        citations=[],        is_generating=True,    )
+
+    is_sqlite = db.bind and db.bind.dialect.name == "sqlite"
+
+    if is_sqlite:
+        # Run synchronously (tests use in-memory SQLite with a single connection).
+        _do_revise(db, placeholder, original_query, previous_answer, feedback or "")
+    else:
+        import threading
+        thread = threading.Thread(
+            target=_regenerate_ai_response_task,
+            args=(placeholder.id, original_query, previous_answer, feedback or ""),
+            daemon=True,
+        )
+        thread.start()
+
+    return placeholder
+
+
+def _do_revise(
+    db: Session,
+    placeholder: Message,
+    original_query: str,
+    previous_answer: str,
+    feedback: str,
+) -> None:
+    """Call the RAG /revise endpoint and update the placeholder message in-place."""
+    rag_payload = {
+        "original_query": original_query,
+        "previous_answer": previous_answer,
+        "feedback": feedback,
+        "top_k": 4,
+    }
+
+    try:
+        rag_response = httpx.post(
+            f"{RAG_SERVICE_URL}/revise", json=rag_payload, timeout=60
+        )
+        rag_response.raise_for_status()
+        rag_json = rag_response.json()
+        revised_content = rag_json.get("answer", "")
+        citations = rag_json.get("citations", [])
+    except Exception as exc:  # pragma: no cover - network fallback
+        revised_content = (
+            f"[Revised after specialist feedback: {feedback}] "
+            f"RAG service unavailable — original question: {original_query} "
+            f"(detail: {exc})"
+        )
+        citations = []
+
+    placeholder.content = revised_content
+    placeholder.citations = citations
+    placeholder.is_generating = False
+    db.commit()
+    db.refresh(placeholder)
+
+
+def _regenerate_ai_response_task(
+    placeholder_id: int,
+    original_query: str,
+    previous_answer: str,
+    feedback: str,
+) -> None:
+    """Background task: call the RAG /revise endpoint and update the placeholder message."""
+    db = SessionLocal()
+    try:
+        placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
+        if placeholder:
+            _do_revise(db, placeholder, original_query, previous_answer, feedback)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def send_message(db: Session, specialist: User, chat_id: int, content: str) -> dict:
