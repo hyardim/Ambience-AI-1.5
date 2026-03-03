@@ -6,8 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_MAX_TOKENS, path_config
-from .generation.client import generate_answer
+from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
+from .generation.client import generate_answer, warmup_model
 from .generation.prompts import build_grounded_prompt, build_revision_prompt
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import (
@@ -33,6 +33,17 @@ def ensure_schema():
         print("✅ Database schema ready (chunks/documents).")
     except Exception as exc:  # pragma: no cover - defensive log only
         print(f"⚠️ Failed to initialize database: {exc}")
+
+
+@app.on_event("startup")
+async def warmup_ollama():
+    """Pre-load the Ollama model into memory on service startup.
+
+    Prevents the first real request from hitting a cold model and avoids
+    500 errors caused by Ollama silently failing to reload an idle model.
+    """
+    print(f"🔥 Warming up Ollama model '{OLLAMA_MODEL}'...")
+    await warmup_model()
 
 
 class QueryRequest(BaseModel):
