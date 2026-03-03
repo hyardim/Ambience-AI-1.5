@@ -169,7 +169,12 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             rag_response.raise_for_status()
             rag_json = rag_response.json()
             ai_content = rag_json.get("answer", "")
-            citations = rag_json.get("citations", [])
+            citations = (
+                rag_json.get("citations_used")
+                or rag_json.get("citations")
+                or rag_json.get("citations_retrieved")
+                or []
+            )
         except Exception as exc:  # pragma: no cover - network fallback
             ai_content = (
                 "RAG service unavailable right now. Echoing your question while the "

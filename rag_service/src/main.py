@@ -143,8 +143,15 @@ def _is_boilerplate(chunk: dict[str, Any]) -> bool:
     return any(pat in text or pat in section for pat in BOILERPLATE_PATTERNS)
 
 
+def _extract_citation_indices(text: str) -> set[int]:
+    """Return the set of 1-based indices present as [1], [2], etc."""
+    return {int(match) for match in re.findall(r"\[(\d+)\]", text)}
+
+
 class AnswerResponse(BaseModel):
     answer: str
+    citations_used: list[SearchResult]
+    citations_retrieved: list[SearchResult]
     citations: list[SearchResult]
 
 
@@ -215,6 +222,8 @@ async def generate_clinical_answer(request: AnswerRequest):
                     "I couldn't find any guideline passage in the indexed sources "
                     "that directly answers this question. Please rephrase or try a different query."
                 ),
+                citations_used=[],
+                citations_retrieved=[],
                 citations=[],
             )
 
@@ -222,7 +231,9 @@ async def generate_clinical_answer(request: AnswerRequest):
 
         answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
 
-        citations = [
+        used_indices = _extract_citation_indices(answer_text)
+
+        citations_retrieved = [
             SearchResult(
                 text=res["text"],
                 source=res.get("metadata", {}).get("filename", "Unknown Source"),
@@ -240,7 +251,20 @@ async def generate_clinical_answer(request: AnswerRequest):
             for res in top_chunks
         ]
 
-        return AnswerResponse(answer=answer_text, citations=citations)
+        citations_used = [
+            citations_retrieved[i - 1]
+            for i in sorted(used_indices)
+            if 1 <= i <= len(citations_retrieved)
+        ]
+
+        fallback_citations = citations_used if citations_used else citations_retrieved
+
+        return AnswerResponse(
+            answer=answer_text,
+            citations_used=citations_used,
+            citations_retrieved=citations_retrieved,
+            citations=fallback_citations,
+        )
     except Exception as e:
         print(f"❌ /answer Error: {str(e)}")
         raise HTTPException(
@@ -284,7 +308,9 @@ async def revise_clinical_answer(request: ReviseRequest):
 
         answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
 
-        citations = [
+        used_indices = _extract_citation_indices(answer_text)
+
+        citations_retrieved = [
             SearchResult(
                 text=res["text"],
                 source=res.get("metadata", {}).get("filename", "Unknown Source"),
@@ -302,7 +328,20 @@ async def revise_clinical_answer(request: ReviseRequest):
             for res in top_chunks
         ]
 
-        return AnswerResponse(answer=answer_text, citations=citations)
+        citations_used = [
+            citations_retrieved[i - 1]
+            for i in sorted(used_indices)
+            if 1 <= i <= len(citations_retrieved)
+        ]
+
+        fallback_citations = citations_used if citations_used else citations_retrieved
+
+        return AnswerResponse(
+            answer=answer_text,
+            citations_used=citations_used,
+            citations_retrieved=citations_retrieved,
+            citations=fallback_citations,
+        )
     except Exception as e:
         print(f"\u274c /revise Error: {str(e)}")
         raise HTTPException(

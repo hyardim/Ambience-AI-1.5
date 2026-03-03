@@ -11,10 +11,14 @@ import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from 
 import type { Message, Citation } from '../../types';
 
 /** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
-function mapCitations(raw?: unknown[] | null): Citation[] {
-  if (!raw || !Array.isArray(raw)) return [];
+function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
+  const list = Array.isArray(raw) && raw.length > 0
+    ? raw
+    : Array.isArray(fallback)
+      ? fallback
+      : [];
 
-  return raw
+  return list
     .map((c: any) => {
       if (!c || typeof c !== 'object') return null;
       const meta = (c as any).metadata || {};
@@ -48,7 +52,10 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
     senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
     content: msg.content,
     timestamp: new Date(msg.created_at),
-    citations: mapCitations(msg.citations),
+    citations: mapCitations(
+      (msg.citations_used as unknown[] | null) ?? msg.citations_used,
+      (msg.citations as unknown[] | null) ?? (msg.citations_retrieved as unknown[] | null),
+    ),
     isGenerating: msg.is_generating ?? false,
     reviewStatus: msg.review_status ?? null,
     reviewFeedback: msg.review_feedback ?? null,
