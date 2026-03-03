@@ -50,6 +50,17 @@ def ensure_notification_fk() -> None:
         )
 
 
+def ensure_message_columns() -> None:
+    """Add is_generating column to messages table if missing."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE messages "
+                "ADD COLUMN IF NOT EXISTS is_generating BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+
+
 def ensure_default_users() -> None:
     if os.getenv("AUTH_BOOTSTRAP_DEMO_USERS", "true").lower() != "true":
         return
@@ -100,6 +111,7 @@ def ensure_default_users() -> None:
 
 ensure_auth_columns()
 ensure_notification_fk()
+ensure_message_columns()
 ensure_default_users()
 
 app = FastAPI(

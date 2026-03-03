@@ -7,6 +7,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getChats, deleteChat } from '../../services/api';
 import type { BackendChat } from '../../types/api';
 
+type TabKey = 'submitted' | 'under_review' | 'closed';
+
+const TAB_STATUSES: Record<TabKey, string[]> = {
+  submitted: ['open', 'submitted'],
+  under_review: ['assigned', 'reviewing'],
+  closed: ['approved', 'rejected'],
+};
+
 export function GPQueriesPage() {
   const navigate = useNavigate();
   const { username, logout } = useAuth();
@@ -14,6 +22,7 @@ export function GPQueriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [tab, setTab] = useState<TabKey>('submitted');
 
   useEffect(() => {
     fetchChats();
@@ -43,18 +52,23 @@ export function GPQueriesPage() {
     }
   };
 
-  const filteredChats = chats.filter(chat =>
+  const tabChats = (key: TabKey) =>
+    chats.filter(c => TAB_STATUSES[key].includes(c.status));
+
+  const filteredChats = tabChats(tab).filter(chat =>
     (chat.title || '').toLowerCase().includes(searchTerm.toLowerCase()),
   );
-
-  const getPreview = (chat: BackendChat) => {
-    return `Created ${formatDate(chat.created_at)}`;
-  };
 
   const formatSpecialty = (s: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : null);
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const emptyMessage: Record<TabKey, string> = {
+    submitted: 'No submitted consultations. Create one to get started.',
+    under_review: 'No consultations are currently under specialist review.',
+    closed: 'No closed consultations yet.',
+  };
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
@@ -74,6 +88,29 @@ export function GPQueriesPage() {
             <Plus className="w-5 h-5" />
             New Consultation
           </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-white rounded-lg shadow-sm p-1 mb-6">
+          {(
+            [
+              { key: 'submitted', label: 'Submitted' },
+              { key: 'under_review', label: 'Under Review' },
+              { key: 'closed', label: 'Closed' },
+            ] as { key: TabKey; label: string }[]
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                tab === key
+                  ? 'bg-[#005eb8] text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {label} ({tabChats(key).length})
+            </button>
+          ))}
         </div>
 
         {/* Search */}
@@ -123,7 +160,7 @@ export function GPQueriesPage() {
                   </div>
                   <div className="flex items-end justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="text-gray-600 text-sm">{getPreview(chat)}</p>
+                      <p className="text-gray-600 text-sm">Created {formatDate(chat.created_at)}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       {chat.specialty && (
@@ -151,11 +188,9 @@ export function GPQueriesPage() {
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No consultations found</h3>
                 <p className="text-gray-600 mb-6">
-                  {searchTerm
-                    ? 'Try adjusting your search'
-                    : 'Create your first consultation to get started'}
+                  {searchTerm ? 'Try adjusting your search' : emptyMessage[tab]}
                 </p>
-                {!searchTerm && (
+                {!searchTerm && tab === 'submitted' && (
                   <button
                     onClick={() => navigate('/gp/queries/new')}
                     className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors"

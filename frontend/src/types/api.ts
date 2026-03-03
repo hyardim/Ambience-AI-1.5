@@ -10,6 +10,7 @@ export interface BackendMessage {
   sender: string;          // "user" | "ai" | "specialist"
   created_at: string;
   citations?: unknown[] | null;
+  is_generating?: boolean;
   review_status?: string | null;
   review_feedback?: string | null;
   reviewed_at?: string | null;
@@ -93,6 +94,7 @@ export interface MessageCreateRequest {
 export interface GPMessageResponse {
   status: string;
   ai_response: string;
+  ai_generating?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,8 +106,9 @@ export interface AssignRequest {
 }
 
 export interface ReviewRequest {
-  action: 'approve' | 'reject' | 'request_changes';
+  action: 'approve' | 'reject' | 'request_changes' | 'manual_response';
   feedback?: string | null;
+  replacement_content?: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -11,8 +11,9 @@ def create(
     content: str,
     sender: str,
     citations: Optional[list] = None,
+    is_generating: bool = False,
 ) -> Message:
-    msg = Message(chat_id=chat_id, content=content, sender=sender, citations=citations)
+    msg = Message(chat_id=chat_id, content=content, sender=sender, citations=citations, is_generating=is_generating)
     db.add(msg)
     db.commit()
     db.refresh(msg)

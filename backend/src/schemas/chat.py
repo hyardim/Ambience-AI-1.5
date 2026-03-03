@@ -19,6 +19,7 @@ class MessageResponse(BaseModel):
     sender: str
     created_at: str
     citations: Optional[List] = None
+    is_generating: bool = False
     review_status: Optional[str] = None
     review_feedback: Optional[str] = None
     reviewed_at: Optional[str] = None
@@ -75,5 +76,6 @@ class AssignRequest(BaseModel):
     specialist_id: int
 
 class ReviewRequest(BaseModel):
-    action: str          # "approve" | "reject" | "request_changes"
+    action: str          # "approve" | "reject" | "request_changes" | "manual_response"
     feedback: Optional[str] = None
+    replacement_content: Optional[str] = None  # required when action == "manual_response"

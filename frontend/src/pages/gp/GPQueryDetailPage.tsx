@@ -40,14 +40,16 @@ function mapCitations(raw?: unknown[] | null): Citation[] {
 /** Map a backend message to the frontend Message shape */
 function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
   const isAI = msg.sender === 'ai';
+  const isSpecialist = msg.sender === 'specialist';
   return {
     id: String(msg.id),
-    senderId: isAI ? 'ai' : 'user',
-    senderName: isAI ? 'NHS AI Assistant' : currentUser,
-    senderType: isAI ? 'ai' : 'gp',
+    senderId: isAI ? 'ai' : isSpecialist ? 'specialist' : 'user',
+    senderName: isAI ? 'NHS AI Assistant' : isSpecialist ? 'Specialist' : currentUser,
+    senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
     content: msg.content,
     timestamp: new Date(msg.created_at),
     citations: mapCitations(msg.citations),
+    isGenerating: msg.is_generating ?? false,
     reviewStatus: msg.review_status ?? null,
     reviewFeedback: msg.review_feedback ?? null,
     reviewedAt: msg.reviewed_at ?? null,
@@ -74,11 +76,38 @@ export function GPQueryDetailPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
 
-  const fetchChat = async () => {
+  const hasPendingAIResponse =
+    messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
+
+  // Also poll when the latest AI message is still generating (revision in progress)
+  const hasRevisionInProgress =
+    messages.length > 0 &&
+    messages[messages.length - 1].senderType === 'ai' &&
+    messages[messages.length - 1].isGenerating === true;
+
+  // Poll when the chat is in a review workflow and the status may change
+  const chatStatus = chat?.status ?? '';
+  const isInReview = ['submitted', 'assigned', 'reviewing'].includes(chatStatus);
+
+  const shouldPoll = hasPendingAIResponse || hasRevisionInProgress || isInReview;
+
+  useEffect(() => {
+    if (!queryId || !shouldPoll) return;
+
+    const intervalId = window.setInterval(() => {
+      fetchChat({ silent: true });
+    }, 2000);
+
+    return () => window.clearInterval(intervalId);
+  }, [queryId, shouldPoll]);
+
+  const fetchChat = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
-    setLoading(true);
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError('');
     try {
       const found = await getChat(Number(queryId));
@@ -88,7 +117,9 @@ export function GPQueryDetailPage() {
       setChat(null);
       setError('Failed to load consultation');
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -214,7 +245,7 @@ export function GPQueryDetailPage() {
               <div className="flex items-center gap-2">
                 {chat.severity && <SeverityBadge severity={chat.severity} />}
                 <StatusBadge status={chat.status} />
-                {!editingMeta && (
+                {!editingMeta && (chat.status === 'open' || chat.status === 'submitted') && (
                   <button
                     onClick={openMetaEditor}
                     className="px-3 py-1.5 text-xs font-medium text-[#005eb8] border border-[#005eb8] rounded-lg hover:bg-[#005eb8] hover:text-white transition-colors"
@@ -319,6 +350,25 @@ export function GPQueryDetailPage() {
                 />
               );
             })}
+            {hasPendingAIResponse && (
+              <div className="flex gap-4">
+                <div className="shrink-0">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />
+                  </div>
+                </div>
+                <div className="flex-1 max-w-3xl">
+                  <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
+                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
+                    <div className="flex items-center gap-1.5 py-1">
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
@@ -326,6 +376,20 @@ export function GPQueryDetailPage() {
           {(chat.status === 'open' || chat.status === 'submitted') && (
             <div className="border-t border-gray-200 p-4">
               <ChatInput onSendMessage={handleSendMessage} disabled={sending} />
+            </div>
+          )}
+
+          {/* Closed banner — bottom */}
+          {chat.status === 'approved' && (
+            <div className="border-t border-green-200 bg-green-50 px-6 py-3 flex items-center gap-2 text-green-800">
+              <ClipboardCheck className="w-4 h-4 shrink-0" />
+              <p className="text-sm">This consultation has been approved by a specialist.</p>
+            </div>
+          )}
+          {chat.status === 'rejected' && (
+            <div className="border-t border-red-200 bg-red-50 px-6 py-3 flex items-center gap-2 text-red-800">
+              <ClipboardCheck className="w-4 h-4 shrink-0" />
+              <p className="text-sm">This consultation has been rejected by a specialist.</p>
             </div>
           )}
         </div>

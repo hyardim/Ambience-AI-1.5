@@ -6,9 +6,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_MAX_TOKENS, path_config
-from .generation.client import generate_answer
-from .generation.prompts import build_grounded_prompt
+from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
+from .generation.client import generate_answer, warmup_model
+from .generation.prompts import build_grounded_prompt, build_revision_prompt
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import (
     get_source_path_for_doc,
@@ -35,6 +35,17 @@ def ensure_schema():
         print(f"⚠️ Failed to initialize database: {exc}")
 
 
+@app.on_event("startup")
+async def warmup_ollama():
+    """Pre-load the Ollama model into memory on service startup.
+
+    Prevents the first real request from hitting a cold model and avoids
+    500 errors caused by Ollama silently failing to reload an idle model.
+    """
+    print(f"🔥 Warming up Ollama model '{OLLAMA_MODEL}'...")
+    await warmup_model()
+
+
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
@@ -56,6 +67,15 @@ class SearchResult(BaseModel):
 
 
 class AnswerRequest(QueryRequest):
+    max_tokens: int = OLLAMA_MAX_TOKENS
+
+
+class ReviseRequest(BaseModel):
+    """Request body for the /revise endpoint."""
+    original_query: str
+    previous_answer: str
+    feedback: str
+    top_k: int = 5
     max_tokens: int = OLLAMA_MAX_TOKENS
 
 
@@ -226,6 +246,68 @@ async def generate_clinical_answer(request: AnswerRequest):
         raise HTTPException(
             status_code=500,
             detail=f"RAG Answer Error: {str(e)}"
+        ) from e
+
+
+@app.post("/revise", response_model=AnswerResponse)
+async def revise_clinical_answer(request: ReviseRequest):
+    """Re-generate an AI answer incorporating specialist feedback.
+
+    Retrieval is performed against the *original* patient query so that the
+    same (or similar) evidence chunks are used, while the generation prompt
+    instructs the model to revise its previous answer according to the
+    specialist's feedback.
+    """
+    try:
+        # Retrieve using the original query so chunk relevance stays high.
+        embeddings_result = embed_text(model, [request.original_query], batch_size=1)
+        query_embedding = embeddings_result[0]
+
+        retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
+
+        filtered = [
+            r
+            for r in retrieved
+            if r.get("score", 0) >= MIN_RELEVANCE
+            and (r.get("metadata") or {}).get("source_path")
+            and _has_query_overlap(request.original_query, r.get("text", ""))
+            and not _is_boilerplate(r)
+        ]
+        top_chunks = filtered[:MAX_CITATIONS]
+
+        prompt = build_revision_prompt(
+            original_question=request.original_query,
+            previous_answer=request.previous_answer,
+            specialist_feedback=request.feedback,
+            chunks=top_chunks,
+        )
+
+        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+
+        citations = [
+            SearchResult(
+                text=res["text"],
+                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                score=res["score"],
+                doc_id=res.get("doc_id"),
+                doc_version=res.get("doc_version"),
+                chunk_id=res.get("chunk_id"),
+                chunk_index=res.get("chunk_index"),
+                content_type=res.get("content_type"),
+                page_start=res.get("page_start"),
+                page_end=res.get("page_end"),
+                section_path=res.get("section_path"),
+                metadata=res.get("metadata"),
+            )
+            for res in top_chunks
+        ]
+
+        return AnswerResponse(answer=answer_text, citations=citations)
+    except Exception as e:
+        print(f"\u274c /revise Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG Revise Error: {str(e)}"
         ) from e
 
 

@@ -96,6 +96,9 @@ class Message(Base):
     # The "Magic Box" for RAG evidence
     citations = Column(JSONB, nullable=True) 
 
+    # True while the RAG service is still generating the content
+    is_generating = Column(Boolean, default=False, server_default="false")
+
     # Specialist review (AI messages only)
     review_status = Column(String, nullable=True)     # null | "approved" | "rejected"
     review_feedback = Column(Text, nullable=True)
