@@ -5,7 +5,14 @@ def _format_context(chunks: list[dict]) -> str:
 
     lines = []
     for idx, chunk in enumerate(chunks, start=1):
-        source = chunk.get("metadata", {}).get("filename", "Unknown Source")
+        metadata = chunk.get("metadata", {}) or {}
+        # Prefer human-friendly labels; fall back to filename when present, otherwise mark unknown.
+        source = (
+            metadata.get("title")
+            or metadata.get("source_name")
+            or metadata.get("filename")
+            or "Unknown Source"
+        )
         page_start = chunk.get("page_start")
         page_end = chunk.get("page_end")
         page_note = ""
