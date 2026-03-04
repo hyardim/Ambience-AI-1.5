@@ -224,7 +224,7 @@ export function AdminLogsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {log.user_email || (log.user_id ? `#${log.user_id}` : '—')}
+                      {log.user_identifier || (log.user_id ? `#${log.user_id}` : '—')}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={log.details || ''}>
                       {log.details || '—'}
