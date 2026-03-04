@@ -161,8 +161,8 @@ def list_all_chats(
     result = []
     for c in chats:
         entry = chat_to_response(c).model_dump()
-        entry["owner_name"] = c.owner.full_name if c.owner else None
-        entry["specialist_name"] = c.specialist.full_name if c.specialist else None
+        entry["owner_identifier"] = f"{c.owner.role.value}_{c.owner.id}" if c.owner else None
+        entry["specialist_identifier"] = f"{c.specialist.role.value}_{c.specialist.id}" if c.specialist else None
         result.append(entry)
     return result
 
@@ -197,8 +197,8 @@ def update_any_chat(db: Session, chat_id: int, payload: ChatUpdate) -> dict:
 
     chat = chat_repository.update(db, chat, **fields)
     entry = chat_to_response(chat).model_dump()
-    entry["owner_name"] = chat.owner.full_name if chat.owner else None
-    entry["specialist_name"] = chat.specialist.full_name if chat.specialist else None
+    entry["owner_identifier"] = f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
+    entry["specialist_identifier"] = f"{chat.specialist.role.value}_{chat.specialist.id}" if chat.specialist else None
     return entry
 
 
@@ -259,7 +259,7 @@ def list_audit_logs(
         {
             "id": log.id,
             "user_id": log.user_id,
-            "user_email": log.user.email if log.user else None,
+            "user_identifier": f"{log.user.role.value}_{log.user.id}" if log.user else None,
             "action": log.action,
             "category": _action_category(log.action),
             "details": log.details,
