@@ -89,7 +89,7 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
     )
     audit_repository.log(
         db, user_id=specialist.id, action="ASSIGN_SPECIALIST",
-        details=f"Specialist {specialist.email} assigned to chat {chat_id}",
+        details=f"Specialist #{specialist.id} assigned to chat {chat_id}",
     )
     notification_repository.create(
         db,
