@@ -170,3 +170,19 @@ export interface ChatUpdateRequest {
   specialty?: string | null;
   severity?: string | null;
 }
+
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
+export interface AdminStatsResponse {
+  total_ai_responses: number;
+  rag_grounded_responses: number;
+  specialist_responses: number;
+  active_consultations: number;
+  chats_by_status: Record<string, number>;
+  chats_by_specialty: Record<string, number>;
+  active_users_by_role: Record<string, number>;
+  daily_ai_queries: DailyCount[];
+}
