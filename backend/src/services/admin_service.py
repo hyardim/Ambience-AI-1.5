@@ -214,9 +214,10 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 _ACTION_CATEGORIES: dict[str, set[str]] = {
-    "AUTH":       {"LOGIN", "LOGOUT", "REGISTER", "UPDATE_PROFILE"},
-    "CHAT":       {"CREATE_CHAT", "VIEW_CHAT", "UPDATE_CHAT", "DELETE_CHAT", "SUBMIT_FOR_REVIEW", "AUTO_SUBMIT_FOR_REVIEW"},
+    "AUTH":       {"LOGIN", "LOGOUT", "REGISTER", "UPDATE_PROFILE", "PASSWORD_RESET"},
+    "CHAT":       {"CREATE_CHAT", "VIEW_CHAT", "UPDATE_CHAT", "DELETE_CHAT", "SUBMIT_FOR_REVIEW", "AUTO_SUBMIT_FOR_REVIEW", "AI_RESPONSE_GENERATED"},
     "SPECIALIST": {"ASSIGN_SPECIALIST", "REVIEW_APPROVE", "REVIEW_REJECT", "REVIEW_REQUEST_CHANGES", "SPECIALIST_MESSAGE"},
+    "RAG":        {"RAG_ANSWER", "RAG_ERROR", "RAG_REVISE"},
 }
 
 
