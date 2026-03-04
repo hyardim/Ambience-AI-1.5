@@ -1,15 +1,67 @@
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from src.db.models import AuditLog, Chat, ChatStatus, User, UserRole
+from src.db.models import AuditLog, Chat, ChatStatus, Message, User, UserRole
 from src.repositories import audit_repository, chat_repository, message_repository, user_repository
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
+
+
+# ---------------------------------------------------------------------------
+# Dashboard stats
+# ---------------------------------------------------------------------------
+
+def get_stats(db: Session) -> dict:
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+
+    total_ai = db.query(func.count(Message.id)).filter(Message.sender == "ai").scalar() or 0
+    rag_grounded = db.query(func.count(Message.id)).filter(
+        Message.sender == "ai", Message.citations.isnot(None)
+    ).scalar() or 0
+    specialist_responses = db.query(func.count(Message.id)).filter(Message.sender == "specialist").scalar() or 0
+
+    active_statuses = [ChatStatus.OPEN, ChatStatus.SUBMITTED, ChatStatus.ASSIGNED, ChatStatus.REVIEWING]
+    active_consultations = db.query(func.count(Chat.id)).filter(Chat.status.in_(active_statuses)).scalar() or 0
+
+    chats_by_status = {
+        row[0].value: row[1]
+        for row in db.query(Chat.status, func.count(Chat.id)).group_by(Chat.status).all()
+    }
+    chats_by_specialty = {
+        (row[0] or "unknown"): row[1]
+        for row in db.query(Chat.specialty, func.count(Chat.id)).group_by(Chat.specialty).all()
+    }
+    active_users_by_role = {
+        row[0].value: row[1]
+        for row in db.query(User.role, func.count(User.id))
+            .filter(User.is_active == True)
+            .group_by(User.role).all()
+    }
+
+    daily_rows = (
+        db.query(func.date_trunc("day", Message.created_at).label("day"), func.count(Message.id))
+        .filter(Message.sender == "ai", Message.created_at >= thirty_days_ago)
+        .group_by("day")
+        .order_by("day")
+        .all()
+    )
+    daily_ai_queries = [{"date": row[0].strftime("%Y-%m-%d"), "count": row[1]} for row in daily_rows]
+
+    return {
+        "total_ai_responses": total_ai,
+        "rag_grounded_responses": rag_grounded,
+        "specialist_responses": specialist_responses,
+        "active_consultations": active_consultations,
+        "chats_by_status": chats_by_status,
+        "chats_by_specialty": chats_by_specialty,
+        "active_users_by_role": active_users_by_role,
+        "daily_ai_queries": daily_ai_queries,
+    }
 
 
 # ---------------------------------------------------------------------------
