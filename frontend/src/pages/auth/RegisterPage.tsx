@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
+import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
 import type { UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -190,6 +191,7 @@ export function RegisterPage() {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                <PasswordStrengthMeter password={formData.password} />
               </div>
 
               <div>
