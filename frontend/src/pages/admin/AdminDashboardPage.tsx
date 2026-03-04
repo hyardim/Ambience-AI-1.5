@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } from 'lucide-react';
-import AdminLayout from '../../components/AdminLayout';
+import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetStats } from '../../services/api';
 import type { AdminStatsResponse } from '../../types/api';
 
@@ -79,7 +79,7 @@ export default function AdminDashboardPage() {
     : [];
 
   return (
-    <AdminLayout userRole="admin">
+    <AdminLayout>
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
