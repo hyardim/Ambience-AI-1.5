@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
+import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
 import { resetPassword } from '../../services/api';
 
 export function ResetPasswordPage() {
@@ -23,10 +24,6 @@ export function ResetPasswordPage() {
     }
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
       return;
     }
 
@@ -116,6 +113,7 @@ export function ResetPasswordPage() {
                         {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                       </button>
                     </div>
+                    <PasswordStrengthMeter password={newPassword} />
                   </div>
 
                   <div>

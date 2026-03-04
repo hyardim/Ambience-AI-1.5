@@ -93,7 +93,7 @@ export function AdminChatsPage() {
 
   const filteredChats = chats.filter(c =>
     (c.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.owner_name || '').toLowerCase().includes(searchTerm.toLowerCase()),
+    (c.owner_identifier || '').toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const formatDate = (iso: string) =>
@@ -176,10 +176,10 @@ export function AdminChatsPage() {
                       {chat.title || 'Untitled'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {chat.owner_name || `User #${chat.user_id}`}
+                      {chat.owner_identifier || `user_${chat.user_id}`}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {chat.specialist_name || '—'}
+                      {chat.specialist_identifier || '—'}
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={chat.status} />

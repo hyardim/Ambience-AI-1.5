@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Header } from '../components/Header';
+import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { useAuth } from '../contexts/AuthContext';
 import { getProfile, updateProfile } from '../services/api';
 import type { UserProfile, ProfileUpdateRequest } from '../types/api';
@@ -56,10 +57,6 @@ export function ProfilePage() {
     }
     if (newPassword && newPassword !== confirmPassword) {
       setError('New passwords do not match');
-      return;
-    }
-    if (newPassword && newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
       return;
     }
 
@@ -232,6 +229,7 @@ export function ProfilePage() {
                   >
                     {showNewPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
+                  <PasswordStrengthMeter password={newPassword} />
                 </div>
 
                 {/* Confirm new password */}

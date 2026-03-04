@@ -21,6 +21,7 @@ import { SpecialistQueriesPage } from './pages/specialist/SpecialistQueriesPage'
 import { SpecialistQueryDetailPage } from './pages/specialist/SpecialistQueryDetailPage';
 
 // Admin pages
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
 import { AdminChatsPage } from './pages/admin/AdminChatsPage';
 import { AdminLogsPage } from './pages/admin/AdminLogsPage';
@@ -54,7 +55,8 @@ function App() {
           <Route path="/specialist/query/:queryId" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueryDetailPage /></ProtectedRoute>} />
 
           {/* Admin routes */}
-          <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboardPage /></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminUsersPage /></ProtectedRoute>} />
           <Route path="/admin/chats" element={<ProtectedRoute allowedRoles={['admin']}><AdminChatsPage /></ProtectedRoute>} />
           <Route path="/admin/logs" element={<ProtectedRoute allowedRoles={['admin']}><AdminLogsPage /></ProtectedRoute>} />

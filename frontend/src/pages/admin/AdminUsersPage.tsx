@@ -70,8 +70,8 @@ export function AdminUsersPage() {
   };
 
   const filteredUsers = users.filter(u =>
-    (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()),
+    `${u.role}_${u.id}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.specialty || '').toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -131,8 +131,7 @@ export function AdminUsersPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Name</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Email</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Identifier</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Role</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Specialty</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
@@ -143,9 +142,8 @@ export function AdminUsersPage() {
                 {filteredUsers.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {user.full_name || '—'}
+                      {`${user.role}_${user.id}`}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{user.email}</td>
                     <td className="px-6 py-4">
                       <span className="inline-block px-2.5 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 uppercase">
                         {user.role}

@@ -145,9 +145,9 @@ export interface AdminChatResponse {
   specialty: string | null;
   severity: string | null;
   user_id: number;
-  owner_name: string | null;
+  owner_identifier: string | null;
   specialist_id: number | null;
-  specialist_name: string | null;
+  specialist_identifier: string | null;
   assigned_at: string | null;
   reviewed_at: string | null;
   review_feedback: string | null;
@@ -157,9 +157,9 @@ export interface AdminChatResponse {
 export interface AuditLogResponse {
   id: number;
   user_id: number | null;
-  user_email: string | null;
+  user_identifier: string | null;
   action: string;
-  category: string;   // "AUTH" | "CHAT" | "SPECIALIST" | "OTHER"
+  category: string;   // "AUTH" | "CHAT" | "SPECIALIST" | "RAG" | "OTHER"
   details: string | null;
   timestamp: string;
 }
@@ -169,4 +169,20 @@ export interface ChatUpdateRequest {
   status?: string | null;
   specialty?: string | null;
   severity?: string | null;
+}
+
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
+export interface AdminStatsResponse {
+  total_ai_responses: number;
+  rag_grounded_responses: number;
+  specialist_responses: number;
+  active_consultations: number;
+  chats_by_status: Record<string, number>;
+  chats_by_specialty: Record<string, number>;
+  active_users_by_role: Record<string, number>;
+  daily_ai_queries: DailyCount[];
 }

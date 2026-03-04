@@ -15,6 +15,7 @@ import type {
   AdminChatResponse,
   AuditLogResponse,
   ChatUpdateRequest,
+  AdminStatsResponse,
 } from '../types/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -388,6 +389,13 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
     headers: authHeaders(),
   });
   return handleResponse<void>(res);
+}
+
+// ── Admin: Dashboard Stats ───────────────────────────────────────────────
+
+export async function adminGetStats(): Promise<AdminStatsResponse> {
+  const res = await fetch(`${API_BASE}/admin/stats`, { headers: authHeaders() });
+  return handleResponse<AdminStatsResponse>(res);
 }
 
 // ── Admin: Audit Logs ────────────────────────────────────────────────────

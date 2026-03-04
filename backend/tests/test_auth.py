@@ -63,7 +63,7 @@ class TestRegister:
         resp = client.post("/auth/register", json={
             "full_name": "John Doe",
             "email": "john.doe@nhs.uk",
-            "password": "pass123",
+            "password": "JohnDoe1!",
             "role": "gp",
         })
         assert resp.status_code == 201

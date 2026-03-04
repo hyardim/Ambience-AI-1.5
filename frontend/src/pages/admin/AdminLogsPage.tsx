@@ -75,6 +75,7 @@ export function AdminLogsPage() {
     AUTH:       'bg-sky-100 text-sky-700',
     CHAT:       'bg-amber-100 text-amber-700',
     SPECIALIST: 'bg-purple-100 text-purple-700',
+    RAG:        'bg-teal-100 text-teal-700',
     OTHER:      'bg-gray-100 text-gray-600',
   };
 
@@ -118,6 +119,7 @@ export function AdminLogsPage() {
               <option value="AUTH">AUTH</option>
               <option value="CHAT">CHAT</option>
               <option value="SPECIALIST">SPECIALIST</option>
+              <option value="RAG">RAG</option>
             </select>
             <input
               type="text"
@@ -222,7 +224,7 @@ export function AdminLogsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {log.user_email || (log.user_id ? `#${log.user_id}` : '—')}
+                      {log.user_identifier || (log.user_id ? `#${log.user_id}` : '—')}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={log.details || ''}>
                       {log.details || '—'}

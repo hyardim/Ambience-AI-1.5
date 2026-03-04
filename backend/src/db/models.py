@@ -94,7 +94,7 @@ class Message(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # The "Magic Box" for RAG evidence
-    citations = Column(JSONB, nullable=True) 
+    citations = Column(JSONB(none_as_null=True), nullable=True)
 
     # True while the RAG service is still generating the content
     is_generating = Column(Boolean, default=False, server_default="false")

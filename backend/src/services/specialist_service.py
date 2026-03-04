@@ -89,7 +89,7 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
     )
     audit_repository.log(
         db, user_id=specialist.id, action="ASSIGN_SPECIALIST",
-        details=f"Specialist {specialist.email} assigned to chat {chat_id}",
+        details=f"Specialist #{specialist.id} assigned to chat {chat_id}",
     )
     notification_repository.create(
         db,
@@ -404,6 +404,17 @@ def _do_revise(
     placeholder.is_generating = False
     db.commit()
     db.refresh(placeholder)
+
+    try:
+        chat = db.query(Chat).filter(Chat.id == placeholder.chat_id).first()
+        audit_repository.log(
+            db,
+            user_id=chat.specialist_id if chat else None,
+            action="RAG_REVISE" if revised_content else "RAG_ERROR",
+            details=f"chunks_used={len(citations)}",
+        )
+    except Exception:
+        pass
 
 
 def _regenerate_ai_response_task(

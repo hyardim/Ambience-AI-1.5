@@ -162,6 +162,8 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
 
         rag_payload = {"query": content, "top_k": 4}
 
+        rag_action = "RAG_ERROR"
+        rag_details = f"query_len={len(content)} error=unknown"
         try:
             rag_response = httpx.post(
                 f"{RAG_SERVICE_URL}/answer", json=rag_payload, timeout=60
@@ -173,14 +175,19 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
                 rag_json.get("citations_used")
                 or rag_json.get("citations")
                 or rag_json.get("citations_retrieved")
-                or []
+                or None
             )
+            rag_action = "RAG_ANSWER"
+            rag_details = f"query_len={len(content)} top_k=4 chunks_used={len(citations) if citations else 0}"
         except Exception as exc:  # pragma: no cover - network fallback
             ai_content = (
                 "RAG service unavailable right now. Echoing your question while the "
                 f"service recovers: {content} (detail: {exc})"
             )
-            citations = []
+            citations = None
+            rag_details = f"query_len={len(content)} error={type(exc).__name__}"
+
+        audit_repository.log(db, user_id=user_id, action=rag_action, details=rag_details)
 
         message_repository.create(
             db,
