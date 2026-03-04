@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from fastapi import HTTPException, status
@@ -8,6 +9,22 @@ from src.core.config import settings
 from src.db.models import User, UserRole
 from src.repositories import audit_repository, user_repository
 from src.schemas.auth import AuthResponse, PasswordResetRequest, ProfileUpdate, UserOut, UserRegister
+
+
+def _validate_password(password: str) -> None:
+    errors = []
+    if len(password) < 8:
+        errors.append("at least 8 characters")
+    if not re.search(r"[A-Z]", password):
+        errors.append("an uppercase letter")
+    if not re.search(r"[a-z]", password):
+        errors.append("a lowercase letter")
+    if not re.search(r"\d", password):
+        errors.append("a digit")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        errors.append("a special character")
+    if errors:
+        raise HTTPException(status_code=400, detail=f"Password must contain: {', '.join(errors)}")
 
 
 def _make_auth_response(user: User) -> AuthResponse:
@@ -47,6 +64,8 @@ def register(db: Session, payload: UserRegister) -> AuthResponse:
     if role == UserRole.SPECIALIST and not payload.specialty:
         raise HTTPException(status_code=400, detail="Specialists must provide a specialty")
 
+    _validate_password(payload.password)
+
     user = user_repository.create(
         db,
         email=payload.email,
@@ -66,8 +85,7 @@ def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
         return {"message": "If that email is registered, the password has been reset"}
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
-    if len(payload.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    _validate_password(payload.new_password)
     user_repository.update(db, user, hashed_password=security.get_password_hash(payload.new_password))
     audit_repository.log(db, user_id=user.id, action="PASSWORD_RESET", details=f"user_id={user.id}")
     return {"message": "If that email is registered, the password has been reset"}
@@ -93,6 +111,7 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
             )
         if not security.verify_password(payload.current_password, user.hashed_password):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
+        _validate_password(payload.new_password)
         fields["hashed_password"] = security.get_password_hash(payload.new_password)
 
     user = user_repository.update(db, user, **fields)
