@@ -33,9 +33,9 @@ class AdminChatResponse(BaseModel):
     specialty: Optional[str] = None
     severity: Optional[str] = None
     user_id: int
-    owner_name: Optional[str] = None
+    owner_identifier: Optional[str] = None
     specialist_id: Optional[int] = None
-    specialist_name: Optional[str] = None
+    specialist_identifier: Optional[str] = None
     assigned_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     review_feedback: Optional[str] = None
@@ -45,7 +45,7 @@ class AdminChatResponse(BaseModel):
 class AuditLogResponse(BaseModel):
     id: int
     user_id: Optional[int] = None
-    user_email: Optional[str] = None
+    user_identifier: Optional[str] = None
     action: str
     category: str
     details: Optional[str] = None
