@@ -7,12 +7,24 @@ from sqlalchemy.orm import Session
 from src.api.deps import get_admin_user
 from src.db.models import User
 from src.db.session import get_db
-from src.schemas.admin import AdminChatResponse, AuditLogResponse, UserUpdateAdmin
+from src.schemas.admin import AdminChatResponse, AdminStatsResponse, AuditLogResponse, UserUpdateAdmin
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services import admin_service
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Dashboard stats
+# ---------------------------------------------------------------------------
+
+@router.get("/stats", response_model=AdminStatsResponse)
+def get_stats(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_admin_user),
+):
+    return admin_service.get_stats(db)
 
 
 # ---------------------------------------------------------------------------
