@@ -95,12 +95,12 @@ class TestAdminChats:
         ids = [c["id"] for c in resp.json()]
         assert created_chat["id"] in ids
 
-    def test_admin_chat_has_owner_and_specialist_fields(self, client, admin_headers, created_chat):
+    def test_admin_chat_has_owner_and_specialist_identifier_fields(self, client, admin_headers, created_chat):
         resp = client.get("/admin/chats", headers=admin_headers)
         assert resp.status_code == 200
         chat = next(c for c in resp.json() if c["id"] == created_chat["id"])
-        assert "owner_name" in chat
-        assert "specialist_name" in chat
+        assert "owner_identifier" in chat
+        assert "specialist_identifier" in chat
 
     def test_admin_get_chat_success(self, client, admin_headers, created_chat):
         resp = client.get(f"/admin/chats/{created_chat['id']}", headers=admin_headers)

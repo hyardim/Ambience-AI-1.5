@@ -44,13 +44,13 @@ def get_stats(db: Session) -> dict:
     }
 
     daily_rows = (
-        db.query(func.date_trunc("day", Message.created_at).label("day"), func.count(Message.id))
+        db.query(func.date(Message.created_at).label("day"), func.count(Message.id))
         .filter(Message.sender == "ai", Message.created_at >= thirty_days_ago)
         .group_by("day")
         .order_by("day")
         .all()
     )
-    daily_ai_queries = [{"date": row[0].strftime("%Y-%m-%d"), "count": row[1]} for row in daily_rows]
+    daily_ai_queries = [{"date": str(row[0])[:10], "count": row[1]} for row in daily_rows]
 
     return {
         "total_ai_responses": total_ai,
