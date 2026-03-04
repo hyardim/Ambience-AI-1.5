@@ -3,6 +3,22 @@ from typing import Optional
 from datetime import datetime
 
 
+class DailyCount(BaseModel):
+    date: str
+    count: int
+
+
+class AdminStatsResponse(BaseModel):
+    total_ai_responses: int
+    rag_grounded_responses: int
+    specialist_responses: int
+    active_consultations: int
+    chats_by_status: dict
+    chats_by_specialty: dict
+    active_users_by_role: dict
+    daily_ai_queries: list[DailyCount]
+
+
 class UserUpdateAdmin(BaseModel):
     full_name: Optional[str] = None
     specialty: Optional[str] = None
