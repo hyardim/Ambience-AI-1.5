@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
 # PROMPT VARIANT TOGGLE
 # Set ACTIVE_PROMPT = "original" to use the strict citation-only prompt.
-# Set ACTIVE_PROMPT = "new"      to use the reasoning-allowed prompt.
+# Set ACTIVE_PROMPT = "new"      to use the balanced health-LLM prompt.
 # ---------------------------------------------------------------------------
-ACTIVE_PROMPT = "original"
+ACTIVE_PROMPT = "new"
 
 # ---------------------------------------------------------------------------
 # Variant A — original: strict, context-only, refuses when no sources found
