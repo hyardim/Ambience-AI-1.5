@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
 from .generation.client import generate_answer, warmup_model
-from .generation.prompts import build_grounded_prompt, build_revision_prompt
+from .generation.prompts import ACTIVE_PROMPT, build_grounded_prompt, build_revision_prompt
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import (
     get_source_path_for_doc,
@@ -143,9 +143,44 @@ def _is_boilerplate(chunk: dict[str, Any]) -> bool:
     return any(pat in text or pat in section for pat in BOILERPLATE_PATTERNS)
 
 
+def _parse_citation_group(raw: str) -> list[int]:
+    """Parse a citation group string into a list of ints, handling ranges.
+
+    e.g. '1, 2, 5-7' → [1, 2, 5, 6, 7]
+    """
+    nums: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if "-" in part:
+            try:
+                a, b = part.split("-", 1)
+                nums.extend(range(int(a), int(b) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                nums.append(int(part))
+            except ValueError:
+                pass
+    return nums
+
+
+# Matches bracket citations: [1], [1, 2], [1-3], [1, 2, 195-202] etc.
+_CITATION_RE = re.compile(r"\[[\d,\s\-]+\]")
+
+
 def _extract_citation_indices(text: str) -> set[int]:
-    """Return the set of 1-based indices present as [1], [2], etc."""
-    return {int(match) for match in re.findall(r"\[(\d+)\]", text)}
+    """Return all 1-based citation indices found in the text."""
+    return {n for m in _CITATION_RE.findall(text) for n in _parse_citation_group(m[1:-1])}
+
+
+def _rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
+    """Renumber valid citations to sequential display numbers; strip out-of-range ones."""
+    def _rewrite(match: re.Match) -> str:
+        nums = _parse_citation_group(match.group(0)[1:-1])
+        kept = sorted({renumber_map[n] for n in nums if n in renumber_map})
+        return f"[{', '.join(str(k) for k in kept)}]" if kept else ""
+    return _CITATION_RE.sub(_rewrite, text)
 
 
 class AnswerResponse(BaseModel):
@@ -157,7 +192,7 @@ class AnswerResponse(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ready", "model": "Med42-OpenVINO"}
+    return {"status": "ready", "model": "Med42-OpenVINO", "active_prompt": ACTIVE_PROMPT}
 
 
 @app.post("/query", response_model=list[SearchResult])
@@ -251,19 +286,25 @@ async def generate_clinical_answer(request: AnswerRequest):
             for res in top_chunks
         ]
 
-        citations_used = [
-            citations_retrieved[i - 1]
-            for i in sorted(used_indices)
-            if 1 <= i <= len(citations_retrieved)
-        ]
+        sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+        citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        fallback_citations = citations_used if citations_used else citations_retrieved
+        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+        renumbered_answer = _rewrite_citations(answer_text, renumber_map)
+        # Strip any fabricated plain-text "References:" section the model appends.
+        renumbered_answer = re.sub(
+            r"\n+\s*References?:.*",
+            "",
+            renumbered_answer,
+            flags=re.DOTALL | re.IGNORECASE,
+        ).rstrip()
 
+        labelled_answer = f"[Prompt: {ACTIVE_PROMPT}]\n\n{renumbered_answer}"
         return AnswerResponse(
-            answer=answer_text,
+            answer=labelled_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=fallback_citations,
+            citations=citations_used,
         )
     except Exception as e:
         print(f"❌ /answer Error: {str(e)}")
@@ -328,19 +369,17 @@ async def revise_clinical_answer(request: ReviseRequest):
             for res in top_chunks
         ]
 
-        citations_used = [
-            citations_retrieved[i - 1]
-            for i in sorted(used_indices)
-            if 1 <= i <= len(citations_retrieved)
-        ]
+        sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+        citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        fallback_citations = citations_used if citations_used else citations_retrieved
+        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+        renumbered_answer = _rewrite_citations(answer_text, renumber_map)
 
         return AnswerResponse(
-            answer=answer_text,
+            answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=fallback_citations,
+            citations=citations_used,
         )
     except Exception as e:
         print(f"\u274c /revise Error: {str(e)}")
