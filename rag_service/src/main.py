@@ -68,6 +68,7 @@ class SearchResult(BaseModel):
 
 class AnswerRequest(QueryRequest):
     max_tokens: int = OLLAMA_MAX_TOKENS
+    patient_context: dict[str, Any] | None = None
 
 
 class ReviseRequest(BaseModel):
@@ -77,6 +78,7 @@ class ReviseRequest(BaseModel):
     feedback: str
     top_k: int = 5
     max_tokens: int = OLLAMA_MAX_TOKENS
+    patient_context: dict[str, Any] | None = None
 
 
 MAX_CITATIONS = 3
@@ -227,7 +229,7 @@ async def generate_clinical_answer(request: AnswerRequest):
                 citations=[],
             )
 
-        prompt = build_grounded_prompt(request.query, top_chunks)
+        prompt = build_grounded_prompt(request.query, top_chunks, patient_context=request.patient_context)
 
         answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
 
@@ -304,6 +306,7 @@ async def revise_clinical_answer(request: ReviseRequest):
             previous_answer=request.previous_answer,
             specialist_feedback=request.feedback,
             chunks=top_chunks,
+            patient_context=request.patient_context,
         )
 
         answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
