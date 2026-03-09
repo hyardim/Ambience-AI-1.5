@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Trash2, Loader2, Filter, X } from 'lucide-react';
+import { Plus, Search, Archive, Loader2, Filter, X } from 'lucide-react';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
@@ -91,14 +91,14 @@ export function GPQueriesPage() {
     }, 300);
   };
 
-  const handleDelete = async (e: React.MouseEvent, chatId: number) => {
+  const handleArchive = async (e: React.MouseEvent, chatId: number) => {
     e.stopPropagation();
-    if (!confirm('Delete this consultation?')) return;
+    if (!confirm('Archive this consultation? It will be hidden from your list but the record will be preserved.')) return;
     try {
       await deleteChat(chatId);
       setChats(prev => prev.filter(c => c.id !== chatId));
     } catch {
-      setError('Failed to delete consultation');
+      setError('Failed to archive consultation');
     }
   };
 
@@ -305,11 +305,11 @@ export function GPQueriesPage() {
                       {chat.severity && <SeverityBadge severity={chat.severity} />}
                       <StatusBadge status={chat.status} />
                       <button
-                        onClick={(e) => handleDelete(e, chat.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
-                        title="Delete consultation"
+                        onClick={(e) => handleArchive(e, chat.id)}
+                        className="p-1.5 text-gray-400 hover:text-amber-600 rounded transition-colors"
+                        title="Archive consultation"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Archive className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

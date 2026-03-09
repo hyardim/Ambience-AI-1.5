@@ -152,7 +152,7 @@ describe('GPQueriesPage', () => {
     });
   });
 
-  it('deletes a chat when delete button is clicked', async () => {
+  it('archives a chat when archive button is clicked', async () => {
     renderGPQueries();
     const user = userEvent.setup();
 
@@ -160,9 +160,9 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('Headache consultation')).toBeInTheDocument();
     });
 
-    // Find the delete button for the first chat (has title "Delete consultation")
-    const deleteButtons = screen.getAllByTitle('Delete consultation');
-    await user.click(deleteButtons[0]);
+    // Find the archive button for the first chat (has title "Archive consultation")
+    const archiveButtons = screen.getAllByTitle('Archive consultation');
+    await user.click(archiveButtons[0]);
 
     await waitFor(() => {
       expect(screen.queryByText('Headache consultation')).not.toBeInTheDocument();

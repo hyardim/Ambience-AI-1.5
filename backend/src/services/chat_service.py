@@ -155,14 +155,14 @@ def update_chat(
 # ---------------------------------------------------------------------------
 
 
-def delete_chat(db: Session, user: User, chat_id: int) -> None:
+def archive_chat(db: Session, user: User, chat_id: int) -> None:
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    chat_repository.delete(db, chat)
+    chat_repository.archive(db, chat)
     audit_repository.log(
-        db, user_id=user.id, action="DELETE_CHAT", details=f"Deleted chat {chat_id}"
+        db, user_id=user.id, action="ARCHIVE_CHAT", details=f"Archived chat {chat_id}"
     )
 
 

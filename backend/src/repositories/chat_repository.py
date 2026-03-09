@@ -32,7 +32,7 @@ def list_for_user(
 ) -> list[Chat]:
     query = db.query(Chat).filter(Chat.user_id == user_id)
     if not include_archived:
-        query = query.filter(Chat.status != ChatStatus.ARCHIVED)
+        query = query.filter(Chat.is_archived == False)
     if status:
         query = query.filter(Chat.status == ChatStatus(status))
     if specialty:
@@ -73,6 +73,12 @@ def update(db: Session, chat: Chat, **fields) -> Chat:
     db.commit()
     db.refresh(chat)
     return chat
+
+
+def archive(db: Session, chat: Chat) -> None:
+    chat.is_archived = True
+    db.commit()
+    db.refresh(chat)
 
 
 def delete(db: Session, chat: Chat) -> None:

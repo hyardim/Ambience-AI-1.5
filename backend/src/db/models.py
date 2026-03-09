@@ -77,6 +77,8 @@ class Chat(Base):
     reviewed_at = Column(DateTime, nullable=True)
     review_feedback = Column(Text, nullable=True)
 
+    is_archived = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

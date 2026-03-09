@@ -1,5 +1,5 @@
 """
-Tests for /chats endpoints: create, list, get, delete, and send message.
+Tests for /chats endpoints: create, list, get, archive (soft-delete), and send message.
 """
 
 
@@ -123,27 +123,34 @@ class TestGetChat:
 
 
 # ---------------------------------------------------------------------------
-# DELETE /chats/{chat_id}
+# DELETE /chats/{chat_id}  (archive, not hard-delete)
 # ---------------------------------------------------------------------------
 
-class TestDeleteChat:
+class TestArchiveChat:
 
-    def test_delete_chat_success(self, client, gp_headers, created_chat):
+    def test_archive_chat_success(self, client, gp_headers, created_chat):
         chat_id = created_chat["id"]
         resp = client.delete(f"/chats/{chat_id}", headers=gp_headers)
         assert resp.status_code == 204
 
-    def test_delete_chat_is_gone_after_deletion(self, client, gp_headers, created_chat):
+    def test_archived_chat_hidden_from_list(self, client, gp_headers, created_chat):
+        chat_id = created_chat["id"]
+        client.delete(f"/chats/{chat_id}", headers=gp_headers)
+        resp = client.get("/chats/", headers=gp_headers)
+        assert all(c["id"] != chat_id for c in resp.json())
+
+    def test_archived_chat_still_fetchable_by_id(self, client, gp_headers, created_chat):
         chat_id = created_chat["id"]
         client.delete(f"/chats/{chat_id}", headers=gp_headers)
         resp = client.get(f"/chats/{chat_id}", headers=gp_headers)
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json()["id"] == chat_id
 
-    def test_delete_chat_not_found(self, client, gp_headers):
+    def test_archive_chat_not_found(self, client, gp_headers):
         resp = client.delete("/chats/99999", headers=gp_headers)
         assert resp.status_code == 404
 
-    def test_delete_chat_belonging_to_other_user_fails(
+    def test_archive_chat_belonging_to_other_user_fails(
         self, client, gp_headers, second_gp_headers, created_chat
     ):
         chat_id = created_chat["id"]
@@ -152,22 +159,22 @@ class TestDeleteChat:
         # Verify original owner can still access it
         assert client.get(f"/chats/{chat_id}", headers=gp_headers).status_code == 200
 
-    def test_delete_chat_unauthenticated_fails(self, client, created_chat):
+    def test_archive_chat_unauthenticated_fails(self, client, created_chat):
         resp = client.delete(f"/chats/{created_chat['id']}")
         assert resp.status_code == 401
 
-    def test_delete_chat_removes_messages(self, client, gp_headers, created_chat):
+    def test_archive_preserves_messages(self, client, gp_headers, created_chat):
         chat_id = created_chat["id"]
         client.post(
             f"/chats/{chat_id}/message",
-            json={"role": "user", "content": "Will be deleted"},
+            json={"role": "user", "content": "Should survive archive"},
             headers=gp_headers,
         )
         client.delete(f"/chats/{chat_id}", headers=gp_headers)
-        # Recreate a chat and verify no orphaned messages bleed over
-        new_id = client.post("/chats/", json={"title": "Fresh", "specialty": "neurology"}, headers=gp_headers).json()["id"]
-        get_resp = client.get(f"/chats/{new_id}", headers=gp_headers)
-        assert get_resp.json()["messages"] == []
+        resp = client.get(f"/chats/{chat_id}", headers=gp_headers)
+        assert resp.status_code == 200
+        contents = [m["content"] for m in resp.json()["messages"]]
+        assert any("Should survive archive" in c for c in contents)
 
 
 # ---------------------------------------------------------------------------
@@ -389,13 +396,13 @@ class TestListChatsFiltering:
         assert all(c["status"] == "open" for c in resp.json())
 
     def test_archived_chats_excluded_by_default(self, client, gp_headers):
-        # Create a chat then archive it via update
+        # Create a chat then archive it via the DELETE endpoint
         chat = client.post("/chats/", json={"title": "Will archive", "specialty": "neurology"}, headers=gp_headers).json()
-        client.patch(f"/chats/{chat['id']}", json={"status": "archived"}, headers=gp_headers)
+        client.delete(f"/chats/{chat['id']}", headers=gp_headers)
 
         resp = client.get("/chats/", headers=gp_headers)
         assert resp.status_code == 200
-        assert all(c["status"] != "archived" for c in resp.json())
+        assert all(c["id"] != chat["id"] for c in resp.json())
 
     def test_no_results_returns_empty_list(self, client, gp_headers):
         resp = client.get("/chats/?search=absolutelynothingmatches", headers=gp_headers)

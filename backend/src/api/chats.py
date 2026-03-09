@@ -72,12 +72,12 @@ def update_chat(
 
 
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_chat(
+def archive_chat(
     chat_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
-    chat_service.delete_chat(db, current_user, chat_id)
+    chat_service.archive_chat(db, current_user, chat_id)
 
 
 @router.post("/{chat_id}/message")

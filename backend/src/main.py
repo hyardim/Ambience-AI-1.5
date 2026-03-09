@@ -109,9 +109,21 @@ def ensure_default_users() -> None:
         db.close()
 
 
+def ensure_chat_archive_column() -> None:
+    """Add is_archived column to chats table if missing."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE chats "
+                "ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+
+
 ensure_auth_columns()
 ensure_notification_fk()
 ensure_message_columns()
+ensure_chat_archive_column()
 ensure_default_users()
 
 app = FastAPI(
