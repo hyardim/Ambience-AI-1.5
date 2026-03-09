@@ -6,7 +6,7 @@ import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat } from '../../services/api';
+import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat, uploadChatFile } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
 import type { Message, Citation } from '../../types';
 
@@ -130,7 +130,7 @@ export function GPQueryDetailPage() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, files?: File[]) => {
     if (!chat || sending) return;
     setSending(true);
 
@@ -146,6 +146,10 @@ export function GPQueryDetailPage() {
     setMessages(prev => [...prev, userMsg]);
 
     try {
+      // Upload any attached files before sending the message
+      if (files && files.length > 0) {
+        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+      }
       // Backend returns { status, ai_response }; refetch chat to attach citations reliably
       await apiSendMessage(chat.id, content);
       const refreshed = await getChat(chat.id);

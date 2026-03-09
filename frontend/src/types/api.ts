@@ -43,8 +43,17 @@ export interface BackendChat {
 // Chat with messages (detail endpoints)
 // ---------------------------------------------------------------------------
 
+export interface FileAttachment {
+  id: number;
+  filename: string;
+  file_type: string | null;
+  file_size: number | null;
+  created_at: string;
+}
+
 export interface BackendChatWithMessages extends BackendChat {
   messages: BackendMessage[];
+  files?: FileAttachment[];
 }
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import {
   reviewChat,
   reviewMessage,
   sendSpecialistMessage,
+  uploadChatFile,
 } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
 import type { Message, Citation } from '../../types';
@@ -252,7 +253,7 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, files?: File[]) => {
     if (!chat) return;
     // Optimistically add the specialist message
     const tempId = `temp-${Date.now()}`;
@@ -267,6 +268,9 @@ export function SpecialistQueryDetailPage() {
     setMessages(prev => [...prev, optimistic]);
 
     try {
+      if (files && files.length > 0) {
+        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+      }
       await sendSpecialistMessage(chat.id, content);
     } catch (err) {
       // Remove the optimistic message on failure
