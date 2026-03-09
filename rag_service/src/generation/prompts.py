@@ -42,10 +42,13 @@ _INSTRUCTIONS_NEW = (
     "passages do not address. Keep this clearly separate — never mix it with cited content or "
     "attach citation numbers to it.\n"
     "4. HONEST SCOPE: If the indexed passages do not cover the question's topic, say so in one sentence, "
-    "then continue with the General Clinical Knowledge section only.\n"
+    "then continue with the 'General clinical context:' section only.\n"
     "5. NO FABRICATION: Do not invent drug doses, statistics, guideline codes, study references, "
     "author names, or year references — not even for well-known studies. "
-    "If you are uncertain, say so explicitly.\n\n"
+    "If you are uncertain, say so explicitly.\n"
+    "6. CONFLICTING SOURCES: If an uploaded document contradicts an indexed guideline passage, "
+    "flag the discrepancy explicitly (e.g. 'Note: the uploaded document states X, whereas the indexed "
+    "guideline states Y').\n\n"
 
     "Response format:\n"
     "First, write only statements that are directly supported by the indexed passages, each cited with [N]. "
@@ -55,7 +58,8 @@ _INSTRUCTIONS_NEW = (
     "Then, if there is additional useful context from general medical knowledge, add a single paragraph "
     "starting with exactly: 'General clinical context:' — no citation numbers, no statistics, no author names. "
     "If the indexed evidence fully covers the question, omit this block entirely.\n"
-    "End with one or two sentences on safety flags or monitoring."
+    "If safety considerations apply to this question, end with one or two sentences on relevant safety flags or monitoring. "
+    "If there are no safety implications, omit this section entirely."
 )
 
 # Active selection — change ACTIVE_PROMPT above to switch

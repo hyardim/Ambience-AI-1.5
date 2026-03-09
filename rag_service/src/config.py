@@ -85,7 +85,7 @@ class GenerationConfig(BaseSettings):
 
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="thewindmom/llama3-med42-8b")
-    ollama_max_tokens: int = Field(default=512)
+    ollama_max_tokens: int = Field(default=1024)
 
 
 class LLMConfig(BaseSettings):
