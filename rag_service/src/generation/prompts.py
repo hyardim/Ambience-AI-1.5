@@ -54,13 +54,16 @@ def build_grounded_prompt(
     question: str,
     chunks: list[dict],
     patient_context: dict | None = None,
+    file_context: str | None = None,
 ) -> str:
     context_block = _format_context(chunks)
     has_context = bool(chunks)
+    has_files = bool(file_context)
     instructions = (
         "You are a cautious clinical assistant. Use only the provided context to "
         "answer the clinician's question. "
         "Cite supporting passages with the bracket numbers given in the context (e.g., [1], [2]) and only cite passages you actually use. "
+        "When referencing content from uploaded documents, cite them as 'Uploaded document'. "
         "If there is no relevant context or the question appears non-medical/off-topic (e.g., small talk), politely state that you cannot provide clinical guidance without relevant medical context. "
         "Do not fabricate context or cite sources when none are available. Keep the response concise and factual."
     )
@@ -68,12 +71,14 @@ def build_grounded_prompt(
     patient_block = _format_patient_context(patient_context)
     context_section = "Context:\n" + (context_block if has_context else "(none)")
     citation_hint = (
-        "Answer (with citations):" if has_context else "Answer (no citations):"
+        "Answer (with citations):" if (has_context or has_files) else "Answer (no citations):"
     )
 
     parts = [instructions]
     if patient_block:
         parts.append(patient_block)
+    if file_context:
+        parts.append(f"UPLOADED DOCUMENTS\n{file_context}")
     parts += [context_section, f"Question: {question}", citation_hint]
     return "\n\n".join(parts)
 
@@ -84,6 +89,7 @@ def build_revision_prompt(
     specialist_feedback: str,
     chunks: list[dict],
     patient_context: dict | None = None,
+    file_context: str | None = None,
 ) -> str:
     """Build a prompt that asks the model to revise a previous answer based on
     specialist feedback, grounded in the same (or refreshed) retrieved context."""
@@ -104,13 +110,16 @@ def build_revision_prompt(
 
     patient_block = _format_patient_context(patient_context)
     context_section = "Context:\n" + (context_block if has_context else "(none)")
+    has_files = bool(file_context)
     citation_hint = (
-        "Revised answer (with citations):" if has_context else "Revised answer (no citations):"
+        "Revised answer (with citations):" if (has_context or has_files) else "Revised answer (no citations):"
     )
 
     parts = [instructions]
     if patient_block:
         parts.append(patient_block)
+    if file_context:
+        parts.append(f"UPLOADED DOCUMENTS\n{file_context}")
     parts += [
         context_section,
         f"Original question: {original_question}",
