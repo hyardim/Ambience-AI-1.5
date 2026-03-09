@@ -26,12 +26,23 @@ RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 
 
 def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
+    patient_context = {
+        k: v
+        for k, v in {
+            "age": data.patient_age,
+            "gender": data.patient_gender,
+            "notes": data.patient_notes,
+        }.items()
+        if v is not None
+    } or None
+
     chat = chat_repository.create(
         db,
         user_id=user.id,
         title=data.title,
         specialty=data.specialty,
         severity=data.severity,
+        patient_context=patient_context,
     )
     audit_repository.log(
         db, user_id=user.id, action="CREATE_CHAT", details=f"Created chat: {data.title}"
@@ -160,7 +171,13 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         if not chat:
             return
 
-        rag_payload = {"query": content, "top_k": 4}
+        ctx = chat.patient_context or {}
+        patient_context = {
+            **ctx,
+            **({"specialty": chat.specialty} if chat.specialty else {}),
+            **({"severity": chat.severity} if chat.severity else {}),
+        } or None
+        rag_payload = {"query": content, "top_k": 4, "patient_context": patient_context}
 
         rag_action = "RAG_ERROR"
         rag_details = f"query_len={len(content)} error=unknown"
