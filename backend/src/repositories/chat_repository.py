@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from src.db.models import Chat, ChatStatus
@@ -23,12 +25,24 @@ def list_for_user(
     limit: int = 100,
     status: Optional[str] = None,
     specialty: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    include_archived: bool = False,
 ) -> list[Chat]:
     query = db.query(Chat).filter(Chat.user_id == user_id)
+    if not include_archived:
+        query = query.filter(Chat.status != ChatStatus.ARCHIVED)
     if status:
         query = query.filter(Chat.status == ChatStatus(status))
     if specialty:
         query = query.filter(Chat.specialty == specialty)
+    if search:
+        query = query.filter(Chat.title.ilike(f"%{search}%"))
+    if date_from:
+        query = query.filter(Chat.created_at >= date_from)
+    if date_to:
+        query = query.filter(Chat.created_at <= date_to)
     return query.order_by(Chat.created_at.desc()).offset(skip).limit(limit).all()
 
 

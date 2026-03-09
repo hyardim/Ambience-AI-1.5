@@ -123,8 +123,25 @@ export async function updateProfile(data: ProfileUpdateRequest): Promise<UserPro
 
 // ── Chats (GP) ───────────────────────────────────────────────────────────
 
-export async function getChats(skip = 0, limit = 100): Promise<BackendChat[]> {
-  const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+export interface ChatListFilters {
+  skip?: number;
+  limit?: number;
+  status?: string;
+  specialty?: string;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export async function getChats(filters: ChatListFilters = {}): Promise<BackendChat[]> {
+  const params = new URLSearchParams();
+  params.set('skip', String(filters.skip ?? 0));
+  params.set('limit', String(filters.limit ?? 100));
+  if (filters.status) params.set('status', filters.status);
+  if (filters.specialty) params.set('specialty', filters.specialty);
+  if (filters.search) params.set('search', filters.search);
+  if (filters.date_from) params.set('date_from', filters.date_from);
+  if (filters.date_to) params.set('date_to', filters.date_to);
   const res = await fetch(`${API_BASE}/chats/?${params}`, {
     headers: authHeaders(),
   });

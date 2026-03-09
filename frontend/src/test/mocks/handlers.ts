@@ -151,8 +151,18 @@ export const handlers = [
   }),
 
   // Chats (GP)
-  http.get('/chats/', () => {
-    return HttpResponse.json([mockChat, mockChat2]);
+  http.get('/chats/', ({ request }) => {
+    const url = new URL(request.url);
+    let chats = [mockChat, mockChat2];
+    const search = url.searchParams.get('search');
+    if (search) {
+      chats = chats.filter(c => c.title.toLowerCase().includes(search.toLowerCase()));
+    }
+    const specialty = url.searchParams.get('specialty');
+    if (specialty) {
+      chats = chats.filter(c => c.specialty === specialty);
+    }
+    return HttpResponse.json(chats);
   }),
 
   http.get('/chats/:chatId', ({ params }) => {

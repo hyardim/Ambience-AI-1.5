@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -52,6 +53,9 @@ def list_chats(
     limit: int = 100,
     status: Optional[str] = None,
     specialty: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ) -> list[ChatResponse]:
     if status:
         try:
@@ -59,8 +63,29 @@ def list_chats(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
+    parsed_date_from = None
+    parsed_date_to = None
+    if date_from:
+        try:
+            parsed_date_from = datetime.fromisoformat(date_from)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid date_from: {date_from}")
+    if date_to:
+        try:
+            parsed_date_to = datetime.fromisoformat(date_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid date_to: {date_to}")
+
     chats = chat_repository.list_for_user(
-        db, user.id, skip=skip, limit=limit, status=status, specialty=specialty
+        db,
+        user.id,
+        skip=skip,
+        limit=limit,
+        status=status,
+        specialty=specialty,
+        search=search,
+        date_from=parsed_date_from,
+        date_to=parsed_date_to,
     )
     return [chat_to_response(c) for c in chats]
 

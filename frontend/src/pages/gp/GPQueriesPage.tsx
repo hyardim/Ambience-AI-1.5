@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Search, Trash2, Loader2, Filter, X } from 'lucide-react';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { getChats, deleteChat } from '../../services/api';
+import type { ChatListFilters } from '../../services/api';
 import type { BackendChat } from '../../types/api';
 
 type TabKey = 'submitted' | 'under_review' | 'closed';
@@ -15,6 +16,19 @@ const TAB_STATUSES: Record<TabKey, string[]> = {
   closed: ['approved', 'rejected'],
 };
 
+const SPECIALTY_OPTIONS = [
+  'neurology',
+  'cardiology',
+  'rheumatology',
+  'dermatology',
+  'orthopedics',
+  'psychiatry',
+  'gastroenterology',
+  'endocrinology',
+  'pulmonology',
+  'oncology',
+];
+
 export function GPQueriesPage() {
   const navigate = useNavigate();
   const { username, logout } = useAuth();
@@ -22,23 +36,59 @@ export function GPQueriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [tab, setTab] = useState<TabKey>('submitted');
+  const [showFilters, setShowFilters] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const hasActiveFilters = !!(specialty || dateFrom || dateTo);
+
+  const buildFilters = useCallback(
+    (searchOverride?: string): ChatListFilters => {
+      const filters: ChatListFilters = {};
+      const s = searchOverride ?? searchTerm;
+      if (s) filters.search = s;
+      if (specialty) filters.specialty = specialty;
+      if (dateFrom) filters.date_from = dateFrom + 'T00:00:00';
+      if (dateTo) filters.date_to = dateTo + 'T23:59:59';
+      return filters;
+    },
+    [searchTerm, specialty, dateFrom, dateTo],
+  );
+
+  const fetchChats = useCallback(
+    async (filters?: ChatListFilters) => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await getChats(filters ?? buildFilters());
+        setChats(data);
+      } catch {
+        setError('Failed to load consultations. Is the backend running?');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [buildFilters],
+  );
 
   useEffect(() => {
     fetchChats();
   }, []);
 
-  const fetchChats = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await getChats();
-      setChats(data);
-    } catch {
-      setError('Failed to load consultations. Is the backend running?');
-    } finally {
-      setLoading(false);
-    }
+  // Refetch when specialty or date filters change
+  useEffect(() => {
+    fetchChats(buildFilters());
+  }, [specialty, dateFrom, dateTo]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchChats(buildFilters(value));
+    }, 300);
   };
 
   const handleDelete = async (e: React.MouseEvent, chatId: number) => {
@@ -52,12 +102,18 @@ export function GPQueriesPage() {
     }
   };
 
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSpecialty('');
+    setDateFrom('');
+    setDateTo('');
+    fetchChats({});
+  };
+
   const tabChats = (key: TabKey) =>
     chats.filter(c => TAB_STATUSES[key].includes(c.status));
 
-  const filteredChats = tabChats(tab).filter(chat =>
-    (chat.title || '').toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  const filteredChats = tabChats(tab);
 
   const formatSpecialty = (s: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : null);
 
@@ -113,25 +169,103 @@ export function GPQueriesPage() {
           ))}
         </div>
 
-        {/* Search */}
+        {/* Search & Filters */}
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by title..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
-            />
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search consultations..."
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center gap-2 px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                showFilters || hasActiveFilters
+                  ? 'bg-[#005eb8] text-white border-[#005eb8]'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              aria-label="Toggle filters"
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {hasActiveFilters && (
+                <span className="bg-white text-[#005eb8] text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {[specialty, dateFrom, dateTo].filter(Boolean).length}
+                </span>
+              )}
+            </button>
           </div>
+
+          {/* Expanded filter controls */}
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="filter-specialty" className="block text-sm font-medium text-gray-700 mb-1">
+                    Specialty
+                  </label>
+                  <select
+                    id="filter-specialty"
+                    value={specialty}
+                    onChange={(e) => setSpecialty(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                  >
+                    <option value="">All specialties</option>
+                    {SPECIALTY_OPTIONS.map(s => (
+                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="filter-date-from" className="block text-sm font-medium text-gray-700 mb-1">
+                    From date
+                  </label>
+                  <input
+                    id="filter-date-from"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="filter-date-to" className="block text-sm font-medium text-gray-700 mb-1">
+                    To date
+                  </label>
+                  <input
+                    id="filter-date-to"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+              {hasActiveFilters && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={clearFilters}
+                    className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Clear filters
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Error */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={fetchChats} className="ml-3 underline font-medium">Retry</button>
+            <button onClick={() => fetchChats()} className="ml-3 underline font-medium">Retry</button>
           </div>
         )}
 
@@ -188,9 +322,11 @@ export function GPQueriesPage() {
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No consultations found</h3>
                 <p className="text-gray-600 mb-6">
-                  {searchTerm ? 'Try adjusting your search' : emptyMessage[tab]}
+                  {searchTerm || hasActiveFilters
+                    ? 'Try adjusting your search or filters'
+                    : emptyMessage[tab]}
                 </p>
-                {!searchTerm && tab === 'submitted' && (
+                {!searchTerm && !hasActiveFilters && tab === 'submitted' && (
                   <button
                     onClick={() => navigate('/gp/queries/new')}
                     className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors"

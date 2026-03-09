@@ -44,7 +44,7 @@ describe('GPQueriesPage', () => {
     expect(screen.getByText('Joint pain assessment')).toBeInTheDocument();
   });
 
-  it('filters chats by search term', async () => {
+  it('filters chats by search term via server', async () => {
     renderGPQueries();
     const user = userEvent.setup();
 
@@ -52,9 +52,11 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('Headache consultation')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText(/search by title/i), 'Joint');
+    await user.type(screen.getByPlaceholderText(/search consultations/i), 'Joint');
 
-    expect(screen.queryByText('Headache consultation')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('Headache consultation')).not.toBeInTheDocument();
+    });
     expect(screen.getByText('Joint pain assessment')).toBeInTheDocument();
   });
 
@@ -66,10 +68,19 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('Headache consultation')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText(/search by title/i), 'xyznonexistent');
+    // Override handler to return empty for the search
+    server.use(
+      http.get('/chats/', () => {
+        return HttpResponse.json([]);
+      }),
+    );
 
-    expect(screen.getByText('No consultations found')).toBeInTheDocument();
-    expect(screen.getByText('Try adjusting your search')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/search consultations/i), 'xyznonexistent');
+
+    await waitFor(() => {
+      expect(screen.getByText('No consultations found')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Try adjusting your search or filters')).toBeInTheDocument();
   });
 
   it('shows empty state with create button when no chats exist', async () => {
@@ -85,7 +96,7 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('No consultations found')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Create your first consultation to get started')).toBeInTheDocument();
+    expect(screen.getByText('No submitted consultations. Create one to get started.')).toBeInTheDocument();
   });
 
   it('navigates to new query page when button is clicked', async () => {
@@ -172,5 +183,107 @@ describe('GPQueriesPage', () => {
     expect(screen.getByText('Submitted')).toBeInTheDocument();
     expect(screen.getByText('Medium')).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
+  });
+
+  // ── Filter UI tests ────────────────────────────────────────────────────
+
+  it('shows filter panel when Filters button is clicked', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+
+    // Click the Filters button
+    await user.click(screen.getByLabelText('Toggle filters'));
+
+    // Filter controls should now be visible
+    expect(screen.getByLabelText('Specialty')).toBeInTheDocument();
+    expect(screen.getByLabelText('From date')).toBeInTheDocument();
+    expect(screen.getByLabelText('To date')).toBeInTheDocument();
+  });
+
+  it('filters by specialty via server', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+
+    // Open filters
+    await user.click(screen.getByLabelText('Toggle filters'));
+
+    // Select neurology specialty
+    await user.selectOptions(screen.getByLabelText('Specialty'), 'neurology');
+
+    // Server-side mock handler filters by specialty, so only neurology chat remains
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Joint pain assessment')).not.toBeInTheDocument();
+  });
+
+  it('clears all filters when Clear filters button is clicked', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+
+    // Open filters and select a specialty
+    await user.click(screen.getByLabelText('Toggle filters'));
+    await user.selectOptions(screen.getByLabelText('Specialty'), 'neurology');
+
+    await waitFor(() => {
+      expect(screen.queryByText('Joint pain assessment')).not.toBeInTheDocument();
+    });
+
+    // Clear filters
+    await user.click(screen.getByText('Clear filters'));
+
+    // Both chats should be visible again
+    await waitFor(() => {
+      expect(screen.getByText('Joint pain assessment')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+  });
+
+  it('shows date range controls in filter panel', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Toggle filters'));
+
+    const dateFrom = screen.getByLabelText('From date');
+    const dateTo = screen.getByLabelText('To date');
+    expect(dateFrom).toHaveAttribute('type', 'date');
+    expect(dateTo).toHaveAttribute('type', 'date');
+  });
+
+  it('shows filter count badge when filters are active', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Toggle filters'));
+    await user.selectOptions(screen.getByLabelText('Specialty'), 'neurology');
+
+    // The Filters button should contain a badge with the active filter count
+    await waitFor(() => {
+      const filtersButton = screen.getByLabelText('Toggle filters');
+      const badge = filtersButton.querySelector('span');
+      expect(badge).not.toBeNull();
+      expect(badge!.textContent).toBe('1');
+    });
   });
 });

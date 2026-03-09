@@ -27,6 +27,7 @@ class ChatStatus(enum.Enum):
     REJECTED = "rejected"        # Specialist rejected / requested changes
     CLOSED = "closed"
     FLAGGED = "flagged"
+    ARCHIVED = "archived"        # Soft-archived by the user
 
 # --- 1. User Management ---
 class User(Base):

@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user_obj
@@ -33,6 +33,9 @@ def list_chats(
     limit: int = 100,
     status: Optional[str] = None,
     specialty: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=200),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
@@ -43,6 +46,9 @@ def list_chats(
         limit=limit,
         status=status,
         specialty=specialty,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
     )
 
 
