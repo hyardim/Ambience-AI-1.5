@@ -191,13 +191,14 @@ class TestIngestValidation:
     def test_all_known_sources_pass_validation(self, client, monkeypatch):
         for source in ("NICE", "BSR", "NICE_NEURO"):
             _patch_ingest(monkeypatch)
-            with patch("builtins.open", mock_open()):
-                with patch.object(Path, "mkdir"):
-                    resp = client.post(
-                        "/ingest",
-                        files={"file": ("test.pdf", PDF_BYTES, "application/pdf")},
-                        data={"source_name": source},
-                    )
+            with patch.object(Path, "mkdir"), \
+                 patch.object(Path, "open", mock_open()), \
+                 patch("shutil.copyfileobj"):
+                resp = client.post(
+                    "/ingest",
+                    files={"file": ("test.pdf", PDF_BYTES, "application/pdf")},
+                    data={"source_name": source},
+                )
             assert resp.status_code != 422, f"Source {source} was incorrectly rejected"
 
 
@@ -209,14 +210,14 @@ class TestIngestSuccess:
 
     def test_returns_ingestion_report(self, client, monkeypatch):
         _patch_ingest(monkeypatch)
-        with patch("builtins.open", mock_open()):
-            with patch.object(Path, "mkdir"):
-                with patch("shutil.copyfileobj"):
-                    resp = client.post(
-                        "/ingest",
-                        files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
-                        data={"source_name": "NICE"},
-                    )
+        with patch.object(Path, "mkdir"), \
+             patch.object(Path, "open", mock_open()), \
+             patch("shutil.copyfileobj"):
+            resp = client.post(
+                "/ingest",
+                files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
+                data={"source_name": "NICE"},
+            )
 
         assert resp.status_code == 200
         body = resp.json()
@@ -232,14 +233,14 @@ class TestIngestSuccess:
         monkeypatch.setattr(_main, "load_sources", lambda path: FAKE_SOURCES)
         monkeypatch.setattr(_main, "run_ingestion", mock_run)
 
-        with patch("builtins.open", mock_open()):
-            with patch.object(Path, "mkdir"):
-                with patch("shutil.copyfileobj"):
-                    client.post(
-                        "/ingest",
-                        files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
-                        data={"source_name": "BSR"},
-                    )
+        with patch.object(Path, "mkdir"), \
+             patch.object(Path, "open", mock_open()), \
+             patch("shutil.copyfileobj"):
+            client.post(
+                "/ingest",
+                files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
+                data={"source_name": "BSR"},
+            )
 
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
@@ -248,14 +249,14 @@ class TestIngestSuccess:
 
     def test_report_fields_all_present(self, client, monkeypatch):
         _patch_ingest(monkeypatch)
-        with patch("builtins.open", mock_open()):
-            with patch.object(Path, "mkdir"):
-                with patch("shutil.copyfileobj"):
-                    resp = client.post(
-                        "/ingest",
-                        files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
-                        data={"source_name": "NICE"},
-                    )
+        with patch.object(Path, "mkdir"), \
+             patch.object(Path, "open", mock_open()), \
+             patch("shutil.copyfileobj"):
+            resp = client.post(
+                "/ingest",
+                files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
+                data={"source_name": "NICE"},
+            )
 
         body = resp.json()
         for field in ("source_name", "filename", "files_scanned", "files_succeeded",
@@ -274,28 +275,28 @@ class TestIngestErrors:
 
     def test_pipeline_error_returns_500(self, client, monkeypatch):
         _patch_ingest(monkeypatch, side_effect=_PipelineError(stage="embed", message="OOM"))
-        with patch("builtins.open", mock_open()):
-            with patch.object(Path, "mkdir"):
-                with patch("shutil.copyfileobj"):
-                    resp = client.post(
-                        "/ingest",
-                        files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
-                        data={"source_name": "NICE"},
-                    )
+        with patch.object(Path, "mkdir"), \
+             patch.object(Path, "open", mock_open()), \
+             patch("shutil.copyfileobj"):
+            resp = client.post(
+                "/ingest",
+                files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
+                data={"source_name": "NICE"},
+            )
 
         assert resp.status_code == 500
         assert "embed" in resp.json()["detail"]
 
     def test_value_error_returns_422(self, client, monkeypatch):
         _patch_ingest(monkeypatch, side_effect=ValueError("No text extracted"))
-        with patch("builtins.open", mock_open()):
-            with patch.object(Path, "mkdir"):
-                with patch("shutil.copyfileobj"):
-                    resp = client.post(
-                        "/ingest",
-                        files={"file": ("empty.pdf", PDF_BYTES, "application/pdf")},
-                        data={"source_name": "NICE"},
-                    )
+        with patch.object(Path, "mkdir"), \
+             patch.object(Path, "open", mock_open()), \
+             patch("shutil.copyfileobj"):
+            resp = client.post(
+                "/ingest",
+                files={"file": ("empty.pdf", PDF_BYTES, "application/pdf")},
+                data={"source_name": "NICE"},
+            )
 
         assert resp.status_code == 422
         assert "No text extracted" in resp.json()["detail"]
