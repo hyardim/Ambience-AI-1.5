@@ -14,6 +14,7 @@ export function GPNewQueryPage() {
   const [formData, setFormData] = useState({
     title: '',
     patientAge: '',
+    sex: '',
     specialty: '',
     severity: 'medium' as Severity,
     message: ''
@@ -35,6 +36,21 @@ export function GPNewQueryPage() {
       return;
     }
 
+    if (!formData.patientAge) {
+      setError('Please enter the patient\'s age.');
+      return;
+    }
+
+    if (!formData.sex) {
+      setError('Please select the patient\'s sex.');
+      return;
+    }
+
+    if (!formData.severity) {
+      setError('Please select urgency.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -46,10 +62,7 @@ export function GPNewQueryPage() {
       });
 
       // 2. Build the first message with clinical context
-      let messageContent = formData.message;
-      if (formData.patientAge) {
-        messageContent = `[Patient age: ${formData.patientAge}]\n\n${formData.message}`;
-      }
+      const messageContent = `Patient age: ${formData.patientAge}\nPatient sex: ${formData.sex}\n\n${formData.message}`;
 
       // 3. Send the first message. The backend auto-generates an AI response
       //    and auto-submits the chat for specialist review.
@@ -68,7 +81,7 @@ export function GPNewQueryPage() {
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
       <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
         <button
           onClick={() => navigate('/gp/queries')}
@@ -95,7 +108,7 @@ export function GPNewQueryPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                  Consultation Title
+                  Consultation Title <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -109,10 +122,10 @@ export function GPNewQueryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label htmlFor="patientAge" className="block text-sm font-medium text-gray-700 mb-2">
-                    Patient Age <span className="text-gray-400 font-normal">(optional)</span>
+                    Patient Age <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -124,7 +137,25 @@ export function GPNewQueryPage() {
                     max="150"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                     placeholder="e.g. 42"
+                    required
                   />
+                </div>
+                <div>
+                  <label htmlFor="sex" className="block text-sm font-medium text-gray-700 mb-2">
+                    Sex <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="sex"
+                    name="sex"
+                    value={formData.sex}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select sex...</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="specialty" className="block text-sm font-medium text-gray-700 mb-2">
@@ -145,7 +176,7 @@ export function GPNewQueryPage() {
                 </div>
                 <div>
                   <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-2">
-                    Severity <span className="text-gray-400 font-normal">(optional)</span>
+                    Urgency <span className="text-red-500">*</span>
                   </label>
                   <select
                     id="severity"
@@ -153,6 +184,7 @@ export function GPNewQueryPage() {
                     value={formData.severity}
                     onChange={handleChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    required
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -164,7 +196,7 @@ export function GPNewQueryPage() {
 
               <div>
                 <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-2">
-                  Clinical Question
+                  Clinical Question <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="message"
