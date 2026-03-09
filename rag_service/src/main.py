@@ -182,12 +182,14 @@ async def clinical_query(request: QueryRequest):
         embeddings_result = embed_text(model, [request.query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
+        raw_results = search_similar_chunks(
+            query_embedding, limit=request.top_k)
 
         return [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -265,7 +267,8 @@ async def generate_clinical_answer(request: AnswerRequest):
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -313,7 +316,8 @@ async def revise_clinical_answer(request: ReviseRequest):
     """
     try:
         # Retrieve using the original query so chunk relevance stays high.
-        embeddings_result = embed_text(model, [request.original_query], batch_size=1)
+        embeddings_result = embed_text(
+            model, [request.original_query], batch_size=1)
         query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
@@ -358,7 +362,8 @@ async def revise_clinical_answer(request: ReviseRequest):
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),

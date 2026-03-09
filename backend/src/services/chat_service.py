@@ -18,7 +18,8 @@ from src.services._mappers import chat_to_response, msg_to_response
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
-RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+RAG_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +59,8 @@ def list_chats(
         try:
             ChatStatus(status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid status: {status}")
 
     chats = chat_repository.list_for_user(
         db, user.id, skip=skip, limit=limit, status=status, specialty=specialty
@@ -195,7 +197,8 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             citations = None
             rag_details = f"query_len={len(content)} error={type(exc).__name__}"
 
-        audit_repository.log(db, user_id=user_id, action=rag_action, details=rag_details)
+        audit_repository.log(db, user_id=user_id,
+                             action=rag_action, details=rag_details)
 
         message_repository.create(
             db,
@@ -234,7 +237,8 @@ def send_message(
             detail=f"Cannot send messages in {chat.status.value} state",
         )
 
-    message_repository.create(db, chat_id=chat.id, content=content, sender="user")
+    message_repository.create(
+        db, chat_id=chat.id, content=content, sender="user")
 
     if chat.status == ChatStatus.OPEN:
         chat_repository.update(db, chat, status=ChatStatus.SUBMITTED)
@@ -248,7 +252,8 @@ def send_message(
     if db.bind and db.bind.dialect.name == "sqlite":
         _generate_ai_response(db, chat.id, user.id, content)
     else:
-        background_tasks.add_task(_generate_ai_response_task, chat.id, user.id, content)
+        background_tasks.add_task(
+            _generate_ai_response_task, chat.id, user.id, content)
 
     return {
         "status": "Message sent",

@@ -42,7 +42,8 @@ async def warmup_model(provider: ProviderName = "local") -> None:
             resp.raise_for_status()
         print(f"✅ Local model '{LOCAL_LLM_MODEL}' warmed up and kept alive.")
     except Exception as exc:  # pragma: no cover
-        print(f"⚠️  Local model warmup failed (model may still be loading): {exc}")
+        print(
+            f"⚠️  Local model warmup failed (model may still be loading): {exc}")
 
 
 async def generate_answer(

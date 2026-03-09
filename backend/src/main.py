@@ -51,12 +51,65 @@ def ensure_notification_fk() -> None:
 
 
 def ensure_message_columns() -> None:
-    """Add is_generating column to messages table if missing."""
+    """Add newer message columns for older databases."""
     with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations JSONB")
+        )
         connection.execute(
             text(
                 "ALTER TABLE messages "
                 "ADD COLUMN IF NOT EXISTS is_generating BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS review_status VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS review_feedback TEXT")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP")
+        )
+
+
+def ensure_chat_columns() -> None:
+    """Add newer chat metadata columns for older databases."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE chats "
+                "ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'open'"
+            )
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS specialty VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS severity VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS patient_context JSONB")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS specialist_id INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS review_feedback TEXT")
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE chats "
+                "ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()"
             )
         )
 
@@ -112,6 +165,7 @@ def ensure_default_users() -> None:
 ensure_auth_columns()
 ensure_notification_fk()
 ensure_message_columns()
+ensure_chat_columns()
 ensure_default_users()
 
 app = FastAPI(

@@ -68,9 +68,9 @@ services:
       - OLLAMA_MODEL=thewindmom/llama3-med42-8b
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
       - LOCAL_LLM_MODEL=thewindmom/llama3-med42-8b
-      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
-      - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-thewindmom/llama3-med42-8b}
-      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-ollama}
+      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-https://aaw0zkgatyq013-8000.proxy.runpod.net/v1}
+      - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
+      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-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}
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
     
     extra_hosts:

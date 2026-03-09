@@ -101,7 +101,8 @@ def _score_complexity(query: str) -> tuple[float, list[str]]:
         score += 0.10
         reasons.append("medium_query")
 
-    sentence_count = len([part for part in re.split(r"[.!?]+", query) if part.strip()])
+    sentence_count = len(
+        [part for part in re.split(r"[.!?]+", query) if part.strip()])
     if sentence_count >= 3:
         score += 0.12
         reasons.append("multi_sentence")
