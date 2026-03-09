@@ -86,6 +86,18 @@ class Chat(Base):
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
     files = relationship("FileAttachment", back_populates="chat", cascade="all, delete-orphan")
 
+    @property
+    def patient_age(self):
+        return (self.patient_context or {}).get("age")
+
+    @property
+    def patient_gender(self):
+        return (self.patient_context or {}).get("gender")
+
+    @property
+    def patient_notes(self):
+        return (self.patient_context or {}).get("notes")
+
 class Message(Base):
     __tablename__ = "messages"
     id = Column(Integer, primary_key=True, index=True)
