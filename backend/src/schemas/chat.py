@@ -4,6 +4,21 @@ from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
+# File attachment
+# ---------------------------------------------------------------------------
+
+class FileAttachmentResponse(BaseModel):
+    id: int
+    filename: str
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
 # Message
 # ---------------------------------------------------------------------------
 
@@ -72,6 +87,7 @@ class ChatResponse(BaseModel):
 
 class ChatWithMessages(ChatResponse):
     messages: List[MessageResponse] = []
+    files: List[FileAttachmentResponse] = []
 
 
 # ---------------------------------------------------------------------------
