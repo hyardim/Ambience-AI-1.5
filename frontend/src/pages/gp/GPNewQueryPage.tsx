@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Paperclip, X } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { createChat, sendMessage } from '../../services/api';
+import { createChat, sendMessage, uploadChatFile } from '../../services/api';
 import type { Severity } from '../../types';
 
 export function GPNewQueryPage() {
@@ -11,6 +11,7 @@ export function GPNewQueryPage() {
   const { username, logout } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [formData, setFormData] = useState({
     title: '',
     patientAge: '',
@@ -65,12 +66,14 @@ export function GPNewQueryPage() {
         patient_notes: formData.patientNotes || undefined,
       });
 
-      // 2. The clinical question is the first message (demographics are now stored on the chat)
-      const messageContent = formData.message;
+      // 2. Upload any attached files now that we have a chat ID
+      if (attachedFiles.length > 0) {
+        await Promise.all(attachedFiles.map(f => uploadChatFile(chat.id, f)));
+      }
 
       // 3. Send the first message. The backend auto-generates an AI response
       //    and auto-submits the chat for specialist review.
-      await sendMessage(chat.id, messageContent);
+      await sendMessage(chat.id, formData.message);
 
       // 4. Navigate to the chat detail page
       navigate(`/gp/query/${chat.id}`);
@@ -227,6 +230,43 @@ export function GPNewQueryPage() {
                   placeholder="Describe your clinical question, including relevant patient history, symptoms, current medications, and what advice you're seeking..."
                   required
                 />
+              </div>
+
+              {/* File attachments */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Attach files <span className="text-gray-400 font-normal">(optional — PDFs or text files)</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                  <Paperclip className="w-4 h-4" />
+                  Choose files
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) setAttachedFiles(Array.from(e.target.files));
+                    }}
+                  />
+                </label>
+                {attachedFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {attachedFiles.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                        <Paperclip className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="ml-auto text-gray-400 hover:text-red-500"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 
