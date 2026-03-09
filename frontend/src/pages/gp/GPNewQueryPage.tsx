@@ -17,6 +17,7 @@ export function GPNewQueryPage() {
     sex: '',
     specialty: '',
     severity: 'medium' as Severity,
+    patientNotes: '',
     message: ''
   });
 
@@ -54,15 +55,18 @@ export function GPNewQueryPage() {
     setIsSubmitting(true);
 
     try {
-      // 1. Create the chat with specialty + severity as proper fields
+      // 1. Create the chat with structured patient demographics
       const chat = await createChat({
         title: formData.title || 'New Consultation',
         specialty: formData.specialty,
         severity: formData.severity || undefined,
+        patient_age: formData.patientAge ? parseInt(formData.patientAge, 10) : undefined,
+        patient_gender: formData.sex || undefined,
+        patient_notes: formData.patientNotes || undefined,
       });
 
-      // 2. Build the first message with clinical context
-      const messageContent = `Patient age: ${formData.patientAge}\nPatient sex: ${formData.sex}\n\n${formData.message}`;
+      // 2. The clinical question is the first message (demographics are now stored on the chat)
+      const messageContent = formData.message;
 
       // 3. Send the first message. The backend auto-generates an AI response
       //    and auto-submits the chat for specialist review.
@@ -192,6 +196,21 @@ export function GPNewQueryPage() {
                     <option value="urgent">Urgent</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="patientNotes" className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional clinical context
+                </label>
+                <textarea
+                  id="patientNotes"
+                  name="patientNotes"
+                  value={formData.patientNotes}
+                  onChange={handleChange}
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none"
+                  placeholder="Relevant comorbidities, current medications, allergies, recent investigations..."
+                />
               </div>
 
               <div>
