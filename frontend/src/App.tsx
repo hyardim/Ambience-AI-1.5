@@ -25,6 +25,7 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
 import { AdminChatsPage } from './pages/admin/AdminChatsPage';
 import { AdminLogsPage } from './pages/admin/AdminLogsPage';
+import { AdminGuidelinesPage } from './pages/admin/AdminGuidelinesPage';
 
 // Profile page
 import { ProfilePage } from './pages/ProfilePage';
@@ -60,6 +61,7 @@ function App() {
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminUsersPage /></ProtectedRoute>} />
           <Route path="/admin/chats" element={<ProtectedRoute allowedRoles={['admin']}><AdminChatsPage /></ProtectedRoute>} />
           <Route path="/admin/logs" element={<ProtectedRoute allowedRoles={['admin']}><AdminLogsPage /></ProtectedRoute>} />
+          <Route path="/admin/guidelines" element={<ProtectedRoute allowedRoles={['admin']}><AdminGuidelinesPage /></ProtectedRoute>} />
 
           {/* Profile (all authenticated users) */}
           <Route path="/profile" element={<ProtectedRoute allowedRoles={['gp', 'specialist', 'admin']}><ProfilePage /></ProtectedRoute>} />
