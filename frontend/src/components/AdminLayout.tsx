@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Users, MessageSquare, ClipboardList, LayoutDashboard } from 'lucide-react';
+import { Users, MessageSquare, ClipboardList, LayoutDashboard, Upload } from 'lucide-react';
 import { Header } from './Header';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,10 +8,11 @@ interface AdminLayoutProps {
 }
 
 const NAV_ITEMS = [
-  { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/admin/users', label: 'Users', icon: Users },
-  { to: '/admin/chats', label: 'Chats', icon: MessageSquare },
-  { to: '/admin/logs', label: 'Audit Logs', icon: ClipboardList },
+  { to: '/admin/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
+  { to: '/admin/users',       label: 'Users',       icon: Users           },
+  { to: '/admin/chats',       label: 'Chats',       icon: MessageSquare   },
+  { to: '/admin/logs',        label: 'Audit Logs',  icon: ClipboardList   },
+  { to: '/admin/guidelines',  label: 'Guidelines',  icon: Upload          },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {

@@ -280,12 +280,8 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             rag_response.raise_for_status()
             rag_json = rag_response.json()
             ai_content = rag_json.get("answer", "")
-            citations = (
-                rag_json.get("citations_used")
-                or rag_json.get("citations")
-                or rag_json.get("citations_retrieved")
-                or None
-            )
+            # Use only citations the model actually cited; empty list means no sources shown.
+            citations = rag_json.get("citations") or None
             rag_action = "RAG_ANSWER"
             rag_details = f"query_len={len(content)} top_k=4 chunks_used={len(citations) if citations else 0}"
         except Exception as exc:  # pragma: no cover - network fallback

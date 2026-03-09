@@ -434,3 +434,38 @@ export async function adminGetLogs(filters?: {
   });
   return handleResponse<AuditLogResponse[]>(res);
 }
+
+// ── Admin: Guideline Upload ───────────────────────────────────────────────
+
+export interface IngestionReport {
+  source_name: string;
+  filename: string;
+  files_scanned: number;
+  files_succeeded: number;
+  files_failed: number;
+  total_chunks: number;
+  embeddings_succeeded: number;
+  embeddings_failed: number;
+  db: {
+    inserted: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  };
+}
+
+export async function adminUploadGuideline(
+  file: File,
+  sourceName: string,
+): Promise<IngestionReport> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('source_name', sourceName);
+  // Do NOT set Content-Type — browser sets the multipart boundary automatically
+  const res = await fetch(`${API_BASE}/admin/guidelines/upload`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  });
+  return handleResponse<IngestionReport>(res);
+}
