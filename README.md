@@ -43,6 +43,9 @@ Set these variables (docker-compose already wires them through):
 - `OLLAMA_BASE_URL`: `http://host.docker.internal:11434` on macOS when Ollama runs on the host.
 - `OLLAMA_MODEL`: `thewindmom/llama3-med42-8b` (pull locally with `ollama pull thewindmom/llama3-med42-8b`).
 - `OLLAMA_MAX_TOKENS`: optional cap for the answer endpoint (defaults in code if unset).
+- `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL`: optional explicit local model override for routing.
+- `CLOUD_LLM_BASE_URL` / `CLOUD_LLM_MODEL` / `CLOUD_LLM_API_KEY`: RunPod OpenAI-compatible endpoint settings for the cloud 70B path.
+- `LLM_ROUTE_THRESHOLD`: route to the cloud model when the request complexity score is above this threshold (default `0.65`).
 
 ### Steps
 
@@ -62,7 +65,7 @@ Set these variables (docker-compose already wires them through):
 
 - Frontend (or API) sends `POST /chats/{chat_id}/message` to the backend.
 - Backend forwards the user message to RAG service `/answer`, saves user and assistant messages, and appends source citations if returned.
-- RAG service embeds the query, retrieves chunks from pgvector, builds a grounded prompt, and calls Ollama at `OLLAMA_BASE_URL` with the selected `OLLAMA_MODEL`.
+- RAG service embeds the query, retrieves chunks from pgvector, builds a grounded prompt, scores the request complexity, and sends simpler requests to the local model while routing harder or revision-style requests to the configured cloud model.
 
 ### Troubleshooting
 

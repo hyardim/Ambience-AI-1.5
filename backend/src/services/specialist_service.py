@@ -19,6 +19,7 @@ from src.services._mappers import chat_to_response, msg_to_response
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
+RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 def get_queue(db: Session, specialist: User) -> list[ChatResponse]:
@@ -355,12 +356,27 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
 
     if is_sqlite:
         # Run synchronously (tests use in-memory SQLite with a single connection).
-        _do_revise(db, placeholder, original_query, previous_answer, feedback or "")
+        _do_revise(
+            db,
+            placeholder,
+            original_query,
+            previous_answer,
+            feedback or "",
+            chat.specialty,
+            chat.severity,
+        )
     else:
         import threading
         thread = threading.Thread(
             target=_regenerate_ai_response_task,
-            args=(placeholder.id, original_query, previous_answer, feedback or ""),
+            args=(
+                placeholder.id,
+                original_query,
+                previous_answer,
+                feedback or "",
+                chat.specialty,
+                chat.severity,
+            ),
             daemon=True,
         )
         thread.start()
@@ -374,6 +390,8 @@ def _do_revise(
     original_query: str,
     previous_answer: str,
     feedback: str,
+    specialty: str | None,
+    severity: str | None,
 ) -> None:
     """Call the RAG /revise endpoint and update the placeholder message in-place."""
     rag_payload = {
@@ -381,11 +399,15 @@ def _do_revise(
         "previous_answer": previous_answer,
         "feedback": feedback,
         "top_k": 4,
+        "specialty": specialty,
+        "severity": severity,
     }
 
     try:
         rag_response = httpx.post(
-            f"{RAG_SERVICE_URL}/revise", json=rag_payload, timeout=60
+            f"{RAG_SERVICE_URL}/revise",
+            json=rag_payload,
+            timeout=RAG_REQUEST_TIMEOUT_SECONDS,
         )
         rag_response.raise_for_status()
         rag_json = rag_response.json()
@@ -422,13 +444,23 @@ def _regenerate_ai_response_task(
     original_query: str,
     previous_answer: str,
     feedback: str,
+    specialty: str | None,
+    severity: str | None,
 ) -> None:
     """Background task: call the RAG /revise endpoint and update the placeholder message."""
     db = SessionLocal()
     try:
         placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
         if placeholder:
-            _do_revise(db, placeholder, original_query, previous_answer, feedback)
+            _do_revise(
+                db,
+                placeholder,
+                original_query,
+                previous_answer,
+                feedback,
+                specialty,
+                severity,
+            )
     except Exception:
         db.rollback()
     finally:

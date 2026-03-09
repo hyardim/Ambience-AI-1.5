@@ -6,9 +6,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
+from .config import (
+    CLOUD_LLM_MODEL,
+    LLM_MAX_TOKENS,
+    LLM_ROUTE_THRESHOLD,
+    LOCAL_LLM_MODEL,
+    path_config,
+)
 from .generation.client import generate_answer, warmup_model
 from .generation.prompts import build_grounded_prompt, build_revision_prompt
+from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import (
     get_source_path_for_doc,
@@ -37,18 +44,19 @@ def ensure_schema():
 
 @app.on_event("startup")
 async def warmup_ollama():
-    """Pre-load the Ollama model into memory on service startup.
+    """Pre-load the local model into memory on service startup.
 
-    Prevents the first real request from hitting a cold model and avoids
-    500 errors caused by Ollama silently failing to reload an idle model.
+    Prevents the first local request from hitting a cold model.
     """
-    print(f"🔥 Warming up Ollama model '{OLLAMA_MODEL}'...")
+    print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
     await warmup_model()
 
 
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
+    specialty: str | None = None
+    severity: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -67,7 +75,7 @@ class SearchResult(BaseModel):
 
 
 class AnswerRequest(QueryRequest):
-    max_tokens: int = OLLAMA_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS
 
 
 class ReviseRequest(BaseModel):
@@ -76,7 +84,9 @@ class ReviseRequest(BaseModel):
     previous_answer: str
     feedback: str
     top_k: int = 5
-    max_tokens: int = OLLAMA_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS
+    specialty: str | None = None
+    severity: str | None = None
 
 
 MAX_CITATIONS = 3
@@ -157,7 +167,12 @@ class AnswerResponse(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ready", "model": "Med42-OpenVINO"}
+    return {
+        "status": "ready",
+        "local_model": LOCAL_LLM_MODEL,
+        "cloud_model": CLOUD_LLM_MODEL,
+        "route_threshold": LLM_ROUTE_THRESHOLD,
+    }
 
 
 @app.post("/query", response_model=list[SearchResult])
@@ -228,8 +243,22 @@ async def generate_clinical_answer(request: AnswerRequest):
             )
 
         prompt = build_grounded_prompt(request.query, top_chunks)
+        route = select_generation_provider(
+            query=request.query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+        )
+        print(
+            "🧭 /answer routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
 
         used_indices = _extract_citation_indices(answer_text)
 
@@ -306,7 +335,23 @@ async def revise_clinical_answer(request: ReviseRequest):
             chunks=top_chunks,
         )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        route = select_generation_provider(
+            query=request.original_query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+            is_revision=True,
+        )
+        print(
+            "🧭 /revise routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
+
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
 
         used_indices = _extract_citation_indices(answer_text)
 

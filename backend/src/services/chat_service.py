@@ -18,6 +18,7 @@ from src.services._mappers import chat_to_response, msg_to_response
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
+RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -160,13 +161,20 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         if not chat:
             return
 
-        rag_payload = {"query": content, "top_k": 4}
+        rag_payload = {
+            "query": content,
+            "top_k": 4,
+            "specialty": chat.specialty,
+            "severity": chat.severity,
+        }
 
         rag_action = "RAG_ERROR"
         rag_details = f"query_len={len(content)} error=unknown"
         try:
             rag_response = httpx.post(
-                f"{RAG_SERVICE_URL}/answer", json=rag_payload, timeout=60
+                f"{RAG_SERVICE_URL}/answer",
+                json=rag_payload,
+                timeout=RAG_REQUEST_TIMEOUT_SECONDS,
             )
             rag_response.raise_for_status()
             rag_json = rag_response.json()
