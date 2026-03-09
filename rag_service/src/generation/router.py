@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 import re
 
-from ..config import LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD
+from ..config import FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD
 
 
 ProviderName = Literal["local", "cloud"]
@@ -57,6 +57,14 @@ def select_generation_provider(
     is_revision: bool = False,
     threshold: float = LLM_ROUTE_THRESHOLD,
 ) -> RouteDecision:
+    if FORCE_CLOUD_LLM:
+        return RouteDecision(
+            provider="cloud",
+            score=1.0,
+            threshold=threshold,
+            reasons=("force_cloud_llm",),
+        )
+
     reasons: list[str] = []
     score = 0.0
 

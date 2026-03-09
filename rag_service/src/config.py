@@ -115,6 +115,7 @@ class RoutingConfig(BaseSettings):
 
     llm_route_threshold: float = Field(default=0.65)
     route_revisions_to_cloud: bool = Field(default=True)
+    force_cloud_llm: bool = Field(default=False)
 
 
 class PathConfig:
@@ -176,3 +177,4 @@ CLOUD_LLM_TIMEOUT_SECONDS = float(
 )
 LLM_ROUTE_THRESHOLD = routing_config.llm_route_threshold
 ROUTE_REVISIONS_TO_CLOUD = routing_config.route_revisions_to_cloud
+FORCE_CLOUD_LLM = routing_config.force_cloud_llm

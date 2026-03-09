@@ -1,3 +1,13 @@
+MAX_CHARS_PER_CHUNK = 1200
+
+
+def _truncate_chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> str:
+    cleaned = text.strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max_chars - 14].rstrip() + " …[truncated]"
+
+
 def _format_context(chunks: list[dict]) -> str:
     """Render retrieved chunks for the prompt. Empty string when none."""
     if not chunks:
@@ -23,7 +33,7 @@ def _format_context(chunks: list[dict]) -> str:
                 page_note = f" (pages {page_start}-{page_end})"
 
         lines.append(
-            f"[{idx}] {chunk.get('text', '').strip()}\nSource: {source}{page_note}"
+            f"[{idx}] {_truncate_chunk_text(chunk.get('text', ''))}\nSource: {source}{page_note}"
         )
 
     return "\n\n".join(lines)

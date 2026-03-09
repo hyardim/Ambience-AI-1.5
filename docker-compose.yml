@@ -70,7 +70,8 @@ services:
       - LOCAL_LLM_MODEL=thewindmom/llama3-med42-8b
       - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-https://aaw0zkgatyq013-8000.proxy.runpod.net/v1}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
-      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-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}
+      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-sk-aaw0zkgatyq013}
+      - FORCE_CLOUD_LLM=${FORCE_CLOUD_LLM:-true}
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
     
     extra_hosts:

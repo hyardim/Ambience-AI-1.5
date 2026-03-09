@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from .config import (
     CLOUD_LLM_MODEL,
+    FORCE_CLOUD_LLM,
     LLM_MAX_TOKENS,
     LLM_ROUTE_THRESHOLD,
     LOCAL_LLM_MODEL,
@@ -44,10 +45,15 @@ def ensure_schema():
 
 @app.on_event("startup")
 async def warmup_ollama():
-    """Pre-load the local model into memory on service startup.
+    """Pre-load the selected generation provider on service startup.
 
-    Prevents the first local request from hitting a cold model.
+    Prevents the first request from hitting a cold provider when applicable.
     """
+    if FORCE_CLOUD_LLM:
+        print(f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
+        await warmup_model(provider="cloud")
+        return
+
     print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
     await warmup_model()
 
@@ -172,6 +178,7 @@ async def health_check():
         "local_model": LOCAL_LLM_MODEL,
         "cloud_model": CLOUD_LLM_MODEL,
         "route_threshold": LLM_ROUTE_THRESHOLD,
+        "force_cloud_llm": FORCE_CLOUD_LLM,
     }
 
 
