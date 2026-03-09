@@ -265,7 +265,10 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             text = _extract_text(attachment.file_path, attachment.file_type)
             if text.strip():
                 file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
+        FILE_CONTEXT_CHAR_LIMIT = 8_000
         file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
+        if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
+            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + "\n\n[Document truncated to fit context window]"
 
         rag_payload: dict = {"query": content, "top_k": 4, "patient_context": patient_context}
         if file_context:
