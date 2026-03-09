@@ -50,7 +50,8 @@ def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
         "Do not fabricate context or cite sources when none are available. Keep the response concise and factual."
     )
 
-    context_section = "Context:\n" + (context_block if has_context else "(none)")
+    context_section = "Context:\n" + \
+        (context_block if has_context else "(none)")
     citation_hint = (
         "Answer (with citations):" if has_context else "Answer (no citations):"
     )
@@ -86,7 +87,8 @@ def build_revision_prompt(
         "- Keep the response concise and factual."
     )
 
-    context_section = "Context:\n" + (context_block if has_context else "(none)")
+    context_section = "Context:\n" + \
+        (context_block if has_context else "(none)")
     citation_hint = (
         "Revised answer (with citations):" if has_context else "Revised answer (no citations):"
     )

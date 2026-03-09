@@ -25,7 +25,6 @@ def ensure_auth_columns() -> None:
         )
 
 
-
 def ensure_notification_fk() -> None:
     """Re-create notifications.chat_id FK with ON DELETE SET NULL.
 
@@ -151,7 +150,8 @@ def ensure_default_users() -> None:
             db.add(
                 User(
                     email=item["email"],
-                    hashed_password=security.get_password_hash(item["password"]),
+                    hashed_password=security.get_password_hash(
+                        item["password"]),
                     full_name=item["full_name"],
                     role=item["role"],
                     specialty=item["specialty"],
@@ -184,11 +184,16 @@ app.add_middleware(
 
 from src.api import auth, chats, specialist, rag, notifications, admin  # noqa: E402
 
-app.include_router(auth.router,          prefix="/auth",          tags=["Auth"])
-app.include_router(chats.router,         prefix="/chats",         tags=["Chats"])
-app.include_router(specialist.router,    prefix="/specialist",    tags=["Specialist"])
-app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
-app.include_router(admin.router,         prefix="/admin",         tags=["Admin"])
+app.include_router(auth.router,          prefix="/auth",
+                   tags=["Auth"])
+app.include_router(chats.router,         prefix="/chats",
+                   tags=["Chats"])
+app.include_router(specialist.router,
+                   prefix="/specialist",    tags=["Specialist"])
+app.include_router(notifications.router,
+                   prefix="/notifications", tags=["Notifications"])
+app.include_router(admin.router,         prefix="/admin",
+                   tags=["Admin"])
 app.include_router(rag.router,           tags=["RAG"])
 
 

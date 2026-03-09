@@ -18,6 +18,14 @@ from ..config import (
 ProviderName = Literal["local", "cloud"]
 
 
+class ModelGenerationError(RuntimeError):
+    """Raised when both primary and fallback model providers fail."""
+
+
+def _fallback_provider(provider: ProviderName) -> ProviderName:
+    return "cloud" if provider == "local" else "local"
+
+
 async def warmup_model(provider: ProviderName = "local") -> None:
     """Warm up the local model when applicable.
 
@@ -51,11 +59,51 @@ async def generate_answer(
     max_tokens: int | None = None,
     provider: ProviderName = "local",
 ) -> str:
-    """Generate an answer using either the local or cloud model endpoint."""
-    if provider == "cloud":
-        return await _generate_cloud_answer(prompt, max_tokens=max_tokens)
+    """Generate an answer using the selected provider with fallback.
 
-    return await _generate_local_answer(prompt, max_tokens=max_tokens)
+    If the primary provider fails, automatically retry once with the other
+    provider. If both fail, raise a single aggregated error.
+    """
+    attempts: list[str] = []
+
+    for index, current_provider in enumerate(
+        (provider, _fallback_provider(provider)),
+        start=1,
+    ):
+        try:
+            if current_provider == "cloud":
+                response = await _generate_cloud_answer(
+                    prompt,
+                    max_tokens=max_tokens,
+                )
+            else:
+                response = await _generate_local_answer(
+                    prompt,
+                    max_tokens=max_tokens,
+                )
+
+            if not response.strip():
+                raise RuntimeError(
+                    f"{current_provider.capitalize()} model returned an empty response"
+                )
+
+            if index > 1:
+                print(
+                    f"🔁 Generation fallback succeeded with provider={current_provider}"
+                )
+
+            return response
+        except Exception as exc:
+            attempts.append(f"{current_provider}: {exc}")
+            if index == 1:
+                print(
+                    f"⚠️ Primary generation provider failed (provider={current_provider}): {exc}. "
+                    f"Trying fallback provider={_fallback_provider(current_provider)}."
+                )
+
+    raise ModelGenerationError(
+        "All model providers failed. " + " | ".join(attempts)
+    )
 
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:

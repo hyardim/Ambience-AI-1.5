@@ -50,7 +50,8 @@ async def warmup_ollama():
     Prevents the first request from hitting a cold provider when applicable.
     """
     if FORCE_CLOUD_LLM:
-        print(f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
+        print(
+            f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
         await warmup_model(provider="cloud")
         return
 
