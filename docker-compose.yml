@@ -68,9 +68,12 @@ services:
       - OLLAMA_MODEL=thewindmom/llama3-med42-8b
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
       - LOCAL_LLM_MODEL=thewindmom/llama3-med42-8b
-      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-https://aaw0zkgatyq013-8000.proxy.runpod.net/v1}
+      - RUNPOD_POD_ID=${RUNPOD_POD_ID:-REPLACE_WITH_RUNPOD_POD_ID}
+      - RUNPOD_PORT=${RUNPOD_PORT:-8000}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-sk-REPLACE_WITH_RUNPOD_POD_ID}
+      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
-      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-sk-aaw0zkgatyq013}
+      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-}
       - FORCE_CLOUD_LLM=${FORCE_CLOUD_LLM:-false}
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
     

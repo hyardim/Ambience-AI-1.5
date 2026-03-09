@@ -127,6 +127,29 @@ class PathConfig:
         self.logs: Path = self.root / "logs"
 
 
+def _first_non_empty(*values: str | None) -> str | None:
+    for value in values:
+        if value:
+            return value
+    return None
+
+
+def _default_runpod_base_url() -> str | None:
+    pod_id = os.getenv("RUNPOD_POD_ID")
+    port = os.getenv("RUNPOD_PORT", "8000")
+    if not pod_id:
+        return None
+    return f"https://{pod_id}-{port}.proxy.runpod.net/v1"
+
+
+def _default_runpod_api_key() -> str | None:
+    pod_id = os.getenv("RUNPOD_POD_ID")
+    return _first_non_empty(
+        os.getenv("RUNPOD_API_KEY"),
+        f"sk-{pod_id}" if pod_id else None,
+    )
+
+
 db_config = DatabaseConfig()
 embed_config = EmbeddingConfig()
 chunk_config = ChunkingConfig()
@@ -163,9 +186,17 @@ LOCAL_LLM_MAX_TOKENS = int(
 LOCAL_LLM_TIMEOUT_SECONDS = float(
     os.getenv("LOCAL_LLM_TIMEOUT_SECONDS", str(OLLAMA_TIMEOUT_SECONDS))
 )
-CLOUD_LLM_BASE_URL = os.getenv("CLOUD_LLM_BASE_URL", LLM_BASE_URL)
+CLOUD_LLM_BASE_URL = _first_non_empty(
+    os.getenv("CLOUD_LLM_BASE_URL"),
+    _default_runpod_base_url(),
+    LLM_BASE_URL,
+) or LLM_BASE_URL
 CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", LLM_MODEL)
-CLOUD_LLM_API_KEY = os.getenv("CLOUD_LLM_API_KEY", LLM_API_KEY)
+CLOUD_LLM_API_KEY = _first_non_empty(
+    os.getenv("CLOUD_LLM_API_KEY"),
+    _default_runpod_api_key(),
+    LLM_API_KEY,
+) or LLM_API_KEY
 CLOUD_LLM_MAX_TOKENS = int(
     os.getenv("CLOUD_LLM_MAX_TOKENS", str(LLM_MAX_TOKENS))
 )
