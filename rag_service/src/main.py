@@ -405,9 +405,8 @@ async def generate_clinical_answer(request: AnswerRequest):
             flags=re.DOTALL | re.IGNORECASE,
         ).rstrip()
 
-        labelled_answer = f"[Prompt: {ACTIVE_PROMPT}]\n\n{renumbered_answer}"
         return AnswerResponse(
-            answer=labelled_answer,
+            answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
             citations=citations_used,
