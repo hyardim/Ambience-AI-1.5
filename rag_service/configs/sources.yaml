@@ -19,6 +19,13 @@ BNF_RHEUMATOLOGY:
   doc_type: formulary
   source_url: https://bnf.nice.org.uk
 
+Others:
+  source_name: Others
+  author_org: Other Clinical Sources
+  specialty: rheumatology
+  doc_type: guideline
+  source_url: ""
+
 NICE_NEURO:
   source_name: NICE_NEURO
   author_org: National Institute for Health and Care Excellence

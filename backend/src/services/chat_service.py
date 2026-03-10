@@ -23,6 +23,7 @@ RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024  # 3 MB per file
 MAX_FILES_PER_CHAT = 5
+RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +74,8 @@ def list_chats(
         try:
             ChatStatus(status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid status: {status}")
 
     chats = chat_repository.list_for_user(
         db, user.id, skip=skip, limit=limit, status=status, specialty=specialty
@@ -286,7 +288,13 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
             file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + "\n\n[Document truncated to fit context window]"
 
-        rag_payload: dict = {"query": content, "top_k": 4, "patient_context": patient_context}
+        rag_payload: dict = {
+            "query": content,
+            "top_k": 4,
+            "specialty": chat.specialty,
+            "severity": chat.severity,
+            "patient_context": patient_context,
+        }
         if file_context:
             rag_payload["file_context"] = file_context
 
@@ -294,7 +302,9 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         rag_details = f"query_len={len(content)} error=unknown"
         try:
             rag_response = httpx.post(
-                f"{RAG_SERVICE_URL}/answer", json=rag_payload, timeout=60
+                f"{RAG_SERVICE_URL}/answer",
+                json=rag_payload,
+                timeout=RAG_REQUEST_TIMEOUT_SECONDS,
             )
             rag_response.raise_for_status()
             rag_json = rag_response.json()
@@ -311,7 +321,8 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             citations = None
             rag_details = f"query_len={len(content)} error={type(exc).__name__}"
 
-        audit_repository.log(db, user_id=user_id, action=rag_action, details=rag_details)
+        audit_repository.log(db, user_id=user_id,
+                             action=rag_action, details=rag_details)
 
         message_repository.create(
             db,
@@ -350,7 +361,8 @@ def send_message(
             detail=f"Cannot send messages in {chat.status.value} state",
         )
 
-    message_repository.create(db, chat_id=chat.id, content=content, sender="user")
+    message_repository.create(
+        db, chat_id=chat.id, content=content, sender="user")
 
     if chat.status == ChatStatus.OPEN:
         chat_repository.update(db, chat, status=ChatStatus.SUBMITTED)
@@ -364,7 +376,8 @@ def send_message(
     if db.bind and db.bind.dialect.name == "sqlite":
         _generate_ai_response(db, chat.id, user.id, content)
     else:
-        background_tasks.add_task(_generate_ai_response_task, chat.id, user.id, content)
+        background_tasks.add_task(
+            _generate_ai_response_task, chat.id, user.id, content)
 
     return {
         "status": "Message sent",
