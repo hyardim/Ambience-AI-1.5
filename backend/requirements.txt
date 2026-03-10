@@ -12,6 +12,8 @@ requests
 # --- Database ---
 sqlalchemy
 psycopg2-binary
+asyncpg
+aiosqlite
 
 # --- Authentication & Security ---
 passlib

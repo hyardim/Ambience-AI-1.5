@@ -1,13 +1,16 @@
+import asyncio
+import logging
 import os
 from datetime import datetime
 from typing import Optional
 
 import httpx
 from fastapi import BackgroundTasks, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.db.models import ChatStatus, User
-from src.db.session import SessionLocal
+from src.db.session import AsyncSessionLocal, SessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
     ChatCreate,
@@ -19,6 +22,8 @@ from src.services._mappers import chat_to_response, msg_to_response
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +271,124 @@ def send_message(
         _generate_ai_response(db, chat.id, user.id, content)
     else:
         background_tasks.add_task(_generate_ai_response_task, chat.id, user.id, content)
+
+    return {
+        "status": "Message sent",
+        "ai_response": f"AI response is being generated for: {content}",
+        "ai_generating": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Async send message  (chat/RAG path — non-blocking)
+# ---------------------------------------------------------------------------
+
+
+async def _async_generate_ai_response(
+    chat_id: int, user_id: int, content: str
+) -> None:
+    """Generate an AI response using async HTTP + async DB."""
+    async with AsyncSessionLocal() as db:
+        try:
+            chat = await chat_repository.async_get(db, chat_id)
+            if not chat:
+                return
+
+            rag_payload = {"query": content, "top_k": 4}
+
+            rag_action = "RAG_ERROR"
+            rag_details = f"query_len={len(content)} error=unknown"
+            try:
+                async with httpx.AsyncClient() as client:
+                    rag_response = await client.post(
+                        f"{RAG_SERVICE_URL}/answer",
+                        json=rag_payload,
+                        timeout=60,
+                    )
+                rag_response.raise_for_status()
+                rag_json = rag_response.json()
+                ai_content = rag_json.get("answer", "")
+                citations = (
+                    rag_json.get("citations_used")
+                    or rag_json.get("citations")
+                    or rag_json.get("citations_retrieved")
+                    or None
+                )
+                rag_action = "RAG_ANSWER"
+                rag_details = (
+                    f"query_len={len(content)} top_k=4 "
+                    f"chunks_used={len(citations) if citations else 0}"
+                )
+            except Exception as exc:
+                ai_content = (
+                    "RAG service unavailable right now. Echoing your question while the "
+                    f"service recovers: {content} (detail: {exc})"
+                )
+                citations = None
+                rag_details = f"query_len={len(content)} error={type(exc).__name__}"
+
+            await audit_repository.async_log(
+                db, user_id=user_id, action=rag_action, details=rag_details
+            )
+
+            await message_repository.async_create(
+                db,
+                chat_id=chat.id,
+                content=ai_content,
+                sender="ai",
+                citations=citations,
+            )
+
+            await audit_repository.async_log(
+                db,
+                user_id=user_id,
+                action="AI_RESPONSE_GENERATED",
+                details=f"AI response generated for chat {chat_id}",
+            )
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "Async AI generation failed for chat %s", chat_id
+            )
+
+
+async def async_send_message(
+    db: AsyncSession,
+    user: User,
+    chat_id: int,
+    content: str,
+) -> dict:
+    chat = await chat_repository.async_get(db, chat_id, user_id=user.id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if chat.status not in (ChatStatus.OPEN, ChatStatus.SUBMITTED):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot send messages in {chat.status.value} state",
+        )
+
+    await message_repository.async_create(
+        db, chat_id=chat.id, content=content, sender="user"
+    )
+
+    if chat.status == ChatStatus.OPEN:
+        await chat_repository.async_update(db, chat, status=ChatStatus.SUBMITTED)
+        await audit_repository.async_log(
+            db,
+            user_id=user.id,
+            action="AUTO_SUBMIT_FOR_REVIEW",
+            details=f"Chat {chat_id} auto-submitted after first GP message",
+        )
+
+    # Fire-and-forget async task for AI generation.
+    # Under SQLite (tests) run inline so assertions can see the result.
+    if db.bind.dialect.name == "sqlite":
+        await _async_generate_ai_response(chat.id, user.id, content)
+    else:
+        asyncio.create_task(
+            _async_generate_ai_response(chat.id, user.id, content)
+        )
 
     return {
         "status": "Message sent",

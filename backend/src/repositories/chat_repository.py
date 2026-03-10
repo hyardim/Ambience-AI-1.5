@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.db.models import Chat, ChatStatus
@@ -15,6 +17,18 @@ def get(
     if user_id is not None:
         query = query.filter(Chat.user_id == user_id)
     return query.first()
+
+
+async def async_get(
+    db: AsyncSession,
+    chat_id: int,
+    user_id: Optional[int] = None,
+) -> Optional[Chat]:
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if user_id is not None:
+        stmt = stmt.where(Chat.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
 def list_for_user(
@@ -72,6 +86,14 @@ def update(db: Session, chat: Chat, **fields) -> Chat:
         setattr(chat, key, value)
     db.commit()
     db.refresh(chat)
+    return chat
+
+
+async def async_update(db: AsyncSession, chat: Chat, **fields) -> Chat:
+    for key, value in fields.items():
+        setattr(chat, key, value)
+    await db.commit()
+    await db.refresh(chat)
     return chat
 
 

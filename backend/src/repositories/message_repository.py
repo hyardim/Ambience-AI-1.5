@@ -1,4 +1,7 @@
 from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.db.models import Message
@@ -17,6 +20,22 @@ def create(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+    return msg
+
+
+async def async_create(
+    db: AsyncSession,
+    *,
+    chat_id: int,
+    content: str,
+    sender: str,
+    citations: Optional[list] = None,
+    is_generating: bool = False,
+) -> Message:
+    msg = Message(chat_id=chat_id, content=content, sender=sender, citations=citations, is_generating=is_generating)
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
     return msg
 
 

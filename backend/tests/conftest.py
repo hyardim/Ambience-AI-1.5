@@ -1,16 +1,24 @@
 """
 Shared test fixtures for the Ambience-AI-1.5 backend test suite.
 
-Uses an in-memory SQLite database so no PostgreSQL connection is needed.
-The `get_db` dependency is overridden for every test, and the schema is
-created fresh and torn down after each test function.
+Uses a file-based temp SQLite database so that the synchronous and
+asynchronous engines share the same data store (in-memory SQLite would
+give each engine its own private database).
+The `get_db` and `get_async_db` dependencies are overridden for every
+test, and the schema is created fresh and torn down after each test
+function.
 """
+
+import atexit
+import os
+import tempfile
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -20,15 +28,29 @@ from sqlalchemy.pool import StaticPool
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
 from src.db.base import Base
-from src.db.session import get_db
+from src.db.session import get_async_db, get_db
 from src.api import auth, chats, specialist, admin, notifications
 
 # ---------------------------------------------------------------------------
-# In-memory SQLite engine (no file, no external service required)
-# StaticPool forces all sessions to reuse the same connection so that
-# tables created by create_all() are visible to every subsequent session.
+# File-based temp SQLite shared by the sync and async engines so that data
+# committed through one engine is visible to the other.
 # ---------------------------------------------------------------------------
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
+_test_db_path = _test_db_path.replace("\\", "/")
+
+
+def _cleanup_test_db():
+    try:
+        os.unlink(_test_db_path)
+    except OSError:
+        pass
+
+
+atexit.register(_cleanup_test_db)
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{_test_db_path}"
+ASYNC_SQLALCHEMY_DATABASE_URL = f"sqlite+aiosqlite:///{_test_db_path}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
@@ -36,6 +58,15 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+async_engine = create_async_engine(
+    ASYNC_SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingAsyncSessionLocal = sessionmaker(
+    bind=async_engine, class_=AsyncSession, expire_on_commit=False,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -75,8 +106,8 @@ def db_session():
 
 
 @pytest.fixture()
-def client(db_session):
-    """HTTP test client wired to the in-memory database."""
+def client(db_session, monkeypatch):
+    """HTTP test client wired to the file-based test database."""
 
     def override_get_db():
         try:
@@ -84,8 +115,21 @@ def client(db_session):
         finally:
             pass  # session lifecycle managed by db_session fixture
 
+    async def override_get_async_db():
+        async with TestingAsyncSessionLocal() as session:
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
+
+    # Ensure the background AI generation also uses the test async session
+    import src.services.chat_service as _cs
+    monkeypatch.setattr(_cs, "AsyncSessionLocal", TestingAsyncSessionLocal)
+
     app = _build_app()
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_async_db] = override_get_async_db
 
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c
