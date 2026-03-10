@@ -154,3 +154,43 @@ class TestFileUploadAuth:
                 headers=specialist_headers,
             )
         assert resp.status_code == 403
+
+
+class TestFileUploadLimits:
+
+    def test_oversized_file_returns_413(self, client, gp_headers, created_chat, tmp_path):
+        content = b"A" * (5 * 1024 * 1024 + 1)  # 5 MB + 1 byte
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("big.txt", io.BytesIO(content), "text/plain")},
+                headers=gp_headers,
+            )
+        assert resp.status_code == 413
+        assert "5 MB" in resp.json()["detail"]
+
+    def test_file_at_exact_limit_is_accepted(self, client, gp_headers, created_chat, tmp_path):
+        content = b"A" * (5 * 1024 * 1024)  # exactly 5 MB
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("exact.txt", io.BytesIO(content), "text/plain")},
+                headers=gp_headers,
+            )
+        assert resp.status_code == 201
+
+    def test_eleventh_file_returns_422(self, client, gp_headers, created_chat, tmp_path):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            for i in range(10):
+                client.post(
+                    f"/chats/{created_chat['id']}/files",
+                    files={"file": (f"doc{i}.txt", io.BytesIO(b"content"), "text/plain")},
+                    headers=gp_headers,
+                )
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("extra.txt", io.BytesIO(b"one too many"), "text/plain")},
+                headers=gp_headers,
+            )
+        assert resp.status_code == 422
+        assert "Maximum is 10" in resp.json()["detail"]
