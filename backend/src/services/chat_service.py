@@ -21,6 +21,8 @@ from src.services._mappers import chat_to_response, msg_to_response
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB per file
+MAX_FILES_PER_CHAT = 10
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +206,20 @@ async def upload_file(
     dest_path = dest_dir / (file.filename or "upload")
 
     contents = await file.read()
+
+    if len(contents) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds the 5 MB limit ({len(contents) // 1024} KB uploaded).",
+        )
+
+    existing_count = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
+    if existing_count >= MAX_FILES_PER_CHAT:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Chat already has {existing_count} files. Maximum is {MAX_FILES_PER_CHAT}.",
+        )
+
     dest_path.write_bytes(contents)
 
     attachment = FileAttachment(
