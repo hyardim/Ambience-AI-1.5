@@ -145,13 +145,13 @@ export function GPQueryDetailPage() {
     };
     setMessages(prev => [...prev, userMsg]);
 
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
       // Upload any attached files before sending the message
       if (files && files.length > 0) {
         const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
         if (oversized.length > 0) {
-          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 5 MB.`);
+          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
           setSending(false);
           return;
         }
