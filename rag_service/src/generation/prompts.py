@@ -1,3 +1,12 @@
+MAX_CHARS_PER_CHUNK = 1200
+
+
+def _truncate_chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> str:
+    cleaned = text.strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max_chars - 14].rstrip() + " …[truncated]"
+
 # ---------------------------------------------------------------------------
 # PROMPT VARIANT TOGGLE
 # Set ACTIVE_PROMPT = "original" to use the strict citation-only prompt.
@@ -82,7 +91,7 @@ def _format_context(chunks: list[dict]) -> str:
                 page_note = f" (pages {page_start}-{page_end})"
 
         lines.append(
-            f"[{idx}] {chunk.get('text', '').strip()}\nSource: {source}{page_note}"
+            f"[{idx}] {_truncate_chunk_text(chunk.get('text', ''))}\nSource: {source}{page_note}"
         )
 
     return "\n\n".join(lines)
@@ -92,7 +101,8 @@ def build_grounded_prompt(question: str, chunks: list[dict]) -> str:
     context_block = _format_context(chunks)
     has_context = bool(chunks)
 
-    context_section = "Context:\n" + (context_block if has_context else "(none)")
+    context_section = "Context:\n" + \
+        (context_block if has_context else "(none)")
     citation_hint = (
         "Answer (with citations):" if has_context else "Answer (no citations):"
     )
@@ -127,7 +137,8 @@ def build_revision_prompt(
         "- Keep the response concise and factual."
     )
 
-    context_section = "Context:\n" + (context_block if has_context else "(none)")
+    context_section = "Context:\n" + \
+        (context_block if has_context else "(none)")
     citation_hint = (
         "Revised answer (with citations):" if has_context else "Revised answer (no citations):"
     )

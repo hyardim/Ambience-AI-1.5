@@ -7,9 +7,22 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import DATABASE_URL, OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
+from .config import (
+    DATABASE_URL,
+    CLOUD_LLM_MODEL,
+    FORCE_CLOUD_LLM,
+    LLM_MAX_TOKENS,
+    LLM_ROUTE_THRESHOLD,
+    LOCAL_LLM_MODEL,
+    path_config,
+)
 from .generation.client import generate_answer, warmup_model
-from .generation.prompts import ACTIVE_PROMPT, build_grounded_prompt, build_revision_prompt
+from .generation.prompts import (
+    ACTIVE_PROMPT,
+    build_grounded_prompt,
+    build_revision_prompt,
+)
+from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from .retrieval.vector_store import (
@@ -39,18 +52,25 @@ def ensure_schema():
 
 @app.on_event("startup")
 async def warmup_ollama():
-    """Pre-load the Ollama model into memory on service startup.
+    """Pre-load the selected generation provider on service startup.
 
-    Prevents the first real request from hitting a cold model and avoids
-    500 errors caused by Ollama silently failing to reload an idle model.
+    Prevents the first request from hitting a cold provider when applicable.
     """
-    print(f"🔥 Warming up Ollama model '{OLLAMA_MODEL}'...")
+    if FORCE_CLOUD_LLM:
+        print(
+            f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
+        await warmup_model(provider="cloud")
+        return
+
+    print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
     await warmup_model()
 
 
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
+    specialty: str | None = None
+    severity: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -69,7 +89,7 @@ class SearchResult(BaseModel):
 
 
 class AnswerRequest(QueryRequest):
-    max_tokens: int = OLLAMA_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS
 
 
 class ReviseRequest(BaseModel):
@@ -78,7 +98,9 @@ class ReviseRequest(BaseModel):
     previous_answer: str
     feedback: str
     top_k: int = 5
-    max_tokens: int = OLLAMA_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS
+    specialty: str | None = None
+    severity: str | None = None
 
 
 MAX_CITATIONS = 3
@@ -247,7 +269,14 @@ async def ingest_guideline(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ready", "model": "Med42-OpenVINO", "active_prompt": ACTIVE_PROMPT}
+    return {
+        "status": "ready",
+        "local_model": LOCAL_LLM_MODEL,
+        "cloud_model": CLOUD_LLM_MODEL,
+        "route_threshold": LLM_ROUTE_THRESHOLD,
+        "force_cloud_llm": FORCE_CLOUD_LLM,
+        "active_prompt": ACTIVE_PROMPT,
+    }
 
 
 @app.post("/query", response_model=list[SearchResult])
@@ -257,12 +286,14 @@ async def clinical_query(request: QueryRequest):
         embeddings_result = embed_text(model, [request.query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
+        raw_results = search_similar_chunks(
+            query_embedding, limit=request.top_k)
 
         return [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -318,15 +349,30 @@ async def generate_clinical_answer(request: AnswerRequest):
             )
 
         prompt = build_grounded_prompt(request.query, top_chunks)
+        route = select_generation_provider(
+            query=request.query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+        )
+        print(
+            "🧭 /answer routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
 
         used_indices = _extract_citation_indices(answer_text)
 
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -380,7 +426,8 @@ async def revise_clinical_answer(request: ReviseRequest):
     """
     try:
         # Retrieve using the original query so chunk relevance stays high.
-        embeddings_result = embed_text(model, [request.original_query], batch_size=1)
+        embeddings_result = embed_text(
+            model, [request.original_query], batch_size=1)
         query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
@@ -402,14 +449,31 @@ async def revise_clinical_answer(request: ReviseRequest):
             chunks=top_chunks,
         )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        route = select_generation_provider(
+            query=request.original_query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+            is_revision=True,
+        )
+        print(
+            "🧭 /revise routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
+
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
 
         used_indices = _extract_citation_indices(answer_text)
 
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
