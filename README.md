@@ -32,41 +32,123 @@ The system follows a decoupled microservices topology:
 * **Grounded Generation:** Every response is grounded in retrieved text chunks from verified PDF guidelines (RAG).
 * **Clinical Safety:** Includes adversarial defense mechanisms and mandatory disclaimer injection.
 
-## Running with Ollama (local)
+## Running with RunPod (2x A100 PCIe + vLLM)
 
-### Environment
+### RunPod pod settings (required)
 
-- Python: 3.10+ (tested on 3.12). On macOS ARM, Python 3.12 avoids PyMuPDF build issues; use a 3.12 venv if pip install fails on earlier versions.
+Create a new RunPod pod with:
 
-Set these variables (docker-compose already wires them through):
+- **GPU**: `2x A100 PCIe`
+- **Template**: latest **vLLM** template
+- **Container disk / volume disk**: `400 GB`
+- **Open port**: `8000`
 
-- `OLLAMA_BASE_URL`: `http://host.docker.internal:11434` on macOS when Ollama runs on the host.
-- `OLLAMA_MODEL`: `thewindmom/llama3-med42-8b` (pull locally with `ollama pull thewindmom/llama3-med42-8b`).
-- `OLLAMA_MAX_TOKENS`: optional cap for the answer endpoint (defaults in code if unset).
+Use this model + launch arguments in the vLLM command field:
 
-### Steps
+`m42-health/Llama3-Med42-70B --host 0.0.0.0 --port 8000 --tensor-parallel-size 2 --dtype bfloat16 --gpu-memory-utilization 0.92 --max-model-len 4096 --disable-custom-all-reduce --enforce-eager`
 
-1) Install and start Ollama on the host, then pull the model:
-	- `brew install ollama` (or follow Ollama docs)
+Notes:
+
+- `3072` also works for `--max-model-len` (safer VRAM).
+- If your pod remains stable, you can increase to `4096` or `6144`.
+
+### Required environment variables in RunPod
+
+Set these in the pod environment variables:
+
+- `HF_TOKEN=<your_huggingface_token>`
+- `JUPYTER_PASSWORD=<your_strong_password>`
+
+How to get the Hugging Face token:
+
+1) Sign in to Hugging Face.
+2) Go to **Settings → Access Tokens**.
+3) Create a token with at least **Read** scope.
+4) Copy it and set it as `HF_TOKEN` in RunPod.
+
+`JUPYTER_PASSWORD` is user-defined (create your own strong password and store it in your password manager).
+
+### Wire the pod endpoint/token into this project
+
+The code reads `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY`.
+
+In `rag_service/.env` set:
+
+- `LLM_BASE_URL=https://<YOUR_POD_ID>-8000.proxy.runpod.net/v1`
+- `LLM_MODEL=m42-health/Llama3-Med42-70B`
+- `LLM_API_KEY=<YOUR_RUNPOD_POD_TOKEN>`
+
+Get `<YOUR_RUNPOD_POD_TOKEN>` from **RunPod Dashboard → Settings → API Keys** (create one if needed).
+
+If you run from the root `docker-compose.yml`, also set the compose variables (for consistency with the compose env wiring):
+
+- `CLOUD_LLM_BASE_URL=https://<YOUR_POD_ID>-8000.proxy.runpod.net/v1`
+- `CLOUD_LLM_MODEL=m42-health/Llama3-Med42-70B`
+- `CLOUD_LLM_API_KEY=<YOUR_RUNPOD_POD_TOKEN>`
+
+Then start the stack:
+
+- `docker compose up --build`
+
+Verify RAG service connectivity:
+
+- `curl http://localhost:8001/health`
+- `curl -X POST http://localhost:8001/answer -H "Content-Type: application/json" -d '{"query":"what is rheumatoid arthritis?","top_k":3}'`
+
+## Running locally with Ollama (keep this for dev)
+
+Use this mode when you want lower cost local development.
+
+1) Install and run Ollama on host:
+	- `brew install ollama` (or official installer)
 	- `ollama pull thewindmom/llama3-med42-8b`
-	- `ollama serve` (if not already running)
+	- `ollama serve`
 
-2) Start the stack (brings up pgvector, backend, and RAG service):
+2) Point `rag_service/.env` to local model:
+	- `LLM_BASE_URL=http://host.docker.internal:11434/v1`
+	- `LLM_MODEL=thewindmom/llama3-med42-8b`
+	- `LLM_API_KEY=ollama`
+
+3) Start stack and test:
 	- `docker compose up --build`
-
-3) Verify RAG service connectivity:
 	- `curl http://localhost:8001/health`
 	- `curl -X POST http://localhost:8001/answer -H "Content-Type: application/json" -d '{"query":"what is rheumatoid arthritis?","top_k":3}'`
+
+## Model selection algorithm (current behavior)
+
+The runtime now uses **query-aware heuristic routing** with automatic fallback:
+
+- Router implementation is in `rag_service/src/generation/router.py` (`select_generation_provider`).
+- Route score is built from three components:
+	- **Complexity score**: query length, sentence count, and reasoning terms (e.g. `differential`, `compare`, `management`, `contraindications`).
+	- **Risk score**: explicit risk/urgency terms in query and optional request `severity` (`urgent` / `emergency`).
+	- **Ambiguity score**: retrieval confidence and separability (top score and top-2 score gap).
+- Final provider decision:
+	- if `score >= LLM_ROUTE_THRESHOLD` → **cloud-first** (`CLOUD_LLM_*`),
+	- else → **local-first** (`LOCAL_LLM_*`).
+- Revision override:
+	- when `ROUTE_REVISIONS_TO_CLOUD=true`, `/revise` is forced cloud-first.
+
+Fallback behavior (both directions):
+
+- Cloud-first request: if cloud fails, automatically retries locally.
+- Local-first request: if local fails, automatically retries in cloud.
+- If both fail, API returns an error.
+
+Operational notes:
+
+- Health endpoint now exposes routing context (`local_model`, `cloud_model`, `route_threshold`) at `GET /health`.
+- Routing decisions are logged in service logs with provider, score, threshold, and reason tags.
 
 ### How requests flow
 
 - Frontend (or API) sends `POST /chats/{chat_id}/message` to the backend.
 - Backend forwards the user message to RAG service `/answer`, saves user and assistant messages, and appends source citations if returned.
-- RAG service embeds the query, retrieves chunks from pgvector, builds a grounded prompt, and calls Ollama at `OLLAMA_BASE_URL` with the selected `OLLAMA_MODEL`.
+- RAG service embeds the query, retrieves chunks from pgvector, runs the heuristic router, then calls cloud/local in routed order with automatic fallback.
 
 ### Troubleshooting
 
-- If `/answer` times out: confirm `ollama serve` is running and reachable from containers via `host.docker.internal`.
+- If `/answer` times out: confirm local and cloud endpoints are both correct in env (`LOCAL_LLM_*`, `CLOUD_LLM_*`) and that the routed provider is reachable.
 - If citations are empty: ensure documents are ingested into pgvector; check RAG logs for ingestion errors.
 - If pgvector is missing: the RAG service will attempt to create the extension and schema on startup; check container logs for errors.
 

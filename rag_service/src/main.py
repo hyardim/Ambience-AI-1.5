@@ -6,9 +6,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
+from .config import (
+    CLOUD_LLM_MODEL,
+    LLM_ROUTE_THRESHOLD,
+    OLLAMA_MAX_TOKENS,
+    OLLAMA_MODEL,
+    LOCAL_LLM_MODEL,
+    path_config,
+)
 from .generation.client import generate_answer, warmup_model
 from .generation.prompts import build_grounded_prompt, build_revision_prompt
+from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import (
     get_source_path_for_doc,
@@ -49,6 +57,8 @@ async def warmup_ollama():
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
+    specialty: str | None = None
+    severity: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -77,6 +87,8 @@ class ReviseRequest(BaseModel):
     feedback: str
     top_k: int = 5
     max_tokens: int = OLLAMA_MAX_TOKENS
+    specialty: str | None = None
+    severity: str | None = None
 
 
 MAX_CITATIONS = 3
@@ -157,7 +169,12 @@ class AnswerResponse(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ready", "model": "Med42-OpenVINO"}
+    return {
+        "status": "ready",
+        "local_model": LOCAL_LLM_MODEL,
+        "cloud_model": CLOUD_LLM_MODEL,
+        "route_threshold": LLM_ROUTE_THRESHOLD,
+    }
 
 
 @app.post("/query", response_model=list[SearchResult])
@@ -229,7 +246,22 @@ async def generate_clinical_answer(request: AnswerRequest):
 
         prompt = build_grounded_prompt(request.query, top_chunks)
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        route = select_generation_provider(
+            query=request.query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+        )
+        print(
+            "🧭 /answer routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
+
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
 
         used_indices = _extract_citation_indices(answer_text)
 
@@ -306,7 +338,23 @@ async def revise_clinical_answer(request: ReviseRequest):
             chunks=top_chunks,
         )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        route = select_generation_provider(
+            query=request.original_query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+            is_revision=True,
+        )
+        print(
+            "🧭 /revise routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
+
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
 
         used_indices = _extract_citation_indices(answer_text)
 

@@ -137,6 +137,24 @@ LLM_MODEL = llm_config.llm_model
 LLM_API_KEY = llm_config.llm_api_key
 LLM_MAX_TOKENS = llm_config.llm_max_tokens
 LLM_TEMPERATURE = llm_config.llm_temperature
+
+LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", OLLAMA_BASE_URL)
+LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", OLLAMA_MODEL)
+LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "ollama")
+LOCAL_LLM_TIMEOUT_SECONDS = float(os.getenv("LOCAL_LLM_TIMEOUT_SECONDS", "60"))
+
+CLOUD_LLM_BASE_URL = os.getenv("CLOUD_LLM_BASE_URL", LLM_BASE_URL)
+CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", LLM_MODEL)
+CLOUD_LLM_API_KEY = os.getenv("CLOUD_LLM_API_KEY", LLM_API_KEY)
+CLOUD_LLM_TIMEOUT_SECONDS = float(os.getenv("CLOUD_LLM_TIMEOUT_SECONDS", "120"))
+
+LLM_ROUTE_THRESHOLD = float(os.getenv("LLM_ROUTE_THRESHOLD", "0.65"))
+ROUTE_REVISIONS_TO_CLOUD = os.getenv("ROUTE_REVISIONS_TO_CLOUD", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 db_config = DatabaseConfig()
 embed_config = EmbeddingConfig()
 chunk_config = ChunkingConfig()
