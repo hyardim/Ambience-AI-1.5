@@ -10,22 +10,31 @@ interface ChatInputProps {
 export function ChatInput({ onSendMessage, placeholder = 'Type your message here...', disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<File[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() || files.length > 0) {
-      onSendMessage(message, files);
+    if (message.trim() || filesRef.current.length > 0) {
+      onSendMessage(message, filesRef.current);
       setMessage('');
+      filesRef.current = [];
       setFiles([]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+    if (e.target.files && e.target.files.length > 0) {
+      const incoming = Array.from(e.target.files);
+      filesRef.current = [...filesRef.current, ...incoming];
+      setFiles([...filesRef.current]);
+      // Reset input value so the same file can be picked again later
+      e.target.value = '';
     }
+  };
+
+  const removeFile = (index: number) => {
+    filesRef.current = filesRef.current.filter((_, i) => i !== index);
+    setFiles([...filesRef.current]);
   };
 
   return (
@@ -37,7 +46,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
               <span className="truncate max-w-32">{file.name}</span>
               <button
                 type="button"
-                onClick={() => setFiles(files.filter((_, i) => i !== index))}
+                onClick={() => removeFile(index)}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ×
@@ -57,22 +66,26 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
           className="flex-1 px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
         />
 
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          multiple
-          className="hidden"
-        />
-
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled}
-          className="p-3 text-gray-500 hover:text-[#005eb8] hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+        {/* File input triggered natively via label — no JS .click() needed */}
+        <label
+          htmlFor="chat-file-input"
+          aria-disabled={disabled}
+          className={`p-3 rounded-lg transition-colors cursor-pointer ${
+            disabled
+              ? 'text-gray-300 cursor-not-allowed'
+              : 'text-gray-500 hover:text-[#005eb8] hover:bg-gray-100'
+          }`}
         >
           <Paperclip className="w-5 h-5" />
-        </button>
+        </label>
+        <input
+          id="chat-file-input"
+          type="file"
+          onChange={handleFileChange}
+          multiple
+          disabled={disabled}
+          className="hidden"
+        />
 
         <button
           type="submit"
