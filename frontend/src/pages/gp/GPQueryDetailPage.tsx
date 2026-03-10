@@ -6,7 +6,7 @@ import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat } from '../../services/api';
+import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat, uploadChatFile } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
 import type { Message, Citation } from '../../types';
 
@@ -130,7 +130,7 @@ export function GPQueryDetailPage() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, files?: File[]) => {
     if (!chat || sending) return;
     setSending(true);
 
@@ -145,14 +145,25 @@ export function GPQueryDetailPage() {
     };
     setMessages(prev => [...prev, userMsg]);
 
+    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
+      // Upload any attached files before sending the message
+      if (files && files.length > 0) {
+        const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+        if (oversized.length > 0) {
+          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+          setSending(false);
+          return;
+        }
+        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+      }
       // Backend returns { status, ai_response }; refetch chat to attach citations reliably
       await apiSendMessage(chat.id, content);
       const refreshed = await getChat(chat.id);
       setChat(refreshed);
       setMessages(refreshed.messages.map(m => toFrontendMessage(m, username || 'GP User')));
-    } catch {
-      setError('Failed to send message');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }

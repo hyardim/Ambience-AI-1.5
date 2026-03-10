@@ -1,11 +1,12 @@
 import os
+from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from src.db.models import ChatStatus, User
+from src.db.models import ChatStatus, FileAttachment, User
 from src.db.session import SessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
@@ -13,13 +14,16 @@ from src.schemas.chat import (
     ChatResponse,
     ChatUpdate,
     ChatWithMessages,
+    FileAttachmentResponse,
 )
 from src.services._mappers import chat_to_response, msg_to_response
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
-RAG_REQUEST_TIMEOUT_SECONDS = float(
-    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024  # 3 MB per file
+MAX_FILES_PER_CHAT = 5
+RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -28,12 +32,23 @@ RAG_REQUEST_TIMEOUT_SECONDS = float(
 
 
 def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
+    patient_context = {
+        k: v
+        for k, v in {
+            "age": data.patient_age,
+            "gender": data.patient_gender,
+            "notes": data.patient_notes,
+        }.items()
+        if v is not None
+    } or None
+
     chat = chat_repository.create(
         db,
         user_id=user.id,
         title=data.title,
         specialty=data.specialty,
         severity=data.severity,
+        patient_context=patient_context,
     )
     audit_repository.log(
         db, user_id=user.id, action="CREATE_CHAT", details=f"Created chat: {data.title}"
@@ -84,6 +99,16 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
     messages = message_repository.list_for_chat(db, chat.id)
     response = ChatWithMessages(**chat_to_response(chat).model_dump())
     response.messages = [msg_to_response(m) for m in messages]
+    response.files = [
+        FileAttachmentResponse(
+            id=f.id,
+            filename=f.filename,
+            file_type=f.file_type,
+            file_size=f.file_size,
+            created_at=f.created_at.isoformat() if f.created_at else "",
+        )
+        for f in (chat.files or [])
+    ]
     return response
 
 
@@ -145,6 +170,89 @@ def delete_chat(db: Session, user: User, chat_id: int) -> None:
 
 
 # ---------------------------------------------------------------------------
+# File uploads
+# ---------------------------------------------------------------------------
+
+
+def _extract_text(file_path: str, file_type: Optional[str]) -> str:
+    """Extract plain text from an uploaded file (PDF or plain text)."""
+    try:
+        if file_type and "pdf" in file_type.lower():
+            from pypdf import PdfReader  # lazy import — only used when PDF is uploaded
+            reader = PdfReader(file_path)
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        else:
+            return Path(file_path).read_text(errors="replace")
+    except Exception:
+        return ""
+
+
+async def upload_file(
+    db: Session,
+    user: User,
+    chat_id: int,
+    file: UploadFile,
+) -> FileAttachmentResponse:
+    chat = chat_repository.get(db, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Only the chat owner or assigned specialist may upload
+    is_owner = chat.user_id == user.id
+    is_specialist = chat.specialist_id == user.id
+    if not (is_owner or is_specialist):
+        raise HTTPException(status_code=403, detail="Not authorised to upload to this chat")
+
+    dest_dir = UPLOAD_DIR / str(chat_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / (file.filename or "upload")
+
+    contents = await file.read()
+
+    if len(contents) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds the 3 MB limit ({len(contents) // 1024} KB uploaded).",
+        )
+
+    existing_count = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
+    if existing_count >= MAX_FILES_PER_CHAT:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Chat already has {existing_count} files. Maximum is {MAX_FILES_PER_CHAT}.",
+        )
+
+    dest_path.write_bytes(contents)
+
+    attachment = FileAttachment(
+        filename=file.filename or "upload",
+        file_path=str(dest_path),
+        file_type=file.content_type,
+        file_size=len(contents),
+        chat_id=chat_id,
+        uploader_id=user.id,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+
+    audit_repository.log(
+        db,
+        user_id=user.id,
+        action="UPLOAD_FILE",
+        details=f"Uploaded {file.filename} to chat {chat_id}",
+    )
+
+    return FileAttachmentResponse(
+        id=attachment.id,
+        filename=attachment.filename,
+        file_type=attachment.file_type,
+        file_size=attachment.file_size,
+        created_at=attachment.created_at.isoformat() if attachment.created_at else "",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Send message
 # ---------------------------------------------------------------------------
 
@@ -163,12 +271,32 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         if not chat:
             return
 
-        rag_payload = {
+        ctx = chat.patient_context or {}
+        patient_context = {
+            **ctx,
+            **({"specialty": chat.specialty} if chat.specialty else {}),
+            **({"severity": chat.severity} if chat.severity else {}),
+        } or None
+
+        file_texts = []
+        for attachment in (chat.files or []):
+            text = _extract_text(attachment.file_path, attachment.file_type)
+            if text.strip():
+                file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
+        FILE_CONTEXT_CHAR_LIMIT = 8_000
+        file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
+        if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
+            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + "\n\n[Document truncated to fit context window]"
+
+        rag_payload: dict = {
             "query": content,
             "top_k": 4,
             "specialty": chat.specialty,
             "severity": chat.severity,
+            "patient_context": patient_context,
         }
+        if file_context:
+            rag_payload["file_context"] = file_context
 
         rag_action = "RAG_ERROR"
         rag_details = f"query_len={len(content)} error=unknown"

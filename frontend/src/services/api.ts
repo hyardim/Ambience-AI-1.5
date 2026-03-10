@@ -1,6 +1,7 @@
 import type {
   BackendChat,
   BackendChatWithMessages,
+  FileAttachment,
   GPMessageResponse,
   LoginResponse,
   RegisterRequest,
@@ -145,6 +146,17 @@ export async function createChat(data: ChatCreateRequest): Promise<BackendChat> 
     body: JSON.stringify(data),
   });
   return handleResponse<BackendChat>(res);
+}
+
+export async function uploadChatFile(chatId: number, file: File): Promise<FileAttachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/chats/${chatId}/files`, {
+    method: 'POST',
+    headers: authHeaders(),  // no Content-Type — browser sets multipart boundary
+    body: formData,
+  });
+  return handleResponse<FileAttachment>(res);
 }
 
 export async function deleteChat(chatId: number): Promise<void> {

@@ -90,6 +90,8 @@ class SearchResult(BaseModel):
 
 class AnswerRequest(QueryRequest):
     max_tokens: int = LLM_MAX_TOKENS
+    patient_context: dict[str, Any] | None = None
+    file_context: str | None = None
 
 
 class ReviseRequest(BaseModel):
@@ -99,6 +101,8 @@ class ReviseRequest(BaseModel):
     feedback: str
     top_k: int = 5
     max_tokens: int = LLM_MAX_TOKENS
+    patient_context: dict[str, Any] | None = None
+    file_context: str | None = None
     specialty: str | None = None
     severity: str | None = None
 
@@ -336,8 +340,9 @@ async def generate_clinical_answer(request: AnswerRequest):
         ]
         top_chunks = filtered[:MAX_CITATIONS]
 
-        if not top_chunks:
-            # Avoid making the model hallucinate when nothing relevant was retrieved.
+        if not top_chunks and not request.file_context:
+            # Avoid making the model hallucinate when nothing relevant was retrieved
+            # and no uploaded document is present.
             return AnswerResponse(
                 answer=(
                     "I couldn't find any guideline passage in the indexed sources "
@@ -348,17 +353,7 @@ async def generate_clinical_answer(request: AnswerRequest):
                 citations=[],
             )
 
-        prompt = build_grounded_prompt(request.query, top_chunks)
-        route = select_generation_provider(
-            query=request.query,
-            retrieved_chunks=filtered or retrieved,
-            severity=request.severity,
-        )
-        print(
-            "🧭 /answer routing "
-            f"provider={route.provider} score={route.score} "
-            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
-        )
+        prompt = build_grounded_prompt(request.query, top_chunks, patient_context=request.patient_context, file_context=request.file_context)
 
         route = select_generation_provider(
             query=request.query,
@@ -410,9 +405,8 @@ async def generate_clinical_answer(request: AnswerRequest):
             flags=re.DOTALL | re.IGNORECASE,
         ).rstrip()
 
-        labelled_answer = f"[Prompt: {ACTIVE_PROMPT}]\n\n{renumbered_answer}"
         return AnswerResponse(
-            answer=labelled_answer,
+            answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
             citations=citations_used,
@@ -457,6 +451,8 @@ async def revise_clinical_answer(request: ReviseRequest):
             previous_answer=request.previous_answer,
             specialist_feedback=request.feedback,
             chunks=top_chunks,
+            patient_context=request.patient_context,
+            file_context=request.file_context,
         )
 
         route = select_generation_provider(

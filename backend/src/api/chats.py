@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user_obj
@@ -11,6 +11,7 @@ from src.schemas.chat import (
     ChatResponse,
     ChatUpdate,
     ChatWithMessages,
+    FileAttachmentResponse,
     MessageCreate,
 )
 from src.services import chat_service
@@ -89,6 +90,16 @@ def send_message(
         message.content,
         background_tasks,
     )
+
+
+@router.post("/{chat_id}/files", response_model=FileAttachmentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_file(
+    chat_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_obj),
+):
+    return await chat_service.upload_file(db, current_user, chat_id, file)
 
 
 @router.post("/{chat_id}/submit", response_model=ChatResponse)

@@ -4,6 +4,21 @@ from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
+# File attachment
+# ---------------------------------------------------------------------------
+
+class FileAttachmentResponse(BaseModel):
+    id: int
+    filename: str
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
 # Message
 # ---------------------------------------------------------------------------
 
@@ -36,6 +51,9 @@ class ChatCreate(BaseModel):
     title: str = "New Chat"
     specialty: str
     severity: Optional[str] = None
+    patient_age:    Optional[int] = None
+    patient_gender: Optional[str] = None  # "male" | "female" | "other"
+    patient_notes:  Optional[str] = None  # free-text clinical notes
 
 class ChatUpdate(BaseModel):
     title: Optional[str] = None
@@ -54,6 +72,9 @@ class ChatResponse(BaseModel):
     status: str
     specialty: Optional[str] = None
     severity: Optional[str] = None
+    patient_age:    Optional[int] = None
+    patient_gender: Optional[str] = None
+    patient_notes:  Optional[str] = None
     specialist_id: Optional[int] = None
     assigned_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
@@ -66,6 +87,7 @@ class ChatResponse(BaseModel):
 
 class ChatWithMessages(ChatResponse):
     messages: List[MessageResponse] = []
+    files: List[FileAttachmentResponse] = []
 
 
 # ---------------------------------------------------------------------------

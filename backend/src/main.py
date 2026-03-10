@@ -53,6 +53,9 @@ def ensure_message_columns() -> None:
     """Add newer message columns for older databases."""
     with engine.begin() as connection:
         connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS role VARCHAR")
+        )
+        connection.execute(
             text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender VARCHAR")
         )
         connection.execute(
@@ -162,10 +165,31 @@ def ensure_default_users() -> None:
         db.close()
 
 
+def ensure_enum_columns_lowercase() -> None:
+    """Migrate any uppercase enum values to lowercase and convert native enum
+    columns to plain VARCHAR.  Handles users.role and chats.status.
+    """
+    with engine.begin() as connection:
+        for table, column in [("users", "role"), ("chats", "status")]:
+            connection.execute(
+                text(
+                    f"ALTER TABLE {table} "
+                    f"ALTER COLUMN {column} TYPE VARCHAR USING {column}::TEXT"
+                )
+            )
+            connection.execute(
+                text(
+                    f"UPDATE {table} SET {column} = LOWER({column}) "
+                    f"WHERE {column} != LOWER({column})"
+                )
+            )
+
+
 ensure_auth_columns()
 ensure_notification_fk()
 ensure_message_columns()
 ensure_chat_columns()
+ensure_enum_columns_lowercase()
 ensure_default_users()
 
 app = FastAPI(
