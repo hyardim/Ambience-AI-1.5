@@ -1,5 +1,6 @@
-import httpx
 from typing import Literal
+
+import httpx
 
 from ..config import (
     CLOUD_LLM_API_KEY,
@@ -13,7 +14,6 @@ from ..config import (
     LOCAL_LLM_MODEL,
     LOCAL_LLM_TIMEOUT_SECONDS,
 )
-
 
 ProviderName = Literal["local", "cloud"]
 
@@ -39,99 +39,42 @@ async def warmup_model(provider: ProviderName = "local") -> None:
         "model": LOCAL_LLM_MODEL,
         "prompt": "warmup",
         "stream": False,
-        "keep_alive": -1,  # keep loaded indefinitely
+        "keep_alive": -1,
         "options": {"num_predict": 1},
     }
     try:
         async with httpx.AsyncClient(timeout=LOCAL_LLM_TIMEOUT_SECONDS) as client:
             resp = await client.post(
-                f"{LOCAL_LLM_BASE_URL}/api/generate", json=payload
+                f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
             )
             resp.raise_for_status()
         print(f"✅ Local model '{LOCAL_LLM_MODEL}' warmed up and kept alive.")
     except Exception as exc:  # pragma: no cover
-        print(
-            f"⚠️  Local model warmup failed (model may still be loading): {exc}")
-
-
-async def generate_answer(
-    prompt: str,
-    max_tokens: int | None = None,
-    provider: ProviderName = "local",
-) -> str:
-    """Generate an answer using the selected provider with fallback.
-
-    If the primary provider fails, automatically retry once with the other
-    provider. If both fail, raise a single aggregated error.
-    """
-    attempts: list[str] = []
-
-    for index, current_provider in enumerate(
-        (provider, _fallback_provider(provider)),
-        start=1,
-    ):
-        try:
-            if current_provider == "cloud":
-                response = await _generate_cloud_answer(
-                    prompt,
-                    max_tokens=max_tokens,
-                )
-            else:
-                response = await _generate_local_answer(
-                    prompt,
-                    max_tokens=max_tokens,
-                )
-
-            if not response.strip():
-                raise RuntimeError(
-                    f"{current_provider.capitalize()} model returned an empty response"
-                )
-
-            if index > 1:
-                print(
-                    f"🔁 Generation fallback succeeded with provider={current_provider}"
-                )
-
-            return response
-        except Exception as exc:
-            attempts.append(f"{current_provider}: {exc}")
-            if index == 1:
-                print(
-                    f"⚠️ Primary generation provider failed (provider={current_provider}): {exc}. "
-                    f"Trying fallback provider={_fallback_provider(current_provider)}."
-                )
-
-    raise ModelGenerationError(
-        "All model providers failed. " + " | ".join(attempts)
-    )
+        print(f"⚠️  Local model warmup failed (model may still be loading): {exc}")
 
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:
-    """Call the local Ollama server to generate a response."""
     payload = {
         "model": LOCAL_LLM_MODEL,
         "prompt": prompt,
         "stream": False,
-        "keep_alive": -1,  # prevent idle unload between requests
+        "keep_alive": -1,
         "options": {"num_predict": max_tokens or LOCAL_LLM_MAX_TOKENS},
     }
 
     try:
         async with httpx.AsyncClient(timeout=LOCAL_LLM_TIMEOUT_SECONDS) as client:
             resp = await client.post(
-                f"{LOCAL_LLM_BASE_URL}/api/generate", json=payload
+                f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
             )
             resp.raise_for_status()
             data = resp.json()
-            # Ollama returns the final text in the "response" field for
-            # non-streaming requests
             return data.get("response", "").strip()
-    except httpx.HTTPError as exc:  # pragma: no cover - passthrough for FastAPI handler
+    except httpx.HTTPError as exc:
         raise RuntimeError(f"Local model request failed: {exc}") from exc
 
 
 async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> str:
-    """Call the cloud RunPod endpoint using an OpenAI-compatible API."""
     payload = {
         "model": CLOUD_LLM_MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -159,5 +102,53 @@ async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> 
                 .get("content", "")
                 .strip()
             )
-    except httpx.HTTPError as exc:  # pragma: no cover - passthrough for FastAPI handler
+    except httpx.HTTPError as exc:
         raise RuntimeError(f"Cloud model request failed: {exc}") from exc
+
+
+async def _call_local_model(prompt: str, max_tokens: int | None = None) -> str:
+    return await _generate_local_answer(prompt, max_tokens=max_tokens)
+
+
+async def _call_cloud_model(prompt: str, max_tokens: int | None = None) -> str:
+    return await _generate_cloud_answer(prompt, max_tokens=max_tokens)
+
+
+async def generate_answer(
+    prompt: str,
+    max_tokens: int | None = None,
+    provider: ProviderName = "local",
+) -> str:
+    """Generate an answer using the selected provider with fallback."""
+    attempts: list[str] = []
+
+    for index, current_provider in enumerate(
+        (provider, _fallback_provider(provider)),
+        start=1,
+    ):
+        try:
+            if current_provider == "cloud":
+                response = await _call_cloud_model(prompt, max_tokens=max_tokens)
+            else:
+                response = await _call_local_model(prompt, max_tokens=max_tokens)
+
+            if not response.strip():
+                raise RuntimeError(
+                    f"{current_provider.capitalize()} model returned an empty response"
+                )
+
+            if index > 1:
+                print(
+                    f"🔁 Generation fallback succeeded with provider={current_provider}"
+                )
+
+            return response
+        except Exception as exc:
+            attempts.append(f"{current_provider}: {exc}")
+            if index == 1:
+                print(
+                    f"⚠️ Primary generation provider failed (provider={current_provider}): {exc}. "
+                    f"Trying fallback provider={_fallback_provider(current_provider)}."
+                )
+
+    raise ModelGenerationError("All model providers failed. " + " | ".join(attempts))

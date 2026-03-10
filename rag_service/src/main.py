@@ -360,6 +360,16 @@ async def generate_clinical_answer(request: AnswerRequest):
             f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
         )
 
+        route = select_generation_provider(
+            query=request.query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+        )
+        print(
+            "🧭 /answer routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
         answer_text = await generate_answer(
             prompt,
             max_tokens=request.max_tokens,

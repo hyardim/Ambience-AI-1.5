@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
-import re
 
 from ..config import FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD
-
 
 ProviderName = Literal["local", "cloud"]
 
@@ -109,8 +108,7 @@ def _score_complexity(query: str) -> tuple[float, list[str]]:
         score += 0.10
         reasons.append("medium_query")
 
-    sentence_count = len(
-        [part for part in re.split(r"[.!?]+", query) if part.strip()])
+    sentence_count = len([part for part in re.split(r"[.!?]+", query) if part.strip()])
     if sentence_count >= 3:
         score += 0.12
         reasons.append("multi_sentence")
