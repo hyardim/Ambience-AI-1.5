@@ -145,9 +145,16 @@ export function GPQueryDetailPage() {
     };
     setMessages(prev => [...prev, userMsg]);
 
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
     try {
       // Upload any attached files before sending the message
       if (files && files.length > 0) {
+        const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+        if (oversized.length > 0) {
+          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 5 MB.`);
+          setSending(false);
+          return;
+        }
         await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
       }
       // Backend returns { status, ai_response }; refetch chat to attach citations reliably
@@ -155,8 +162,8 @@ export function GPQueryDetailPage() {
       const refreshed = await getChat(chat.id);
       setChat(refreshed);
       setMessages(refreshed.messages.map(m => toFrontendMessage(m, username || 'GP User')));
-    } catch {
-      setError('Failed to send message');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
