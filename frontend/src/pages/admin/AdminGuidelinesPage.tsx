@@ -4,14 +4,32 @@ import { AdminLayout } from '../../components/AdminLayout';
 import { adminUploadGuideline } from '../../services/api';
 import type { IngestionReport } from '../../services/api';
 
-const SOURCES = [
-  { key: 'NICE',       label: 'NICE (Rheumatology)' },
-  { key: 'BSR',        label: 'BSR (Rheumatology)'  },
-  { key: 'NICE_NEURO', label: 'NICE (Neurology)'    },
+const SOURCE_GROUPS = [
+  {
+    group: 'Rheumatology',
+    sources: [
+      { key: 'NICE',             label: 'NICE Guidelines'             },
+      { key: 'BSR',              label: 'BSR Guidelines'              },
+      { key: 'BNF_RHEUMATOLOGY',   label: 'BNF (British National Formulary)' },
+      { key: 'OTHER_RHEUMATOLOGY', label: 'Other (Rheumatology)'              },
+    ],
+  },
+  {
+    group: 'Neurology',
+    sources: [
+      { key: 'NICE_NEURO', label: 'NICE Guidelines' },
+    ],
+  },
+  {
+    group: 'Other',
+    sources: [
+      { key: 'OTHER', label: 'Other / Miscellaneous' },
+    ],
+  },
 ];
 
 export function AdminGuidelinesPage() {
-  const [selectedSource, setSelectedSource] = useState(SOURCES[0].key);
+  const [selectedSource, setSelectedSource] = useState(SOURCE_GROUPS[0].sources[0].key);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -71,8 +89,12 @@ export function AdminGuidelinesPage() {
               disabled={uploading}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm disabled:opacity-50"
             >
-              {SOURCES.map(s => (
-                <option key={s.key} value={s.key}>{s.label}</option>
+              {SOURCE_GROUPS.map(g => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.sources.map(s => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
