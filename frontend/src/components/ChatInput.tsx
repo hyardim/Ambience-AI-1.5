@@ -18,12 +18,13 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
       onSendMessage(message, files);
       setMessage('');
       setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
     }
   };
 
