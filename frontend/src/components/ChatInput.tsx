@@ -67,12 +67,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
         <button
           type="button"
-          onClick={() => {
-            if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-              fileInputRef.current.click();
-            }
-          }}
+          onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
           className="p-3 text-gray-500 hover:text-[#005eb8] hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
         >
