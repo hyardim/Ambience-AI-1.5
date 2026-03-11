@@ -289,6 +289,21 @@ export function GPQueryDetailPage() {
     [username],
   );
 
+  useEffect(() => {
+    if (!chat) return;
+    if (streamCleanupRef.current || streamConnected || sending) return;
+    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+
+    void connectStream(chat.id);
+  }, [
+    chat,
+    connectStream,
+    hasPendingAIResponse,
+    hasRevisionInProgress,
+    sending,
+    streamConnected,
+  ]);
+
   const handleSendMessage = async (content: string) => {
     if (!chat || sending) return;
     setSending(true);

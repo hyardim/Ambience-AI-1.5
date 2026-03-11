@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, CheckCircle, XCircle, AlertTriangle,
@@ -16,6 +16,7 @@ import {
   reviewChat,
   reviewMessage,
   sendSpecialistMessage,
+  subscribeToChatStream,
 } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
 import type { Message, Citation } from '../../types';
@@ -99,10 +100,18 @@ export function SpecialistQueryDetailPage() {
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // SSE streaming state
+  const streamCleanupRef = useRef<(() => void) | null>(null);
+  const [streamConnected, setStreamConnected] = useState(false);
 
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
     loadData();
+    // Clean up SSE on unmount / chat change
+    return () => {
+      streamCleanupRef.current?.();
+      streamCleanupRef.current = null;
+    };
   }, [queryId]);
 
   useEffect(() => {
@@ -118,15 +127,18 @@ export function SpecialistQueryDetailPage() {
     messages[messages.length - 1].senderType === 'ai' &&
     messages[messages.length - 1].isGenerating === true;
 
+  // Only poll when SSE is not connected and there's pending work
+  const shouldPoll = (hasPendingAIResponse || hasRevisionInProgress) && !streamConnected;
+
   useEffect(() => {
-    if (!queryId || (!hasPendingAIResponse && !hasRevisionInProgress)) return;
+    if (!queryId || !shouldPoll) return;
 
     const intervalId = window.setInterval(() => {
       loadData({ silent: true });
     }, 2000);
 
     return () => window.clearInterval(intervalId);
-  }, [queryId, hasPendingAIResponse, hasRevisionInProgress]);
+  }, [queryId, shouldPoll]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
@@ -152,6 +164,95 @@ export function SpecialistQueryDetailPage() {
       }
     }
   };
+
+  /** Open an SSE connection for AI generation events on this chat.
+   *  Returns a Promise that resolves once connected (or after a short timeout). */
+  const connectStream = useCallback(
+    (chatId: number): Promise<void> => {
+      streamCleanupRef.current?.();
+
+      return new Promise<void>((resolve) => {
+        let resolved = false;
+        const settle = () => { if (!resolved) { resolved = true; resolve(); } };
+        const timer = setTimeout(settle, 500);
+
+        const cleanup = subscribeToChatStream(chatId, {
+          onOpen() {
+            clearTimeout(timer);
+            settle();
+          },
+          onStreamStart(messageId) {
+            setStreamConnected(true);
+            setMessages((prev) => {
+              if (prev.find((m) => m.id === String(messageId))) return prev;
+              const placeholder: Message = {
+                id: String(messageId),
+                senderId: 'ai',
+                senderName: 'NHS AI Assistant',
+                senderType: 'ai',
+                content: '',
+                timestamp: new Date(),
+                isGenerating: true,
+              };
+              return [...prev, placeholder];
+            });
+          },
+          onContent(messageId, content) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === String(messageId) ? { ...m, content, isGenerating: true } : m,
+              ),
+            );
+          },
+          onComplete(messageId, content, citations) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === String(messageId)
+                  ? {
+                      ...m,
+                      content,
+                      citations: mapCitations(citations),
+                      isGenerating: false,
+                    }
+                  : m,
+              ),
+            );
+            setStreamConnected(false);
+            streamCleanupRef.current = null;
+            loadData({ silent: true });
+          },
+          onError(_messageId, _errorMsg) {
+            setStreamConnected(false);
+            streamCleanupRef.current = null;
+            loadData({ silent: true });
+          },
+          onConnectionError() {
+            setStreamConnected(false);
+            streamCleanupRef.current = null;
+            clearTimeout(timer);
+            settle();
+          },
+        });
+
+        streamCleanupRef.current = cleanup;
+      });
+    },
+    [username],
+  );
+
+  useEffect(() => {
+    if (!chat) return;
+    if (streamCleanupRef.current || streamConnected) return;
+    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+
+    void connectStream(chat.id);
+  }, [
+    chat,
+    connectStream,
+    hasPendingAIResponse,
+    hasRevisionInProgress,
+    streamConnected,
+  ]);
 
   // ── Actions ──────────────────────────────────────────────────
 
@@ -208,11 +309,14 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
+      // Open SSE *before* the API call so we catch the revision stream events
+      await connectStream(chat.id);
       await reviewMessage(chat.id, reviewTargetMessageId, 'request_changes', rejectReason.trim());
       setShowRejectModal(false);
       setRejectReason('');
       setReviewTargetMessageId(null);
-      await loadData();
+      // Reconcile with persisted state (streaming will update progressively)
+      await loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to request changes');
     } finally {

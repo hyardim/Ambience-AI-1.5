@@ -1,3 +1,5 @@
+import json
+import threading
 from datetime import datetime
 from typing import Optional
 import os
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.db.models import Chat, ChatStatus, Message, NotificationType, User
 from src.db.session import SessionLocal
+from src.utils.sse import SSEEvent, chat_event_bus
 from src.repositories import (
     audit_repository,
     chat_repository,
@@ -357,10 +360,9 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
         # Run synchronously (tests use in-memory SQLite with a single connection).
         _do_revise(db, placeholder, original_query, previous_answer, feedback or "")
     else:
-        import threading
         thread = threading.Thread(
             target=_regenerate_ai_response_task,
-            args=(placeholder.id, original_query, previous_answer, feedback or ""),
+            args=(placeholder.id, chat.id, original_query, previous_answer, feedback or ""),
             daemon=True,
         )
         thread.start()
@@ -419,19 +421,139 @@ def _do_revise(
 
 def _regenerate_ai_response_task(
     placeholder_id: int,
+    chat_id: int,
     original_query: str,
     previous_answer: str,
     feedback: str,
 ) -> None:
-    """Background task: call the RAG /revise endpoint and update the placeholder message."""
+    """Background task: stream from RAG /revise and publish SSE events."""
     db = SessionLocal()
     try:
         placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
-        if placeholder:
-            _do_revise(db, placeholder, original_query, previous_answer, feedback)
+        if not placeholder:
+            return
+
+        # Publish stream_start
+        chat_event_bus.publish_threadsafe(
+            chat_id,
+            SSEEvent(
+                event="stream_start",
+                data={"chat_id": chat_id, "message_id": placeholder_id},
+            ),
+        )
+
+        rag_payload = {
+            "original_query": original_query,
+            "previous_answer": previous_answer,
+            "feedback": feedback,
+            "top_k": 4,
+            "stream": True,
+        }
+
+        accumulated = ""
+        citations: list = []
+
+        try:
+            with httpx.Client(timeout=120) as client:
+                with client.stream(
+                    "POST",
+                    f"{RAG_SERVICE_URL}/revise",
+                    json=rag_payload,
+                ) as response:
+                    response.raise_for_status()
+                    for line in response.iter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+
+                        if chunk.get("type") == "chunk":
+                            accumulated += chunk.get("delta", "")
+                            chat_event_bus.publish_threadsafe(
+                                chat_id,
+                                SSEEvent(
+                                    event="content",
+                                    data={
+                                        "chat_id": chat_id,
+                                        "message_id": placeholder_id,
+                                        "content": accumulated,
+                                    },
+                                ),
+                            )
+                        elif chunk.get("type") == "done":
+                            accumulated = chunk.get("answer", accumulated)
+                            citations = chunk.get("citations", [])
+                        elif chunk.get("type") == "error":
+                            raise RuntimeError(
+                                chunk.get("error", "RAG streaming error")
+                            )
+        except Exception as exc:
+            accumulated = (
+                f"[Revised after specialist feedback: {feedback}] "
+                f"RAG service unavailable — original question: {original_query} "
+                f"(detail: {exc})"
+            )
+            citations = []
+            chat_event_bus.publish_threadsafe(
+                chat_id,
+                SSEEvent(
+                    event="error",
+                    data={
+                        "chat_id": chat_id,
+                        "message_id": placeholder_id,
+                        "error": str(exc),
+                    },
+                ),
+            )
+
+        # Finalise placeholder
+        placeholder.content = accumulated
+        placeholder.citations = citations
+        placeholder.is_generating = False
+        db.commit()
+        db.refresh(placeholder)
+
+        # Publish final content + complete
+        chat_event_bus.publish_threadsafe(
+            chat_id,
+            SSEEvent(
+                event="content",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": placeholder_id,
+                    "content": accumulated,
+                },
+            ),
+        )
+        chat_event_bus.publish_threadsafe(
+            chat_id,
+            SSEEvent(
+                event="complete",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": placeholder_id,
+                    "content": accumulated,
+                    "citations": citations,
+                },
+            ),
+        )
+
+        try:
+            chat = db.query(Chat).filter(Chat.id == chat_id).first()
+            audit_repository.log(
+                db,
+                user_id=chat.specialist_id if chat else None,
+                action="RAG_REVISE" if accumulated else "RAG_ERROR",
+                details=f"chunks_used={len(citations)}",
+            )
+        except Exception:
+            pass
     except Exception:
         db.rollback()
     finally:
+        chat_event_bus.close_chat_threadsafe(chat_id)
         db.close()
 
 

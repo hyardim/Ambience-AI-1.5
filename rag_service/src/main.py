@@ -1,13 +1,15 @@
+import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
 from .generation.client import generate_answer, warmup_model
+from .generation.streaming import stream_generate
 from .generation.prompts import build_grounded_prompt, build_revision_prompt
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .retrieval.vector_store import (
@@ -68,6 +70,7 @@ class SearchResult(BaseModel):
 
 class AnswerRequest(QueryRequest):
     max_tokens: int = OLLAMA_MAX_TOKENS
+    stream: bool = False
 
 
 class ReviseRequest(BaseModel):
@@ -77,6 +80,7 @@ class ReviseRequest(BaseModel):
     feedback: str
     top_k: int = 5
     max_tokens: int = OLLAMA_MAX_TOKENS
+    stream: bool = False
 
 
 MAX_CITATIONS = 3
@@ -155,6 +159,49 @@ class AnswerResponse(BaseModel):
     citations: list[SearchResult]
 
 
+async def _streaming_generator(
+    prompt: str,
+    max_tokens: int,
+    citations_retrieved: list[SearchResult],
+) -> AsyncGenerator[str, None]:
+    """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
+    accumulated = ""
+    try:
+        async for token in stream_generate(prompt, max_tokens=max_tokens):
+            accumulated += token
+            yield json.dumps({"type": "chunk", "delta": token}) + "\n"
+    except Exception as e:
+        yield json.dumps({"type": "error", "error": str(e)}) + "\n"
+        return
+
+    used_indices = _extract_citation_indices(accumulated)
+    citations_used = [
+        citations_retrieved[i - 1]
+        for i in sorted(used_indices)
+        if 1 <= i <= len(citations_retrieved)
+    ]
+    fallback = citations_used if citations_used else citations_retrieved
+
+    yield json.dumps({
+        "type": "done",
+        "answer": accumulated,
+        "citations_used": [c.model_dump() for c in citations_used],
+        "citations_retrieved": [c.model_dump() for c in citations_retrieved],
+        "citations": [c.model_dump() for c in fallback],
+    }) + "\n"
+
+
+async def _ndjson_done_only(answer: str) -> AsyncGenerator[str, None]:
+    """Single ``done`` line for cases where no streaming is needed."""
+    yield json.dumps({
+        "type": "done",
+        "answer": answer,
+        "citations_used": [],
+        "citations_retrieved": [],
+        "citations": [],
+    }) + "\n"
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ready", "model": "Med42-OpenVINO"}
@@ -217,21 +264,23 @@ async def generate_clinical_answer(request: AnswerRequest):
 
         if not top_chunks:
             # Avoid making the model hallucinate when nothing relevant was retrieved.
+            no_result = (
+                "I couldn't find any guideline passage in the indexed sources "
+                "that directly answers this question. Please rephrase or try a different query."
+            )
+            if request.stream:
+                return StreamingResponse(
+                    _ndjson_done_only(no_result),
+                    media_type="application/x-ndjson",
+                )
             return AnswerResponse(
-                answer=(
-                    "I couldn't find any guideline passage in the indexed sources "
-                    "that directly answers this question. Please rephrase or try a different query."
-                ),
+                answer=no_result,
                 citations_used=[],
                 citations_retrieved=[],
                 citations=[],
             )
 
         prompt = build_grounded_prompt(request.query, top_chunks)
-
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
-
-        used_indices = _extract_citation_indices(answer_text)
 
         citations_retrieved = [
             SearchResult(
@@ -250,6 +299,16 @@ async def generate_clinical_answer(request: AnswerRequest):
             )
             for res in top_chunks
         ]
+
+        if request.stream:
+            return StreamingResponse(
+                _streaming_generator(prompt, request.max_tokens, citations_retrieved),
+                media_type="application/x-ndjson",
+            )
+
+        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+
+        used_indices = _extract_citation_indices(answer_text)
 
         citations_used = [
             citations_retrieved[i - 1]
@@ -306,10 +365,6 @@ async def revise_clinical_answer(request: ReviseRequest):
             chunks=top_chunks,
         )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
-
-        used_indices = _extract_citation_indices(answer_text)
-
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
@@ -327,6 +382,16 @@ async def revise_clinical_answer(request: ReviseRequest):
             )
             for res in top_chunks
         ]
+
+        if request.stream:
+            return StreamingResponse(
+                _streaming_generator(prompt, request.max_tokens, citations_retrieved),
+                media_type="application/x-ndjson",
+            )
+
+        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+
+        used_indices = _extract_citation_indices(answer_text)
 
         citations_used = [
             citations_retrieved[i - 1]

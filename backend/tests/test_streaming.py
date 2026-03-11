@@ -170,3 +170,173 @@ class TestStreamingWithSendMessage:
         user_messages = [m for m in messages if m["sender"] == "user"]
         # Each user message should have exactly one AI reply
         assert len(ai_messages) == len(user_messages)
+
+
+# ---------------------------------------------------------------------------
+# Unit: Replay buffer for late subscribers
+# ---------------------------------------------------------------------------
+
+class TestReplayBuffer:
+
+    @pytest.fixture()
+    def bus(self):
+        return _ChatEventBus()
+
+    @pytest.mark.asyncio
+    async def test_stream_start_buffered(self, bus):
+        """stream_start should be replayed to late subscribers."""
+        ev = SSEEvent(event="stream_start", data={"chat_id": 1, "message_id": 10})
+        await bus.publish(1, ev)
+        # Late subscriber
+        q = await bus.subscribe(1)
+        replayed = q.get_nowait()
+        assert replayed.event == "stream_start"
+        assert replayed.data["message_id"] == 10
+
+    @pytest.mark.asyncio
+    async def test_latest_content_buffered(self, bus):
+        """Only the latest content event is replayed."""
+        await bus.publish(1, SSEEvent(event="stream_start", data={"chat_id": 1, "message_id": 5}))
+        await bus.publish(1, SSEEvent(event="content", data={"content": "A"}))
+        await bus.publish(1, SSEEvent(event="content", data={"content": "AB"}))
+        await bus.publish(1, SSEEvent(event="content", data={"content": "ABC"}))
+        # Late subscriber
+        q = await bus.subscribe(1)
+        start = q.get_nowait()
+        assert start.event == "stream_start"
+        content = q.get_nowait()
+        assert content.event == "content"
+        assert content.data["content"] == "ABC"  # latest only
+
+    @pytest.mark.asyncio
+    async def test_terminal_event_replayed_with_sentinel(self, bus):
+        """Completed streams should not be replayed to future subscribers."""
+        await bus.publish(1, SSEEvent(event="stream_start", data={"chat_id": 1, "message_id": 5}))
+        await bus.publish(1, SSEEvent(event="content", data={"content": "final"}))
+        await bus.publish(1, SSEEvent(event="complete", data={"content": "final", "citations": []}))
+        # Late subscriber after completion
+        q = await bus.subscribe(1)
+        assert q.empty()
+
+    @pytest.mark.asyncio
+    async def test_buffer_cleared_on_new_stream_start(self, bus):
+        """A new stream_start clears stale buffer from previous generation."""
+        await bus.publish(1, SSEEvent(event="stream_start", data={"message_id": 1}))
+        await bus.publish(1, SSEEvent(event="content", data={"content": "old"}))
+        await bus.publish(1, SSEEvent(event="complete", data={"content": "old"}))
+        # New generation
+        await bus.publish(1, SSEEvent(event="stream_start", data={"message_id": 2}))
+        q = await bus.subscribe(1)
+        start = q.get_nowait()
+        assert start.data["message_id"] == 2
+        assert q.empty()  # old content/complete should be cleared
+
+
+# ---------------------------------------------------------------------------
+# Unit: Thread-safe publish
+# ---------------------------------------------------------------------------
+
+class TestThreadSafePublish:
+
+    @pytest.fixture()
+    def bus(self):
+        return _ChatEventBus()
+
+    @pytest.mark.asyncio
+    async def test_publish_threadsafe_updates_buffer(self, bus):
+        """publish_threadsafe should update the replay buffer."""
+        # Subscribe first to set the loop reference
+        q = await bus.subscribe(1)
+        ev = SSEEvent(event="stream_start", data={"chat_id": 1, "message_id": 7})
+        bus.publish_threadsafe(1, ev)
+        # Give the event loop a chance to process call_soon_threadsafe
+        await asyncio.sleep(0.05)
+        assert not q.empty()
+        received = q.get_nowait()
+        assert received.event == "stream_start"
+        assert received.data["message_id"] == 7
+
+
+# ---------------------------------------------------------------------------
+# Integration: Multi-content event ordering (cumulative streaming)
+# ---------------------------------------------------------------------------
+
+class TestMultiContentEventOrdering:
+
+    @pytest.fixture()
+    def bus(self):
+        return _ChatEventBus()
+
+    @pytest.mark.asyncio
+    async def test_content_events_arrive_in_order(self, bus):
+        """Multiple content events should arrive in publish order."""
+        q = await bus.subscribe(1)
+        contents = ["H", "He", "Hel", "Hell", "Hello"]
+        await bus.publish(1, SSEEvent(event="stream_start", data={"message_id": 1}))
+        for c in contents:
+            await bus.publish(1, SSEEvent(event="content", data={"content": c}))
+        await bus.publish(1, SSEEvent(event="complete", data={"content": "Hello"}))
+
+        received = []
+        while not q.empty():
+            ev = q.get_nowait()
+            if ev is not None:
+                received.append(ev)
+
+        assert received[0].event == "stream_start"
+        content_events = [e for e in received if e.event == "content"]
+        assert len(content_events) == len(contents)
+        for i, ev in enumerate(content_events):
+            assert ev.data["content"] == contents[i]
+        assert received[-1].event == "complete"
+
+
+# ---------------------------------------------------------------------------
+# Integration: Specialist stream authorization
+# ---------------------------------------------------------------------------
+
+class TestSpecialistStreamAuthorization:
+
+    def test_specialist_can_access_submitted_queue_chat_stream(
+        self, client, submitted_chat, registered_specialist,
+    ):
+        token = registered_specialist["access_token"]
+        chat_id = submitted_chat["id"]
+
+        resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+
+        assert resp.status_code == 200
+
+    def test_specialist_can_access_assigned_chat_stream(
+        self, client, submitted_chat, registered_specialist, specialist_headers,
+    ):
+        chat_id = submitted_chat["id"]
+        specialist_id = registered_specialist["user"]["id"]
+        # Assign the specialist
+        client.post(
+            f"/specialist/chats/{chat_id}/assign",
+            json={"specialist_id": specialist_id},
+            headers=specialist_headers,
+        )
+        # Specialist should be able to access the stream endpoint
+        token = registered_specialist["access_token"]
+        resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+        # Should not be 404 – should be 200 (SSE stream)
+        assert resp.status_code == 200
+
+    def test_specialist_cannot_access_outside_specialty_stream(
+        self, client, gp_headers, registered_specialist,
+    ):
+        cardio = client.post(
+            "/chats/", json={"title": "Cardio Chat", "specialty": "cardiology"}, headers=gp_headers
+        ).json()
+        client.post(
+            f"/chats/{cardio['id']}/message",
+            json={"role": "user", "content": "Cardiology question"},
+            headers=gp_headers,
+        )
+
+        token = registered_specialist["access_token"]
+        resp = client.get(f"/chats/{cardio['id']}/stream?token={token}")
+
+        assert resp.status_code == 404

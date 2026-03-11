@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime
@@ -294,8 +295,8 @@ async def _async_generate_ai_response(
     updates.  The flow:
       1. Create a placeholder message with ``is_generating=True``.
       2. Publish ``stream_start``.
-      3. Call the RAG service (non-streaming).
-      4. Publish ``content`` with the full answer.
+      3. Call the RAG service with streaming enabled.
+      4. Publish cumulative ``content`` events as tokens arrive.
       5. Finalise the message (content, citations, ``is_generating=False``).
       6. Publish ``complete`` with citations.
       7. Close the chat's event bus so SSE clients disconnect cleanly.
@@ -324,28 +325,52 @@ async def _async_generate_ai_response(
                 ),
             )
 
-            rag_payload = {"query": content, "top_k": 4}
+            rag_payload = {"query": content, "top_k": 4, "stream": True}
 
             rag_action = "RAG_ERROR"
             rag_details = f"query_len={len(content)} error=unknown"
             ai_content = ""
             citations = None
             try:
-                async with httpx.AsyncClient() as client:
-                    rag_response = await client.post(
+                async with httpx.AsyncClient(timeout=120) as client:
+                    async with client.stream(
+                        "POST",
                         f"{RAG_SERVICE_URL}/answer",
                         json=rag_payload,
-                        timeout=60,
-                    )
-                rag_response.raise_for_status()
-                rag_json = rag_response.json()
-                ai_content = rag_json.get("answer", "")
-                citations = (
-                    rag_json.get("citations_used")
-                    or rag_json.get("citations")
-                    or rag_json.get("citations_retrieved")
-                    or None
-                )
+                    ) as rag_response:
+                        rag_response.raise_for_status()
+                        async for line in rag_response.aiter_lines():
+                            if not line.strip():
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+
+                            if chunk.get("type") == "chunk":
+                                ai_content += chunk.get("delta", "")
+                                await chat_event_bus.publish(
+                                    chat_id,
+                                    SSEEvent(
+                                        event="content",
+                                        data={
+                                            "chat_id": chat_id,
+                                            "message_id": placeholder.id,
+                                            "content": ai_content,
+                                        },
+                                    ),
+                                )
+                            elif chunk.get("type") == "done":
+                                ai_content = chunk.get("answer", ai_content)
+                                citations = (
+                                    chunk.get("citations_used")
+                                    or chunk.get("citations")
+                                    or chunk.get("citations_retrieved")
+                                    or None
+                                )
+                            elif chunk.get("type") == "error":
+                                raise RuntimeError(chunk.get("error", "RAG streaming error"))
+
                 rag_action = "RAG_ANSWER"
                 rag_details = (
                     f"query_len={len(content)} top_k=4 "
@@ -376,7 +401,8 @@ async def _async_generate_ai_response(
                 db, user_id=user_id, action=rag_action, details=rag_details
             )
 
-            # 4. content event
+            # Publish a final content event so late subscribers see the result
+            # even if they missed the incremental chunks.
             await chat_event_bus.publish(
                 chat_id,
                 SSEEvent(

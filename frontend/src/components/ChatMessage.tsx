@@ -210,7 +210,7 @@ export function ChatMessage({
               : 'bg-white shadow-sm'
         }`}>
           <div className="whitespace-pre-wrap text-gray-800 leading-relaxed text-sm sm:text-base">
-            {isGenerating ? (
+              {isGenerating && !message.content ? (
               <div className="flex items-center gap-1.5 py-1">
                 <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
                 <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>

@@ -180,4 +180,36 @@ describe('subscribeToChatStream', () => {
     // Should not throw when onopen fires without a callback
     expect(() => es._triggerOpen()).not.toThrow();
   });
+
+  it('delivers multiple cumulative content events in order', () => {
+    const contents: string[] = [];
+    subscribeToChatStream(1, {
+      onContent: (_id: number, content: string) => contents.push(content),
+    });
+
+    const es = MockEventSource.instances[0];
+    es._emit('stream_start', { chat_id: 1, message_id: 1 });
+    es._emit('content', { chat_id: 1, message_id: 1, content: 'H' });
+    es._emit('content', { chat_id: 1, message_id: 1, content: 'He' });
+    es._emit('content', { chat_id: 1, message_id: 1, content: 'Hel' });
+    es._emit('content', { chat_id: 1, message_id: 1, content: 'Hell' });
+    es._emit('content', { chat_id: 1, message_id: 1, content: 'Hello' });
+
+    expect(contents).toEqual(['H', 'He', 'Hel', 'Hell', 'Hello']);
+  });
+
+  it('handles rapid start → content → error sequence without throwing', () => {
+    const onError = vi.fn();
+    const onContent = vi.fn();
+    subscribeToChatStream(1, { onContent, onError });
+
+    const es = MockEventSource.instances[0];
+    es._emit('stream_start', { chat_id: 1, message_id: 1 });
+    es._emit('content', { chat_id: 1, message_id: 1, content: 'partial' });
+    es._emit('error', { chat_id: 1, message_id: 1, error: 'LLM timeout' });
+
+    expect(onContent).toHaveBeenCalledWith(1, 'partial');
+    expect(onError).toHaveBeenCalledWith(1, 'LLM timeout');
+    expect(es.closed).toBe(true);
+  });
 });
