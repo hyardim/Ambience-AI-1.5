@@ -11,6 +11,7 @@ import {
   sendMessage as apiSendMessage,
   updateChat as apiUpdateChat,
   subscribeToChatStream,
+  uploadChatFile,
 } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
 import type { Message, Citation } from '../../types';
@@ -304,7 +305,7 @@ export function GPQueryDetailPage() {
     streamConnected,
   ]);
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, files?: File[]) => {
     if (!chat || sending) return;
     setSending(true);
 
@@ -319,13 +320,30 @@ export function GPQueryDetailPage() {
     };
     setMessages(prev => [...prev, userMsg]);
 
+    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
       // Open SSE stream *before* sending so we catch the AI generation events
       await connectStream(chat.id);
+
+      // Upload any attached files before sending the message
+      if (files && files.length > 0) {
+        const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+        if (oversized.length > 0) {
+          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+          setSending(false);
+          return;
+        }
+        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+      }
+
+        // Open SSE stream before sending so we catch the AI generation events.
+        await connectStream(chat.id);
+
       await apiSendMessage(chat.id, content);
       // Also do one fetch to reconcile the user message id
       const refreshed = await getChat(chat.id);
       setChat(refreshed);
+
       // Merge: keep streaming placeholder if present, else use fetched messages
       setMessages((prev) => {
         const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
@@ -340,8 +358,8 @@ export function GPQueryDetailPage() {
         }
         return fetched;
       });
-    } catch {
-      setError('Failed to send message');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }

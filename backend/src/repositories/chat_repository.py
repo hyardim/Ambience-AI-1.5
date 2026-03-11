@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from src.db.models import Chat, ChatStatus
 
@@ -24,7 +24,7 @@ async def async_get(
     chat_id: int,
     user_id: Optional[int] = None,
 ) -> Optional[Chat]:
-    stmt = select(Chat).where(Chat.id == chat_id)
+    stmt = select(Chat).options(selectinload(Chat.files)).where(Chat.id == chat_id)
     if user_id is not None:
         stmt = stmt.where(Chat.user_id == user_id)
     result = await db.execute(stmt)
@@ -67,11 +67,13 @@ def create(
     title: str = "New Chat",
     specialty: Optional[str] = None,
     severity: Optional[str] = None,
+    patient_context: Optional[dict] = None,
 ) -> Chat:
     chat = Chat(
         title=title,
         specialty=specialty,
         severity=severity,
+        patient_context=patient_context,
         user_id=user_id,
         status=ChatStatus.OPEN,
     )

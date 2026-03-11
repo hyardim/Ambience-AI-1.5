@@ -1,17 +1,32 @@
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .config import OLLAMA_MAX_TOKENS, OLLAMA_MODEL, path_config
+from .config import (
+    DATABASE_URL,
+    CLOUD_LLM_MODEL,
+    FORCE_CLOUD_LLM,
+    LLM_MAX_TOKENS,
+    LLM_ROUTE_THRESHOLD,
+    LOCAL_LLM_MODEL,
+    path_config,
+)
 from .generation.client import generate_answer, warmup_model
 from .generation.streaming import stream_generate
-from .generation.prompts import build_grounded_prompt, build_revision_prompt
+from .generation.prompts import (
+    ACTIVE_PROMPT,
+    build_grounded_prompt,
+    build_revision_prompt,
+)
+from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
+from .ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from .retrieval.vector_store import (
     get_source_path_for_doc,
     init_db,
@@ -39,18 +54,25 @@ def ensure_schema():
 
 @app.on_event("startup")
 async def warmup_ollama():
-    """Pre-load the Ollama model into memory on service startup.
+    """Pre-load the selected generation provider on service startup.
 
-    Prevents the first real request from hitting a cold model and avoids
-    500 errors caused by Ollama silently failing to reload an idle model.
+    Prevents the first request from hitting a cold provider when applicable.
     """
-    print(f"🔥 Warming up Ollama model '{OLLAMA_MODEL}'...")
+    if FORCE_CLOUD_LLM:
+        print(
+            f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
+        await warmup_model(provider="cloud")
+        return
+
+    print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
     await warmup_model()
 
 
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
+    specialty: str | None = None
+    severity: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -69,7 +91,9 @@ class SearchResult(BaseModel):
 
 
 class AnswerRequest(QueryRequest):
-    max_tokens: int = OLLAMA_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS
+    patient_context: dict[str, Any] | None = None
+    file_context: str | None = None
     stream: bool = False
 
 
@@ -79,7 +103,11 @@ class ReviseRequest(BaseModel):
     previous_answer: str
     feedback: str
     top_k: int = 5
-    max_tokens: int = OLLAMA_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS
+    patient_context: dict[str, Any] | None = None
+    file_context: str | None = None
+    specialty: str | None = None
+    severity: str | None = None
     stream: bool = False
 
 
@@ -147,9 +175,44 @@ def _is_boilerplate(chunk: dict[str, Any]) -> bool:
     return any(pat in text or pat in section for pat in BOILERPLATE_PATTERNS)
 
 
+def _parse_citation_group(raw: str) -> list[int]:
+    """Parse a citation group string into a list of ints, handling ranges.
+
+    e.g. '1, 2, 5-7' → [1, 2, 5, 6, 7]
+    """
+    nums: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if "-" in part:
+            try:
+                a, b = part.split("-", 1)
+                nums.extend(range(int(a), int(b) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                nums.append(int(part))
+            except ValueError:
+                pass
+    return nums
+
+
+# Matches bracket citations: [1], [1, 2], [1-3], [1, 2, 195-202] etc.
+_CITATION_RE = re.compile(r"\[[\d,\s\-]+\]")
+
+
 def _extract_citation_indices(text: str) -> set[int]:
-    """Return the set of 1-based indices present as [1], [2], etc."""
-    return {int(match) for match in re.findall(r"\[(\d+)\]", text)}
+    """Return all 1-based citation indices found in the text."""
+    return {n for m in _CITATION_RE.findall(text) for n in _parse_citation_group(m[1:-1])}
+
+
+def _rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
+    """Renumber valid citations to sequential display numbers; strip out-of-range ones."""
+    def _rewrite(match: re.Match) -> str:
+        nums = _parse_citation_group(match.group(0)[1:-1])
+        kept = sorted({renumber_map[n] for n in nums if n in renumber_map})
+        return f"[{', '.join(str(k) for k in kept)}]" if kept else ""
+    return _CITATION_RE.sub(_rewrite, text)
 
 
 class AnswerResponse(BaseModel):
@@ -163,28 +226,41 @@ async def _streaming_generator(
     prompt: str,
     max_tokens: int,
     citations_retrieved: list[SearchResult],
+    provider: str = "local",
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
     accumulated = ""
     try:
-        async for token in stream_generate(prompt, max_tokens=max_tokens):
-            accumulated += token
-            yield json.dumps({"type": "chunk", "delta": token}) + "\n"
+        if provider == "local":
+            async for token in stream_generate(prompt, max_tokens=max_tokens):
+                accumulated += token
+                yield json.dumps({"type": "chunk", "delta": token}) + "\n"
+        else:
+            accumulated = await generate_answer(
+                prompt,
+                max_tokens=max_tokens,
+                provider=provider,
+            )
     except Exception as e:
         yield json.dumps({"type": "error", "error": str(e)}) + "\n"
         return
 
     used_indices = _extract_citation_indices(accumulated)
-    citations_used = [
-        citations_retrieved[i - 1]
-        for i in sorted(used_indices)
-        if 1 <= i <= len(citations_retrieved)
-    ]
+    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+    citations_used = [citations_retrieved[i - 1] for i in sorted_used]
+    renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+    renumbered_answer = _rewrite_citations(accumulated, renumber_map)
+    renumbered_answer = re.sub(
+        r"\n+\s*References?:.*",
+        "",
+        renumbered_answer,
+        flags=re.DOTALL | re.IGNORECASE,
+    ).rstrip()
     fallback = citations_used if citations_used else citations_retrieved
 
     yield json.dumps({
         "type": "done",
-        "answer": accumulated,
+        "answer": renumbered_answer,
         "citations_used": [c.model_dump() for c in citations_used],
         "citations_retrieved": [c.model_dump() for c in citations_retrieved],
         "citations": [c.model_dump() for c in fallback],
@@ -202,9 +278,69 @@ async def _ndjson_done_only(answer: str) -> AsyncGenerator[str, None]:
     }) + "\n"
 
 
+class IngestResponse(BaseModel):
+    source_name: str
+    filename: str
+    files_scanned: int
+    files_succeeded: int
+    files_failed: int
+    total_chunks: int
+    embeddings_succeeded: int
+    embeddings_failed: int
+    db: dict
+
+
+@app.post("/ingest", response_model=IngestResponse)
+async def ingest_guideline(
+    file: UploadFile = File(...),
+    source_name: str = Form(...),
+):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=422, detail="Only PDF files are supported.")
+
+    sources_path = path_config.root / "configs" / "sources.yaml"
+    sources = load_sources(sources_path)
+    if source_name not in sources:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown source '{source_name}'. Valid: {sorted(sources.keys())}",
+        )
+
+    specialty = sources[source_name].get("specialty", "general")
+    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / source_name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / file.filename
+
+    try:
+        with dest_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}") from e
+    finally:
+        file.file.close()
+
+    try:
+        report = run_ingestion(input_path=dest_path, source_name=source_name, db_url=DATABASE_URL)
+    except PipelineError as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}") from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion error: {e}") from e
+
+    return IngestResponse(source_name=source_name, filename=file.filename, **report)
+
+
 @app.get("/health")
 async def health_check():
-    return {"status": "ready", "model": "Med42-OpenVINO"}
+    return {
+        "status": "ready",
+        "local_model": LOCAL_LLM_MODEL,
+        "cloud_model": CLOUD_LLM_MODEL,
+        "route_threshold": LLM_ROUTE_THRESHOLD,
+        "force_cloud_llm": FORCE_CLOUD_LLM,
+        "active_prompt": ACTIVE_PROMPT,
+    }
 
 
 @app.post("/query", response_model=list[SearchResult])
@@ -214,12 +350,14 @@ async def clinical_query(request: QueryRequest):
         embeddings_result = embed_text(model, [request.query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
+        raw_results = search_similar_chunks(
+            query_embedding, limit=request.top_k)
 
         return [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -262,12 +400,13 @@ async def generate_clinical_answer(request: AnswerRequest):
         ]
         top_chunks = filtered[:MAX_CITATIONS]
 
-        if not top_chunks:
-            # Avoid making the model hallucinate when nothing relevant was retrieved.
-            no_result = (
-                "I couldn't find any guideline passage in the indexed sources "
-                "that directly answers this question. Please rephrase or try a different query."
-            )
+        no_result = (
+            "I couldn't find any guideline passage in the indexed sources "
+            "that directly answers this question. Please rephrase or try a different query."
+        )
+        if not top_chunks and not request.file_context:
+            # Avoid making the model hallucinate when nothing relevant was retrieved
+            # and no uploaded document is present.
             if request.stream:
                 return StreamingResponse(
                     _ndjson_done_only(no_result),
@@ -280,12 +419,30 @@ async def generate_clinical_answer(request: AnswerRequest):
                 citations=[],
             )
 
-        prompt = build_grounded_prompt(request.query, top_chunks)
+        prompt = build_grounded_prompt(request.query, top_chunks, patient_context=request.patient_context, file_context=request.file_context)
 
+        route = select_generation_provider(
+            query=request.query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+        )
+        print(
+            "🧭 /answer routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
+
+        used_indices = _extract_citation_indices(answer_text)
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -302,27 +459,33 @@ async def generate_clinical_answer(request: AnswerRequest):
 
         if request.stream:
             return StreamingResponse(
-                _streaming_generator(prompt, request.max_tokens, citations_retrieved),
+                _streaming_generator(
+                    prompt,
+                    request.max_tokens,
+                    citations_retrieved,
+                    provider=route.provider,
+                ),
                 media_type="application/x-ndjson",
             )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+        citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        used_indices = _extract_citation_indices(answer_text)
-
-        citations_used = [
-            citations_retrieved[i - 1]
-            for i in sorted(used_indices)
-            if 1 <= i <= len(citations_retrieved)
-        ]
-
-        fallback_citations = citations_used if citations_used else citations_retrieved
+        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+        renumbered_answer = _rewrite_citations(answer_text, renumber_map)
+        # Strip any fabricated plain-text "References:" section the model appends.
+        renumbered_answer = re.sub(
+            r"\n+\s*References?:.*",
+            "",
+            renumbered_answer,
+            flags=re.DOTALL | re.IGNORECASE,
+        ).rstrip()
 
         return AnswerResponse(
-            answer=answer_text,
+            answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=fallback_citations,
+            citations=citations_used,
         )
     except Exception as e:
         print(f"❌ /answer Error: {str(e)}")
@@ -343,7 +506,8 @@ async def revise_clinical_answer(request: ReviseRequest):
     """
     try:
         # Retrieve using the original query so chunk relevance stays high.
-        embeddings_result = embed_text(model, [request.original_query], batch_size=1)
+        embeddings_result = embed_text(
+            model, [request.original_query], batch_size=1)
         query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
@@ -363,12 +527,34 @@ async def revise_clinical_answer(request: ReviseRequest):
             previous_answer=request.previous_answer,
             specialist_feedback=request.feedback,
             chunks=top_chunks,
+            patient_context=request.patient_context,
+            file_context=request.file_context,
         )
 
+        route = select_generation_provider(
+            query=request.original_query,
+            retrieved_chunks=filtered or retrieved,
+            severity=request.severity,
+            is_revision=True,
+        )
+        print(
+            "🧭 /revise routing "
+            f"provider={route.provider} score={route.score} "
+            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        )
+
+        answer_text = await generate_answer(
+            prompt,
+            max_tokens=request.max_tokens,
+            provider=route.provider,
+        )
+
+        used_indices = _extract_citation_indices(answer_text)
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
+                source=res.get("metadata", {}).get(
+                    "filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -385,27 +571,26 @@ async def revise_clinical_answer(request: ReviseRequest):
 
         if request.stream:
             return StreamingResponse(
-                _streaming_generator(prompt, request.max_tokens, citations_retrieved),
+                _streaming_generator(
+                    prompt,
+                    request.max_tokens,
+                    citations_retrieved,
+                    provider=route.provider,
+                ),
                 media_type="application/x-ndjson",
             )
 
-        answer_text = await generate_answer(prompt, max_tokens=request.max_tokens)
+        sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+        citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        used_indices = _extract_citation_indices(answer_text)
-
-        citations_used = [
-            citations_retrieved[i - 1]
-            for i in sorted(used_indices)
-            if 1 <= i <= len(citations_retrieved)
-        ]
-
-        fallback_citations = citations_used if citations_used else citations_retrieved
+        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+        renumbered_answer = _rewrite_citations(answer_text, renumber_map)
 
         return AnswerResponse(
-            answer=answer_text,
+            answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=fallback_citations,
+            citations=citations_used,
         )
     except Exception as e:
         print(f"\u274c /revise Error: {str(e)}")

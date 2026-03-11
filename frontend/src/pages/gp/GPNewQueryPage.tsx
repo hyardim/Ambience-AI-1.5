@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Paperclip, X } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { createChat } from '../../services/api';
+import { createChat, sendMessage, uploadChatFile } from '../../services/api';
 import type { Severity } from '../../types';
 
 export function GPNewQueryPage() {
@@ -11,11 +11,14 @@ export function GPNewQueryPage() {
   const { username, logout } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [formData, setFormData] = useState({
     title: '',
     patientAge: '',
+    sex: '',
     specialty: '',
     severity: 'medium' as Severity,
+    patientNotes: '',
     message: ''
   });
 
@@ -35,25 +38,43 @@ export function GPNewQueryPage() {
       return;
     }
 
+    if (!formData.patientAge) {
+      setError('Please enter the patient\'s age.');
+      return;
+    }
+
+    if (!formData.sex) {
+      setError('Please select the patient\'s sex.');
+      return;
+    }
+
+    if (!formData.severity) {
+      setError('Please select urgency.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // 1. Create the chat with specialty + severity as proper fields
+      // 1. Create the chat with structured patient demographics
       const chat = await createChat({
         title: formData.title || 'New Consultation',
         specialty: formData.specialty,
         severity: formData.severity || undefined,
+        patient_age: formData.patientAge ? parseInt(formData.patientAge, 10) : undefined,
+        patient_gender: formData.sex || undefined,
+        patient_notes: formData.patientNotes || undefined,
       });
 
-      // 2. Build the first message with clinical context
-      let messageContent = formData.message;
-      if (formData.patientAge) {
-        messageContent = `[Patient age: ${formData.patientAge}]\n\n${formData.message}`;
+      // 2. Upload any attached files now that we have a chat ID
+      if (attachedFiles.length > 0) {
+        await Promise.all(attachedFiles.map(f => uploadChatFile(chat.id, f)));
       }
 
       // 3. Navigate to the detail page immediately, passing the draft message
-      //    via router state so the detail page can open SSE *before* sending.
-      navigate(`/gp/query/${chat.id}`, { state: { draftMessage: messageContent } });
+      // 3. Navigate to the detail page immediately so it can open SSE before
+      //    sending the first GP message. Attachments are already persisted.
+      navigate(`/gp/query/${chat.id}`, { state: { draftMessage: formData.message } });
     } catch {
       setError('Failed to create consultation. Is the backend running?');
     } finally {
@@ -65,7 +86,7 @@ export function GPNewQueryPage() {
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
       <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
         <button
           onClick={() => navigate('/gp/queries')}
@@ -92,7 +113,7 @@ export function GPNewQueryPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                  Consultation Title
+                  Consultation Title <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -106,10 +127,10 @@ export function GPNewQueryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label htmlFor="patientAge" className="block text-sm font-medium text-gray-700 mb-2">
-                    Patient Age <span className="text-gray-400 font-normal">(optional)</span>
+                    Patient Age <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -121,7 +142,25 @@ export function GPNewQueryPage() {
                     max="150"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                     placeholder="e.g. 42"
+                    required
                   />
+                </div>
+                <div>
+                  <label htmlFor="sex" className="block text-sm font-medium text-gray-700 mb-2">
+                    Sex <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="sex"
+                    name="sex"
+                    value={formData.sex}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select sex...</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="specialty" className="block text-sm font-medium text-gray-700 mb-2">
@@ -142,7 +181,7 @@ export function GPNewQueryPage() {
                 </div>
                 <div>
                   <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-2">
-                    Severity <span className="text-gray-400 font-normal">(optional)</span>
+                    Urgency <span className="text-red-500">*</span>
                   </label>
                   <select
                     id="severity"
@@ -150,6 +189,7 @@ export function GPNewQueryPage() {
                     value={formData.severity}
                     onChange={handleChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    required
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -160,8 +200,23 @@ export function GPNewQueryPage() {
               </div>
 
               <div>
+                <label htmlFor="patientNotes" className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional clinical context
+                </label>
+                <textarea
+                  id="patientNotes"
+                  name="patientNotes"
+                  value={formData.patientNotes}
+                  onChange={handleChange}
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none"
+                  placeholder="Relevant comorbidities, current medications, allergies, recent investigations..."
+                />
+              </div>
+
+              <div>
                 <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-2">
-                  Clinical Question
+                  Clinical Question <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="message"
@@ -173,6 +228,43 @@ export function GPNewQueryPage() {
                   placeholder="Describe your clinical question, including relevant patient history, symptoms, current medications, and what advice you're seeking..."
                   required
                 />
+              </div>
+
+              {/* File attachments */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Attach files <span className="text-gray-400 font-normal">(optional — PDFs or text files)</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                  <Paperclip className="w-4 h-4" />
+                  Choose files
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) setAttachedFiles(Array.from(e.target.files));
+                    }}
+                  />
+                </label>
+                {attachedFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {attachedFiles.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                        <Paperclip className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="ml-auto text-gray-400 hover:text-red-500"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 

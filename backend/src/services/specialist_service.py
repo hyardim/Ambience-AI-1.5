@@ -19,9 +19,12 @@ from src.repositories import (
 )
 from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, ReviewRequest
 from src.services._mappers import chat_to_response, msg_to_response
+from src.services.chat_service import _extract_text
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
+RAG_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 def get_queue(db: Session, specialist: User) -> list[ChatResponse]:
@@ -56,7 +59,8 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
     assigned_to_me = chat.specialist_id == specialist.id
 
     if not (in_queue or assigned_to_me):
-        raise HTTPException(status_code=403, detail="You do not have access to this chat")
+        raise HTTPException(
+            status_code=403, detail="You do not have access to this chat")
 
     messages = message_repository.list_for_chat(db, chat.id)
     resp = ChatWithMessages(**chat_to_response(chat).model_dump())
@@ -75,7 +79,8 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
             detail=f"Chat is not in SUBMITTED state (current: {chat.status.value})",
         )
     if body.specialist_id != specialist.id:
-        raise HTTPException(status_code=403, detail="You can only assign yourself to a chat")
+        raise HTTPException(
+            status_code=403, detail="You can only assign yourself to a chat")
 
     # Verify specialty match
     if specialist.specialty and chat.specialty and specialist.specialty != chat.specialty:
@@ -116,7 +121,8 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
         Chat.id == chat_id, Chat.specialist_id == specialist.id
     ).first()
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found or not assigned to you")
+        raise HTTPException(
+            status_code=404, detail="Chat not found or not assigned to you")
 
     if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
         raise HTTPException(
@@ -212,7 +218,8 @@ def review_message(
         Chat.id == chat_id, Chat.specialist_id == specialist.id
     ).first()
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found or not assigned to you")
+        raise HTTPException(
+            status_code=404, detail="Chat not found or not assigned to you")
 
     if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
         raise HTTPException(
@@ -225,7 +232,8 @@ def review_message(
         Message.id == message_id, Message.chat_id == chat_id, Message.sender == "ai",
     ).first()
     if not target:
-        raise HTTPException(status_code=404, detail="AI message not found in this chat")
+        raise HTTPException(
+            status_code=404, detail="AI message not found in this chat")
 
     # Validate manual_response has replacement content before making any changes
     if body.action == "manual_response":
@@ -283,7 +291,8 @@ def review_message(
         )
         # Ensure status is REVIEWING
         if chat.status != ChatStatus.REVIEWING:
-            chat = chat_repository.update(db, chat, status=ChatStatus.REVIEWING)
+            chat = chat_repository.update(
+                db, chat, status=ChatStatus.REVIEWING)
     else:
         # approve or reject for this message
         audit_action = "REVIEW_APPROVE" if body.action == "approve" else "REVIEW_REJECT"
@@ -295,7 +304,8 @@ def review_message(
 
         # Ensure status is REVIEWING
         if chat.status != ChatStatus.REVIEWING:
-            chat = chat_repository.update(db, chat, status=ChatStatus.REVIEWING)
+            chat = chat_repository.update(
+                db, chat, status=ChatStatus.REVIEWING)
 
     return chat_to_response(chat)
 
@@ -352,17 +362,33 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
         chat_id=chat.id,
         content="Revising response based on specialist feedback…",
         sender="ai",
-        citations=[],        is_generating=True,    )
+        citations=[],        is_generating=True,)
 
     is_sqlite = db.bind and db.bind.dialect.name == "sqlite"
 
     if is_sqlite:
         # Run synchronously (tests use in-memory SQLite with a single connection).
-        _do_revise(db, placeholder, original_query, previous_answer, feedback or "")
+        _do_revise(
+            db,
+            placeholder,
+            original_query,
+            previous_answer,
+            feedback or "",
+            chat.specialty,
+            chat.severity,
+        )
     else:
         thread = threading.Thread(
             target=_regenerate_ai_response_task,
-            args=(placeholder.id, chat.id, original_query, previous_answer, feedback or ""),
+            args=(
+                placeholder.id,
+                chat.id,
+                original_query,
+                previous_answer,
+                feedback or "",
+                chat.specialty,
+                chat.severity,
+            ),
             daemon=True,
         )
         thread.start()
@@ -376,6 +402,8 @@ def _do_revise(
     original_query: str,
     previous_answer: str,
     feedback: str,
+    specialty: str | None,
+    severity: str | None,
 ) -> None:
     """Call the RAG /revise endpoint and update the placeholder message in-place."""
     rag_payload = {
@@ -383,11 +411,15 @@ def _do_revise(
         "previous_answer": previous_answer,
         "feedback": feedback,
         "top_k": 4,
+        "specialty": specialty,
+        "severity": severity,
     }
 
     try:
         rag_response = httpx.post(
-            f"{RAG_SERVICE_URL}/revise", json=rag_payload, timeout=60
+            f"{RAG_SERVICE_URL}/revise",
+            json=rag_payload,
+            timeout=RAG_REQUEST_TIMEOUT_SECONDS,
         )
         rag_response.raise_for_status()
         rag_json = rag_response.json()
@@ -425,6 +457,8 @@ def _regenerate_ai_response_task(
     original_query: str,
     previous_answer: str,
     feedback: str,
+    specialty: str | None,
+    severity: str | None,
 ) -> None:
     """Background task: stream from RAG /revise and publish SSE events."""
     db = SessionLocal()
@@ -432,6 +466,31 @@ def _regenerate_ai_response_task(
         placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
         if not placeholder:
             return
+
+        chat = db.query(Chat).filter(Chat.id == chat_id).first()
+        patient_context = None
+        file_context = None
+        if chat:
+            ctx = chat.patient_context or {}
+            patient_context = {
+                **ctx,
+                **({"specialty": chat.specialty} if chat.specialty else {}),
+                **({"severity": chat.severity} if chat.severity else {}),
+            } or None
+
+            file_texts = []
+            for attachment in (chat.files or []):
+                text = _extract_text(attachment.file_path, attachment.file_type)
+                if text.strip():
+                    file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
+
+            if file_texts:
+                file_context = "\n\n---\n\n".join(file_texts)
+                if len(file_context) > 8000:
+                    file_context = (
+                        file_context[:8000]
+                        + "\n\n[Document truncated to fit context window]"
+                    )
 
         # Publish stream_start
         chat_event_bus.publish_threadsafe(
@@ -448,7 +507,13 @@ def _regenerate_ai_response_task(
             "feedback": feedback,
             "top_k": 4,
             "stream": True,
+            "specialty": specialty,
+            "severity": severity,
         }
+        if patient_context:
+            rag_payload["patient_context"] = patient_context
+        if file_context:
+            rag_payload["file_context"] = file_context
 
         accumulated = ""
         citations: list = []
@@ -541,7 +606,6 @@ def _regenerate_ai_response_task(
         )
 
         try:
-            chat = db.query(Chat).filter(Chat.id == chat_id).first()
             audit_repository.log(
                 db,
                 user_id=chat.specialist_id if chat else None,
@@ -562,7 +626,8 @@ def send_message(db: Session, specialist: User, chat_id: int, content: str) -> d
         Chat.id == chat_id, Chat.specialist_id == specialist.id
     ).first()
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found or not assigned to you")
+        raise HTTPException(
+            status_code=404, detail="Chat not found or not assigned to you")
 
     if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
         raise HTTPException(

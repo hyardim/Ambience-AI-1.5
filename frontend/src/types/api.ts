@@ -28,6 +28,9 @@ export interface BackendChat {
   status: string;            // ChatStatus enum on backend
   specialty: string | null;
   severity: string | null;
+  patient_age?: number | null;
+  patient_gender?: string | null;
+  patient_notes?: string | null;
   specialist_id: number | null;
   assigned_at: string | null;
   reviewed_at: string | null;
@@ -40,8 +43,17 @@ export interface BackendChat {
 // Chat with messages (detail endpoints)
 // ---------------------------------------------------------------------------
 
+export interface FileAttachment {
+  id: number;
+  filename: string;
+  file_type: string | null;
+  file_size: number | null;
+  created_at: string;
+}
+
 export interface BackendChatWithMessages extends BackendChat {
   messages: BackendMessage[];
+  files?: FileAttachment[];
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +98,9 @@ export interface ChatCreateRequest {
   title?: string;
   specialty?: string;
   severity?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  patient_notes?: string;
 }
 
 export interface MessageCreateRequest {

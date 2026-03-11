@@ -17,6 +17,7 @@ import {
   reviewMessage,
   sendSpecialistMessage,
   subscribeToChatStream,
+  uploadChatFile,
 } from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
 import type { Message, Citation } from '../../types';
@@ -356,7 +357,7 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, files?: File[]) => {
     if (!chat) return;
     // Optimistically add the specialist message
     const tempId = `temp-${Date.now()}`;
@@ -370,7 +371,17 @@ export function SpecialistQueryDetailPage() {
     };
     setMessages(prev => [...prev, optimistic]);
 
+    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
+      if (files && files.length > 0) {
+        const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+        if (oversized.length > 0) {
+          setMessages(prev => prev.filter(m => m.id !== tempId));
+          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+          return;
+        }
+        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+      }
       await sendSpecialistMessage(chat.id, content);
     } catch (err) {
       // Remove the optimistic message on failure

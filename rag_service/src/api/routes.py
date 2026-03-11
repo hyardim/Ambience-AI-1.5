@@ -1,7 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+import shutil
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.api.dependencies import get_db_url, get_settings
-from src.api.schemas import AskRequest, AskResponse, CitationResponse, SourceResponse
+from src.api.schemas import AskRequest, AskResponse, CitationResponse, IngestResponse, SourceResponse
+from src.config import path_config
+from src.ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from src.rag.pipeline import ask
 from src.rag.generate import RAGResponse, GenerationError
 from src.retrieval.query import RetrievalError
@@ -58,3 +63,45 @@ async def ask_route(
         raise HTTPException(status_code=502, detail=f"Generation failed: {e}") from e
     except Exception as e:  # pragma: no cover - defensive
         raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+@router.post("/ingest", response_model=IngestResponse)
+async def ingest_guideline(
+    file: UploadFile = File(...),
+    source_name: str = Form(...),
+    db_url: str = Depends(get_db_url),
+):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=422, detail="Only PDF files are supported.")
+
+    sources_path = path_config.root / "configs" / "sources.yaml"
+    sources = load_sources(sources_path)
+    if source_name not in sources:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown source '{source_name}'. Valid: {sorted(sources.keys())}",
+        )
+
+    specialty = sources[source_name].get("specialty", "general")
+    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / source_name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / file.filename
+
+    try:
+        with dest_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}") from e
+    finally:
+        file.file.close()
+
+    try:
+        report = run_ingestion(input_path=dest_path, source_name=source_name, db_url=db_url)
+    except PipelineError as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}") from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:  # pragma: no cover - defensive
+        raise HTTPException(status_code=500, detail=f"Ingestion error: {e}") from e
+
+    return IngestResponse(source_name=source_name, filename=file.filename, **report)

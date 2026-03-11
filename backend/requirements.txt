@@ -21,3 +21,4 @@ bcrypt==4.0.1        # <--- CRITICAL FIX: Version 4.1+ crashes passlib
 pyjwt                
 python-multipart
 email-validator
+pypdf

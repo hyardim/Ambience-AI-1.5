@@ -145,7 +145,7 @@ def run_pipeline(
             "db_url is required when dry_run=False. Pass --db-url or set DATABASE_URL."
         )
 
-    path_str = str(pdf_path)
+    path_str = Path(pdf_path).as_posix()
     source_info = {**source_info, "source_path": path_str}
 
     # Derive a per-PDF temp directory name so concurrent runs don't collide

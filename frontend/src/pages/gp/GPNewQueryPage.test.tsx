@@ -72,6 +72,8 @@ describe('GPNewQueryPage', () => {
     });
 
     await user.type(screen.getByLabelText(/consultation title/i), 'Headache inquiry');
+    await user.type(screen.getByLabelText(/patient age/i), '42');
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
     await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
     await user.type(screen.getByLabelText(/clinical question/i), 'Patient has persistent headaches');
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
@@ -87,7 +89,7 @@ describe('GPNewQueryPage', () => {
     );
   });
 
-  it('includes patient age in draftMessage when provided', async () => {
+  it('keeps the draft message focused on the clinical question when patient age is provided', async () => {
     renderNewQuery();
     const user = userEvent.setup();
 
@@ -98,6 +100,7 @@ describe('GPNewQueryPage', () => {
     await user.type(screen.getByLabelText(/consultation title/i), 'Test');
     await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
     await user.type(screen.getByLabelText(/patient age/i), '42');
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
     await user.type(screen.getByLabelText(/clinical question/i), 'Headache');
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
 
@@ -106,7 +109,7 @@ describe('GPNewQueryPage', () => {
     });
 
     expect(capturedState.current).toEqual(
-      expect.objectContaining({ draftMessage: '[Patient age: 42]\n\nHeadache' }),
+      expect.objectContaining({ draftMessage: 'Headache' }),
     );
   });
 
@@ -125,6 +128,8 @@ describe('GPNewQueryPage', () => {
     });
 
     await user.type(screen.getByLabelText(/consultation title/i), 'Test');
+    await user.type(screen.getByLabelText(/patient age/i), '30');
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'male');
     await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
     await user.type(screen.getByLabelText(/clinical question/i), 'Question');
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
@@ -160,13 +165,14 @@ describe('GPNewQueryPage', () => {
     expect(screen.getByText('Queries List')).toBeInTheDocument();
   });
 
-  it('renders severity and patient age fields', async () => {
+  it('renders urgency, patient age, and sex fields', async () => {
     renderNewQuery();
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/severity/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/urgency/i)).toBeInTheDocument();
     });
 
     expect(screen.getByLabelText(/patient age/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/sex/i)).toBeInTheDocument();
   });
 });

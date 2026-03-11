@@ -12,9 +12,37 @@ BSR:
   doc_type: guideline
   source_url: https://www.rheumatology.org.uk
 
+BNF_RHEUMATOLOGY:
+  source_name: BNF_RHEUMATOLOGY
+  author_org: British National Formulary
+  specialty: rheumatology
+  doc_type: formulary
+  source_url: https://bnf.nice.org.uk
+
+Others:
+  source_name: Others
+  author_org: Other Clinical Sources
+  specialty: rheumatology
+  doc_type: guideline
+  source_url: ""
+
 NICE_NEURO:
   source_name: NICE_NEURO
   author_org: National Institute for Health and Care Excellence
   specialty: neurology
   doc_type: guideline
   source_url: https://www.nice.org.uk
+
+OTHER_RHEUMATOLOGY:
+  source_name: OTHER_RHEUMATOLOGY
+  author_org: Various
+  specialty: rheumatology
+  doc_type: document
+  source_url: ""
+
+OTHER:
+  source_name: OTHER
+  author_org: Various
+  specialty: general
+  doc_type: document
+  source_url: ""

@@ -300,16 +300,23 @@ class TestSpecialistStreamAuthorization:
     def test_specialist_can_access_submitted_queue_chat_stream(
         self, client, submitted_chat, registered_specialist,
     ):
+        from unittest.mock import patch
+
         token = registered_specialist["access_token"]
         chat_id = submitted_chat["id"]
 
-        resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+        async def _one_event(_: int):
+            yield "event: stream_start\ndata: {}\n\n"
 
-        assert resp.status_code == 200
+        with patch("src.api.chats.sse_event_generator", side_effect=_one_event):
+            resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+            assert resp.status_code == 200
 
     def test_specialist_can_access_assigned_chat_stream(
         self, client, submitted_chat, registered_specialist, specialist_headers,
     ):
+        from unittest.mock import patch
+
         chat_id = submitted_chat["id"]
         specialist_id = registered_specialist["user"]["id"]
         # Assign the specialist
@@ -320,9 +327,13 @@ class TestSpecialistStreamAuthorization:
         )
         # Specialist should be able to access the stream endpoint
         token = registered_specialist["access_token"]
-        resp = client.get(f"/chats/{chat_id}/stream?token={token}")
-        # Should not be 404 – should be 200 (SSE stream)
-        assert resp.status_code == 200
+        async def _one_event(_: int):
+            yield "event: stream_start\ndata: {}\n\n"
+
+        with patch("src.api.chats.sse_event_generator", side_effect=_one_event):
+            resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+            # Should not be 404 – should be 200 (SSE stream)
+            assert resp.status_code == 200
 
     def test_specialist_cannot_access_outside_specialty_stream(
         self, client, gp_headers, registered_specialist,

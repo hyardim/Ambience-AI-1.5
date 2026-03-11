@@ -25,7 +25,6 @@ def ensure_auth_columns() -> None:
         )
 
 
-
 def ensure_notification_fk() -> None:
     """Re-create notifications.chat_id FK with ON DELETE SET NULL.
 
@@ -51,12 +50,68 @@ def ensure_notification_fk() -> None:
 
 
 def ensure_message_columns() -> None:
-    """Add is_generating column to messages table if missing."""
+    """Add newer message columns for older databases."""
     with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS role VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations JSONB")
+        )
         connection.execute(
             text(
                 "ALTER TABLE messages "
                 "ADD COLUMN IF NOT EXISTS is_generating BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS review_status VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS review_feedback TEXT")
+        )
+        connection.execute(
+            text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP")
+        )
+
+
+def ensure_chat_columns() -> None:
+    """Add newer chat metadata columns for older databases."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE chats "
+                "ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'open'"
+            )
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS specialty VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS severity VARCHAR")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS patient_context JSONB")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS specialist_id INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP")
+        )
+        connection.execute(
+            text("ALTER TABLE chats ADD COLUMN IF NOT EXISTS review_feedback TEXT")
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE chats "
+                "ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()"
             )
         )
 
@@ -98,7 +153,8 @@ def ensure_default_users() -> None:
             db.add(
                 User(
                     email=item["email"],
-                    hashed_password=security.get_password_hash(item["password"]),
+                    hashed_password=security.get_password_hash(
+                        item["password"]),
                     full_name=item["full_name"],
                     role=item["role"],
                     specialty=item["specialty"],
@@ -120,10 +176,32 @@ def ensure_chat_archive_column() -> None:
         )
 
 
+def ensure_enum_columns_lowercase() -> None:
+    """Migrate any uppercase enum values to lowercase and convert native enum
+    columns to plain VARCHAR.  Handles users.role and chats.status.
+    """
+    with engine.begin() as connection:
+        for table, column in [("users", "role"), ("chats", "status")]:
+            connection.execute(
+                text(
+                    f"ALTER TABLE {table} "
+                    f"ALTER COLUMN {column} TYPE VARCHAR USING {column}::TEXT"
+                )
+            )
+            connection.execute(
+                text(
+                    f"UPDATE {table} SET {column} = LOWER({column}) "
+                    f"WHERE {column} != LOWER({column})"
+                )
+            )
+
+
 ensure_auth_columns()
 ensure_notification_fk()
 ensure_message_columns()
 ensure_chat_archive_column()
+ensure_chat_columns()
+ensure_enum_columns_lowercase()
 ensure_default_users()
 
 app = FastAPI(
@@ -142,11 +220,16 @@ app.add_middleware(
 
 from src.api import auth, chats, specialist, rag, notifications, admin  # noqa: E402
 
-app.include_router(auth.router,          prefix="/auth",          tags=["Auth"])
-app.include_router(chats.router,         prefix="/chats",         tags=["Chats"])
-app.include_router(specialist.router,    prefix="/specialist",    tags=["Specialist"])
-app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
-app.include_router(admin.router,         prefix="/admin",         tags=["Admin"])
+app.include_router(auth.router,          prefix="/auth",
+                   tags=["Auth"])
+app.include_router(chats.router,         prefix="/chats",
+                   tags=["Chats"])
+app.include_router(specialist.router,
+                   prefix="/specialist",    tags=["Specialist"])
+app.include_router(notifications.router,
+                   prefix="/notifications", tags=["Notifications"])
+app.include_router(admin.router,         prefix="/admin",
+                   tags=["Admin"])
 app.include_router(rag.router,           tags=["RAG"])
 
 
