@@ -439,3 +439,96 @@ export async function adminGetLogs(filters?: {
   });
   return handleResponse<AuditLogResponse[]>(res);
 }
+
+// ── Chat SSE Stream ──────────────────────────────────────────────────────
+
+/** Event types pushed by the backend SSE endpoint. */
+export type ChatStreamEventType = 'stream_start' | 'content' | 'complete' | 'error';
+
+export interface ChatStreamEvent {
+  type: ChatStreamEventType;
+  chat_id: number;
+  message_id: number;
+  content?: string;
+  citations?: unknown[] | null;
+  error?: string;
+}
+
+export interface ChatStreamCallbacks {
+  onOpen?: () => void;
+  onStreamStart?: (messageId: number) => void;
+  onContent?: (messageId: number, content: string) => void;
+  onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
+  onError?: (messageId: number, error: string) => void;
+  onConnectionError?: () => void;
+}
+
+/**
+ * Subscribe to real-time AI generation events for a chat via SSE.
+ *
+ * Returns a cleanup function to close the connection. If the EventSource
+ * cannot connect or encounters an error, `onConnectionError` is called so
+ * the caller can fall back to polling.
+ */
+export function subscribeToChatStream(
+  chatId: number,
+  callbacks: ChatStreamCallbacks,
+): () => void {
+  const token = localStorage.getItem('access_token');
+  if (!token) {
+    callbacks.onConnectionError?.();
+    return () => {};
+  }
+
+  const url = `${API_BASE}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`;
+  const source = new EventSource(url);
+
+  const handleEvent = (eventType: ChatStreamEventType) => (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(ev.data) as Record<string, unknown>;
+      const messageId = data.message_id as number;
+      switch (eventType) {
+        case 'stream_start':
+          callbacks.onStreamStart?.(messageId);
+          break;
+        case 'content':
+          callbacks.onContent?.(messageId, (data.content as string) ?? '');
+          break;
+        case 'complete':
+          callbacks.onComplete?.(
+            messageId,
+            (data.content as string) ?? '',
+            (data.citations as unknown[] | null) ?? null,
+          );
+          // Server will close the stream after complete; clean up client side.
+          source.close();
+          break;
+        case 'error':
+          callbacks.onError?.(messageId, (data.error as string) ?? 'Unknown error');
+          source.close();
+          break;
+      }
+    } catch {
+      // Malformed event – ignore
+    }
+  };
+
+  source.addEventListener('stream_start', handleEvent('stream_start'));
+  source.addEventListener('content', handleEvent('content'));
+  source.addEventListener('complete', handleEvent('complete'));
+  source.addEventListener('error', handleEvent('error'));
+
+  source.onopen = () => {
+    callbacks.onOpen?.();
+  };
+
+  // Built-in error handler (network failure, 401, etc.)
+  source.onerror = () => {
+    source.close();
+    callbacks.onConnectionError?.();
+  };
+
+  return () => {
+    source.close();
+  };
+}

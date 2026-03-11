@@ -1,12 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, ClipboardCheck } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat } from '../../services/api';
+import {
+  getChat,
+  sendMessage as apiSendMessage,
+  updateChat as apiUpdateChat,
+  subscribeToChatStream,
+} from '../../services/api';
 import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
 import type { Message, Citation } from '../../types';
 
@@ -66,6 +71,7 @@ function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
 export function GPQueryDetailPage() {
   const { queryId } = useParams<{ queryId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { username, logout } = useAuth();
   const [chat, setChat] = useState<BackendChatWithMessages | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -76,14 +82,67 @@ export function GPQueryDetailPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [editMeta, setEditMeta] = useState<ChatUpdateRequest>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // SSE streaming state
+  const streamCleanupRef = useRef<(() => void) | null>(null);
+  const [streamConnected, setStreamConnected] = useState(false);
+  // Guard: auto-send the draft message from GPNewQueryPage only once
+  const draftSentRef = useRef(false);
 
   useEffect(() => {
     fetchChat();
+    // Clean up SSE on unmount / chat change
+    return () => {
+      streamCleanupRef.current?.();
+      streamCleanupRef.current = null;
+    };
   }, [queryId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  // ── Auto-send draft message passed from GPNewQueryPage ───────────────
+  const draftMessage = (location.state as { draftMessage?: string } | null)?.draftMessage;
+
+  useEffect(() => {
+    if (!chat || !draftMessage || draftSentRef.current) return;
+    draftSentRef.current = true;
+
+    // Clear router state so a page refresh won't re-send
+    navigate(location.pathname, { replace: true, state: {} });
+
+    // The optimistic user message was already added by fetchChat in the same
+    // render as loading=false, so no need to setMessages here.
+    setSending(true);
+
+    (async () => {
+      try {
+        // Open SSE *before* sending so we catch stream_start / content / complete
+        await connectStream(chat.id);
+        await apiSendMessage(chat.id, draftMessage);
+        // Reconcile user message id
+        const refreshed = await getChat(chat.id);
+        setChat(refreshed);
+        setMessages((prev) => {
+          const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
+          const fetched = refreshed.messages.map((m) =>
+            toFrontendMessage(m, username || 'GP User'),
+          );
+          if (streamingMsg) {
+            return fetched.map((m) =>
+              m.id === streamingMsg.id ? streamingMsg : m,
+            );
+          }
+          return fetched;
+        });
+      } catch {
+        setError('Failed to send message');
+      } finally {
+        setSending(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat?.id]);
 
   const hasPendingAIResponse =
     messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
@@ -98,7 +157,10 @@ export function GPQueryDetailPage() {
   const chatStatus = chat?.status ?? '';
   const isInReview = ['submitted', 'assigned', 'reviewing'].includes(chatStatus);
 
-  const shouldPoll = hasPendingAIResponse || hasRevisionInProgress || isInReview;
+  // Don't poll while actively sending: the backend hasn't persisted the message
+  // yet, so a silent fetch would return an empty message list and clobber the
+  // optimistic message that's already visible.
+  const shouldPoll = (hasPendingAIResponse || hasRevisionInProgress || isInReview) && !streamConnected && !sending;
 
   useEffect(() => {
     if (!queryId || !shouldPoll) return;
@@ -119,7 +181,22 @@ export function GPQueryDetailPage() {
     try {
       const found = await getChat(Number(queryId));
       setChat(found);
-      setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
+      const mapped = found.messages.map(m => toFrontendMessage(m, username || 'GP User'));
+      // When a draft message is about to be sent, pre-populate the optimistic
+      // user message in the same batch as loading=false so there's no
+      // empty-messages flash between fetchChat completing and the draft effect.
+      if (draftMessage && !draftSentRef.current) {
+        setMessages([...mapped, {
+          id: 'temp-draft',
+          senderId: 'user',
+          senderName: username || 'GP User',
+          senderType: 'gp' as const,
+          content: draftMessage,
+          timestamp: new Date(),
+        }]);
+      } else {
+        setMessages(mapped);
+      }
     } catch {
       setChat(null);
       setError('Failed to load consultation');
@@ -129,6 +206,88 @@ export function GPQueryDetailPage() {
       }
     }
   };
+
+  /** Open an SSE connection that merges AI generation events into the messages list.
+   *  Returns a Promise that resolves once the EventSource connection is open
+   *  (or after a short timeout fallback so the caller never waits forever). */
+  const connectStream = useCallback(
+    (chatId: number): Promise<void> => {
+      // Clean up any previous stream
+      streamCleanupRef.current?.();
+
+      return new Promise<void>((resolve) => {
+        let resolved = false;
+        const settle = () => { if (!resolved) { resolved = true; resolve(); } };
+        // Timeout fallback – don't block the caller forever
+        const timer = setTimeout(settle, 500);
+
+      const cleanup = subscribeToChatStream(chatId, {
+        onOpen() {
+          clearTimeout(timer);
+          settle();
+        },
+        onStreamStart(messageId) {
+          setStreamConnected(true);
+          // Insert a placeholder AI message if not already present
+          setMessages((prev) => {
+            if (prev.find((m) => m.id === String(messageId))) return prev;
+            const placeholder: Message = {
+              id: String(messageId),
+              senderId: 'ai',
+              senderName: 'NHS AI Assistant',
+              senderType: 'ai',
+              content: '',
+              timestamp: new Date(),
+              isGenerating: true,
+            };
+            return [...prev, placeholder];
+          });
+        },
+        onContent(messageId, content) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === String(messageId) ? { ...m, content, isGenerating: true } : m,
+            ),
+          );
+        },
+        onComplete(messageId, content, citations) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === String(messageId)
+                ? {
+                    ...m,
+                    content,
+                    citations: mapCitations(citations),
+                    isGenerating: false,
+                  }
+                : m,
+            ),
+          );
+          setStreamConnected(false);
+          streamCleanupRef.current = null;
+          // Reconcile with persisted state
+          fetchChat({ silent: true });
+        },
+        onError(_messageId, _errorMsg) {
+          setStreamConnected(false);
+          streamCleanupRef.current = null;
+          // Fall back to polling – fetchChat will find the final message
+          fetchChat({ silent: true });
+        },
+        onConnectionError() {
+          // SSE failed to connect – rely on polling fallback
+          setStreamConnected(false);
+          streamCleanupRef.current = null;
+          clearTimeout(timer);
+          settle();
+        },
+      });
+
+      streamCleanupRef.current = cleanup;
+      }); // end Promise
+    },
+    [username],
+  );
 
   const handleSendMessage = async (content: string) => {
     if (!chat || sending) return;
@@ -146,11 +305,26 @@ export function GPQueryDetailPage() {
     setMessages(prev => [...prev, userMsg]);
 
     try {
-      // Backend returns { status, ai_response }; refetch chat to attach citations reliably
+      // Open SSE stream *before* sending so we catch the AI generation events
+      await connectStream(chat.id);
       await apiSendMessage(chat.id, content);
+      // Also do one fetch to reconcile the user message id
       const refreshed = await getChat(chat.id);
       setChat(refreshed);
-      setMessages(refreshed.messages.map(m => toFrontendMessage(m, username || 'GP User')));
+      // Merge: keep streaming placeholder if present, else use fetched messages
+      setMessages((prev) => {
+        const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
+        const fetched = refreshed.messages.map((m) =>
+          toFrontendMessage(m, username || 'GP User'),
+        );
+        if (streamingMsg) {
+          // Replace the generating message from the fetch with our streaming version
+          return fetched.map((m) =>
+            m.id === streamingMsg.id ? streamingMsg : m,
+          );
+        }
+        return fetched;
+      });
     } catch {
       setError('Failed to send message');
     } finally {
@@ -357,7 +531,7 @@ export function GPQueryDetailPage() {
                 />
               );
             })}
-            {hasPendingAIResponse && (
+            {hasPendingAIResponse && !streamConnected && (
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">

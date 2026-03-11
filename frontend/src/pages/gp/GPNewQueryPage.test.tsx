@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders, seedAuth } from '../../test/utils';
 import { GPNewQueryPage } from './GPNewQueryPage';
@@ -10,7 +10,12 @@ import { GPNewQueryPage } from './GPNewQueryPage';
 function QueriesStub() {
   return <div>Queries List</div>;
 }
+
+/** Stub that also exposes the router state so tests can inspect it. */
+const capturedState: { current: unknown } = { current: undefined };
 function QueryDetailStub() {
+  const location = useLocation();
+  capturedState.current = location.state;
   return <div>Query Detail</div>;
 }
 
@@ -58,7 +63,7 @@ describe('GPNewQueryPage', () => {
     expect(specialtySelect).toHaveValue('');
   });
 
-  it('creates a consultation and navigates to detail page', async () => {
+  it('creates a consultation and navigates to detail page with draftMessage', async () => {
     renderNewQuery();
     const user = userEvent.setup();
 
@@ -74,6 +79,35 @@ describe('GPNewQueryPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Query Detail')).toBeInTheDocument();
     });
+
+    // The draft message should be passed via router state so the detail page
+    // can open SSE before sending.
+    expect(capturedState.current).toEqual(
+      expect.objectContaining({ draftMessage: 'Patient has persistent headaches' }),
+    );
+  });
+
+  it('includes patient age in draftMessage when provided', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /submit consultation/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/consultation title/i), 'Test');
+    await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
+    await user.type(screen.getByLabelText(/patient age/i), '42');
+    await user.type(screen.getByLabelText(/clinical question/i), 'Headache');
+    await user.click(screen.getByRole('button', { name: /submit consultation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Query Detail')).toBeInTheDocument();
+    });
+
+    expect(capturedState.current).toEqual(
+      expect.objectContaining({ draftMessage: '[Patient age: 42]\n\nHeadache' }),
+    );
   });
 
   it('shows error on API failure', async () => {

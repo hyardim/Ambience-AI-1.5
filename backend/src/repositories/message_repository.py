@@ -46,3 +46,11 @@ def list_for_chat(db: Session, chat_id: int) -> list[Message]:
         .order_by(Message.created_at)
         .all()
     )
+
+
+async def async_update(db: AsyncSession, msg: Message, **fields) -> Message:
+    for key, value in fields.items():
+        setattr(msg, key, value)
+    await db.commit()
+    await db.refresh(msg)
+    return msg

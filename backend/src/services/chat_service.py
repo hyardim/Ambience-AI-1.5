@@ -19,6 +19,7 @@ from src.schemas.chat import (
     ChatWithMessages,
 )
 from src.services._mappers import chat_to_response, msg_to_response
+from src.utils.sse import SSEEvent, chat_event_bus
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
@@ -287,17 +288,48 @@ def send_message(
 async def _async_generate_ai_response(
     chat_id: int, user_id: int, content: str
 ) -> None:
-    """Generate an AI response using async HTTP + async DB."""
+    """Generate an AI response using async HTTP + async DB.
+
+    Publishes SSE lifecycle events so connected clients receive real-time
+    updates.  The flow:
+      1. Create a placeholder message with ``is_generating=True``.
+      2. Publish ``stream_start``.
+      3. Call the RAG service (non-streaming).
+      4. Publish ``content`` with the full answer.
+      5. Finalise the message (content, citations, ``is_generating=False``).
+      6. Publish ``complete`` with citations.
+      7. Close the chat's event bus so SSE clients disconnect cleanly.
+    """
     async with AsyncSessionLocal() as db:
         try:
             chat = await chat_repository.async_get(db, chat_id)
             if not chat:
                 return
 
+            # 1. Placeholder message
+            placeholder = await message_repository.async_create(
+                db,
+                chat_id=chat.id,
+                content="",
+                sender="ai",
+                is_generating=True,
+            )
+
+            # 2. stream_start
+            await chat_event_bus.publish(
+                chat_id,
+                SSEEvent(
+                    event="stream_start",
+                    data={"chat_id": chat_id, "message_id": placeholder.id},
+                ),
+            )
+
             rag_payload = {"query": content, "top_k": 4}
 
             rag_action = "RAG_ERROR"
             rag_details = f"query_len={len(content)} error=unknown"
+            ai_content = ""
+            citations = None
             try:
                 async with httpx.AsyncClient() as client:
                     rag_response = await client.post(
@@ -327,16 +359,43 @@ async def _async_generate_ai_response(
                 citations = None
                 rag_details = f"query_len={len(content)} error={type(exc).__name__}"
 
+                # Publish error event (still finalise below)
+                await chat_event_bus.publish(
+                    chat_id,
+                    SSEEvent(
+                        event="error",
+                        data={
+                            "chat_id": chat_id,
+                            "message_id": placeholder.id,
+                            "error": str(exc),
+                        },
+                    ),
+                )
+
             await audit_repository.async_log(
                 db, user_id=user_id, action=rag_action, details=rag_details
             )
 
-            await message_repository.async_create(
+            # 4. content event
+            await chat_event_bus.publish(
+                chat_id,
+                SSEEvent(
+                    event="content",
+                    data={
+                        "chat_id": chat_id,
+                        "message_id": placeholder.id,
+                        "content": ai_content,
+                    },
+                ),
+            )
+
+            # 5. Finalise placeholder
+            await message_repository.async_update(
                 db,
-                chat_id=chat.id,
+                placeholder,
                 content=ai_content,
-                sender="ai",
                 citations=citations,
+                is_generating=False,
             )
 
             await audit_repository.async_log(
@@ -345,11 +404,40 @@ async def _async_generate_ai_response(
                 action="AI_RESPONSE_GENERATED",
                 details=f"AI response generated for chat {chat_id}",
             )
+
+            # 6. complete event
+            await chat_event_bus.publish(
+                chat_id,
+                SSEEvent(
+                    event="complete",
+                    data={
+                        "chat_id": chat_id,
+                        "message_id": placeholder.id,
+                        "content": ai_content,
+                        "citations": citations,
+                    },
+                ),
+            )
         except Exception:
             await db.rollback()
             logger.exception(
                 "Async AI generation failed for chat %s", chat_id
             )
+            # Notify any waiting SSE subscribers about the failure
+            await chat_event_bus.publish(
+                chat_id,
+                SSEEvent(
+                    event="error",
+                    data={
+                        "chat_id": chat_id,
+                        "message_id": 0,
+                        "error": "Internal generation error",
+                    },
+                ),
+            )
+        finally:
+            # 7. Close the bus so SSE clients disconnect
+            await chat_event_bus.close_chat(chat_id)
 
 
 async def async_send_message(

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { createChat, sendMessage } from '../../services/api';
+import { createChat } from '../../services/api';
 import type { Severity } from '../../types';
 
 export function GPNewQueryPage() {
@@ -51,12 +51,9 @@ export function GPNewQueryPage() {
         messageContent = `[Patient age: ${formData.patientAge}]\n\n${formData.message}`;
       }
 
-      // 3. Send the first message. The backend auto-generates an AI response
-      //    and auto-submits the chat for specialist review.
-      await sendMessage(chat.id, messageContent);
-
-      // 4. Navigate to the chat detail page
-      navigate(`/gp/query/${chat.id}`);
+      // 3. Navigate to the detail page immediately, passing the draft message
+      //    via router state so the detail page can open SSE *before* sending.
+      navigate(`/gp/query/${chat.id}`, { state: { draftMessage: messageContent } });
     } catch {
       setError('Failed to create consultation. Is the backend running?');
     } finally {
