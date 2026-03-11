@@ -141,25 +141,11 @@ async def stream_chat(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    # Verify the user owns this chat or has the same specialist access as the
-    # specialist chat-detail view (assigned chat, or submitted queue chat in
-    # their specialty).
-    from src.repositories import chat_repository
-    from src.db.models import Chat, ChatStatus, UserRole
+    from src.db.models import Chat
+    from src.core.chat_policy import can_stream_chat
 
-    chat = chat_repository.get(db, chat_id, user_id=user.id)
-    if not chat:
-        chat = db.query(Chat).filter(Chat.id == chat_id).first()
-        if chat and user.role == UserRole.SPECIALIST:
-            in_queue = chat.status == ChatStatus.SUBMITTED and (
-                not user.specialty or chat.specialty == user.specialty
-            )
-            assigned_to_me = chat.specialist_id == user.id
-            if not (in_queue or assigned_to_me):
-                chat = None
-        else:
-            chat = None
-    if not chat:
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat or not can_stream_chat(user, chat):
         raise HTTPException(status_code=404, detail="Chat not found")
 
     return StreamingResponse(

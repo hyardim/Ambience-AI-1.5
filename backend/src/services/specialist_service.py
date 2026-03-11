@@ -49,16 +49,13 @@ def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
 
 
 def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMessages:
+    from src.core.chat_policy import can_view_chat
+
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    in_queue = chat.status == ChatStatus.SUBMITTED and (
-        not specialist.specialty or chat.specialty == specialist.specialty
-    )
-    assigned_to_me = chat.specialist_id == specialist.id
-
-    if not (in_queue or assigned_to_me):
+    if not can_view_chat(specialist, chat):
         raise HTTPException(
             status_code=403, detail="You do not have access to this chat")
 

@@ -225,14 +225,13 @@ async def upload_file(
     chat_id: int,
     file: UploadFile,
 ) -> FileAttachmentResponse:
+    from src.core.chat_policy import can_upload_to_chat
+
     chat = chat_repository.get(db, chat_id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    # Only the chat owner or assigned specialist may upload
-    is_owner = chat.user_id == user.id
-    is_specialist = chat.specialist_id == user.id
-    if not (is_owner or is_specialist):
+    if not can_upload_to_chat(user, chat):
         raise HTTPException(status_code=403, detail="Not authorised to upload to this chat")
 
     dest_dir = UPLOAD_DIR / str(chat_id)
