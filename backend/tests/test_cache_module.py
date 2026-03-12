@@ -62,3 +62,15 @@ async def test_cache_get_error_returns_none(monkeypatch):
     monkeypatch.setattr(cache, "_get_client", fake_get_client)
 
     assert await cache.get("oops") is None
+
+
+@pytest.mark.asyncio
+async def test_cache_delete_missing_key_returns_zero(monkeypatch):
+    fake = FakeRedis()
+
+    async def fake_get_client():
+        return fake
+
+    monkeypatch.setattr(cache, "_get_client", fake_get_client)
+
+    assert await cache.delete("missing:key") == 0
