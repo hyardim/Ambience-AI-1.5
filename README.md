@@ -176,6 +176,28 @@ Verify RAG service connectivity:
 - `curl http://localhost:8001/health`
 - `curl -X POST http://localhost:8001/answer -H "Content-Type: application/json" -d '{"query":"what is rheumatoid arthritis?","top_k":3}'`
 
+## Backend Redis cache
+
+The backend caches read-heavy endpoints in Redis to reduce database load and improve latency.
+
+Cached data:
+
+- Chat list responses (per user, page, status, specialty)
+- Chat detail payloads (messages + files)
+- Admin user profile lookups
+
+Cache invalidation happens on chat creation/updates/deletes, message sends, file uploads,
+specialist reviews, and user profile/password updates.
+
+Environment variables (backend):
+
+- `REDIS_URL` (default: `redis://redis:6379/0`)
+- `CACHE_ENABLED` (default: `true`)
+- `CACHE_CHAT_LIST_TTL` (seconds, default: `30`)
+- `CACHE_CHAT_DETAIL_TTL` (seconds, default: `60`)
+- `CACHE_PROFILE_TTL` (seconds, default: `300`)
+- `CACHE_KEY_PREFIX` (default: `cache`)
+
 ## Running locally with Ollama (keep this for dev)
 
 Use this mode when you want lower cost local development.

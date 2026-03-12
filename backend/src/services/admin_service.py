@@ -5,11 +5,13 @@ from fastapi import HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.db.models import AuditLog, Chat, ChatStatus, Message, User, UserRole
 from src.repositories import audit_repository, chat_repository, message_repository, user_repository
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
+from src.utils.cache import cache, cache_keys
 
 
 # ---------------------------------------------------------------------------
@@ -94,10 +96,23 @@ def list_users(db: Session, role: Optional[str] = None) -> list[UserOut]:
 
 
 def get_user(db: Session, user_id: int) -> UserOut:
+    cache_key = cache_keys.user_profile(user_id)
+    cached = cache.get_sync(cache_key, user_id=user_id, resource="user_profile")
+    if cached is not None:
+        return UserOut(**cached)
+
     user = user_repository.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return UserOut.model_validate(user)
+    response = UserOut.model_validate(user)
+    cache.set_sync(
+        cache_key,
+        response.model_dump(),
+        ttl=settings.CACHE_PROFILE_TTL,
+        user_id=user_id,
+        resource="user_profile",
+    )
+    return response
 
 
 def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
@@ -119,6 +134,7 @@ def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
             raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
 
     user = user_repository.update(db, user, **fields)
+    cache.delete_sync(cache_keys.user_profile(user_id), user_id=user_id, resource="user_profile")
     return UserOut.model_validate(user)
 
 
@@ -127,6 +143,7 @@ def deactivate_user(db: Session, user_id: int) -> UserOut:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user = user_repository.update(db, user, is_active=False)
+    cache.delete_sync(cache_keys.user_profile(user_id), user_id=user_id, resource="user_profile")
     return UserOut.model_validate(user)
 
 
@@ -196,6 +213,12 @@ def update_any_chat(db: Session, chat_id: int, payload: ChatUpdate) -> dict:
             raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
 
     chat = chat_repository.update(db, chat, **fields)
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
     entry = chat_to_response(chat).model_dump()
     entry["owner_identifier"] = f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
     entry["specialist_identifier"] = f"{chat.specialist.role.value}_{chat.specialist.id}" if chat.specialist else None
@@ -207,6 +230,12 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     chat_repository.delete(db, chat)
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
 
 
 # ---------------------------------------------------------------------------

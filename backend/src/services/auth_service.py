@@ -9,6 +9,7 @@ from src.core.config import settings
 from src.db.models import User, UserRole
 from src.repositories import audit_repository, user_repository
 from src.schemas.auth import AuthResponse, PasswordResetRequest, ProfileUpdate, UserOut, UserRegister
+from src.utils.cache import cache, cache_keys
 
 
 def _validate_password(password: str) -> None:
@@ -88,6 +89,7 @@ def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
     _validate_password(payload.new_password)
     user_repository.update(db, user, hashed_password=security.get_password_hash(payload.new_password))
     audit_repository.log(db, user_id=user.id, action="PASSWORD_RESET", details=f"user_id={user.id}")
+    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
     return {"message": "If that email is registered, the password has been reset"}
 
 
@@ -116,4 +118,5 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
 
     user = user_repository.update(db, user, **fields)
     audit_repository.log(db, user_id=user.id, action="UPDATE_PROFILE", details=f"user_id={user.id}")
+    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
     return user
