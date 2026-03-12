@@ -118,6 +118,22 @@ class RoutingConfig(BaseSettings):
     force_cloud_llm: bool = Field(default=False)
 
 
+class RetryConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    redis_url: str = Field(default="redis://localhost:6379/0")
+    retry_enabled: bool = Field(default=True)
+    retry_max_attempts: int = Field(default=3)
+    retry_backoff_seconds: int = Field(default=10)
+    retry_backoff_multiplier: int = Field(default=2)
+    retry_job_ttl_seconds: int = Field(default=86400)
+
+
 class PathConfig:
     def __init__(self) -> None:
         self.root: Path = Path(__file__).parent.parent
@@ -158,6 +174,7 @@ logging_config = LoggingConfig()
 generation_config = GenerationConfig()
 llm_config = LLMConfig()
 routing_config = RoutingConfig()
+retry_config = RetryConfig()
 path_config = PathConfig()
 
 # Compatibility shims for existing codepaths
@@ -182,7 +199,8 @@ LLM_TIMEOUT_SECONDS = llm_config.llm_timeout_seconds
 LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", OLLAMA_BASE_URL)
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", OLLAMA_MODEL)
 LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "ollama")
-LOCAL_LLM_MAX_TOKENS = int(os.getenv("LOCAL_LLM_MAX_TOKENS", str(OLLAMA_MAX_TOKENS)))
+LOCAL_LLM_MAX_TOKENS = int(
+    os.getenv("LOCAL_LLM_MAX_TOKENS", str(OLLAMA_MAX_TOKENS)))
 LOCAL_LLM_TIMEOUT_SECONDS = float(
     os.getenv("LOCAL_LLM_TIMEOUT_SECONDS", str(OLLAMA_TIMEOUT_SECONDS))
 )
@@ -198,8 +216,10 @@ CLOUD_LLM_API_KEY = _first_non_empty(
     _default_runpod_api_key(),
     LLM_API_KEY,
 ) or LLM_API_KEY
-CLOUD_LLM_MAX_TOKENS = int(os.getenv("CLOUD_LLM_MAX_TOKENS", str(LLM_MAX_TOKENS)))
-CLOUD_LLM_TEMPERATURE = float(os.getenv("CLOUD_LLM_TEMPERATURE", str(LLM_TEMPERATURE)))
+CLOUD_LLM_MAX_TOKENS = int(
+    os.getenv("CLOUD_LLM_MAX_TOKENS", str(LLM_MAX_TOKENS)))
+CLOUD_LLM_TEMPERATURE = float(
+    os.getenv("CLOUD_LLM_TEMPERATURE", str(LLM_TEMPERATURE)))
 CLOUD_LLM_TIMEOUT_SECONDS = float(
     os.getenv("CLOUD_LLM_TIMEOUT_SECONDS", str(LLM_TIMEOUT_SECONDS))
 )
@@ -207,3 +227,10 @@ CLOUD_LLM_TIMEOUT_SECONDS = float(
 LLM_ROUTE_THRESHOLD = routing_config.llm_route_threshold
 ROUTE_REVISIONS_TO_CLOUD = routing_config.route_revisions_to_cloud
 FORCE_CLOUD_LLM = routing_config.force_cloud_llm
+
+REDIS_URL = retry_config.redis_url
+RETRY_ENABLED = retry_config.retry_enabled
+RETRY_MAX_ATTEMPTS = retry_config.retry_max_attempts
+RETRY_BACKOFF_SECONDS = retry_config.retry_backoff_seconds
+RETRY_BACKOFF_MULTIPLIER = retry_config.retry_backoff_multiplier
+RETRY_JOB_TTL_SECONDS = retry_config.retry_job_ttl_seconds
