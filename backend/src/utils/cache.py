@@ -144,6 +144,7 @@ class RedisCache:
         return asyncio.run(self.delete_pattern(pattern, user_id=user_id, resource=resource))
 
 
+# Cache keys include user scoping to avoid cross-tenant leakage.
 class CacheKeys:
     def __init__(self, prefix: str) -> None:
         self._prefix = prefix.rstrip(":")
