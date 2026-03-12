@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.db.models import Chat, ChatStatus, Message, NotificationType, User
 from src.db.session import SessionLocal
 from src.repositories import (
@@ -16,6 +17,7 @@ from src.repositories import (
 )
 from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, ReviewRequest
 from src.services._mappers import chat_to_response, msg_to_response
+from src.utils.cache import cache, cache_keys
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
@@ -45,6 +47,12 @@ def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
 
 
 def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMessages:
+    cache_key = cache_keys.chat_detail(specialist.id, chat_id)
+    cached = cache.get_sync(
+        cache_key, user_id=specialist.id, resource="chat_detail")
+    if cached is not None:
+        return ChatWithMessages(**cached)
+
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -61,6 +69,13 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
     messages = message_repository.list_for_chat(db, chat.id)
     resp = ChatWithMessages(**chat_to_response(chat).model_dump())
     resp.messages = [msg_to_response(m) for m in messages]
+    cache.set_sync(
+        cache_key,
+        resp.model_dump(),
+        ttl=settings.CACHE_CHAT_DETAIL_TTL,
+        user_id=specialist.id,
+        resource="chat_detail",
+    )
     return resp
 
 
@@ -102,6 +117,18 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
         title="Chat assigned to a specialist",
         body=f"Your chat '{chat.title}' has been picked up by {specialist.full_name or specialist.email}.",
         chat_id=chat.id,
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), user_id=specialist.id, resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
     return chat_to_response(chat)
 
@@ -197,6 +224,12 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
                 chat_id=chat.id,
             )
 
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
     return chat_to_response(chat)
 
 
@@ -435,6 +468,10 @@ def _do_revise(
     db.commit()
     db.refresh(placeholder)
 
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(placeholder.chat_id), resource="chat_detail"
+    )
+
     try:
         chat = db.query(Chat).filter(Chat.id == placeholder.chat_id).first()
         audit_repository.log(
@@ -508,5 +545,11 @@ def send_message(db: Session, specialist: User, chat_id: int, content: str) -> d
         title="New message from specialist",
         body=f"{specialist.full_name or specialist.email} sent a message in '{chat.title}'.",
         chat_id=chat.id,
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), user_id=specialist.id, resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
     return {"status": "Message sent", "message_id": msg.id}

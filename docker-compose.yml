@@ -1,6 +1,14 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: ambience_rag_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ambience_net
+
   # 1. The Vector Database
   db_vector:
     image: pgvector/pgvector:pg16
@@ -36,6 +44,8 @@ services:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
       - RAG_SERVICE_URL=http://rag_service:8001
       - RAG_REQUEST_TIMEOUT_SECONDS=120
+      - REDIS_URL=redis://redis:6379/0
+      - CACHE_ENABLED=true
 
     ports:
       - "8000:8000"
@@ -53,6 +63,7 @@ services:
     container_name: ambience_rag
     depends_on:
       - db_vector
+      - redis
     ports:
       - "8001:8001"
     volumes:
@@ -63,23 +74,36 @@ services:
       - ./rag_service/configs:/app/configs
     environment:
       - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      - REDIS_URL=redis://redis:6379/0
       # Allow connection to host Ollama (Mac)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=thewindmom/llama3-med42-8b
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
       - LOCAL_LLM_MODEL=thewindmom/llama3-med42-8b
-      - RUNPOD_POD_ID=${RUNPOD_POD_ID:-YOUR_RUNPOD_POD_ID}
-      - RUNPOD_PORT=${RUNPOD_PORT:-8000}
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-sk-$RUNPOD_POD_ID}
-      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-}
+      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-https://aaw0zkgatyq013-8000.proxy.runpod.net/v1}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
-      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-}
-      - FORCE_CLOUD_LLM=${FORCE_CLOUD_LLM:-false}
+      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-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}
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
     
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+    networks:
+      - ambience_net
+
+  rag_worker:
+    build:
+      context: ./rag_service
+      dockerfile: Dockerfile
+    container_name: ambience_rag_worker
+    depends_on:
+      - redis
+    volumes:
+      - ./rag_service/src:/app/src
+      - ./rag_service/scripts:/app/scripts
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    command: python scripts/run_retry_worker.py
     networks:
       - ambience_net
 
