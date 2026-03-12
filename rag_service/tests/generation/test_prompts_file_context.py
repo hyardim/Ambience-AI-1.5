@@ -5,7 +5,6 @@ uploaded document content into the prompt string when provided.
 
 from src.generation.prompts import build_grounded_prompt, build_revision_prompt
 
-
 _CHUNKS = [
     {
         "text": "Methotrexate is first-line for RA.",

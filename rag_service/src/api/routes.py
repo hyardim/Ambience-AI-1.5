@@ -1,5 +1,4 @@
 import shutil
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
@@ -13,8 +12,8 @@ from src.api.schemas import (
 )
 from src.config import path_config
 from src.ingestion.pipeline import PipelineError, load_sources, run_ingestion
+from src.rag.generate import GenerationError, RAGResponse
 from src.rag.pipeline import ask
-from src.rag.generate import RAGResponse, GenerationError
 from src.retrieval.query import RetrievalError
 
 router = APIRouter()

@@ -9,37 +9,37 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def _make_stub(name: str) -> types.ModuleType:
+def _make_stub(name: str, monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     mod = types.ModuleType(name)
-    sys.modules.setdefault(name, mod)
+    monkeypatch.setitem(sys.modules, name, mod)
     return sys.modules[name]
 
 
 @pytest.fixture()
 def client(monkeypatch):
     # Stub heavy modules before importing src.main
-    ps = _make_stub("pydantic_settings")
+    ps = _make_stub("pydantic_settings", monkeypatch)
     ps.BaseSettings = object
     ps.SettingsConfigDict = lambda **kw: None  # type: ignore[assignment]
 
-    _make_stub("sentence_transformers")
-    _make_stub("torch")
-    _make_stub("pgvector")
-    _make_stub("pgvector.sqlalchemy")
-    _make_stub("psycopg2")
-    _make_stub("psycopg2.extras")
-    _make_stub("sqlalchemy")
-    _make_stub("sqlalchemy.orm")
-    _make_stub("sqlalchemy.pool")
-    _make_stub("sqlalchemy.dialects")
-    _make_stub("sqlalchemy.dialects.postgresql")
+    _make_stub("sentence_transformers", monkeypatch)
+    _make_stub("torch", monkeypatch)
+    _make_stub("pgvector", monkeypatch)
+    _make_stub("pgvector.sqlalchemy", monkeypatch)
+    _make_stub("psycopg2", monkeypatch)
+    _make_stub("psycopg2.extras", monkeypatch)
+    _make_stub("sqlalchemy", monkeypatch)
+    _make_stub("sqlalchemy.orm", monkeypatch)
+    _make_stub("sqlalchemy.pool", monkeypatch)
+    _make_stub("sqlalchemy.dialects", monkeypatch)
+    _make_stub("sqlalchemy.dialects.postgresql", monkeypatch)
 
-    tqdm_mod = _make_stub("tqdm")
+    tqdm_mod = _make_stub("tqdm", monkeypatch)
     tqdm_mod.tqdm = lambda it, **kw: it  # type: ignore[assignment]
 
-    _make_stub("nltk")
-    _make_stub("nltk.tokenize")
-    _make_stub("fitz")
+    _make_stub("nltk", monkeypatch)
+    _make_stub("nltk.tokenize", monkeypatch)
+    _make_stub("fitz", monkeypatch)
 
     fake_config = types.ModuleType("src.config")
     fake_config.DATABASE_URL = "postgresql://admin:pw@localhost/test"
@@ -62,7 +62,7 @@ def client(monkeypatch):
     path_config.root = MagicMock()
     fake_config.path_config = path_config
 
-    sys.modules["src.config"] = fake_config
+    monkeypatch.setitem(sys.modules, "src.config", fake_config)
 
     for module_name in (
         "src.ingestion.embed",
@@ -72,7 +72,7 @@ def client(monkeypatch):
         "src.generation.prompts",
         "src.retry_queue",
     ):
-        sys.modules.setdefault(module_name, types.ModuleType(module_name))
+        monkeypatch.setitem(sys.modules, module_name, types.ModuleType(module_name))
 
     sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
         return_value=MagicMock()

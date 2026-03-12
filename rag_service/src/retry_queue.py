@@ -5,9 +5,10 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Awaitable
+from typing import Any
 from uuid import uuid4
 
 from redis import Redis

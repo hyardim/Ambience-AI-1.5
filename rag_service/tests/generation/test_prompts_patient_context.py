@@ -3,9 +3,7 @@ Tests that build_grounded_prompt() and build_revision_prompt() correctly inject
 patient context into the prompt string when provided.
 """
 
-import pytest
 from src.generation.prompts import build_grounded_prompt, build_revision_prompt
-
 
 _CHUNKS = [
     {

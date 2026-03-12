@@ -3,14 +3,13 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, Header, UploadFile
-from fastapi.responses import JSONResponse
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from .config import (
-    DATABASE_URL,
     CLOUD_LLM_MODEL,
+    DATABASE_URL,
     FORCE_CLOUD_LLM,
     LLM_MAX_TOKENS,
     LLM_ROUTE_THRESHOLD,
@@ -27,12 +26,12 @@ from .generation.prompts import (
 from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .ingestion.pipeline import PipelineError, load_sources, run_ingestion
-from .retry_queue import RetryJobStatus, create_retry_job, get_retry_job
 from .retrieval.vector_store import (
     get_source_path_for_doc,
     init_db,
     search_similar_chunks,
 )
+from .retry_queue import RetryJobStatus, create_retry_job, get_retry_job
 
 app = FastAPI(title="Ambience Med42 RAG Service")
 
@@ -60,8 +59,7 @@ async def warmup_ollama():
     Prevents the first request from hitting a cold provider when applicable.
     """
     if FORCE_CLOUD_LLM:
-        print(
-            f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
+        print(f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
         await warmup_model(provider="cloud")
         return
 
@@ -99,6 +97,7 @@ class AnswerRequest(QueryRequest):
 
 class ReviseRequest(BaseModel):
     """Request body for the /revise endpoint."""
+
     original_query: str
     previous_answer: str
     feedback: str
@@ -202,15 +201,19 @@ _CITATION_RE = re.compile(r"\[[\d,\s\-]+\]")
 
 def _extract_citation_indices(text: str) -> set[int]:
     """Return all 1-based citation indices found in the text."""
-    return {n for m in _CITATION_RE.findall(text) for n in _parse_citation_group(m[1:-1])}
+    return {
+        n for m in _CITATION_RE.findall(text) for n in _parse_citation_group(m[1:-1])
+    }
 
 
 def _rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
     """Renumber valid citations to sequential display numbers; strip out-of-range ones."""
+
     def _rewrite(match: re.Match) -> str:
         nums = _parse_citation_group(match.group(0)[1:-1])
         kept = sorted({renumber_map[n] for n in nums if n in renumber_map})
         return f"[{', '.join(str(k) for k in kept)}]" if kept else ""
+
     return _CITATION_RE.sub(_rewrite, text)
 
 
@@ -254,8 +257,7 @@ async def ingest_guideline(
     source_name: str = Form(...),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=422, detail="Only PDF files are supported.")
+        raise HTTPException(status_code=422, detail="Only PDF files are supported.")
 
     sources_path = path_config.root / "configs" / "sources.yaml"
     sources = load_sources(sources_path)
@@ -266,8 +268,7 @@ async def ingest_guideline(
         )
 
     specialty = sources[source_name].get("specialty", "general")
-    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / \
-        source_name
+    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / source_name
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file.filename
 
@@ -275,22 +276,22 @@ async def ingest_guideline(
         with dest_path.open("wb") as f:
             shutil.copyfileobj(file.file, f)
     except OSError as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to save file: {e}") from e
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}") from e
     finally:
         file.file.close()
 
     try:
-        report = run_ingestion(input_path=dest_path,
-                               source_name=source_name, db_url=DATABASE_URL)
+        report = run_ingestion(
+            input_path=dest_path, source_name=source_name, db_url=DATABASE_URL
+        )
     except PipelineError as e:
         raise HTTPException(
-            status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}") from e
+            status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}"
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Ingestion error: {e}") from e
+        raise HTTPException(status_code=500, detail=f"Ingestion error: {e}") from e
 
     return IngestResponse(source_name=source_name, filename=file.filename, **report)
 
@@ -314,14 +315,12 @@ async def clinical_query(request: QueryRequest):
         embeddings_result = embed_text(model, [request.query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        raw_results = search_similar_chunks(
-            query_embedding, limit=request.top_k)
+        raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
 
         return [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get(
-                    "filename", "Unknown Source"),
+                source=res.get("metadata", {}).get("filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -338,8 +337,7 @@ async def clinical_query(request: QueryRequest):
     except Exception as e:
         print(f"❌ /query Error: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"RAG Inference Error: {str(e)}"
+            status_code=500, detail=f"RAG Inference Error: {str(e)}"
         ) from e
 
 
@@ -380,12 +378,12 @@ async def generate_clinical_answer(
                 citations=[],
             )
 
-    prompt = build_grounded_prompt(
-        request.query,
-        top_chunks,
-        patient_context=request.patient_context,
-        file_context=request.file_context,
-    )
+        prompt = build_grounded_prompt(
+            request.query,
+            top_chunks,
+            patient_context=request.patient_context,
+            file_context=request.file_context,
+        )
         route = select_generation_provider(
             query=request.query,
             retrieved_chunks=filtered or retrieved,
@@ -399,8 +397,7 @@ async def generate_clinical_answer(
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get(
-                    "filename", "Unknown Source"),
+                source=res.get("metadata", {}).get("filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -438,18 +435,20 @@ async def generate_clinical_answer(
                 )
                 return JSONResponse(
                     status_code=202,
-                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                    content=RetryAcceptedResponse(
+                        job_id=job_id, status=status
+                    ).model_dump(),
                 )
             raise
 
         used_indices = _extract_citation_indices(answer_text)
 
-        sorted_used = sorted(i for i in used_indices if 1 <=
-                             i <= len(citations_retrieved))
+        sorted_used = sorted(
+            i for i in used_indices if 1 <= i <= len(citations_retrieved)
+        )
         citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        renumber_map = {orig: new for new,
-                        orig in enumerate(sorted_used, start=1)}
+        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
         renumbered_answer = _rewrite_citations(answer_text, renumber_map)
         # Strip any fabricated plain-text "References:" section the model appends.
         renumbered_answer = re.sub(
@@ -468,8 +467,7 @@ async def generate_clinical_answer(
     except Exception as e:
         print(f"❌ /answer Error: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"RAG Answer Error: {str(e)}"
+            status_code=500, detail=f"RAG Answer Error: {str(e)}"
         ) from e
 
 
@@ -487,8 +485,7 @@ async def revise_clinical_answer(
     """
     try:
         # Retrieve using the original query so chunk relevance stays high.
-        embeddings_result = embed_text(
-            model, [request.original_query], batch_size=1)
+        embeddings_result = embed_text(model, [request.original_query], batch_size=1)
         query_embedding = embeddings_result[0]
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
@@ -527,8 +524,7 @@ async def revise_clinical_answer(
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
-                source=res.get("metadata", {}).get(
-                    "filename", "Unknown Source"),
+                source=res.get("metadata", {}).get("filename", "Unknown Source"),
                 score=res["score"],
                 doc_id=res.get("doc_id"),
                 doc_version=res.get("doc_version"),
@@ -565,18 +561,20 @@ async def revise_clinical_answer(
                 )
                 return JSONResponse(
                     status_code=202,
-                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                    content=RetryAcceptedResponse(
+                        job_id=job_id, status=status
+                    ).model_dump(),
                 )
             raise
 
         used_indices = _extract_citation_indices(answer_text)
 
-        sorted_used = sorted(i for i in used_indices if 1 <=
-                             i <= len(citations_retrieved))
+        sorted_used = sorted(
+            i for i in used_indices if 1 <= i <= len(citations_retrieved)
+        )
         citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        renumber_map = {orig: new for new,
-                        orig in enumerate(sorted_used, start=1)}
+        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
         renumbered_answer = _rewrite_citations(answer_text, renumber_map)
 
         return AnswerResponse(
@@ -588,8 +586,7 @@ async def revise_clinical_answer(
     except Exception as e:
         print(f"\u274c /revise Error: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"RAG Revise Error: {str(e)}"
+            status_code=500, detail=f"RAG Revise Error: {str(e)}"
         ) from e
 
 

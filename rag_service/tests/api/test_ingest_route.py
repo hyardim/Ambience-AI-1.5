@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # PipelineError - defined at module level so tests can reference it without
 # importing anything from src.*
@@ -151,6 +150,12 @@ def main_app():
     fake_config.LLM_ROUTE_THRESHOLD = 0.65  # type: ignore[attr-defined]
     fake_config.LOCAL_LLM_MODEL = "fake-local-model"  # type: ignore[attr-defined]
     fake_config.ROUTE_REVISIONS_TO_CLOUD = True  # type: ignore[attr-defined]
+    fake_config.RETRY_ENABLED = True  # type: ignore[attr-defined]
+    fake_config.REDIS_URL = "redis://localhost:6379/0"  # type: ignore[attr-defined]
+    fake_config.RETRY_MAX_ATTEMPTS = 3  # type: ignore[attr-defined]
+    fake_config.RETRY_BACKOFF_SECONDS = 10  # type: ignore[attr-defined]
+    fake_config.RETRY_BACKOFF_MULTIPLIER = 2  # type: ignore[attr-defined]
+    fake_config.RETRY_JOB_TTL_SECONDS = 86400  # type: ignore[attr-defined]
     _path_config = MagicMock()
     _path_config.root = Path("/app")
     fake_config.path_config = _path_config  # type: ignore[attr-defined]
@@ -178,6 +183,12 @@ def main_app():
     sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
         return_value=None
     )  # type: ignore[attr-defined]
+    class _ModelGenerationError(RuntimeError):
+        def __init__(self, message: str, retryable: bool = False) -> None:
+            super().__init__(message)
+            self.retryable = retryable
+
+    sys.modules["src.generation.client"].ModelGenerationError = _ModelGenerationError  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].generate_answer = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].warmup_model = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"  # type: ignore[attr-defined]
@@ -190,14 +201,15 @@ def main_app():
     # src.generation.router only uses stdlib + src.config so let it load for real
     # (fake_config already has FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD)
 
-    import src.main as _main  # noqa: E402
+    try:
+        import src.main as _main  # noqa: E402
 
-    yield _main
-
-    # Teardown: remove stubs and restore anything that was previously cached
-    for k in _STUBBED:
-        sys.modules.pop(k, None)
-    sys.modules.update(saved)
+        yield _main
+    finally:
+        # Teardown: remove stubs and restore anything that was previously cached
+        for k in _STUBBED:
+            sys.modules.pop(k, None)
+        sys.modules.update(saved)
 
 
 @pytest.fixture()
