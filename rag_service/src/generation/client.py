@@ -18,8 +18,29 @@ from ..config import (
 ProviderName = Literal["local", "cloud"]
 
 
+class ProviderRequestError(RuntimeError):
+    """Provider-specific generation failure with retry metadata."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: ProviderName,
+        retryable: bool,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.retryable = retryable
+        self.status_code = status_code
+
+
 class ModelGenerationError(RuntimeError):
     """Raised when both primary and fallback model providers fail."""
+
+    def __init__(self, message: str, *, retryable: bool) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 def _fallback_provider(provider: ProviderName) -> ProviderName:
@@ -50,7 +71,8 @@ async def warmup_model(provider: ProviderName = "local") -> None:
             resp.raise_for_status()
         print(f"✅ Local model '{LOCAL_LLM_MODEL}' warmed up and kept alive.")
     except Exception as exc:  # pragma: no cover
-        print(f"⚠️  Local model warmup failed (model may still be loading): {exc}")
+        print(
+            f"⚠️  Local model warmup failed (model may still be loading): {exc}")
 
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:
@@ -70,8 +92,32 @@ async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> 
             resp.raise_for_status()
             data = resp.json()
             return data.get("response", "").strip()
-    except httpx.HTTPError as exc:
-        raise RuntimeError(f"Local model request failed: {exc}") from exc
+    except httpx.TimeoutException as exc:
+        raise ProviderRequestError(
+            f"Local model request timed out: {exc}",
+            provider="local",
+            retryable=True,
+        ) from exc
+    except httpx.ConnectError as exc:
+        raise ProviderRequestError(
+            f"Local model connection failed: {exc}",
+            provider="local",
+            retryable=True,
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        raise ProviderRequestError(
+            f"Local model returned HTTP {status_code}",
+            provider="local",
+            retryable=status_code >= 500,
+            status_code=status_code,
+        ) from exc
+    except httpx.RequestError as exc:
+        raise ProviderRequestError(
+            f"Local model request failed: {exc}",
+            provider="local",
+            retryable=True,
+        ) from exc
 
 
 async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> str:
@@ -102,8 +148,32 @@ async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> 
                 .get("content", "")
                 .strip()
             )
-    except httpx.HTTPError as exc:
-        raise RuntimeError(f"Cloud model request failed: {exc}") from exc
+    except httpx.TimeoutException as exc:
+        raise ProviderRequestError(
+            f"Cloud model request timed out: {exc}",
+            provider="cloud",
+            retryable=True,
+        ) from exc
+    except httpx.ConnectError as exc:
+        raise ProviderRequestError(
+            f"Cloud model connection failed: {exc}",
+            provider="cloud",
+            retryable=True,
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        raise ProviderRequestError(
+            f"Cloud model returned HTTP {status_code}",
+            provider="cloud",
+            retryable=status_code >= 500,
+            status_code=status_code,
+        ) from exc
+    except httpx.RequestError as exc:
+        raise ProviderRequestError(
+            f"Cloud model request failed: {exc}",
+            provider="cloud",
+            retryable=True,
+        ) from exc
 
 
 async def _call_local_model(prompt: str, max_tokens: int | None = None) -> str:
@@ -121,6 +191,7 @@ async def generate_answer(
 ) -> str:
     """Generate an answer using the selected provider with fallback."""
     attempts: list[str] = []
+    attempt_errors: list[ProviderRequestError] = []
 
     for index, current_provider in enumerate(
         (provider, _fallback_provider(provider)),
@@ -145,10 +216,19 @@ async def generate_answer(
             return response
         except Exception as exc:
             attempts.append(f"{current_provider}: {exc}")
+            if isinstance(exc, ProviderRequestError):
+                attempt_errors.append(exc)
             if index == 1:
                 print(
                     f"⚠️ Primary generation provider failed (provider={current_provider}): {exc}. "
                     f"Trying fallback provider={_fallback_provider(current_provider)}."
                 )
 
-    raise ModelGenerationError("All model providers failed. " + " | ".join(attempts))
+    retryable = (
+        len(attempt_errors) == len(attempts)
+        and all(error.retryable for error in attempt_errors)
+    )
+    raise ModelGenerationError(
+        "All model providers failed. " + " | ".join(attempts),
+        retryable=retryable,
+    )

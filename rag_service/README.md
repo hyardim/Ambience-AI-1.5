@@ -86,7 +86,58 @@ CHUNK_OVERLAP=100
 # Logging
 LOG_LEVEL=INFO
 LOG_FILE=logs/rag.log
+
+# Retry queue
+REDIS_URL=redis://localhost:6379/0
+RETRY_ENABLED=true
+RETRY_MAX_ATTEMPTS=3
+RETRY_BACKOFF_SECONDS=10
+RETRY_BACKOFF_MULTIPLIER=2
+RETRY_JOB_TTL_SECONDS=86400
 ```
+
+---
+
+## Retry Queue (Redis + Worker)
+
+When `/answer` or `/revise` fails due to transient provider/network/timeouts, the
+request is queued and retried asynchronously. The API returns `202` with a job id
+that can be polled via `/jobs/{job_id}`.
+
+### Run Redis locally
+
+```bash
+docker run --name ambience-redis -p 6379:6379 -d redis:7-alpine
+```
+
+Or via Docker Compose:
+
+```bash
+docker compose up -d redis
+```
+
+### Start the retry worker
+
+```bash
+python scripts/run_retry_worker.py
+```
+
+Or via Docker Compose:
+
+```bash
+docker compose up -d rag_worker
+```
+
+### Example request flow
+
+```text
+POST /answer -> 202 { job_id: "...", status: "queued" }
+GET  /jobs/{job_id} -> { status: "retrying", attempt_count: 1 }
+GET  /jobs/{job_id} -> { status: "succeeded", response: { ... } }
+```
+
+Validation errors and 4xx provider responses are not retried and return
+immediate failures.
 
 ---
 

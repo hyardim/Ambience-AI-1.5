@@ -3,7 +3,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Header, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -14,9 +15,10 @@ from .config import (
     LLM_MAX_TOKENS,
     LLM_ROUTE_THRESHOLD,
     LOCAL_LLM_MODEL,
+    RETRY_ENABLED,
     path_config,
 )
-from .generation.client import generate_answer, warmup_model
+from .generation.client import ModelGenerationError, generate_answer, warmup_model
 from .generation.prompts import (
     ACTIVE_PROMPT,
     build_grounded_prompt,
@@ -25,6 +27,7 @@ from .generation.prompts import (
 from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .ingestion.pipeline import PipelineError, load_sources, run_ingestion
+from .retry_queue import RetryJobStatus, create_retry_job, get_retry_job
 from .retrieval.vector_store import (
     get_source_path_for_doc,
     init_db,
@@ -230,13 +233,29 @@ class IngestResponse(BaseModel):
     db: dict
 
 
+class RetryAcceptedResponse(BaseModel):
+    job_id: str
+    status: RetryJobStatus
+
+
+class RetryJobResponse(BaseModel):
+    job_id: str
+    status: RetryJobStatus
+    attempt_count: int
+    last_error: str | None = None
+    created_at: str
+    updated_at: str
+    response: dict[str, Any] | None = None
+
+
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest_guideline(
     file: UploadFile = File(...),
     source_name: str = Form(...),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=422, detail="Only PDF files are supported.")
+        raise HTTPException(
+            status_code=422, detail="Only PDF files are supported.")
 
     sources_path = path_config.root / "configs" / "sources.yaml"
     sources = load_sources(sources_path)
@@ -247,7 +266,8 @@ async def ingest_guideline(
         )
 
     specialty = sources[source_name].get("specialty", "general")
-    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / source_name
+    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / \
+        source_name
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file.filename
 
@@ -255,18 +275,22 @@ async def ingest_guideline(
         with dest_path.open("wb") as f:
             shutil.copyfileobj(file.file, f)
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save file: {e}") from e
     finally:
         file.file.close()
 
     try:
-        report = run_ingestion(input_path=dest_path, source_name=source_name, db_url=DATABASE_URL)
+        report = run_ingestion(input_path=dest_path,
+                               source_name=source_name, db_url=DATABASE_URL)
     except PipelineError as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}") from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ingestion error: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Ingestion error: {e}") from e
 
     return IngestResponse(source_name=source_name, filename=file.filename, **report)
 
@@ -319,8 +343,11 @@ async def clinical_query(request: QueryRequest):
         ) from e
 
 
-@app.post("/answer", response_model=AnswerResponse)
-async def generate_clinical_answer(request: AnswerRequest):
+@app.post("/answer", response_model=AnswerResponse | RetryAcceptedResponse)
+async def generate_clinical_answer(
+    request: AnswerRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     """Retrieve supporting chunks, build a grounded prompt, and call Ollama
     for an answer."""
     try:
@@ -353,8 +380,12 @@ async def generate_clinical_answer(request: AnswerRequest):
                 citations=[],
             )
 
-        prompt = build_grounded_prompt(request.query, top_chunks, patient_context=request.patient_context, file_context=request.file_context)
-
+    prompt = build_grounded_prompt(
+        request.query,
+        top_chunks,
+        patient_context=request.patient_context,
+        file_context=request.file_context,
+    )
         route = select_generation_provider(
             query=request.query,
             retrieved_chunks=filtered or retrieved,
@@ -365,14 +396,6 @@ async def generate_clinical_answer(request: AnswerRequest):
             f"provider={route.provider} score={route.score} "
             f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
         )
-        answer_text = await generate_answer(
-            prompt,
-            max_tokens=request.max_tokens,
-            provider=route.provider,
-        )
-
-        used_indices = _extract_citation_indices(answer_text)
-
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
@@ -392,10 +415,41 @@ async def generate_clinical_answer(request: AnswerRequest):
             for res in top_chunks
         ]
 
-        sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+        try:
+            answer_text = await generate_answer(
+                prompt,
+                max_tokens=request.max_tokens,
+                provider=route.provider,
+            )
+        except ModelGenerationError as exc:
+            if RETRY_ENABLED and exc.retryable:
+                job_id, status = create_retry_job(
+                    request_type="answer",
+                    payload={
+                        "prompt": prompt,
+                        "provider": route.provider,
+                        "max_tokens": request.max_tokens,
+                        "prompt_label": ACTIVE_PROMPT,
+                        "citations_retrieved": [
+                            citation.model_dump() for citation in citations_retrieved
+                        ],
+                    },
+                    idempotency_key=idempotency_key,
+                )
+                return JSONResponse(
+                    status_code=202,
+                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                )
+            raise
+
+        used_indices = _extract_citation_indices(answer_text)
+
+        sorted_used = sorted(i for i in used_indices if 1 <=
+                             i <= len(citations_retrieved))
         citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+        renumber_map = {orig: new for new,
+                        orig in enumerate(sorted_used, start=1)}
         renumbered_answer = _rewrite_citations(answer_text, renumber_map)
         # Strip any fabricated plain-text "References:" section the model appends.
         renumbered_answer = re.sub(
@@ -419,8 +473,11 @@ async def generate_clinical_answer(request: AnswerRequest):
         ) from e
 
 
-@app.post("/revise", response_model=AnswerResponse)
-async def revise_clinical_answer(request: ReviseRequest):
+@app.post("/revise", response_model=AnswerResponse | RetryAcceptedResponse)
+async def revise_clinical_answer(
+    request: ReviseRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     """Re-generate an AI answer incorporating specialist feedback.
 
     Retrieval is performed against the *original* patient query so that the
@@ -467,14 +524,6 @@ async def revise_clinical_answer(request: ReviseRequest):
             f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
         )
 
-        answer_text = await generate_answer(
-            prompt,
-            max_tokens=request.max_tokens,
-            provider=route.provider,
-        )
-
-        used_indices = _extract_citation_indices(answer_text)
-
         citations_retrieved = [
             SearchResult(
                 text=res["text"],
@@ -494,10 +543,40 @@ async def revise_clinical_answer(request: ReviseRequest):
             for res in top_chunks
         ]
 
-        sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+        try:
+            answer_text = await generate_answer(
+                prompt,
+                max_tokens=request.max_tokens,
+                provider=route.provider,
+            )
+        except ModelGenerationError as exc:
+            if RETRY_ENABLED and exc.retryable:
+                job_id, status = create_retry_job(
+                    request_type="revise",
+                    payload={
+                        "prompt": prompt,
+                        "provider": route.provider,
+                        "max_tokens": request.max_tokens,
+                        "citations_retrieved": [
+                            citation.model_dump() for citation in citations_retrieved
+                        ],
+                    },
+                    idempotency_key=idempotency_key,
+                )
+                return JSONResponse(
+                    status_code=202,
+                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                )
+            raise
+
+        used_indices = _extract_citation_indices(answer_text)
+
+        sorted_used = sorted(i for i in used_indices if 1 <=
+                             i <= len(citations_retrieved))
         citations_used = [citations_retrieved[i - 1] for i in sorted_used]
 
-        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+        renumber_map = {orig: new for new,
+                        orig in enumerate(sorted_used, start=1)}
         renumbered_answer = _rewrite_citations(answer_text, renumber_map)
 
         return AnswerResponse(
@@ -512,6 +591,23 @@ async def revise_clinical_answer(request: ReviseRequest):
             status_code=500,
             detail=f"RAG Revise Error: {str(e)}"
         ) from e
+
+
+@app.get("/jobs/{job_id}", response_model=RetryJobResponse)
+async def get_retry_job_status(job_id: str):
+    state = get_retry_job(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return RetryJobResponse(
+        job_id=state["job_id"],
+        status=RetryJobStatus(state["status"]),
+        attempt_count=state["attempt_count"],
+        last_error=state.get("last_error") or None,
+        created_at=state["created_at"],
+        updated_at=state["updated_at"],
+        response=state.get("response"),
+    )
 
 
 @app.get("/docs/{doc_id}")

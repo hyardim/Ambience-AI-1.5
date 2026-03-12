@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query
+.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query run-retry-worker
 
 help:
 	@echo "Available commands:"
@@ -22,6 +22,7 @@ help:
 	@echo "  make run-ingest         - Run ingestion pipeline"
 	@echo "                           Required: INPUT=... SOURCE=..."
 	@echo "                           Optional: DRY_RUN=1 DB_URL=... SINCE=YYYY-MM-DD MAX_FILES=N WRITE_DEBUG=1 LOG_LEVEL=..."
+	@echo "  make run-retry-worker   - Start Redis retry worker for /answer and /revise"
 # 	@echo "  make run-query          - Run RAG query"
 
 install:
@@ -104,6 +105,9 @@ run-ingest:
 	  $(if $(SINCE),--since $(SINCE)) \
 	  $(if $(MAX_FILES),--max-files $(MAX_FILES)) \
 	  $(if $(WRITE_DEBUG),--write-debug-artifacts)
+
+run-retry-worker:
+	python scripts/run_retry_worker.py
 
 # run-query:
 # 	python scripts/query.py
