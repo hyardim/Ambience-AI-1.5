@@ -198,6 +198,14 @@ Environment variables (backend):
 - `CACHE_PROFILE_TTL` (seconds, default: `300`)
 - `CACHE_KEY_PREFIX` (default: `cache`)
 
+Cache troubleshooting:
+
+- To disable caching temporarily, set `CACHE_ENABLED=false` and restart the backend.
+- To reset only backend cache keys, run: `redis-cli KEYS "cache:*" | xargs redis-cli DEL`
+- If you see stale chat data, confirm you updated the correct environment variables for the backend service.
+- If Redis is not reachable, the backend will fall back to database reads and log a `cache.error` warning.
+- You can point the backend to a local Redis by setting `REDIS_URL=redis://localhost:6379/0`.
+
 ## Running locally with Ollama (keep this for dev)
 
 Use this mode when you want lower cost local development.
