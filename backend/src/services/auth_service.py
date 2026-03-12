@@ -25,7 +25,8 @@ def _validate_password(password: str) -> None:
     if not re.search(r"[^A-Za-z0-9]", password):
         errors.append("a special character")
     if errors:
-        raise HTTPException(status_code=400, detail=f"Password must contain: {', '.join(errors)}")
+        raise HTTPException(
+            status_code=400, detail=f"Password must contain: {', '.join(errors)}")
 
 
 def _make_auth_response(user: User) -> AuthResponse:
@@ -49,7 +50,8 @@ def login(db: Session, email: str, password: str) -> AuthResponse:
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    audit_repository.log(db, user_id=user.id, action="LOGIN", details=f"user_id={user.id}")
+    audit_repository.log(db, user_id=user.id, action="LOGIN",
+                         details=f"user_id={user.id}")
     return _make_auth_response(user)
 
 
@@ -60,10 +62,12 @@ def register(db: Session, payload: UserRegister) -> AuthResponse:
     try:
         role = UserRole(payload.role)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid role: {payload.role}")
 
     if role == UserRole.SPECIALIST and not payload.specialty:
-        raise HTTPException(status_code=400, detail="Specialists must provide a specialty")
+        raise HTTPException(
+            status_code=400, detail="Specialists must provide a specialty")
 
     _validate_password(payload.password)
 
@@ -75,7 +79,8 @@ def register(db: Session, payload: UserRegister) -> AuthResponse:
         role=role,
         specialty=payload.specialty,
     )
-    audit_repository.log(db, user_id=user.id, action="REGISTER", details=f"user_id={user.id}")
+    audit_repository.log(db, user_id=user.id,
+                         action="REGISTER", details=f"user_id={user.id}")
     return _make_auth_response(user)
 
 
@@ -87,14 +92,18 @@ def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
     _validate_password(payload.new_password)
-    user_repository.update(db, user, hashed_password=security.get_password_hash(payload.new_password))
-    audit_repository.log(db, user_id=user.id, action="PASSWORD_RESET", details=f"user_id={user.id}")
-    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
+    user_repository.update(
+        db, user, hashed_password=security.get_password_hash(payload.new_password))
+    audit_repository.log(db, user_id=user.id,
+                         action="PASSWORD_RESET", details=f"user_id={user.id}")
+    cache.delete_sync(cache_keys.user_profile(user.id),
+                      user_id=user.id, resource="user_profile")
     return {"message": "If that email is registered, the password has been reset"}
 
 
 def logout(db: Session, user: User) -> dict:
-    audit_repository.log(db, user_id=user.id, action="LOGOUT", details=f"user_id={user.id}")
+    audit_repository.log(db, user_id=user.id, action="LOGOUT",
+                         details=f"user_id={user.id}")
     return {"message": "Logged out successfully"}
 
 
@@ -112,11 +121,15 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
                 status_code=400, detail="current_password is required to set a new password"
             )
         if not security.verify_password(payload.current_password, user.hashed_password):
-            raise HTTPException(status_code=400, detail="Current password is incorrect")
+            raise HTTPException(
+                status_code=400, detail="Current password is incorrect")
         _validate_password(payload.new_password)
-        fields["hashed_password"] = security.get_password_hash(payload.new_password)
+        fields["hashed_password"] = security.get_password_hash(
+            payload.new_password)
 
     user = user_repository.update(db, user, **fields)
-    audit_repository.log(db, user_id=user.id, action="UPDATE_PROFILE", details=f"user_id={user.id}")
-    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
+    audit_repository.log(db, user_id=user.id,
+                         action="UPDATE_PROFILE", details=f"user_id={user.id}")
+    cache.delete_sync(cache_keys.user_profile(user.id),
+                      user_id=user.id, resource="user_profile")
     return user

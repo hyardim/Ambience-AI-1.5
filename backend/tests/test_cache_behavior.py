@@ -32,7 +32,8 @@ def test_list_chats_cache_hit_uses_cached_data(monkeypatch):
         raise AssertionError("repo should not be called when cache hits")
 
     monkeypatch.setattr(chat_service.cache, "get_sync", fake_get_sync)
-    monkeypatch.setattr(chat_service.chat_repository, "list_for_user", fake_list_for_user)
+    monkeypatch.setattr(chat_service.chat_repository,
+                        "list_for_user", fake_list_for_user)
 
     user = SimpleNamespace(id=7)
     result = chat_service.list_chats(db=None, user=user)
@@ -68,7 +69,8 @@ def test_list_chats_cache_miss_sets_cache(monkeypatch):
 
     monkeypatch.setattr(chat_service.cache, "get_sync", fake_get_sync)
     monkeypatch.setattr(chat_service.cache, "set_sync", fake_set_sync)
-    monkeypatch.setattr(chat_service.chat_repository, "list_for_user", lambda *_args, **_kwargs: [fake_chat])
+    monkeypatch.setattr(chat_service.chat_repository,
+                        "list_for_user", lambda *_args, **_kwargs: [fake_chat])
 
     user = SimpleNamespace(id=11)
     result = chat_service.list_chats(db=None, user=user)
@@ -134,9 +136,12 @@ def test_create_chat_invalidates_list_cache(monkeypatch):
         user_id=9,
     )
 
-    monkeypatch.setattr(chat_service.chat_repository, "create", lambda *_args, **_kwargs: fake_chat)
-    monkeypatch.setattr(chat_service.audit_repository, "log", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(chat_service.cache, "delete_pattern_sync", fake_delete_pattern_sync)
+    monkeypatch.setattr(chat_service.chat_repository,
+                        "create", lambda *_args, **_kwargs: fake_chat)
+    monkeypatch.setattr(chat_service.audit_repository,
+                        "log", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(chat_service.cache,
+                        "delete_pattern_sync", fake_delete_pattern_sync)
 
     user = SimpleNamespace(id=9)
     payload = SimpleNamespace(

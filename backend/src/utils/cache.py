@@ -18,29 +18,34 @@ class RedisCache:
         if not settings.CACHE_ENABLED:
             return None
         if self._client is None:
-            self._client = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+            self._client = Redis.from_url(
+                settings.REDIS_URL, decode_responses=True)
         return self._client
 
     async def get(self, key: str, *, user_id: Optional[int] = None, resource: str = "") -> Optional[Any]:
         client = await self._get_client()
         if client is None:
-            logger.debug("cache.disabled", extra={"key": key, "user_id": user_id, "resource": resource})
+            logger.debug("cache.disabled", extra={
+                         "key": key, "user_id": user_id, "resource": resource})
             return None
         try:
             value = await client.get(key)
             if value is None:
-                logger.debug("cache.miss", extra={"key": key, "user_id": user_id, "resource": resource})
+                logger.debug("cache.miss", extra={
+                             "key": key, "user_id": user_id, "resource": resource})
                 return None
             ttl = await client.ttl(key)
             logger.debug(
                 "cache.hit",
-                extra={"key": key, "user_id": user_id, "resource": resource, "ttl": ttl},
+                extra={"key": key, "user_id": user_id,
+                       "resource": resource, "ttl": ttl},
             )
             return json.loads(value)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"key": key, "user_id": user_id, "resource": resource, "error": str(exc)},
+                extra={"key": key, "user_id": user_id,
+                       "resource": resource, "error": str(exc)},
             )
             return None
 
@@ -55,20 +60,23 @@ class RedisCache:
     ) -> bool:
         client = await self._get_client()
         if client is None:
-            logger.debug("cache.disabled", extra={"key": key, "user_id": user_id, "resource": resource})
+            logger.debug("cache.disabled", extra={
+                         "key": key, "user_id": user_id, "resource": resource})
             return False
         try:
             payload = json.dumps(value)
             await client.set(key, payload, ex=ttl)
             logger.debug(
                 "cache.set",
-                extra={"key": key, "user_id": user_id, "resource": resource, "ttl": ttl},
+                extra={"key": key, "user_id": user_id,
+                       "resource": resource, "ttl": ttl},
             )
             return True
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"key": key, "user_id": user_id, "resource": resource, "error": str(exc)},
+                extra={"key": key, "user_id": user_id,
+                       "resource": resource, "error": str(exc)},
             )
             return False
 
@@ -80,13 +88,15 @@ class RedisCache:
             count = await client.delete(key)
             logger.debug(
                 "cache.delete",
-                extra={"key": key, "user_id": user_id, "resource": resource, "count": count},
+                extra={"key": key, "user_id": user_id,
+                       "resource": resource, "count": count},
             )
             return count
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"key": key, "user_id": user_id, "resource": resource, "error": str(exc)},
+                extra={"key": key, "user_id": user_id,
+                       "resource": resource, "error": str(exc)},
             )
             return 0
 
@@ -101,13 +111,15 @@ class RedisCache:
             count = await client.delete(*keys)
             logger.debug(
                 "cache.invalidate",
-                extra={"pattern": pattern, "user_id": user_id, "resource": resource, "count": count},
+                extra={"pattern": pattern, "user_id": user_id,
+                       "resource": resource, "count": count},
             )
             return count
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"pattern": pattern, "user_id": user_id, "resource": resource, "error": str(exc)},
+                extra={"pattern": pattern, "user_id": user_id,
+                       "resource": resource, "error": str(exc)},
             )
             return 0
 

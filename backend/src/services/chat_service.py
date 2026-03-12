@@ -25,7 +25,8 @@ RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024  # 3 MB per file
 MAX_FILES_PER_CHAT = 5
-RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+RAG_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +84,8 @@ def list_chats(
                 status_code=400, detail=f"Invalid status: {status}")
 
     page = skip // limit if limit else 0
-    cache_key = cache_keys.chat_list(user.id, page, limit, status=status, specialty=specialty)
+    cache_key = cache_keys.chat_list(
+        user.id, page, limit, status=status, specialty=specialty)
     cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_list")
     if cached is not None:
         return [ChatResponse(**item) for item in cached]
@@ -244,7 +246,8 @@ async def upload_file(
     is_owner = chat.user_id == user.id
     is_specialist = chat.specialist_id == user.id
     if not (is_owner or is_specialist):
-        raise HTTPException(status_code=403, detail="Not authorised to upload to this chat")
+        raise HTTPException(
+            status_code=403, detail="Not authorised to upload to this chat")
 
     dest_dir = UPLOAD_DIR / str(chat_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -258,7 +261,8 @@ async def upload_file(
             detail=f"File exceeds the 3 MB limit ({len(contents) // 1024} KB uploaded).",
         )
 
-    existing_count = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
+    existing_count = db.query(FileAttachment).filter(
+        FileAttachment.chat_id == chat_id).count()
     if existing_count >= MAX_FILES_PER_CHAT:
         raise HTTPException(
             status_code=422,
@@ -335,7 +339,8 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         FILE_CONTEXT_CHAR_LIMIT = 8_000
         file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
         if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
-            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + "\n\n[Document truncated to fit context window]"
+            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + \
+                "\n\n[Document truncated to fit context window]"
 
         rag_payload: dict = {
             "query": content,

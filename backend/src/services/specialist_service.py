@@ -48,7 +48,8 @@ def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
 
 def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMessages:
     cache_key = cache_keys.chat_detail(specialist.id, chat_id)
-    cached = cache.get_sync(cache_key, user_id=specialist.id, resource="chat_detail")
+    cached = cache.get_sync(
+        cache_key, user_id=specialist.id, resource="chat_detail")
     if cached is not None:
         return ChatWithMessages(**cached)
 
