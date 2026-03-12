@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
+from enum import Enum
 
 # ---------------------------------------------------------------------------
 # Stub all heavy modules BEFORE any src.* import
@@ -72,6 +73,12 @@ _fake_config = _types.ModuleType("src.config")
 _fake_config.DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:pw@localhost/test")  # type: ignore[attr-defined]
 _fake_config.OLLAMA_MODEL = "fake-model"  # type: ignore[attr-defined]
 _fake_config.OLLAMA_MAX_TOKENS = 512  # type: ignore[attr-defined]
+_fake_config.RETRY_ENABLED = False  # type: ignore[attr-defined]
+_fake_config.REDIS_URL = "redis://localhost:6379/0"  # type: ignore[attr-defined]
+_fake_config.RETRY_MAX_ATTEMPTS = 3  # type: ignore[attr-defined]
+_fake_config.RETRY_BACKOFF_SECONDS = 10  # type: ignore[attr-defined]
+_fake_config.RETRY_BACKOFF_MULTIPLIER = 2  # type: ignore[attr-defined]
+_fake_config.RETRY_JOB_TTL_SECONDS = 86400  # type: ignore[attr-defined]
 
 _path_config = MagicMock()
 _path_config.root = Path("/app")
@@ -86,6 +93,7 @@ for _mod in (
     "src.retrieval.vector_store",
     "src.generation.client",
     "src.generation.prompts",
+    "src.retry_queue",
 ):
     sys.modules.setdefault(_mod, _types.ModuleType(_mod))
 
@@ -101,6 +109,12 @@ sys.modules["src.generation.client"].warmup_model = MagicMock()  # type: ignore[
 sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"  # type: ignore[attr-defined]
 sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock()  # type: ignore[attr-defined]
 sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock()  # type: ignore[attr-defined]
+class _FakeRetryJobStatus(str, Enum):
+    QUEUED = "queued"
+
+sys.modules["src.retry_queue"].RetryJobStatus = _FakeRetryJobStatus  # type: ignore[attr-defined]
+sys.modules["src.retry_queue"].create_retry_job = MagicMock()  # type: ignore[attr-defined]
+sys.modules["src.retry_queue"].get_retry_job = MagicMock()  # type: ignore[attr-defined]
 
 # PipelineError needs to be a real exception class
 class _PipelineError(Exception):
