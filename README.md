@@ -206,6 +206,25 @@ Cache troubleshooting:
 - If Redis is not reachable, the backend will fall back to database reads and log a `cache.error` warning.
 - You can point the backend to a local Redis by setting `REDIS_URL=redis://localhost:6379/0`.
 
+Cache key format:
+
+- Chat list keys: `cache:user:{user_id}:chats:{status}:{specialty}:{page}:{page_size}`
+- Chat detail keys: `cache:user:{user_id}:chat:{chat_id}`
+- Profile keys: `cache:user:{user_id}:profile`
+- Chat detail invalidation uses a wildcard pattern: `cache:user:*:chat:{chat_id}`
+- Chat list invalidation uses a per-user pattern: `cache:user:{user_id}:chats:*`
+
+Examples:
+
+- `cache:user:12:chats:open:neuro:0:50`
+- `cache:user:12:chat:410`
+- `cache:user:12:profile`
+
+Notes:
+
+- `CACHE_KEY_PREFIX` replaces the leading `cache` segment.
+- Keys are scoped per user to avoid cross-tenant leakage.
+
 ## Running locally with Ollama (keep this for dev)
 
 Use this mode when you want lower cost local development.
