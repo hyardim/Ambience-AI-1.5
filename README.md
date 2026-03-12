@@ -225,6 +225,23 @@ Notes:
 - `CACHE_KEY_PREFIX` replaces the leading `cache` segment.
 - Keys are scoped per user to avoid cross-tenant leakage.
 
+Cache FAQ:
+
+- Q: Do I need Redis running to use the backend?
+- A: No. If Redis is down, the backend will log a warning and read from the database directly.
+
+- Q: Why am I still seeing old data?
+- A: Check that your backend container picked up the latest env values and that the cache keys were invalidated.
+
+- Q: How can I wipe only chat caches?
+- A: Use a pattern delete, e.g. `redis-cli KEYS "cache:user:*:chats:*" | xargs redis-cli DEL`.
+
+- Q: Can I tune how long chat details are cached?
+- A: Yes. Set `CACHE_CHAT_DETAIL_TTL` in seconds and restart the backend.
+
+- Q: What about large payloads?
+- A: The cache stores JSON payloads; keep payload sizes reasonable by tuning list page sizes.
+
 ## Running locally with Ollama (keep this for dev)
 
 Use this mode when you want lower cost local development.
