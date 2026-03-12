@@ -74,14 +74,21 @@ def client(monkeypatch):
     ):
         sys.modules.setdefault(module_name, types.ModuleType(module_name))
 
-    sys.modules["src.ingestion.embed"].load_embedder = MagicMock(return_value=MagicMock())
+    sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
+        return_value=MagicMock()
+    )
     sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(return_value=384)
     sys.modules["src.ingestion.embed"].embed_text = MagicMock(return_value=[[0.1]])
     sys.modules["src.retrieval.vector_store"].init_db = MagicMock()
-    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(return_value=[])
-    sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(return_value=None)
+    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(
+        return_value=[]
+    )
+    sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
+        return_value=None
+    )
     sys.modules["src.generation.client"].generate_answer = MagicMock()
     sys.modules["src.generation.client"].warmup_model = MagicMock()
+
     class FakeModelGenerationError(RuntimeError):
         def __init__(self, message: str, retryable: bool) -> None:
             super().__init__(message)
@@ -89,8 +96,12 @@ def client(monkeypatch):
 
     sys.modules["src.generation.client"].ModelGenerationError = FakeModelGenerationError
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"
-    sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(return_value="prompt")
-    sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock(return_value="prompt")
+    sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(
+        return_value="prompt"
+    )
+    sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock(
+        return_value="prompt"
+    )
 
     class _PipelineError(Exception):
         def __init__(self, stage: str, message: str) -> None:
@@ -103,20 +114,23 @@ def client(monkeypatch):
     sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock()
 
     retry_module = sys.modules["src.retry_queue"]
+
     class FakeRetryJobStatus(str, Enum):
         QUEUED = "queued"
 
     retry_module.RetryJobStatus = FakeRetryJobStatus
     retry_module.create_retry_job = MagicMock(return_value=("job-1", "queued"))
-    retry_module.get_retry_job = MagicMock(return_value={
-        "job_id": "job-1",
-        "status": "queued",
-        "attempt_count": 1,
-        "last_error": "",
-        "created_at": "now",
-        "updated_at": "now",
-        "response": None,
-    })
+    retry_module.get_retry_job = MagicMock(
+        return_value={
+            "job_id": "job-1",
+            "status": "queued",
+            "attempt_count": 1,
+            "last_error": "",
+            "created_at": "now",
+            "updated_at": "now",
+            "response": None,
+        }
+    )
 
     import src.main as main
 
@@ -134,9 +148,15 @@ def test_jobs_status_endpoint_returns_state(client):
 def test_answer_returns_202_on_retryable_failure(monkeypatch, client):
     from src import main
 
-    main.search_similar_chunks = MagicMock(return_value=[
-        {"text": "headache guidance", "score": 0.9, "metadata": {"source_path": "x"}},
-    ])
+    main.search_similar_chunks = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
 
     async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise main.ModelGenerationError("transient", retryable=True)

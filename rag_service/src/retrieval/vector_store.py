@@ -187,7 +187,9 @@ def search_similar_chunks(
                 "page_start": (row[7] or {}).get("page_start"),
                 "page_end": (row[7] or {}).get("page_end"),
                 # section_path can be stored as a list in metadata; join for API compatibility.
-                "section_path": _normalize_section_path((row[7] or {}).get("section_path")),
+                "section_path": _normalize_section_path(
+                    (row[7] or {}).get("section_path")
+                ),
             }
             for row in results
         ]

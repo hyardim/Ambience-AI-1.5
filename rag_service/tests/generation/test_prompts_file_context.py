@@ -20,7 +20,6 @@ _FILE_CONTEXT = "[discharge_summary.txt]\nPatient is a 45F with RRMS. Recent MRI
 
 
 class TestGroundedPromptFileContext:
-
     def test_uploaded_documents_block_present(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=_FILE_CONTEXT)
         assert "UPLOADED DOCUMENTS" in prompt
@@ -56,7 +55,9 @@ class TestGroundedPromptFileContext:
 
     def test_citation_hint_present_when_file_context_only(self):
         """Even with no indexed chunks, citation hint should appear when file_context is set."""
-        prompt = build_grounded_prompt("What DMT?", chunks=[], file_context=_FILE_CONTEXT)
+        prompt = build_grounded_prompt(
+            "What DMT?", chunks=[], file_context=_FILE_CONTEXT
+        )
         assert "citations" in prompt.lower()
 
     def test_both_patient_context_and_file_context(self):
@@ -87,7 +88,6 @@ class TestGroundedPromptFileContext:
 
 
 class TestRevisionPromptFileContext:
-
     def test_file_context_in_revision_prompt(self):
         prompt = build_revision_prompt(
             original_question="What DMT?",

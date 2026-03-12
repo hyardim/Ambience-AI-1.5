@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 # importing anything from src.*
 # ---------------------------------------------------------------------------
 
+
 class _PipelineError(Exception):
     def __init__(self, stage: str, message: str):
         self.stage = stage
@@ -55,6 +56,7 @@ FAKE_REPORT = {
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_stub(name: str) -> types.ModuleType:
     mod = types.ModuleType(name)
     sys.modules[name] = mod
@@ -68,12 +70,21 @@ def main_app():
         "pydantic_settings",
         "sentence_transformers",
         "torch",
-        "pgvector", "pgvector.sqlalchemy", "pgvector.psycopg2",
-        "psycopg2", "psycopg2.extras", "psycopg2.errors",
-        "sqlalchemy", "sqlalchemy.orm", "sqlalchemy.pool",
-        "sqlalchemy.dialects", "sqlalchemy.dialects.postgresql", "sqlalchemy.engine",
+        "pgvector",
+        "pgvector.sqlalchemy",
+        "pgvector.psycopg2",
+        "psycopg2",
+        "psycopg2.extras",
+        "psycopg2.errors",
+        "sqlalchemy",
+        "sqlalchemy.orm",
+        "sqlalchemy.pool",
+        "sqlalchemy.dialects",
+        "sqlalchemy.dialects.postgresql",
+        "sqlalchemy.engine",
         "tqdm",
-        "nltk", "nltk.tokenize",
+        "nltk",
+        "nltk.tokenize",
         "fitz",
         "src.config",
         "src.ingestion.embed",
@@ -129,7 +140,9 @@ def main_app():
 
     # src.config - fake module with all symbols that src.main and its imports need
     fake_config = types.ModuleType("src.config")
-    fake_config.DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:pw@localhost/test")  # type: ignore[attr-defined]
+    fake_config.DATABASE_URL = os.getenv(
+        "DATABASE_URL", "postgresql://admin:pw@localhost/test"
+    )  # type: ignore[attr-defined]
     fake_config.OLLAMA_MODEL = "fake-model"  # type: ignore[attr-defined]
     fake_config.OLLAMA_MAX_TOKENS = 512  # type: ignore[attr-defined]
     fake_config.CLOUD_LLM_MODEL = "fake-cloud-model"  # type: ignore[attr-defined]
@@ -153,12 +166,18 @@ def main_app():
     ):
         _make_stub(_mod_name)
 
-    sys.modules["src.ingestion.embed"].load_embedder = MagicMock(return_value=MagicMock())  # type: ignore[attr-defined]
+    sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
+        return_value=MagicMock()
+    )  # type: ignore[attr-defined]
     sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(return_value=384)  # type: ignore[attr-defined]
     sys.modules["src.ingestion.embed"].embed_text = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.retrieval.vector_store"].init_db = MagicMock()  # type: ignore[attr-defined]
-    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(return_value=[])  # type: ignore[attr-defined]
-    sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(return_value=None)  # type: ignore[attr-defined]
+    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(
+        return_value=[]
+    )  # type: ignore[attr-defined]
+    sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
+        return_value=None
+    )  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].generate_answer = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].warmup_model = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"  # type: ignore[attr-defined]
@@ -188,14 +207,18 @@ def client(main_app):
 
 def _patch_ingest(monkeypatch, main_app, report=None, sources=None, side_effect=None):
     monkeypatch.setattr(
-        main_app, "load_sources",
+        main_app,
+        "load_sources",
         lambda path: sources if sources is not None else FAKE_SOURCES,
     )
     if side_effect:
-        monkeypatch.setattr(main_app, "run_ingestion", MagicMock(side_effect=side_effect))
+        monkeypatch.setattr(
+            main_app, "run_ingestion", MagicMock(side_effect=side_effect)
+        )
     else:
         monkeypatch.setattr(
-            main_app, "run_ingestion",
+            main_app,
+            "run_ingestion",
             MagicMock(return_value=report if report is not None else FAKE_REPORT),
         )
 
@@ -204,8 +227,8 @@ def _patch_ingest(monkeypatch, main_app, report=None, sources=None, side_effect=
 # Validation
 # ---------------------------------------------------------------------------
 
-class TestIngestValidation:
 
+class TestIngestValidation:
     def test_non_pdf_rejected(self, client, main_app, monkeypatch):
         _patch_ingest(monkeypatch, main_app)
         resp = client.post(
@@ -229,9 +252,11 @@ class TestIngestValidation:
     def test_all_known_sources_pass_validation(self, client, main_app, monkeypatch):
         for source in ("NICE", "BSR", "NICE_NEURO"):
             _patch_ingest(monkeypatch, main_app)
-            with patch.object(Path, "mkdir"), \
-                 patch.object(Path, "open", mock_open()), \
-                 patch("shutil.copyfileobj"):
+            with (
+                patch.object(Path, "mkdir"),
+                patch.object(Path, "open", mock_open()),
+                patch("shutil.copyfileobj"),
+            ):
                 resp = client.post(
                     "/ingest",
                     files={"file": ("test.pdf", PDF_BYTES, "application/pdf")},
@@ -244,13 +269,15 @@ class TestIngestValidation:
 # Success path
 # ---------------------------------------------------------------------------
 
-class TestIngestSuccess:
 
+class TestIngestSuccess:
     def test_returns_ingestion_report(self, client, main_app, monkeypatch):
         _patch_ingest(monkeypatch, main_app)
-        with patch.object(Path, "mkdir"), \
-             patch.object(Path, "open", mock_open()), \
-             patch("shutil.copyfileobj"):
+        with (
+            patch.object(Path, "mkdir"),
+            patch.object(Path, "open", mock_open()),
+            patch("shutil.copyfileobj"),
+        ):
             resp = client.post(
                 "/ingest",
                 files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
@@ -266,14 +293,18 @@ class TestIngestSuccess:
         assert body["db"]["inserted"] == 45
         assert body["db"]["failed"] == 0
 
-    def test_run_ingestion_called_with_correct_source(self, client, main_app, monkeypatch):
+    def test_run_ingestion_called_with_correct_source(
+        self, client, main_app, monkeypatch
+    ):
         mock_run = MagicMock(return_value=FAKE_REPORT)
         monkeypatch.setattr(main_app, "load_sources", lambda path: FAKE_SOURCES)
         monkeypatch.setattr(main_app, "run_ingestion", mock_run)
 
-        with patch.object(Path, "mkdir"), \
-             patch.object(Path, "open", mock_open()), \
-             patch("shutil.copyfileobj"):
+        with (
+            patch.object(Path, "mkdir"),
+            patch.object(Path, "open", mock_open()),
+            patch("shutil.copyfileobj"),
+        ):
             client.post(
                 "/ingest",
                 files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
@@ -287,9 +318,11 @@ class TestIngestSuccess:
 
     def test_report_fields_all_present(self, client, main_app, monkeypatch):
         _patch_ingest(monkeypatch, main_app)
-        with patch.object(Path, "mkdir"), \
-             patch.object(Path, "open", mock_open()), \
-             patch("shutil.copyfileobj"):
+        with (
+            patch.object(Path, "mkdir"),
+            patch.object(Path, "open", mock_open()),
+            patch("shutil.copyfileobj"),
+        ):
             resp = client.post(
                 "/ingest",
                 files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
@@ -297,9 +330,17 @@ class TestIngestSuccess:
             )
 
         body = resp.json()
-        for field in ("source_name", "filename", "files_scanned", "files_succeeded",
-                      "files_failed", "total_chunks", "embeddings_succeeded",
-                      "embeddings_failed", "db"):
+        for field in (
+            "source_name",
+            "filename",
+            "files_scanned",
+            "files_succeeded",
+            "files_failed",
+            "total_chunks",
+            "embeddings_succeeded",
+            "embeddings_failed",
+            "db",
+        ):
             assert field in body, f"Missing field: {field}"
         for db_key in ("inserted", "updated", "skipped", "failed"):
             assert db_key in body["db"], f"Missing db key: {db_key}"
@@ -309,13 +350,19 @@ class TestIngestSuccess:
 # Pipeline error handling
 # ---------------------------------------------------------------------------
 
-class TestIngestErrors:
 
+class TestIngestErrors:
     def test_pipeline_error_returns_500(self, client, main_app, monkeypatch):
-        _patch_ingest(monkeypatch, main_app, side_effect=_PipelineError(stage="embed", message="OOM"))
-        with patch.object(Path, "mkdir"), \
-             patch.object(Path, "open", mock_open()), \
-             patch("shutil.copyfileobj"):
+        _patch_ingest(
+            monkeypatch,
+            main_app,
+            side_effect=_PipelineError(stage="embed", message="OOM"),
+        )
+        with (
+            patch.object(Path, "mkdir"),
+            patch.object(Path, "open", mock_open()),
+            patch("shutil.copyfileobj"),
+        ):
             resp = client.post(
                 "/ingest",
                 files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
@@ -326,10 +373,14 @@ class TestIngestErrors:
         assert "embed" in resp.json()["detail"]
 
     def test_value_error_returns_422(self, client, main_app, monkeypatch):
-        _patch_ingest(monkeypatch, main_app, side_effect=ValueError("No text extracted"))
-        with patch.object(Path, "mkdir"), \
-             patch.object(Path, "open", mock_open()), \
-             patch("shutil.copyfileobj"):
+        _patch_ingest(
+            monkeypatch, main_app, side_effect=ValueError("No text extracted")
+        )
+        with (
+            patch.object(Path, "mkdir"),
+            patch.object(Path, "open", mock_open()),
+            patch("shutil.copyfileobj"),
+        ):
             resp = client.post(
                 "/ingest",
                 files={"file": ("empty.pdf", PDF_BYTES, "application/pdf")},

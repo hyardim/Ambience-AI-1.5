@@ -42,7 +42,9 @@ class FakeRedis:
     def expire(self, key: str, ttl: int) -> None:  # noqa: ARG002
         return
 
-    def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:  # noqa: ARG002
+    def set(
+        self, key: str, value: str, ex: int | None = None, nx: bool = False
+    ) -> bool:  # noqa: ARG002
         if nx and key in self.kv:
             return False
         self.kv[key] = value
@@ -60,7 +62,9 @@ def fake_backend(monkeypatch):
     redis_conn = FakeRedis()
     queue = FakeQueue()
     monkeypatch.setattr("src.retry_queue.get_redis_connection", lambda: redis_conn)
-    monkeypatch.setattr("src.retry_queue.get_retry_queue", lambda connection=None: queue)
+    monkeypatch.setattr(
+        "src.retry_queue.get_retry_queue", lambda connection=None: queue
+    )
     return redis_conn, queue
 
 
@@ -70,15 +74,15 @@ def _payload() -> dict[str, Any]:
         "provider": "local",
         "max_tokens": 32,
         "prompt_label": "unit",
-        "citations_retrieved": [
-            {"text": "Evidence", "source": "S", "score": 0.9}
-        ],
+        "citations_retrieved": [{"text": "Evidence", "source": "S", "score": 0.9}],
     }
 
 
 def test_retries_on_transient_generation_error(fake_backend, monkeypatch):
     redis_conn, queue = fake_backend
-    job_id, status = create_retry_job(request_type="answer", payload=_payload(), connection=redis_conn)
+    job_id, status = create_retry_job(
+        request_type="answer", payload=_payload(), connection=redis_conn
+    )
     assert status == RetryJobStatus.QUEUED
 
     async def transient_fail(*args, **kwargs):  # noqa: ANN002, ANN003
@@ -100,7 +104,9 @@ def test_no_retry_on_validation_error(fake_backend):
     payload = _payload()
     payload["max_tokens"] = 0
 
-    job_id, _ = create_retry_job(request_type="answer", payload=payload, connection=redis_conn)
+    job_id, _ = create_retry_job(
+        request_type="answer", payload=payload, connection=redis_conn
+    )
     process_retry_job(job_id)
     state = get_retry_job(job_id, connection=redis_conn)
 
@@ -111,7 +117,9 @@ def test_no_retry_on_validation_error(fake_backend):
 
 def test_status_transitions_to_succeeded(fake_backend, monkeypatch):
     redis_conn, _ = fake_backend
-    job_id, _ = create_retry_job(request_type="answer", payload=_payload(), connection=redis_conn)
+    job_id, _ = create_retry_job(
+        request_type="answer", payload=_payload(), connection=redis_conn
+    )
 
     async def succeed(*args, **kwargs):  # noqa: ANN002, ANN003
         return "Answer with citation [1]"
@@ -129,9 +137,13 @@ def test_status_transitions_to_succeeded(fake_backend, monkeypatch):
 
 def test_exhausted_retries_marks_failed(fake_backend, monkeypatch):
     redis_conn, _ = fake_backend
-    job_id, _ = create_retry_job(request_type="answer", payload=_payload(), connection=redis_conn)
+    job_id, _ = create_retry_job(
+        request_type="answer", payload=_payload(), connection=redis_conn
+    )
 
-    redis_conn.hset(f"rag:job:{job_id}", mapping={"attempt_count": "2", "status": "queued"})
+    redis_conn.hset(
+        f"rag:job:{job_id}", mapping={"attempt_count": "2", "status": "queued"}
+    )
 
     async def transient_fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise ModelGenerationError("temporary", retryable=True)

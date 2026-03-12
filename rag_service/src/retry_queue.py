@@ -98,7 +98,7 @@ def _build_idempotency_identifier(
 
 def _compute_backoff_seconds(attempt_count: int) -> int:
     exponent = max(attempt_count - 1, 0)
-    seconds = RETRY_BACKOFF_SECONDS * (RETRY_BACKOFF_MULTIPLIER ** exponent)
+    seconds = RETRY_BACKOFF_SECONDS * (RETRY_BACKOFF_MULTIPLIER**exponent)
     return max(int(seconds), 1)
 
 
@@ -184,7 +184,9 @@ def create_retry_job(
     return job_id, RetryJobStatus.QUEUED
 
 
-def get_retry_job(job_id: str, connection: Redis | None = None) -> dict[str, Any] | None:
+def get_retry_job(
+    job_id: str, connection: Redis | None = None
+) -> dict[str, Any] | None:
     redis_conn = connection or get_redis_connection()
     raw = redis_conn.hgetall(_job_key(job_id))
     if not raw:
@@ -346,8 +348,8 @@ def process_retry_job(job_id: str) -> None:
     logger.info("retry_attempt job_id=%s attempt=%s", job_id, next_attempt)
 
     try:
-        prompt, provider, max_tokens, citations_retrieved, prompt_label = _extract_retry_payload(
-            payload
+        prompt, provider, max_tokens, citations_retrieved, prompt_label = (
+            _extract_retry_payload(payload)
         )
         answer_text = _run_async(
             generate_answer(prompt, max_tokens=max_tokens, provider=provider)
@@ -433,4 +435,6 @@ def process_retry_job(job_id: str) -> None:
             status=RetryJobStatus.FAILED.value,
             last_error=str(exc),
         )
-        logger.exception("retry_unexpected_failure job_id=%s attempt=%s", job_id, next_attempt)
+        logger.exception(
+            "retry_unexpected_failure job_id=%s attempt=%s", job_id, next_attempt
+        )

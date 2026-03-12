@@ -13,8 +13,23 @@ from ..utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 VALID_SPECIALTIES = {"neurology", "rheumatology", "general"}
-VALID_SOURCE_NAMES = {"NICE", "BSR", "Others", "NICE_NEURO", "BNF_RHEUMATOLOGY", "OTHER_RHEUMATOLOGY", "OTHER"}
-VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard", "formulary", "document"}
+VALID_SOURCE_NAMES = {
+    "NICE",
+    "BSR",
+    "Others",
+    "NICE_NEURO",
+    "BNF_RHEUMATOLOGY",
+    "OTHER_RHEUMATOLOGY",
+    "OTHER",
+}
+VALID_DOC_TYPES = {
+    "guideline",
+    "protocol",
+    "policy",
+    "standard",
+    "formulary",
+    "document",
+}
 TITLE_FONT_SIZE_THRESHOLD = 18
 
 

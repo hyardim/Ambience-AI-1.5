@@ -7,6 +7,7 @@ def _truncate_chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> str
         return cleaned
     return cleaned[: max_chars - 14].rstrip() + " …[truncated]"
 
+
 # ---------------------------------------------------------------------------
 # PROMPT VARIANT TOGGLE
 # Set ACTIVE_PROMPT = "original" to use the strict citation-only prompt.
@@ -38,7 +39,6 @@ _INSTRUCTIONS_NEW = (
     "The indexed guideline passages below are your PRIMARY and most authoritative source. "
     "Your general clinical knowledge plays a SUPPLEMENTARY role only — use it to explain terminology, "
     "provide clinical context, or bridge small gaps in the indexed evidence, never to replace it.\n\n"
-
     "Rules for answering:\n"
     "1. INDEXED CITATIONS FIRST: Base your answer on the indexed passages. "
     "Cite them with [1], [2] etc. only when a passage directly supports the specific claim you are making. "
@@ -58,7 +58,6 @@ _INSTRUCTIONS_NEW = (
     "6. CONFLICTING SOURCES: If an uploaded document contradicts an indexed guideline passage, "
     "flag the discrepancy explicitly (e.g. 'Note: the uploaded document states X, whereas the indexed "
     "guideline states Y').\n\n"
-
     "Response format:\n"
     "First, write only statements that are directly supported by the indexed passages, each cited with [N]. "
     "Do NOT include any statistic, percentage, risk factor, or clinical claim in this section unless it "
@@ -140,7 +139,9 @@ def build_grounded_prompt(
     # Numbered context comes first so [1][2]... anchor to indexed passages only.
     context_section = "Context:\n" + (context_block if has_context else "(none)")
     citation_hint = (
-        "Answer (with citations):" if (has_context or has_files) else "Answer (no citations):"
+        "Answer (with citations):"
+        if (has_context or has_files)
+        else "Answer (no citations):"
     )
 
     parts = [_INSTRUCTIONS]
@@ -183,7 +184,9 @@ def build_revision_prompt(
     context_section = "Context:\n" + (context_block if has_context else "(none)")
     has_files = bool(file_context)
     citation_hint = (
-        "Revised answer (with citations):" if (has_context or has_files) else "Revised answer (no citations):"
+        "Revised answer (with citations):"
+        if (has_context or has_files)
+        else "Revised answer (no citations):"
     )
 
     parts = [instructions]

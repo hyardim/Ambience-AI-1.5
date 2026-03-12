@@ -4,7 +4,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.api.dependencies import get_db_url, get_settings
-from src.api.schemas import AskRequest, AskResponse, CitationResponse, IngestResponse, SourceResponse
+from src.api.schemas import (
+    AskRequest,
+    AskResponse,
+    CitationResponse,
+    IngestResponse,
+    SourceResponse,
+)
 from src.config import path_config
 from src.ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from src.rag.pipeline import ask
@@ -96,9 +102,13 @@ async def ingest_guideline(
         file.file.close()
 
     try:
-        report = run_ingestion(input_path=dest_path, source_name=source_name, db_url=db_url)
+        report = run_ingestion(
+            input_path=dest_path, source_name=source_name, db_url=db_url
+        )
     except PipelineError as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Pipeline failed at stage {e.stage}: {e.message}"
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:  # pragma: no cover - defensive

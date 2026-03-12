@@ -19,8 +19,7 @@ def format_context(context: list[CitedResult]) -> str:
         citation = item.citation
         section = format_section_path(citation.section_path)
         header = (
-            f"[{idx}] {citation.title} — {citation.source_name} "
-            f"({citation.specialty})"
+            f"[{idx}] {citation.title} — {citation.source_name} ({citation.specialty})"
         )
         meta = (
             f"Section: {citation.section_title} | {section} | "

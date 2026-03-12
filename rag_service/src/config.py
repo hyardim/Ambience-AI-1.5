@@ -199,27 +199,30 @@ LLM_TIMEOUT_SECONDS = llm_config.llm_timeout_seconds
 LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", OLLAMA_BASE_URL)
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", OLLAMA_MODEL)
 LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "ollama")
-LOCAL_LLM_MAX_TOKENS = int(
-    os.getenv("LOCAL_LLM_MAX_TOKENS", str(OLLAMA_MAX_TOKENS)))
+LOCAL_LLM_MAX_TOKENS = int(os.getenv("LOCAL_LLM_MAX_TOKENS", str(OLLAMA_MAX_TOKENS)))
 LOCAL_LLM_TIMEOUT_SECONDS = float(
     os.getenv("LOCAL_LLM_TIMEOUT_SECONDS", str(OLLAMA_TIMEOUT_SECONDS))
 )
 
-CLOUD_LLM_BASE_URL = _first_non_empty(
-    os.getenv("CLOUD_LLM_BASE_URL"),
-    _default_runpod_base_url(),
-    LLM_BASE_URL,
-) or LLM_BASE_URL
+CLOUD_LLM_BASE_URL = (
+    _first_non_empty(
+        os.getenv("CLOUD_LLM_BASE_URL"),
+        _default_runpod_base_url(),
+        LLM_BASE_URL,
+    )
+    or LLM_BASE_URL
+)
 CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", LLM_MODEL)
-CLOUD_LLM_API_KEY = _first_non_empty(
-    os.getenv("CLOUD_LLM_API_KEY"),
-    _default_runpod_api_key(),
-    LLM_API_KEY,
-) or LLM_API_KEY
-CLOUD_LLM_MAX_TOKENS = int(
-    os.getenv("CLOUD_LLM_MAX_TOKENS", str(LLM_MAX_TOKENS)))
-CLOUD_LLM_TEMPERATURE = float(
-    os.getenv("CLOUD_LLM_TEMPERATURE", str(LLM_TEMPERATURE)))
+CLOUD_LLM_API_KEY = (
+    _first_non_empty(
+        os.getenv("CLOUD_LLM_API_KEY"),
+        _default_runpod_api_key(),
+        LLM_API_KEY,
+    )
+    or LLM_API_KEY
+)
+CLOUD_LLM_MAX_TOKENS = int(os.getenv("CLOUD_LLM_MAX_TOKENS", str(LLM_MAX_TOKENS)))
+CLOUD_LLM_TEMPERATURE = float(os.getenv("CLOUD_LLM_TEMPERATURE", str(LLM_TEMPERATURE)))
 CLOUD_LLM_TIMEOUT_SECONDS = float(
     os.getenv("CLOUD_LLM_TIMEOUT_SECONDS", str(LLM_TIMEOUT_SECONDS))
 )

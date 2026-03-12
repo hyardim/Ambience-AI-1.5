@@ -71,8 +71,7 @@ async def warmup_model(provider: ProviderName = "local") -> None:
             resp.raise_for_status()
         print(f"✅ Local model '{LOCAL_LLM_MODEL}' warmed up and kept alive.")
     except Exception as exc:  # pragma: no cover
-        print(
-            f"⚠️  Local model warmup failed (model may still be loading): {exc}")
+        print(f"⚠️  Local model warmup failed (model may still be loading): {exc}")
 
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:
@@ -224,9 +223,8 @@ async def generate_answer(
                     f"Trying fallback provider={_fallback_provider(current_provider)}."
                 )
 
-    retryable = (
-        len(attempt_errors) == len(attempts)
-        and all(error.retryable for error in attempt_errors)
+    retryable = len(attempt_errors) == len(attempts) and all(
+        error.retryable for error in attempt_errors
     )
     raise ModelGenerationError(
         "All model providers failed. " + " | ".join(attempts),
