@@ -8,6 +8,7 @@ python-dotenv
 # --- Networking ---
 httpx
 requests
+redis>=5.0.0
 
 # --- Database ---
 sqlalchemy

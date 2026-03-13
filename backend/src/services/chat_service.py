@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.db.models import ChatStatus, FileAttachment, User
 from src.db.session import AsyncSessionLocal, SessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
@@ -23,13 +24,15 @@ from src.schemas.chat import (
 )
 from src.services._mappers import chat_to_response, msg_to_response
 from src.utils.sse import SSEEvent, chat_event_bus
+from src.utils.cache import cache, cache_keys
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024  # 3 MB per file
 MAX_FILES_PER_CHAT = 5
-RAG_REQUEST_TIMEOUT_SECONDS = float(os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+RAG_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +63,9 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
     )
     audit_repository.log(
         db, user_id=user.id, action="CREATE_CHAT", details=f"Created chat: {data.title}"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(user.id), user_id=user.id, resource="chat_list"
     )
     return chat_to_response(chat)
 
@@ -101,6 +107,17 @@ def list_chats(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid date_to: {date_to}")
 
+    # Avoid cache collisions for filter combinations not encoded in cache key.
+    should_cache = not (search or date_from or date_to)
+    cache_key = None
+    if should_cache:
+        page = skip // limit if limit else 0
+        cache_key = cache_keys.chat_list(
+            user.id, page, limit, status=status, specialty=specialty)
+        cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_list")
+        if cached is not None:
+            return [ChatResponse(**item) for item in cached]
+
     chats = chat_repository.list_for_user(
         db,
         user.id,
@@ -112,7 +129,16 @@ def list_chats(
         date_from=parsed_date_from,
         date_to=parsed_date_to,
     )
-    return [chat_to_response(c) for c in chats]
+    response = [chat_to_response(c) for c in chats]
+    if should_cache and cache_key is not None:
+        cache.set_sync(
+            cache_key,
+            [item.model_dump() for item in response],
+            ttl=settings.CACHE_CHAT_LIST_TTL,
+            user_id=user.id,
+            resource="chat_list",
+        )
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +147,11 @@ def list_chats(
 
 
 def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
+    cache_key = cache_keys.chat_detail(user.id, chat_id)
+    cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_detail")
+    if cached is not None:
+        return ChatWithMessages(**cached)
+
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -141,6 +172,13 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
         )
         for f in (chat.files or [])
     ]
+    cache.set_sync(
+        cache_key,
+        response.model_dump(),
+        ttl=settings.CACHE_CHAT_DETAIL_TTL,
+        user_id=user.id,
+        resource="chat_detail",
+    )
     return response
 
 
@@ -182,6 +220,12 @@ def update_chat(
     audit_repository.log(
         db, user_id=user.id, action="UPDATE_CHAT", details=f"Updated chat {chat_id}"
     )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(user.id), user_id=user.id, resource="chat_list"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
+    )
     return chat_to_response(chat)
 
 
@@ -198,6 +242,12 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
     chat_repository.archive(db, chat)
     audit_repository.log(
         db, user_id=user.id, action="ARCHIVE_CHAT", details=f"Archived chat {chat_id}"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(user.id), user_id=user.id, resource="chat_list"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
 
 
@@ -246,7 +296,8 @@ async def upload_file(
             detail=f"File exceeds the 3 MB limit ({len(contents) // 1024} KB uploaded).",
         )
 
-    existing_count = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
+    existing_count = db.query(FileAttachment).filter(
+        FileAttachment.chat_id == chat_id).count()
     if existing_count >= MAX_FILES_PER_CHAT:
         raise HTTPException(
             status_code=422,
@@ -272,6 +323,12 @@ async def upload_file(
         user_id=user.id,
         action="UPLOAD_FILE",
         details=f"Uploaded {file.filename} to chat {chat_id}",
+    )
+    await cache.delete_pattern(
+        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
+    )
+    await cache.delete_pattern(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
 
     return FileAttachmentResponse(
@@ -317,7 +374,8 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
         FILE_CONTEXT_CHAR_LIMIT = 8_000
         file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
         if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
-            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + "\n\n[Document truncated to fit context window]"
+            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + \
+                "\n\n[Document truncated to fit context window]"
 
         rag_payload: dict = {
             "query": content,
@@ -362,6 +420,12 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             sender="ai",
             citations=citations,
         )
+        cache.delete_pattern_sync(
+            cache_keys.chat_detail_pattern(chat_id), user_id=user_id, resource="chat_detail"
+        )
+        cache.delete_pattern_sync(
+            cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        )
 
         audit_repository.log(
             db,
@@ -403,6 +467,13 @@ def send_message(
             action="AUTO_SUBMIT_FOR_REVIEW",
             details=f"Chat {chat_id} auto-submitted after first GP message",
         )
+
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
 
     if db.bind and db.bind.dialect.name == "sqlite":
         _generate_ai_response(db, chat.id, user.id, content)
@@ -728,5 +799,11 @@ def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
         user_id=user.id,
         action="SUBMIT_FOR_REVIEW",
         details=f"Chat {chat_id} submitted for specialist review",
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(user.id), user_id=user.id, resource="chat_list"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
     return chat_to_response(chat)

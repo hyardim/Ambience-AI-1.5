@@ -5,11 +5,13 @@ from fastapi import HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.db.models import AuditLog, Chat, ChatStatus, Message, User, UserRole
 from src.repositories import audit_repository, chat_repository, message_repository, user_repository
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
+from src.utils.cache import cache, cache_keys
 
 
 # ---------------------------------------------------------------------------
@@ -19,14 +21,18 @@ from src.services._mappers import chat_to_response, msg_to_response
 def get_stats(db: Session) -> dict:
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
 
-    total_ai = db.query(func.count(Message.id)).filter(Message.sender == "ai").scalar() or 0
+    total_ai = db.query(func.count(Message.id)).filter(
+        Message.sender == "ai").scalar() or 0
     rag_grounded = db.query(func.count(Message.id)).filter(
         Message.sender == "ai", Message.citations.isnot(None)
     ).scalar() or 0
-    specialist_responses = db.query(func.count(Message.id)).filter(Message.sender == "specialist").scalar() or 0
+    specialist_responses = db.query(func.count(Message.id)).filter(
+        Message.sender == "specialist").scalar() or 0
 
-    active_statuses = [ChatStatus.OPEN, ChatStatus.SUBMITTED, ChatStatus.ASSIGNED, ChatStatus.REVIEWING]
-    active_consultations = db.query(func.count(Chat.id)).filter(Chat.status.in_(active_statuses)).scalar() or 0
+    active_statuses = [ChatStatus.OPEN, ChatStatus.SUBMITTED,
+                       ChatStatus.ASSIGNED, ChatStatus.REVIEWING]
+    active_consultations = db.query(func.count(Chat.id)).filter(
+        Chat.status.in_(active_statuses)).scalar() or 0
 
     chats_by_status = {
         row[0].value: row[1]
@@ -39,18 +45,20 @@ def get_stats(db: Session) -> dict:
     active_users_by_role = {
         row[0].value: row[1]
         for row in db.query(User.role, func.count(User.id))
-            .filter(User.is_active == True)
-            .group_by(User.role).all()
+        .filter(User.is_active == True)
+        .group_by(User.role).all()
     }
 
     daily_rows = (
-        db.query(func.date(Message.created_at).label("day"), func.count(Message.id))
+        db.query(func.date(Message.created_at).label(
+            "day"), func.count(Message.id))
         .filter(Message.sender == "ai", Message.created_at >= thirty_days_ago)
         .group_by("day")
         .order_by("day")
         .all()
     )
-    daily_ai_queries = [{"date": str(row[0])[:10], "count": row[1]} for row in daily_rows]
+    daily_ai_queries = [
+        {"date": str(row[0])[:10], "count": row[1]} for row in daily_rows]
 
     return {
         "total_ai_responses": total_ai,
@@ -88,16 +96,31 @@ def list_users(db: Session, role: Optional[str] = None) -> list[UserOut]:
         try:
             query = query.filter(User.role == UserRole(role))
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid role: {role}")
     users = query.order_by(User.id).all()
     return [UserOut.model_validate(u) for u in users]
 
 
 def get_user(db: Session, user_id: int) -> UserOut:
+    cache_key = cache_keys.user_profile(user_id)
+    cached = cache.get_sync(cache_key, user_id=user_id,
+                            resource="user_profile")
+    if cached is not None:
+        return UserOut(**cached)
+
     user = user_repository.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return UserOut.model_validate(user)
+    response = UserOut.model_validate(user)
+    cache.set_sync(
+        cache_key,
+        response.model_dump(),
+        ttl=settings.CACHE_PROFILE_TTL,
+        user_id=user_id,
+        resource="user_profile",
+    )
+    return response
 
 
 def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
@@ -116,9 +139,12 @@ def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
         try:
             fields["role"] = UserRole(payload.role)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid role: {payload.role}")
 
     user = user_repository.update(db, user, **fields)
+    cache.delete_sync(cache_keys.user_profile(user_id),
+                      user_id=user_id, resource="user_profile")
     return UserOut.model_validate(user)
 
 
@@ -127,6 +153,8 @@ def deactivate_user(db: Session, user_id: int) -> UserOut:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user = user_repository.update(db, user, is_active=False)
+    cache.delete_sync(cache_keys.user_profile(user_id),
+                      user_id=user_id, resource="user_profile")
     return UserOut.model_validate(user)
 
 
@@ -148,7 +176,8 @@ def list_all_chats(
         try:
             query = query.filter(Chat.status == ChatStatus(status))
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid status: {status}")
     if specialty:
         query = query.filter(Chat.specialty == specialty)
     if user_id:
@@ -156,7 +185,8 @@ def list_all_chats(
     if specialist_id:
         query = query.filter(Chat.specialist_id == specialist_id)
 
-    chats = query.order_by(Chat.created_at.desc()).offset(skip).limit(limit).all()
+    chats = query.order_by(Chat.created_at.desc()).offset(
+        skip).limit(limit).all()
 
     result = []
     for c in chats:
@@ -193,9 +223,16 @@ def update_any_chat(db: Session, chat_id: int, payload: ChatUpdate) -> dict:
         try:
             fields["status"] = ChatStatus(payload.status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid status: {payload.status}")
 
     chat = chat_repository.update(db, chat, **fields)
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
     entry = chat_to_response(chat).model_dump()
     entry["owner_identifier"] = f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
     entry["specialist_identifier"] = f"{chat.specialist.role.value}_{chat.specialist.id}" if chat.specialist else None
@@ -207,6 +244,12 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     chat_repository.delete(db, chat)
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id), resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +295,8 @@ def list_audit_logs(
         query = query.filter(AuditLog.timestamp <= date_to)
     if search:
         term = f"%{search}%"
-        query = query.filter(or_(AuditLog.action.ilike(term), AuditLog.details.ilike(term)))
+        query = query.filter(
+            or_(AuditLog.action.ilike(term), AuditLog.details.ilike(term)))
 
     logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
     return [

@@ -176,6 +176,72 @@ Verify RAG service connectivity:
 - `curl http://localhost:8001/health`
 - `curl -X POST http://localhost:8001/answer -H "Content-Type: application/json" -d '{"query":"what is rheumatoid arthritis?","top_k":3}'`
 
+## Backend Redis cache
+
+The backend caches read-heavy endpoints in Redis to reduce database load and improve latency.
+
+Cached data:
+
+- Chat list responses (per user, page, status, specialty)
+- Chat detail payloads (messages + files)
+- Admin user profile lookups
+
+Cache invalidation happens on chat creation/updates/deletes, message sends, file uploads,
+specialist reviews, and user profile/password updates.
+
+Environment variables (backend):
+
+- `REDIS_URL` (default: `redis://redis:6379/0`)
+- `CACHE_ENABLED` (default: `true`)
+- `CACHE_CHAT_LIST_TTL` (seconds, default: `30`)
+- `CACHE_CHAT_DETAIL_TTL` (seconds, default: `60`)
+- `CACHE_PROFILE_TTL` (seconds, default: `300`)
+- `CACHE_KEY_PREFIX` (default: `cache`)
+
+Cache troubleshooting:
+
+- To disable caching temporarily, set `CACHE_ENABLED=false` and restart the backend.
+- To reset only backend cache keys, run: `redis-cli KEYS "cache:*" | xargs redis-cli DEL`
+- If you see stale chat data, confirm you updated the correct environment variables for the backend service.
+- If Redis is not reachable, the backend will fall back to database reads and log a `cache.error` warning.
+- You can point the backend to a local Redis by setting `REDIS_URL=redis://localhost:6379/0`.
+
+Cache key format:
+
+- Chat list keys: `cache:user:{user_id}:chats:{status}:{specialty}:{page}:{page_size}`
+- Chat detail keys: `cache:user:{user_id}:chat:{chat_id}`
+- Profile keys: `cache:user:{user_id}:profile`
+- Chat detail invalidation uses a wildcard pattern: `cache:user:*:chat:{chat_id}`
+- Chat list invalidation uses a per-user pattern: `cache:user:{user_id}:chats:*`
+
+Examples:
+
+- `cache:user:12:chats:open:neuro:0:50`
+- `cache:user:12:chat:410`
+- `cache:user:12:profile`
+
+Notes:
+
+- `CACHE_KEY_PREFIX` replaces the leading `cache` segment.
+- Keys are scoped per user to avoid cross-tenant leakage.
+
+Cache FAQ:
+
+- Q: Do I need Redis running to use the backend?
+- A: No. If Redis is down, the backend will log a warning and read from the database directly.
+
+- Q: Why am I still seeing old data?
+- A: Check that your backend container picked up the latest env values and that the cache keys were invalidated.
+
+- Q: How can I wipe only chat caches?
+- A: Use a pattern delete, e.g. `redis-cli KEYS "cache:user:*:chats:*" | xargs redis-cli DEL`.
+
+- Q: Can I tune how long chat details are cached?
+- A: Yes. Set `CACHE_CHAT_DETAIL_TTL` in seconds and restart the backend.
+
+- Q: What about large payloads?
+- A: The cache stores JSON payloads; keep payload sizes reasonable by tuning list page sizes.
+
 ## Running locally with Ollama (keep this for dev)
 
 Use this mode when you want lower cost local development.

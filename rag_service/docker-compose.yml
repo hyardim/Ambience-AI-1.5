@@ -1,6 +1,14 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: ambience_rag_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ambience_net
+
   # 1. The Vector Database
   db_vector:
     image: pgvector/pgvector:pg16
@@ -54,6 +62,8 @@ services:
     depends_on:
       db_vector:
         condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "8001:8001"
     volumes:
@@ -61,6 +71,24 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - ambience_net
+
+  rag_worker:
+    build:
+      context: ./rag_service
+      dockerfile: Dockerfile
+    container_name: ambience_rag_worker
+    depends_on:
+      redis:
+        condition: service_started
+    volumes:
+      - ./rag_service/src:/app/src
+      - ./rag_service/scripts:/app/scripts
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    command: python scripts/run_retry_worker.py
     networks:
       - ambience_net
 
