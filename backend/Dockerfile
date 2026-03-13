@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN PIP_CONFIG_FILE=/dev/null PIP_REQUIRE_HASHES=0 \
+    pip install --isolated --no-cache-dir -r requirements.txt
 
 COPY src /app/src
 

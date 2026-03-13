@@ -9,6 +9,8 @@ import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/AuthContext';
+import { useChatStream } from '../../hooks/useChatStream';
+import { toFrontendMessage } from '../../utils/messageMapping';
 import {
   getSpecialistChatDetail,
   getProfile,
@@ -16,64 +18,10 @@ import {
   reviewChat,
   reviewMessage,
   sendSpecialistMessage,
-  subscribeToChatStream,
   uploadChatFile,
 } from '../../services/api';
-import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
-import type { Message, Citation } from '../../types';
-
-/** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
-function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw) && raw.length > 0
-    ? raw
-    : Array.isArray(fallback)
-      ? fallback
-      : [];
-
-  return list
-    .map((c: any) => {
-      if (!c || typeof c !== 'object') return null;
-      const meta = (c as any).metadata || {};
-      const docId = (c as any).doc_id ?? meta.doc_id;
-      const sectionPath = (c as any).section_path ?? meta.section_path;
-      const pageStart = (c as any).page_start ?? meta.page_start;
-      const pageEnd = (c as any).page_end ?? meta.page_end;
-
-      return {
-        doc_id: docId || undefined,
-        title: meta.title || meta.filename || (c as any).source || 'Source',
-        source_name: meta.source_name || (c as any).source || 'Source',
-        specialty: meta.specialty,
-        section_path: sectionPath,
-        page_start: typeof pageStart === 'number' ? pageStart : undefined,
-        page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
-        source_url: meta.source_url,
-      } satisfies Citation;
-    })
-    .filter(Boolean) as Citation[];
-}
-
-/** Map a backend message to the frontend Message shape used by ChatMessage */
-function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
-  const isAI = msg.sender === 'ai';
-  const isSpecialist = msg.sender === 'specialist';
-  return {
-    id: String(msg.id),
-    senderId: msg.sender,
-    senderName: isAI ? 'NHS AI Assistant' : isSpecialist ? currentUser : 'GP User',
-    senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
-    content: msg.content,
-    timestamp: new Date(msg.created_at),
-    citations: mapCitations(
-      (msg.citations_used as unknown[] | null) ?? msg.citations_used,
-      (msg.citations as unknown[] | null) ?? (msg.citations_retrieved as unknown[] | null),
-    ),
-    isGenerating: msg.is_generating ?? false,
-    reviewStatus: msg.review_status ?? null,
-    reviewFeedback: msg.review_feedback ?? null,
-    reviewedAt: msg.reviewed_at ?? null,
-  };
-}
+import type { BackendChatWithMessages } from '../../types/api';
+import type { Message } from '../../types';
 
 export function SpecialistQueryDetailPage() {
   const { username, logout } = useAuth();
@@ -101,18 +49,29 @@ export function SpecialistQueryDetailPage() {
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // SSE streaming state
-  const streamCleanupRef = useRef<(() => void) | null>(null);
-  const [streamConnected, setStreamConnected] = useState(false);
+
+  // ── Streaming state machine ────────────────────────────────────────────
+  const refreshData = useCallback(async () => {
+    if (!queryId) return;
+    try {
+      const [profile, chatData] = await Promise.all([
+        getProfile(),
+        getSpecialistChatDetail(Number(queryId)),
+      ]);
+      setMyUserId(profile.id);
+      setChat(chatData);
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
+    } catch { /* silent refresh */ }
+  }, [queryId, username]);
+
+  const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
+    setMessages,
+    { chatId: chat?.id ?? null, onRefresh: refreshData },
+  );
 
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
     loadData();
-    // Clean up SSE on unmount / chat change
-    return () => {
-      streamCleanupRef.current?.();
-      streamCleanupRef.current = null;
-    };
   }, [queryId]);
 
   useEffect(() => {
@@ -131,15 +90,15 @@ export function SpecialistQueryDetailPage() {
   // Only poll when SSE is not connected and there's pending work
   const shouldPoll = (hasPendingAIResponse || hasRevisionInProgress) && !streamConnected;
 
+  // Delegate polling to the hook
   useEffect(() => {
-    if (!queryId || !shouldPoll) return;
-
-    const intervalId = window.setInterval(() => {
-      loadData({ silent: true });
-    }, 2000);
-
-    return () => window.clearInterval(intervalId);
-  }, [queryId, shouldPoll]);
+    if (!queryId) return;
+    if (shouldPoll) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+  }, [queryId, shouldPoll, startPolling, stopPolling]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
@@ -154,7 +113,7 @@ export function SpecialistQueryDetailPage() {
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User')));
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
     } catch (err) {
       if (!options?.silent) {
         setError(err instanceof Error ? err.message : 'Failed to load consultation');
@@ -166,84 +125,11 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
-  /** Open an SSE connection for AI generation events on this chat.
-   *  Returns a Promise that resolves once connected (or after a short timeout). */
-  const connectStream = useCallback(
-    (chatId: number): Promise<void> => {
-      streamCleanupRef.current?.();
-
-      return new Promise<void>((resolve) => {
-        let resolved = false;
-        const settle = () => { if (!resolved) { resolved = true; resolve(); } };
-        const timer = setTimeout(settle, 500);
-
-        const cleanup = subscribeToChatStream(chatId, {
-          onOpen() {
-            clearTimeout(timer);
-            settle();
-          },
-          onStreamStart(messageId) {
-            setStreamConnected(true);
-            setMessages((prev) => {
-              if (prev.find((m) => m.id === String(messageId))) return prev;
-              const placeholder: Message = {
-                id: String(messageId),
-                senderId: 'ai',
-                senderName: 'NHS AI Assistant',
-                senderType: 'ai',
-                content: '',
-                timestamp: new Date(),
-                isGenerating: true,
-              };
-              return [...prev, placeholder];
-            });
-          },
-          onContent(messageId, content) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === String(messageId) ? { ...m, content, isGenerating: true } : m,
-              ),
-            );
-          },
-          onComplete(messageId, content, citations) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === String(messageId)
-                  ? {
-                      ...m,
-                      content,
-                      citations: mapCitations(citations),
-                      isGenerating: false,
-                    }
-                  : m,
-              ),
-            );
-            setStreamConnected(false);
-            streamCleanupRef.current = null;
-            loadData({ silent: true });
-          },
-          onError(_messageId, _errorMsg) {
-            setStreamConnected(false);
-            streamCleanupRef.current = null;
-            loadData({ silent: true });
-          },
-          onConnectionError() {
-            setStreamConnected(false);
-            streamCleanupRef.current = null;
-            clearTimeout(timer);
-            settle();
-          },
-        });
-
-        streamCleanupRef.current = cleanup;
-      });
-    },
-    [username],
-  );
-
+  // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
     if (!chat) return;
-    if (streamCleanupRef.current || streamConnected) return;
+    if (streamConnected) return;
+    if (streamPhase !== 'idle' && streamPhase !== 'fallback_polling') return;
     if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
 
     void connectStream(chat.id);
@@ -253,6 +139,7 @@ export function SpecialistQueryDetailPage() {
     hasPendingAIResponse,
     hasRevisionInProgress,
     streamConnected,
+    streamPhase,
   ]);
 
   // ── Actions ──────────────────────────────────────────────────

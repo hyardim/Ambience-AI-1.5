@@ -178,10 +178,15 @@ def ensure_chat_archive_column() -> None:
 
 def ensure_enum_columns_lowercase() -> None:
     """Migrate any uppercase enum values to lowercase and convert native enum
-    columns to plain VARCHAR.  Handles users.role and chats.status.
+    columns to plain VARCHAR.  Handles users.role, chats.status and
+    notifications.type.
     """
     with engine.begin() as connection:
-        for table, column in [("users", "role"), ("chats", "status")]:
+        for table, column in [
+            ("users", "role"),
+            ("chats", "status"),
+            ("notifications", "type"),
+        ]:
             connection.execute(
                 text(
                     f"ALTER TABLE {table} "

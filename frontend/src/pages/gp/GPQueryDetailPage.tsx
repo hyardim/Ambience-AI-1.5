@@ -6,68 +6,16 @@ import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
+import { useChatStream } from '../../hooks/useChatStream';
+import { toFrontendMessage } from '../../utils/messageMapping';
 import {
   getChat,
   sendMessage as apiSendMessage,
   updateChat as apiUpdateChat,
-  subscribeToChatStream,
   uploadChatFile,
 } from '../../services/api';
-import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
-import type { Message, Citation } from '../../types';
-
-/** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
-function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw) && raw.length > 0
-    ? raw
-    : Array.isArray(fallback)
-      ? fallback
-      : [];
-
-  return list
-    .map((c: any) => {
-      if (!c || typeof c !== 'object') return null;
-      const meta = (c as any).metadata || {};
-      const docId = (c as any).doc_id ?? meta.doc_id;
-      const sectionPath = (c as any).section_path ?? meta.section_path;
-      const pageStart = (c as any).page_start ?? meta.page_start;
-      const pageEnd = (c as any).page_end ?? meta.page_end;
-
-      return {
-        doc_id: docId || undefined,
-        title: meta.title || meta.filename || (c as any).source || 'Source',
-        source_name: meta.source_name || (c as any).source || 'Source',
-        specialty: meta.specialty,
-        section_path: sectionPath,
-        page_start: typeof pageStart === 'number' ? pageStart : undefined,
-        page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
-        source_url: meta.source_url,
-      } satisfies Citation;
-    })
-    .filter(Boolean) as Citation[];
-}
-
-/** Map a backend message to the frontend Message shape */
-function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
-  const isAI = msg.sender === 'ai';
-  const isSpecialist = msg.sender === 'specialist';
-  return {
-    id: String(msg.id),
-    senderId: isAI ? 'ai' : isSpecialist ? 'specialist' : 'user',
-    senderName: isAI ? 'NHS AI Assistant' : isSpecialist ? 'Specialist' : currentUser,
-    senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
-    content: msg.content,
-    timestamp: new Date(msg.created_at),
-    citations: mapCitations(
-      (msg.citations_used as unknown[] | null) ?? msg.citations_used,
-      (msg.citations as unknown[] | null) ?? (msg.citations_retrieved as unknown[] | null),
-    ),
-    isGenerating: msg.is_generating ?? false,
-    reviewStatus: msg.review_status ?? null,
-    reviewFeedback: msg.review_feedback ?? null,
-    reviewedAt: msg.reviewed_at ?? null,
-  };
-}
+import type { BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
+import type { Message } from '../../types';
 
 export function GPQueryDetailPage() {
   const { queryId } = useParams<{ queryId: string }>();
@@ -83,19 +31,26 @@ export function GPQueryDetailPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [editMeta, setEditMeta] = useState<ChatUpdateRequest>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // SSE streaming state
-  const streamCleanupRef = useRef<(() => void) | null>(null);
-  const [streamConnected, setStreamConnected] = useState(false);
   // Guard: auto-send the draft message from GPNewQueryPage only once
   const draftSentRef = useRef(false);
 
+  // ── Streaming state machine ────────────────────────────────────────────
+  const refreshChat = useCallback(async () => {
+    if (!queryId) return;
+    try {
+      const found = await getChat(Number(queryId));
+      setChat(found);
+      setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
+    } catch { /* silent refresh */ }
+  }, [queryId, username]);
+
+  const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
+    setMessages,
+    { chatId: chat?.id ?? null, onRefresh: refreshChat },
+  );
+
   useEffect(() => {
     fetchChat();
-    // Clean up SSE on unmount / chat change
-    return () => {
-      streamCleanupRef.current?.();
-      streamCleanupRef.current = null;
-    };
   }, [queryId]);
 
   useEffect(() => {
@@ -163,15 +118,15 @@ export function GPQueryDetailPage() {
   // optimistic message that's already visible.
   const shouldPoll = (hasPendingAIResponse || hasRevisionInProgress || isInReview) && !streamConnected && !sending;
 
+  // Delegate polling to the hook — start/stop based on derived shouldPoll flag
   useEffect(() => {
-    if (!queryId || !shouldPoll) return;
-
-    const intervalId = window.setInterval(() => {
-      fetchChat({ silent: true });
-    }, 2000);
-
-    return () => window.clearInterval(intervalId);
-  }, [queryId, shouldPoll]);
+    if (!queryId) return;
+    if (shouldPoll) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+  }, [queryId, shouldPoll, startPolling, stopPolling]);
 
   const fetchChat = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
@@ -208,91 +163,11 @@ export function GPQueryDetailPage() {
     }
   };
 
-  /** Open an SSE connection that merges AI generation events into the messages list.
-   *  Returns a Promise that resolves once the EventSource connection is open
-   *  (or after a short timeout fallback so the caller never waits forever). */
-  const connectStream = useCallback(
-    (chatId: number): Promise<void> => {
-      // Clean up any previous stream
-      streamCleanupRef.current?.();
-
-      return new Promise<void>((resolve) => {
-        let resolved = false;
-        const settle = () => { if (!resolved) { resolved = true; resolve(); } };
-        // Timeout fallback – don't block the caller forever
-        const timer = setTimeout(settle, 500);
-
-      const cleanup = subscribeToChatStream(chatId, {
-        onOpen() {
-          clearTimeout(timer);
-          settle();
-        },
-        onStreamStart(messageId) {
-          setStreamConnected(true);
-          // Insert a placeholder AI message if not already present
-          setMessages((prev) => {
-            if (prev.find((m) => m.id === String(messageId))) return prev;
-            const placeholder: Message = {
-              id: String(messageId),
-              senderId: 'ai',
-              senderName: 'NHS AI Assistant',
-              senderType: 'ai',
-              content: '',
-              timestamp: new Date(),
-              isGenerating: true,
-            };
-            return [...prev, placeholder];
-          });
-        },
-        onContent(messageId, content) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === String(messageId) ? { ...m, content, isGenerating: true } : m,
-            ),
-          );
-        },
-        onComplete(messageId, content, citations) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === String(messageId)
-                ? {
-                    ...m,
-                    content,
-                    citations: mapCitations(citations),
-                    isGenerating: false,
-                  }
-                : m,
-            ),
-          );
-          setStreamConnected(false);
-          streamCleanupRef.current = null;
-          // Reconcile with persisted state
-          fetchChat({ silent: true });
-        },
-        onError(_messageId, _errorMsg) {
-          setStreamConnected(false);
-          streamCleanupRef.current = null;
-          // Fall back to polling – fetchChat will find the final message
-          fetchChat({ silent: true });
-        },
-        onConnectionError() {
-          // SSE failed to connect – rely on polling fallback
-          setStreamConnected(false);
-          streamCleanupRef.current = null;
-          clearTimeout(timer);
-          settle();
-        },
-      });
-
-      streamCleanupRef.current = cleanup;
-      }); // end Promise
-    },
-    [username],
-  );
-
+  // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
     if (!chat) return;
-    if (streamCleanupRef.current || streamConnected || sending) return;
+    if (streamConnected || sending) return;
+    if (streamPhase !== 'idle' && streamPhase !== 'fallback_polling') return;
     if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
 
     void connectStream(chat.id);
@@ -303,6 +178,7 @@ export function GPQueryDetailPage() {
     hasRevisionInProgress,
     sending,
     streamConnected,
+    streamPhase,
   ]);
 
   const handleSendMessage = async (content: string, files?: File[]) => {
@@ -322,9 +198,6 @@ export function GPQueryDetailPage() {
 
     const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
-      // Open SSE stream *before* sending so we catch the AI generation events
-      await connectStream(chat.id);
-
       // Upload any attached files before sending the message
       if (files && files.length > 0) {
         const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
@@ -336,8 +209,8 @@ export function GPQueryDetailPage() {
         await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
       }
 
-        // Open SSE stream before sending so we catch the AI generation events.
-        await connectStream(chat.id);
+      // Open SSE stream *once* before sending so we catch the AI generation events
+      await connectStream(chat.id);
 
       await apiSendMessage(chat.id, content);
       // Also do one fetch to reconcile the user message id
