@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from enum import Enum
@@ -79,6 +80,7 @@ def client(monkeypatch):
     )
     sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(return_value=384)
     sys.modules["src.ingestion.embed"].embed_text = MagicMock(return_value=[[0.1]])
+
     sys.modules["src.retrieval.vector_store"].init_db = MagicMock()
     sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(
         return_value=[]
@@ -94,7 +96,10 @@ def client(monkeypatch):
             super().__init__(message)
             self.retryable = retryable
 
+    sys.modules["src.generation.client"].generate_answer = MagicMock()
+    sys.modules["src.generation.client"].warmup_model = MagicMock()
     sys.modules["src.generation.client"].ModelGenerationError = FakeModelGenerationError
+
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"
     sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(
         return_value="prompt"
@@ -103,13 +108,13 @@ def client(monkeypatch):
         return_value="prompt"
     )
 
-    class _PipelineError(Exception):
+    class PipelineError(Exception):
         def __init__(self, stage: str, message: str) -> None:
             self.stage = stage
             self.message = message
             super().__init__(f"{stage}: {message}")
 
-    sys.modules["src.ingestion.pipeline"].PipelineError = _PipelineError
+    sys.modules["src.ingestion.pipeline"].PipelineError = PipelineError
     sys.modules["src.ingestion.pipeline"].load_sources = MagicMock()
     sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock()
 
@@ -118,6 +123,7 @@ def client(monkeypatch):
     class FakeRetryJobStatus(str, Enum):
         QUEUED = "queued"
 
+    retry_module = sys.modules["src.retry_queue"]
     retry_module.RetryJobStatus = FakeRetryJobStatus
     retry_module.create_retry_job = MagicMock(return_value=("job-1", "queued"))
     retry_module.get_retry_job = MagicMock(
@@ -131,10 +137,36 @@ def client(monkeypatch):
             "response": None,
         }
     )
+    retry_module.get_retry_job = MagicMock(
+        return_value={
+            "job_id": "job-1",
+            "status": "queued",
+            "attempt_count": 1,
+            "last_error": "",
+            "created_at": "now",
+            "updated_at": "now",
+            "response": None,
+        }
+    )
 
-    import src.main as main
 
-    return TestClient(main.app, raise_server_exceptions=False)
+@pytest.fixture()
+def main_module():
+    originals = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
+    _install_stubs()
+    sys.modules.pop("src.main", None)
+
+    main = importlib.import_module("src.main")
+    try:
+        yield main
+    finally:
+        sys.modules.pop("src.main", None)
+        _restore_modules(originals)
+
+
+@pytest.fixture()
+def client(main_module):
+    return TestClient(main_module.app, raise_server_exceptions=False)
 
 
 def test_jobs_status_endpoint_returns_state(client):
@@ -159,9 +191,9 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client):
     )
 
     async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
-        raise main.ModelGenerationError("transient", retryable=True)
+        raise main_module.ModelGenerationError("transient", retryable=True)
 
-    monkeypatch.setattr(main, "generate_answer", fail)
+    monkeypatch.setattr(main_module, "generate_answer", fail)
 
     resp = client.post("/answer", json={"query": "headache", "top_k": 1})
     assert resp.status_code == 202

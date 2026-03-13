@@ -1,3 +1,5 @@
+import json
+import threading
 from datetime import datetime
 from typing import Optional
 import os
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.core.config import settings
 from src.db.models import Chat, ChatStatus, Message, NotificationType, User
 from src.db.session import SessionLocal
+from src.utils.sse import SSEEvent, chat_event_bus
 from src.repositories import (
     audit_repository,
     chat_repository,
@@ -17,7 +20,9 @@ from src.repositories import (
 )
 from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, ReviewRequest
 from src.services._mappers import chat_to_response, msg_to_response
+from src.services.chat_service import _extract_text
 from src.utils.cache import cache, cache_keys
+from src.core.chat_policy import can_view_chat
 
 
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
@@ -57,12 +62,7 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    in_queue = chat.status == ChatStatus.SUBMITTED and (
-        not specialist.specialty or chat.specialty == specialist.specialty
-    )
-    assigned_to_me = chat.specialist_id == specialist.id
-
-    if not (in_queue or assigned_to_me):
+    if not can_view_chat(specialist, chat):
         raise HTTPException(
             status_code=403, detail="You do not have access to this chat")
 
@@ -407,11 +407,11 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
             chat.severity,
         )
     else:
-        import threading
         thread = threading.Thread(
             target=_regenerate_ai_response_task,
             args=(
                 placeholder.id,
+                chat.id,
                 original_query,
                 previous_answer,
                 feedback or "",
@@ -486,30 +486,160 @@ def _do_revise(
 
 def _regenerate_ai_response_task(
     placeholder_id: int,
+    chat_id: int,
     original_query: str,
     previous_answer: str,
     feedback: str,
     specialty: str | None,
     severity: str | None,
 ) -> None:
-    """Background task: call the RAG /revise endpoint and update the placeholder message."""
+    """Background task: stream from RAG /revise and publish SSE events."""
     db = SessionLocal()
     try:
-        placeholder = db.query(Message).filter(
-            Message.id == placeholder_id).first()
-        if placeholder:
-            _do_revise(
-                db,
-                placeholder,
-                original_query,
-                previous_answer,
-                feedback,
-                specialty,
-                severity,
+        placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
+        if not placeholder:
+            return
+
+        chat = db.query(Chat).filter(Chat.id == chat_id).first()
+        patient_context = None
+        file_context = None
+        if chat:
+            ctx = chat.patient_context or {}
+            patient_context = {
+                **ctx,
+                **({"specialty": chat.specialty} if chat.specialty else {}),
+                **({"severity": chat.severity} if chat.severity else {}),
+            } or None
+
+            file_texts = []
+            for attachment in (chat.files or []):
+                text = _extract_text(attachment.file_path, attachment.file_type)
+                if text.strip():
+                    file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
+
+            if file_texts:
+                file_context = "\n\n---\n\n".join(file_texts)
+                if len(file_context) > 8000:
+                    file_context = (
+                        file_context[:8000]
+                        + "\n\n[Document truncated to fit context window]"
+                    )
+
+        # Publish stream_start
+        chat_event_bus.publish_threadsafe(
+            chat_id,
+            SSEEvent(
+                event="stream_start",
+                data={"chat_id": chat_id, "message_id": placeholder_id},
+            ),
+        )
+
+        rag_payload = {
+            "original_query": original_query,
+            "previous_answer": previous_answer,
+            "feedback": feedback,
+            "top_k": 4,
+            "stream": True,
+            "specialty": specialty,
+            "severity": severity,
+        }
+        if patient_context:
+            rag_payload["patient_context"] = patient_context
+        if file_context:
+            rag_payload["file_context"] = file_context
+
+        accumulated = ""
+        citations: list = []
+
+        try:
+            with httpx.Client(timeout=120) as client:
+                with client.stream(
+                    "POST",
+                    f"{RAG_SERVICE_URL}/revise",
+                    json=rag_payload,
+                ) as response:
+                    response.raise_for_status()
+                    for line in response.iter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+
+                        if chunk.get("type") == "chunk":
+                            accumulated += chunk.get("delta", "")
+                            chat_event_bus.publish_threadsafe(
+                                chat_id,
+                                SSEEvent(
+                                    event="content",
+                                    data={
+                                        "chat_id": chat_id,
+                                        "message_id": placeholder_id,
+                                        "content": accumulated,
+                                    },
+                                ),
+                            )
+                        elif chunk.get("type") == "done":
+                            accumulated = chunk.get("answer", accumulated)
+                            citations = chunk.get("citations", [])
+                        elif chunk.get("type") == "error":
+                            raise RuntimeError(
+                                chunk.get("error", "RAG streaming error")
+                            )
+        except Exception as exc:
+            accumulated = (
+                f"[Revised after specialist feedback: {feedback}] "
+                f"RAG service unavailable — original question: {original_query} "
+                f"(detail: {exc})"
             )
+            citations = []
+
+        # Finalise placeholder
+        placeholder.content = accumulated
+        placeholder.citations = citations
+        placeholder.is_generating = False
+        db.commit()
+        db.refresh(placeholder)
+
+        # Publish final content + complete
+        chat_event_bus.publish_threadsafe(
+            chat_id,
+            SSEEvent(
+                event="content",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": placeholder_id,
+                    "content": accumulated,
+                },
+            ),
+        )
+        chat_event_bus.publish_threadsafe(
+            chat_id,
+            SSEEvent(
+                event="complete",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": placeholder_id,
+                    "content": accumulated,
+                    "citations": citations,
+                },
+            ),
+        )
+
+        try:
+            audit_repository.log(
+                db,
+                user_id=chat.specialist_id if chat else None,
+                action="RAG_REVISE" if accumulated else "RAG_ERROR",
+                details=f"chunks_used={len(citations)}",
+            )
+        except Exception:
+            pass
     except Exception:
         db.rollback()
     finally:
+        chat_event_bus.close_chat_threadsafe(chat_id)
         db.close()
 
 

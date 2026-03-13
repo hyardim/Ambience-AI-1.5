@@ -165,12 +165,28 @@ def ensure_default_users() -> None:
         db.close()
 
 
+def ensure_chat_archive_column() -> None:
+    """Add is_archived column to chats table if missing."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE chats "
+                "ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+
+
 def ensure_enum_columns_lowercase() -> None:
     """Migrate any uppercase enum values to lowercase and convert native enum
-    columns to plain VARCHAR.  Handles users.role and chats.status.
+    columns to plain VARCHAR.  Handles users.role, chats.status and
+    notifications.type.
     """
     with engine.begin() as connection:
-        for table, column in [("users", "role"), ("chats", "status")]:
+        for table, column in [
+            ("users", "role"),
+            ("chats", "status"),
+            ("notifications", "type"),
+        ]:
             connection.execute(
                 text(
                     f"ALTER TABLE {table} "
@@ -188,6 +204,7 @@ def ensure_enum_columns_lowercase() -> None:
 ensure_auth_columns()
 ensure_notification_fk()
 ensure_message_columns()
+ensure_chat_archive_column()
 ensure_chat_columns()
 ensure_enum_columns_lowercase()
 ensure_default_users()

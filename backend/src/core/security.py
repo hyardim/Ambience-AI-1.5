@@ -51,6 +51,27 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 # --- 4. Get Current User ---
+def decode_token(token: str) -> str:
+    """Decode a JWT and return the subject (email).
+
+    Raises ``HTTPException(401)`` when the token is invalid or expired.
+    Used by endpoints that receive the token as a query parameter
+    (e.g. the SSE stream endpoint where EventSource cannot set headers).
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    return email
+
+
 def get_current_user(token: str = Depends(oauth2_scheme)):
     """
     Decodes the token to get the user's email.

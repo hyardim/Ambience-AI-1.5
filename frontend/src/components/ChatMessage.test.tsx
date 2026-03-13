@@ -66,4 +66,18 @@ describe('ChatMessage', () => {
     const wrapper = container.firstElementChild;
     expect(wrapper?.className).toContain('flex-row-reverse');
   });
+
+  it('renders streamed AI content while generation is still in progress', () => {
+    const streamingAiMessage: Message = {
+      ...baseMessage,
+      senderType: 'ai',
+      senderName: 'AI',
+      content: 'Partial streamed answer',
+      isGenerating: true,
+    };
+
+    render(<ChatMessage message={streamingAiMessage} />);
+
+    expect(screen.getByText('Partial streamed answer')).toBeInTheDocument();
+  });
 });

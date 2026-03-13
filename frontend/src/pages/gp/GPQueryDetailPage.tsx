@@ -1,71 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, ClipboardCheck } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { getChat, sendMessage as apiSendMessage, updateChat as apiUpdateChat, uploadChatFile } from '../../services/api';
-import type { BackendChatWithMessages, BackendMessage, ChatUpdateRequest } from '../../types/api';
-import type { Message, Citation } from '../../types';
-
-/** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
-function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw) && raw.length > 0
-    ? raw
-    : Array.isArray(fallback)
-      ? fallback
-      : [];
-
-  return list
-    .map((c: any) => {
-      if (!c || typeof c !== 'object') return null;
-      const meta = (c as any).metadata || {};
-      const docId = (c as any).doc_id ?? meta.doc_id;
-      const sectionPath = (c as any).section_path ?? meta.section_path;
-      const pageStart = (c as any).page_start ?? meta.page_start;
-      const pageEnd = (c as any).page_end ?? meta.page_end;
-
-      return {
-        doc_id: docId || undefined,
-        title: meta.title || meta.filename || (c as any).source || 'Source',
-        source_name: meta.source_name || (c as any).source || 'Source',
-        specialty: meta.specialty,
-        section_path: sectionPath,
-        page_start: typeof pageStart === 'number' ? pageStart : undefined,
-        page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
-        source_url: meta.source_url,
-      } satisfies Citation;
-    })
-    .filter(Boolean) as Citation[];
-}
-
-/** Map a backend message to the frontend Message shape */
-function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
-  const isAI = msg.sender === 'ai';
-  const isSpecialist = msg.sender === 'specialist';
-  return {
-    id: String(msg.id),
-    senderId: isAI ? 'ai' : isSpecialist ? 'specialist' : 'user',
-    senderName: isAI ? 'NHS AI Assistant' : isSpecialist ? 'Specialist' : currentUser,
-    senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
-    content: msg.content,
-    timestamp: new Date(msg.created_at),
-    citations: mapCitations(
-      (msg.citations_used as unknown[] | null) ?? msg.citations_used,
-      (msg.citations as unknown[] | null) ?? (msg.citations_retrieved as unknown[] | null),
-    ),
-    isGenerating: msg.is_generating ?? false,
-    reviewStatus: msg.review_status ?? null,
-    reviewFeedback: msg.review_feedback ?? null,
-    reviewedAt: msg.reviewed_at ?? null,
-  };
-}
+import { useChatStream } from '../../hooks/useChatStream';
+import { toFrontendMessage } from '../../utils/messageMapping';
+import {
+  getChat,
+  sendMessage as apiSendMessage,
+  updateChat as apiUpdateChat,
+  uploadChatFile,
+} from '../../services/api';
+import type { BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
+import type { Message } from '../../types';
 
 export function GPQueryDetailPage() {
   const { queryId } = useParams<{ queryId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { username, logout } = useAuth();
   const [chat, setChat] = useState<BackendChatWithMessages | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -76,6 +31,23 @@ export function GPQueryDetailPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [editMeta, setEditMeta] = useState<ChatUpdateRequest>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Guard: auto-send the draft message from GPNewQueryPage only once
+  const draftSentRef = useRef(false);
+
+  // ── Streaming state machine ────────────────────────────────────────────
+  const refreshChat = useCallback(async () => {
+    if (!queryId) return;
+    try {
+      const found = await getChat(Number(queryId));
+      setChat(found);
+      setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
+    } catch { /* silent refresh */ }
+  }, [queryId, username]);
+
+  const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
+    setMessages,
+    { chatId: chat?.id ?? null, onRefresh: refreshChat },
+  );
 
   useEffect(() => {
     fetchChat();
@@ -84,6 +56,49 @@ export function GPQueryDetailPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  // ── Auto-send draft message passed from GPNewQueryPage ───────────────
+  const draftMessage = (location.state as { draftMessage?: string } | null)?.draftMessage;
+
+  useEffect(() => {
+    if (!chat || !draftMessage || draftSentRef.current) return;
+    draftSentRef.current = true;
+
+    // Clear router state so a page refresh won't re-send
+    navigate(location.pathname, { replace: true, state: {} });
+
+    // The optimistic user message was already added by fetchChat in the same
+    // render as loading=false, so no need to setMessages here.
+    setSending(true);
+
+    (async () => {
+      try {
+        // Open SSE *before* sending so we catch stream_start / content / complete
+        await connectStream(chat.id);
+        await apiSendMessage(chat.id, draftMessage);
+        // Reconcile user message id
+        const refreshed = await getChat(chat.id);
+        setChat(refreshed);
+        setMessages((prev) => {
+          const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
+          const fetched = refreshed.messages.map((m) =>
+            toFrontendMessage(m, username || 'GP User'),
+          );
+          if (streamingMsg) {
+            return fetched.map((m) =>
+              m.id === streamingMsg.id ? streamingMsg : m,
+            );
+          }
+          return fetched;
+        });
+      } catch {
+        setError('Failed to send message');
+      } finally {
+        setSending(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat?.id]);
 
   const hasPendingAIResponse =
     messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
@@ -98,17 +113,20 @@ export function GPQueryDetailPage() {
   const chatStatus = chat?.status ?? '';
   const isInReview = ['submitted', 'assigned', 'reviewing'].includes(chatStatus);
 
-  const shouldPoll = hasPendingAIResponse || hasRevisionInProgress || isInReview;
+  // Don't poll while actively sending: the backend hasn't persisted the message
+  // yet, so a silent fetch would return an empty message list and clobber the
+  // optimistic message that's already visible.
+  const shouldPoll = (hasPendingAIResponse || hasRevisionInProgress || isInReview) && !streamConnected && !sending;
 
+  // Delegate polling to the hook — start/stop based on derived shouldPoll flag
   useEffect(() => {
-    if (!queryId || !shouldPoll) return;
-
-    const intervalId = window.setInterval(() => {
-      fetchChat({ silent: true });
-    }, 2000);
-
-    return () => window.clearInterval(intervalId);
-  }, [queryId, shouldPoll]);
+    if (!queryId) return;
+    if (shouldPoll) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+  }, [queryId, shouldPoll, startPolling, stopPolling]);
 
   const fetchChat = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
@@ -119,7 +137,22 @@ export function GPQueryDetailPage() {
     try {
       const found = await getChat(Number(queryId));
       setChat(found);
-      setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
+      const mapped = found.messages.map(m => toFrontendMessage(m, username || 'GP User'));
+      // When a draft message is about to be sent, pre-populate the optimistic
+      // user message in the same batch as loading=false so there's no
+      // empty-messages flash between fetchChat completing and the draft effect.
+      if (draftMessage && !draftSentRef.current) {
+        setMessages([...mapped, {
+          id: 'temp-draft',
+          senderId: 'user',
+          senderName: username || 'GP User',
+          senderType: 'gp' as const,
+          content: draftMessage,
+          timestamp: new Date(),
+        }]);
+      } else {
+        setMessages(mapped);
+      }
     } catch {
       setChat(null);
       setError('Failed to load consultation');
@@ -129,6 +162,26 @@ export function GPQueryDetailPage() {
       }
     }
   };
+
+  // Auto-connect SSE when there's pending AI work and no active stream
+  useEffect(() => {
+    if (!chat) return;
+    if (streamConnected || sending) return;
+    // Only auto-connect from idle. When fallback polling is active, avoid
+    // tight reconnect loops against /stream under poor network conditions.
+    if (streamPhase !== 'idle') return;
+    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+
+    void connectStream(chat.id);
+  }, [
+    chat,
+    connectStream,
+    hasPendingAIResponse,
+    hasRevisionInProgress,
+    sending,
+    streamConnected,
+    streamPhase,
+  ]);
 
   const handleSendMessage = async (content: string, files?: File[]) => {
     if (!chat || sending) return;
@@ -157,11 +210,29 @@ export function GPQueryDetailPage() {
         }
         await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
       }
-      // Backend returns { status, ai_response }; refetch chat to attach citations reliably
+
+      // Open SSE stream *once* before sending so we catch the AI generation events
+      await connectStream(chat.id);
+
       await apiSendMessage(chat.id, content);
+      // Also do one fetch to reconcile the user message id
       const refreshed = await getChat(chat.id);
       setChat(refreshed);
-      setMessages(refreshed.messages.map(m => toFrontendMessage(m, username || 'GP User')));
+
+      // Merge: keep streaming placeholder if present, else use fetched messages
+      setMessages((prev) => {
+        const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
+        const fetched = refreshed.messages.map((m) =>
+          toFrontendMessage(m, username || 'GP User'),
+        );
+        if (streamingMsg) {
+          // Replace the generating message from the fetch with our streaming version
+          return fetched.map((m) =>
+            m.id === streamingMsg.id ? streamingMsg : m,
+          );
+        }
+        return fetched;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
@@ -368,7 +439,7 @@ export function GPQueryDetailPage() {
                 />
               );
             })}
-            {hasPendingAIResponse && (
+            {hasPendingAIResponse && !streamConnected && (
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">

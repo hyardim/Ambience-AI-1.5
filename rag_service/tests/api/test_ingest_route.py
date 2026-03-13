@@ -9,6 +9,7 @@ they are torn down after this module finishes and do not pollute other tests.
 import os
 import sys
 import types
+from enum import Enum
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -342,6 +343,17 @@ class TestIngestSuccess:
             )
 
         body = resp.json()
+        for field in (
+            "source_name",
+            "filename",
+            "files_scanned",
+            "files_succeeded",
+            "files_failed",
+            "total_chunks",
+            "embeddings_succeeded",
+            "embeddings_failed",
+            "db",
+        ):
         for field in (
             "source_name",
             "filename",

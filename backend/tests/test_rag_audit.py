@@ -9,7 +9,7 @@ The rag_grounded_responses stat only counts messages whose citations column
 is NOT NULL (i.e. real sources were retrieved).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -26,6 +26,15 @@ def _create_chat(client, headers, specialty="neurology"):
     resp = client.post("/chats/", json={"title": "RAG test", "specialty": specialty}, headers=headers)
     assert resp.status_code == 200
     return resp.json()
+
+
+def _mock_async_client(response):
+    """Return a mock httpx.AsyncClient that works as an async context manager."""
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=response)
+    return mock_client
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +91,8 @@ class TestRAGAnswerLogging:
         return mock
 
     def test_rag_answer_logged_on_success(self, client, admin_headers, gp_headers):
-        with patch("src.services.chat_service.httpx.post", return_value=self._mock_rag_response()):
+        with patch("src.services.chat_service.httpx.AsyncClient",
+                    return_value=_mock_async_client(self._mock_rag_response())):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
 
@@ -91,7 +101,8 @@ class TestRAGAnswerLogging:
         assert len(rag_answer_logs) >= 1
 
     def test_rag_answer_category_is_rag(self, client, admin_headers, gp_headers):
-        with patch("src.services.chat_service.httpx.post", return_value=self._mock_rag_response()):
+        with patch("src.services.chat_service.httpx.AsyncClient",
+                    return_value=_mock_async_client(self._mock_rag_response())):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
 
@@ -100,7 +111,8 @@ class TestRAGAnswerLogging:
             assert log["category"] == "RAG"
 
     def test_rag_grounded_stat_increments_on_answer_with_citations(self, client, admin_headers, gp_headers):
-        with patch("src.services.chat_service.httpx.post", return_value=self._mock_rag_response()):
+        with patch("src.services.chat_service.httpx.AsyncClient",
+                    return_value=_mock_async_client(self._mock_rag_response())):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
 
@@ -114,7 +126,8 @@ class TestRAGAnswerLogging:
         mock.raise_for_status = MagicMock()
         mock.json.return_value = {"answer": "I don't know.", "citations_used": []}
 
-        with patch("src.services.chat_service.httpx.post", return_value=mock):
+        with patch("src.services.chat_service.httpx.AsyncClient",
+                    return_value=_mock_async_client(mock)):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
 
@@ -123,7 +136,8 @@ class TestRAGAnswerLogging:
 
     def test_rag_log_details_contain_chunk_count(self, client, admin_headers, gp_headers):
         citations = [{"source": "NICE", "chunk": "a"}, {"source": "BMJ", "chunk": "b"}]
-        with patch("src.services.chat_service.httpx.post", return_value=self._mock_rag_response(citations)):
+        with patch("src.services.chat_service.httpx.AsyncClient",
+                    return_value=_mock_async_client(self._mock_rag_response(citations))):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
 

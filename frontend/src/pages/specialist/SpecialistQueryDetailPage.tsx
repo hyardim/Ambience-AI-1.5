@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, CheckCircle, XCircle, AlertTriangle,
@@ -9,6 +9,8 @@ import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/AuthContext';
+import { useChatStream } from '../../hooks/useChatStream';
+import { toFrontendMessage } from '../../utils/messageMapping';
 import {
   getSpecialistChatDetail,
   getProfile,
@@ -18,61 +20,8 @@ import {
   sendSpecialistMessage,
   uploadChatFile,
 } from '../../services/api';
-import type { BackendChatWithMessages, BackendMessage } from '../../types/api';
-import type { Message, Citation } from '../../types';
-
-/** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
-function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw) && raw.length > 0
-    ? raw
-    : Array.isArray(fallback)
-      ? fallback
-      : [];
-
-  return list
-    .map((c: any) => {
-      if (!c || typeof c !== 'object') return null;
-      const meta = (c as any).metadata || {};
-      const docId = (c as any).doc_id ?? meta.doc_id;
-      const sectionPath = (c as any).section_path ?? meta.section_path;
-      const pageStart = (c as any).page_start ?? meta.page_start;
-      const pageEnd = (c as any).page_end ?? meta.page_end;
-
-      return {
-        doc_id: docId || undefined,
-        title: meta.title || meta.filename || (c as any).source || 'Source',
-        source_name: meta.source_name || (c as any).source || 'Source',
-        specialty: meta.specialty,
-        section_path: sectionPath,
-        page_start: typeof pageStart === 'number' ? pageStart : undefined,
-        page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
-        source_url: meta.source_url,
-      } satisfies Citation;
-    })
-    .filter(Boolean) as Citation[];
-}
-
-/** Map a backend message to the frontend Message shape used by ChatMessage */
-function toFrontendMessage(msg: BackendMessage, currentUser: string): Message {
-  const isAI = msg.sender === 'ai';
-  const isSpecialist = msg.sender === 'specialist';
-  return {
-    id: String(msg.id),
-    senderId: msg.sender,
-    senderName: isAI ? 'NHS AI Assistant' : isSpecialist ? currentUser : 'GP User',
-    senderType: isAI ? 'ai' : isSpecialist ? 'specialist' : 'gp',
-    content: msg.content,
-    timestamp: new Date(msg.created_at),
-    citations: mapCitations(
-      (msg.citations_used as unknown[] | null) ?? msg.citations_used,
-      (msg.citations as unknown[] | null) ?? (msg.citations_retrieved as unknown[] | null),
-    ),
-    isGenerating: msg.is_generating ?? false,
-    reviewStatus: msg.review_status ?? null,
-    reviewFeedback: msg.review_feedback ?? null,
-    reviewedAt: msg.reviewed_at ?? null,
-  };
-}
+import type { BackendChatWithMessages } from '../../types/api';
+import type { Message } from '../../types';
 
 export function SpecialistQueryDetailPage() {
   const { username, logout } = useAuth();
@@ -101,6 +50,25 @@ export function SpecialistQueryDetailPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // ── Streaming state machine ────────────────────────────────────────────
+  const refreshData = useCallback(async () => {
+    if (!queryId) return;
+    try {
+      const [profile, chatData] = await Promise.all([
+        getProfile(),
+        getSpecialistChatDetail(Number(queryId)),
+      ]);
+      setMyUserId(profile.id);
+      setChat(chatData);
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
+    } catch { /* silent refresh */ }
+  }, [queryId, username]);
+
+  const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
+    setMessages,
+    { chatId: chat?.id ?? null, onRefresh: refreshData },
+  );
+
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
     loadData();
@@ -119,15 +87,18 @@ export function SpecialistQueryDetailPage() {
     messages[messages.length - 1].senderType === 'ai' &&
     messages[messages.length - 1].isGenerating === true;
 
+  // Only poll when SSE is not connected and there's pending work
+  const shouldPoll = (hasPendingAIResponse || hasRevisionInProgress) && !streamConnected;
+
+  // Delegate polling to the hook
   useEffect(() => {
-    if (!queryId || (!hasPendingAIResponse && !hasRevisionInProgress)) return;
-
-    const intervalId = window.setInterval(() => {
-      loadData({ silent: true });
-    }, 2000);
-
-    return () => window.clearInterval(intervalId);
-  }, [queryId, hasPendingAIResponse, hasRevisionInProgress]);
+    if (!queryId) return;
+    if (shouldPoll) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+  }, [queryId, shouldPoll, startPolling, stopPolling]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!queryId) return;
@@ -142,7 +113,7 @@ export function SpecialistQueryDetailPage() {
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User')));
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
     } catch (err) {
       if (!options?.silent) {
         setError(err instanceof Error ? err.message : 'Failed to load consultation');
@@ -153,6 +124,23 @@ export function SpecialistQueryDetailPage() {
       }
     }
   };
+
+  // Auto-connect SSE when there's pending AI work and no active stream
+  useEffect(() => {
+    if (!chat) return;
+    if (streamConnected) return;
+    if (streamPhase !== 'idle' && streamPhase !== 'fallback_polling') return;
+    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+
+    void connectStream(chat.id);
+  }, [
+    chat,
+    connectStream,
+    hasPendingAIResponse,
+    hasRevisionInProgress,
+    streamConnected,
+    streamPhase,
+  ]);
 
   // ── Actions ──────────────────────────────────────────────────
 
@@ -209,11 +197,14 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
+      // Open SSE *before* the API call so we catch the revision stream events
+      await connectStream(chat.id);
       await reviewMessage(chat.id, reviewTargetMessageId, 'request_changes', rejectReason.trim());
       setShowRejectModal(false);
       setRejectReason('');
       setReviewTargetMessageId(null);
-      await loadData();
+      // Reconcile with persisted state (streaming will update progressively)
+      await loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to request changes');
     } finally {
