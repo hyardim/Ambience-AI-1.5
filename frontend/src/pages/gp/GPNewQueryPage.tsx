@@ -71,12 +71,10 @@ export function GPNewQueryPage() {
         await Promise.all(attachedFiles.map(f => uploadChatFile(chat.id, f)));
       }
 
-      // 3. Send the first message. The backend auto-generates an AI response
-      //    and auto-submits the chat for specialist review.
-      await sendMessage(chat.id, formData.message);
-
-      // 4. Navigate to the chat detail page
-      navigate(`/gp/query/${chat.id}`);
+      // 3. Navigate to the detail page immediately, passing the draft message
+      // 3. Navigate to the detail page immediately so it can open SSE before
+      //    sending the first GP message. Attachments are already persisted.
+      navigate(`/gp/query/${chat.id}`, { state: { draftMessage: formData.message } });
     } catch {
       setError('Failed to create consultation. Is the backend running?');
     } finally {

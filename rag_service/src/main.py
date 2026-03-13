@@ -1,11 +1,12 @@
+import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, File, Form, HTTPException, Header, UploadFile
 from fastapi.responses import JSONResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .config import (
@@ -19,6 +20,7 @@ from .config import (
     path_config,
 )
 from .generation.client import ModelGenerationError, generate_answer, warmup_model
+from .generation.streaming import stream_generate
 from .generation.prompts import (
     ACTIVE_PROMPT,
     build_grounded_prompt,
@@ -95,6 +97,7 @@ class AnswerRequest(QueryRequest):
     max_tokens: int = LLM_MAX_TOKENS
     patient_context: dict[str, Any] | None = None
     file_context: str | None = None
+    stream: bool = False
 
 
 class ReviseRequest(BaseModel):
@@ -108,6 +111,7 @@ class ReviseRequest(BaseModel):
     file_context: str | None = None
     specialty: str | None = None
     severity: str | None = None
+    stream: bool = False
 
 
 MAX_CITATIONS = 3
@@ -219,6 +223,62 @@ class AnswerResponse(BaseModel):
     citations_used: list[SearchResult]
     citations_retrieved: list[SearchResult]
     citations: list[SearchResult]
+
+
+async def _streaming_generator(
+    prompt: str,
+    max_tokens: int,
+    citations_retrieved: list[SearchResult],
+    provider: str = "local",
+) -> AsyncGenerator[str, None]:
+    """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
+    accumulated = ""
+    try:
+        if provider == "local":
+            async for token in stream_generate(prompt, max_tokens=max_tokens):
+                accumulated += token
+                yield json.dumps({"type": "chunk", "delta": token}) + "\n"
+        else:
+            accumulated = await generate_answer(
+                prompt,
+                max_tokens=max_tokens,
+                provider=provider,
+            )
+    except Exception as e:
+        yield json.dumps({"type": "error", "error": str(e)}) + "\n"
+        return
+
+    used_indices = _extract_citation_indices(accumulated)
+    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+    citations_used = [citations_retrieved[i - 1] for i in sorted_used]
+    renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+    renumbered_answer = _rewrite_citations(accumulated, renumber_map)
+    renumbered_answer = re.sub(
+        r"\n+\s*References?:.*",
+        "",
+        renumbered_answer,
+        flags=re.DOTALL | re.IGNORECASE,
+    ).rstrip()
+    fallback = citations_used if citations_used else citations_retrieved
+
+    yield json.dumps({
+        "type": "done",
+        "answer": renumbered_answer,
+        "citations_used": [c.model_dump() for c in citations_used],
+        "citations_retrieved": [c.model_dump() for c in citations_retrieved],
+        "citations": [c.model_dump() for c in fallback],
+    }) + "\n"
+
+
+async def _ndjson_done_only(answer: str) -> AsyncGenerator[str, None]:
+    """Single ``done`` line for cases where no streaming is needed."""
+    yield json.dumps({
+        "type": "done",
+        "answer": answer,
+        "citations_used": [],
+        "citations_retrieved": [],
+        "citations": [],
+    }) + "\n"
 
 
 class IngestResponse(BaseModel):
@@ -367,25 +427,31 @@ async def generate_clinical_answer(
         ]
         top_chunks = filtered[:MAX_CITATIONS]
 
+        no_result = (
+            "I couldn't find any guideline passage in the indexed sources "
+            "that directly answers this question. Please rephrase or try a different query."
+        )
         if not top_chunks and not request.file_context:
             # Avoid making the model hallucinate when nothing relevant was retrieved
             # and no uploaded document is present.
+            if request.stream:
+                return StreamingResponse(
+                    _ndjson_done_only(no_result),
+                    media_type="application/x-ndjson",
+                )
             return AnswerResponse(
-                answer=(
-                    "I couldn't find any guideline passage in the indexed sources "
-                    "that directly answers this question. Please rephrase or try a different query."
-                ),
+                answer=no_result,
                 citations_used=[],
                 citations_retrieved=[],
                 citations=[],
             )
 
-    prompt = build_grounded_prompt(
-        request.query,
-        top_chunks,
-        patient_context=request.patient_context,
-        file_context=request.file_context,
-    )
+        prompt = build_grounded_prompt(
+            request.query,
+            top_chunks,
+            patient_context=request.patient_context,
+            file_context=request.file_context,
+        )
         route = select_generation_provider(
             query=request.query,
             retrieved_chunks=filtered or retrieved,
@@ -414,6 +480,17 @@ async def generate_clinical_answer(
             )
             for res in top_chunks
         ]
+
+        if request.stream:
+            return StreamingResponse(
+                _streaming_generator(
+                    prompt,
+                    request.max_tokens,
+                    citations_retrieved,
+                    provider=route.provider,
+                ),
+                media_type="application/x-ndjson",
+            )
 
         try:
             answer_text = await generate_answer(
@@ -542,6 +619,17 @@ async def revise_clinical_answer(
             )
             for res in top_chunks
         ]
+
+        if request.stream:
+            return StreamingResponse(
+                _streaming_generator(
+                    prompt,
+                    request.max_tokens,
+                    citations_retrieved,
+                    provider=route.provider,
+                ),
+                media_type="application/x-ndjson",
+            )
 
         try:
             answer_text = await generate_answer(

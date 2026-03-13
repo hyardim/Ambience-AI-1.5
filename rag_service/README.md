@@ -226,6 +226,44 @@ data/
 
 ---
 
+## Streaming (Token-by-Token AI Responses)
+
+The `/answer` and `/revise` endpoints support an optional `"stream": true` field in the
+request body. When enabled, the response is an **NDJSON** stream
+(`application/x-ndjson`) rather than a single JSON object.
+
+### Wire format
+
+Each line is a self-contained JSON object with a `type` discriminator:
+
+| type    | Payload                                                      | Meaning                       |
+|---------|--------------------------------------------------------------|-------------------------------|
+| `chunk` | `{"type":"chunk","delta":"token"}`                           | One LLM token                 |
+| `done`  | `{"type":"done","answer":"…","citations_used":[],"citations_retrieved":[],"citations":[]}` | Final answer + citations      |
+| `error` | `{"type":"error","error":"message"}`                         | Generation failure             |
+
+### Example request
+
+```bash
+curl -s -N http://localhost:8001/answer \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What is migraine?","specialty":"neurology","stream":true}'
+```
+
+### Streaming helper
+
+`src/generation/streaming.py` provides `stream_generate(prompt, max_tokens)`, an async
+iterator over Ollama's `/api/generate` endpoint that yields individual tokens. Both
+`/answer` and `/revise` re-use this helper when `stream=True`.
+
+### Non-streaming (default)
+
+When `stream` is omitted or `false`, the endpoints behave exactly as before — returning a
+single JSON response with the complete answer. No client changes are required for the
+non-streaming path.
+
+---
+
 ## Testing
 
 ```bash

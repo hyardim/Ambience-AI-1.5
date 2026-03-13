@@ -37,6 +37,7 @@ class ChatStatus(enum.Enum):
     REJECTED = "rejected"        # Specialist rejected / requested changes
     CLOSED = "closed"
     FLAGGED = "flagged"
+    ARCHIVED = "archived"        # Soft-archived by the user
 
 # --- 1. User Management ---
 
@@ -96,6 +97,8 @@ class Chat(Base):
     assigned_at = Column(DateTime, nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_feedback = Column(Text, nullable=True)
+
+    is_archived = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow,

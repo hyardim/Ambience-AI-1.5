@@ -1,4 +1,5 @@
 from typing import Optional
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.db.models import Notification, NotificationType
@@ -29,6 +30,18 @@ def create(
 def list_for_user(
     db: Session, user_id: int, *, unread_only: bool = False
 ) -> list[Notification]:
+    # Backward-compatibility: older deployments stored enum names in uppercase
+    # (e.g. CHAT_APPROVED). Normalize them so SQLAlchemy enum parsing succeeds.
+    db.execute(
+        text(
+            "UPDATE notifications "
+            "SET type = LOWER(type) "
+            "WHERE user_id = :user_id AND type != LOWER(type)"
+        ),
+        {"user_id": user_id},
+    )
+    db.commit()
+
     query = db.query(Notification).filter(Notification.user_id == user_id)
     if unread_only:
         query = query.filter(Notification.is_read == False)

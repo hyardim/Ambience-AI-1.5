@@ -29,13 +29,13 @@ describe('AdminUsersPage', () => {
       expect(screen.getByText('User Management')).toBeInTheDocument();
     });
 
-    // Wait for users to load
+    // Wait for users to load (component renders role_id as identifier)
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('specialist@example.com')).toBeInTheDocument();
-    expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+    expect(screen.getByText('specialist_2')).toBeInTheDocument();
+    expect(screen.getByText('admin_3')).toBeInTheDocument();
   });
 
   it('filters users by search term', async () => {
@@ -43,13 +43,13 @@ describe('AdminUsersPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText(/search by name or email/i), 'specialist');
+    await user.type(screen.getByPlaceholderText(/search by identifier or specialty/i), 'specialist');
 
-    expect(screen.queryByText('gp@example.com')).not.toBeInTheDocument();
-    expect(screen.getByText('specialist@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('gp_1')).not.toBeInTheDocument();
+    expect(screen.getByText('specialist_2')).toBeInTheDocument();
   });
 
   it('shows error message on load failure', async () => {
@@ -71,7 +71,7 @@ describe('AdminUsersPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
     const editButtons = screen.getAllByText('Edit');
@@ -85,7 +85,7 @@ describe('AdminUsersPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
     const editButtons = screen.getAllByText('Edit');
@@ -103,7 +103,7 @@ describe('AdminUsersPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
     const editButtons = screen.getAllByText('Edit');
@@ -121,7 +121,7 @@ describe('AdminUsersPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
     const deactivateButtons = screen.getAllByTitle('Deactivate user');
@@ -129,7 +129,7 @@ describe('AdminUsersPage', () => {
 
     // The user should still appear but with updated status (the mock returns is_active: false)
     await waitFor(() => {
-      expect(screen.getByText('gp@example.com')).toBeInTheDocument();
+      expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
   });
 

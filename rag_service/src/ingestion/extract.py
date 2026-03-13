@@ -52,7 +52,8 @@ def extract_raw_document(pdf_path: str | Path) -> dict[str, Any]:
     Raises:
         PDFExtractionError: If PDF cannot be opened or is corrupted
     """
-    pdf_path = str(pdf_path)
+    # Keep source_path stable across OSes for reproducible metadata and tests.
+    pdf_path = Path(pdf_path).as_posix()
 
     try:
         with _open_pdf(pdf_path) as doc:

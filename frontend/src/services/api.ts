@@ -124,8 +124,25 @@ export async function updateProfile(data: ProfileUpdateRequest): Promise<UserPro
 
 // ── Chats (GP) ───────────────────────────────────────────────────────────
 
-export async function getChats(skip = 0, limit = 100): Promise<BackendChat[]> {
-  const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+export interface ChatListFilters {
+  skip?: number;
+  limit?: number;
+  status?: string;
+  specialty?: string;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export async function getChats(filters: ChatListFilters = {}): Promise<BackendChat[]> {
+  const params = new URLSearchParams();
+  params.set('skip', String(filters.skip ?? 0));
+  params.set('limit', String(filters.limit ?? 100));
+  if (filters.status) params.set('status', filters.status);
+  if (filters.specialty) params.set('specialty', filters.specialty);
+  if (filters.search) params.set('search', filters.search);
+  if (filters.date_from) params.set('date_from', filters.date_from);
+  if (filters.date_to) params.set('date_to', filters.date_to);
   const res = await fetch(`${API_BASE}/chats/?${params}`, {
     headers: authHeaders(),
   });
@@ -433,6 +450,99 @@ export async function adminGetLogs(filters?: {
     headers: authHeaders(),
   });
   return handleResponse<AuditLogResponse[]>(res);
+}
+
+// ── Chat SSE Stream ──────────────────────────────────────────────────────
+
+/** Event types pushed by the backend SSE endpoint. */
+export type ChatStreamEventType = 'stream_start' | 'content' | 'complete' | 'error';
+
+export interface ChatStreamEvent {
+  type: ChatStreamEventType;
+  chat_id: number;
+  message_id: number;
+  content?: string;
+  citations?: unknown[] | null;
+  error?: string;
+}
+
+export interface ChatStreamCallbacks {
+  onOpen?: () => void;
+  onStreamStart?: (messageId: number) => void;
+  onContent?: (messageId: number, content: string) => void;
+  onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
+  onError?: (messageId: number, error: string) => void;
+  onConnectionError?: () => void;
+}
+
+/**
+ * Subscribe to real-time AI generation events for a chat via SSE.
+ *
+ * Returns a cleanup function to close the connection. If the EventSource
+ * cannot connect or encounters an error, `onConnectionError` is called so
+ * the caller can fall back to polling.
+ */
+export function subscribeToChatStream(
+  chatId: number,
+  callbacks: ChatStreamCallbacks,
+): () => void {
+  const token = localStorage.getItem('access_token');
+  if (!token) {
+    callbacks.onConnectionError?.();
+    return () => {};
+  }
+
+  const url = `${API_BASE}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`;
+  const source = new EventSource(url);
+
+  const handleEvent = (eventType: ChatStreamEventType) => (ev: MessageEvent) => {
+    try {
+      const data = JSON.parse(ev.data) as Record<string, unknown>;
+      const messageId = data.message_id as number;
+      switch (eventType) {
+        case 'stream_start':
+          callbacks.onStreamStart?.(messageId);
+          break;
+        case 'content':
+          callbacks.onContent?.(messageId, (data.content as string) ?? '');
+          break;
+        case 'complete':
+          callbacks.onComplete?.(
+            messageId,
+            (data.content as string) ?? '',
+            (data.citations as unknown[] | null) ?? null,
+          );
+          // Server will close the stream after complete; clean up client side.
+          source.close();
+          break;
+        case 'error':
+          callbacks.onError?.(messageId, (data.error as string) ?? 'Unknown error');
+          source.close();
+          break;
+      }
+    } catch {
+      // Malformed event – ignore
+    }
+  };
+
+  source.addEventListener('stream_start', handleEvent('stream_start'));
+  source.addEventListener('content', handleEvent('content'));
+  source.addEventListener('complete', handleEvent('complete'));
+  source.addEventListener('error', handleEvent('error'));
+
+  source.onopen = () => {
+    callbacks.onOpen?.();
+  };
+
+  // Built-in error handler (network failure, 401, etc.)
+  source.onerror = () => {
+    source.close();
+    callbacks.onConnectionError?.();
+  };
+
+  return () => {
+    source.close();
+  };
 }
 
 // ── Admin: Guideline Upload ───────────────────────────────────────────────

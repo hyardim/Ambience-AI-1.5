@@ -1,11 +1,15 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user_obj
+from src.core import security
 from src.db.models import User
-from src.db.session import get_db
+from src.db.session import get_async_db, get_db
+from src.repositories import user_repository
 from src.schemas.chat import (
     ChatCreate,
     ChatResponse,
@@ -15,6 +19,7 @@ from src.schemas.chat import (
     MessageCreate,
 )
 from src.services import chat_service
+from src.utils.sse import sse_event_generator
 
 router = APIRouter()
 
@@ -34,6 +39,9 @@ def list_chats(
     limit: int = 100,
     status: Optional[str] = None,
     specialty: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=200),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
@@ -44,6 +52,9 @@ def list_chats(
         limit=limit,
         status=status,
         specialty=specialty,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
     )
 
 
@@ -67,28 +78,26 @@ def update_chat(
 
 
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_chat(
+def archive_chat(
     chat_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
-    chat_service.delete_chat(db, current_user, chat_id)
+    chat_service.archive_chat(db, current_user, chat_id)
 
 
 @router.post("/{chat_id}/message")
-def send_message(
+async def send_message(
     chat_id: int,
     message: MessageCreate,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user_obj),
 ):
-    return chat_service.send_message(
+    return await chat_service.async_send_message(
         db,
         current_user,
         chat_id,
         message.content,
-        background_tasks,
     )
 
 
@@ -109,3 +118,41 @@ def submit_for_review(
     current_user: User = Depends(get_current_user_obj),
 ):
     return chat_service.submit_for_review(db, current_user, chat_id)
+
+
+@router.get("/{chat_id}/stream")
+async def stream_chat(
+    chat_id: int,
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """SSE endpoint for real-time AI generation events.
+
+    EventSource does not support custom headers, so the JWT is passed as a
+    query parameter.  The token is validated before the stream begins.
+    """
+    # Validate token and resolve user
+    try:
+        email = security.decode_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user = user_repository.get_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    from src.db.models import Chat
+    from src.core.chat_policy import can_stream_chat
+
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat or not can_stream_chat(user, chat):
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    return StreamingResponse(
+        sse_event_generator(chat_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
