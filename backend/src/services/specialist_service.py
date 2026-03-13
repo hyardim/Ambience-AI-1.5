@@ -594,17 +594,6 @@ def _regenerate_ai_response_task(
                 f"(detail: {exc})"
             )
             citations = []
-            chat_event_bus.publish_threadsafe(
-                chat_id,
-                SSEEvent(
-                    event="error",
-                    data={
-                        "chat_id": chat_id,
-                        "message_id": placeholder_id,
-                        "error": str(exc),
-                    },
-                ),
-            )
 
         # Finalise placeholder
         placeholder.content = accumulated

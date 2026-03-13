@@ -167,7 +167,9 @@ export function GPQueryDetailPage() {
   useEffect(() => {
     if (!chat) return;
     if (streamConnected || sending) return;
-    if (streamPhase !== 'idle' && streamPhase !== 'fallback_polling') return;
+    // Only auto-connect from idle. When fallback polling is active, avoid
+    // tight reconnect loops against /stream under poor network conditions.
+    if (streamPhase !== 'idle') return;
     if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
 
     void connectStream(chat.id);

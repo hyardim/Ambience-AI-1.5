@@ -650,19 +650,6 @@ async def _async_generate_ai_response(
                 citations = None
                 rag_details = f"query_len={len(content)} error={type(exc).__name__}"
 
-                # Publish error event (still finalise below)
-                await chat_event_bus.publish(
-                    chat_id,
-                    SSEEvent(
-                        event="error",
-                        data={
-                            "chat_id": chat_id,
-                            "message_id": placeholder.id,
-                            "error": str(exc),
-                        },
-                    ),
-                )
-
             await audit_repository.async_log(
                 db, user_id=user_id, action=rag_action, details=rag_details
             )
