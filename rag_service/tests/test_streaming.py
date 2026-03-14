@@ -147,7 +147,9 @@ class TestStreamGenerate:
         class FailStreamResponse:
             def raise_for_status(self):
                 raise httpx.HTTPStatusError(
-                    "500", request=httpx.Request("POST", "http://x"), response=httpx.Response(500)
+                    "500",
+                    request=httpx.Request("POST", "http://x"),
+                    response=httpx.Response(500),
                 )
 
             async def __aenter__(self):
@@ -176,6 +178,7 @@ class TestStreamGenerate:
 # ---------------------------------------------------------------------------
 # Unit: _streaming_generator NDJSON output (via the main module helper)
 # ---------------------------------------------------------------------------
+
 
 class TestStreamingGenerator:
     """Test the _streaming_generator that produces NDJSON for /answer and /revise."""

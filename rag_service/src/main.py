@@ -264,24 +264,34 @@ async def _streaming_generator(
     ).rstrip()
     fallback = citations_used if citations_used else citations_retrieved
 
-    yield json.dumps({
-        "type": "done",
-        "answer": renumbered_answer,
-        "citations_used": [c.model_dump() for c in citations_used],
-        "citations_retrieved": [c.model_dump() for c in citations_retrieved],
-        "citations": [c.model_dump() for c in fallback],
-    }) + "\n"
+    yield (
+        json.dumps(
+            {
+                "type": "done",
+                "answer": renumbered_answer,
+                "citations_used": [c.model_dump() for c in citations_used],
+                "citations_retrieved": [c.model_dump() for c in citations_retrieved],
+                "citations": [c.model_dump() for c in fallback],
+            }
+        )
+        + "\n"
+    )
 
 
 async def _ndjson_done_only(answer: str) -> AsyncGenerator[str, None]:
     """Single ``done`` line for cases where no streaming is needed."""
-    yield json.dumps({
-        "type": "done",
-        "answer": answer,
-        "citations_used": [],
-        "citations_retrieved": [],
-        "citations": [],
-    }) + "\n"
+    yield (
+        json.dumps(
+            {
+                "type": "done",
+                "answer": answer,
+                "citations_used": [],
+                "citations_retrieved": [],
+                "citations": [],
+            }
+        )
+        + "\n"
+    )
 
 
 class IngestResponse(BaseModel):

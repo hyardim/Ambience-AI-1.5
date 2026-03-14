@@ -41,10 +41,7 @@ def _ensure_resource(nltk: object, download_dir: Path, resource: str) -> bool:
             return True
         except Exception as exc:  # noqa: BLE001
             _cleanup_resource(download_dir, resource)
-            print(
-                f"WARN: failed to install {resource} "
-                f"(attempt {attempt}/3): {exc}"
-            )
+            print(f"WARN: failed to install {resource} (attempt {attempt}/3): {exc}")
 
     print(f"ERROR: unable to install {resource} after 3 attempts")
     return False
