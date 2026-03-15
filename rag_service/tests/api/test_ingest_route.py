@@ -143,6 +143,7 @@ def main_app():
     fake_config.DATABASE_URL = os.getenv(
         "DATABASE_URL", "postgresql://admin:pw@localhost/test"
     )  # type: ignore[attr-defined]
+    fake_config.OLLAMA_BASE_URL = "http://localhost:11434"  # type: ignore[attr-defined]
     fake_config.OLLAMA_MODEL = "fake-model"  # type: ignore[attr-defined]
     fake_config.OLLAMA_MAX_TOKENS = 512  # type: ignore[attr-defined]
     fake_config.CLOUD_LLM_MODEL = "fake-cloud-model"  # type: ignore[attr-defined]
@@ -343,17 +344,6 @@ class TestIngestSuccess:
             )
 
         body = resp.json()
-        for field in (
-            "source_name",
-            "filename",
-            "files_scanned",
-            "files_succeeded",
-            "files_failed",
-            "total_chunks",
-            "embeddings_succeeded",
-            "embeddings_failed",
-            "db",
-        ):
         for field in (
             "source_name",
             "filename",

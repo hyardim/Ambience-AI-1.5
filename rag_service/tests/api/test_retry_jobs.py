@@ -44,6 +44,7 @@ def client(monkeypatch):
 
     fake_config = types.ModuleType("src.config")
     fake_config.DATABASE_URL = "postgresql://admin:pw@localhost/test"
+    fake_config.OLLAMA_BASE_URL = "http://localhost:11434"
     fake_config.OLLAMA_MODEL = "fake"
     fake_config.OLLAMA_MAX_TOKENS = 512
     fake_config.LLM_MAX_TOKENS = 512
