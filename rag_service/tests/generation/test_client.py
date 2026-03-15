@@ -3,7 +3,7 @@ import pytest
 from src.generation import client
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_answer_routes_local_first_and_falls_back_to_cloud(monkeypatch):
     calls: list[str] = []
 
@@ -28,7 +28,7 @@ async def test_generate_answer_routes_local_first_and_falls_back_to_cloud(monkey
     assert calls == ["local", "cloud"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_answer_routes_cloud_first_and_falls_back_to_local(monkeypatch):
     calls: list[str] = []
 
@@ -53,7 +53,7 @@ async def test_generate_answer_routes_cloud_first_and_falls_back_to_local(monkey
     assert calls == ["cloud", "local"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_answer_cloud_first_success(monkeypatch):
     calls: list[str] = []
 
@@ -78,7 +78,7 @@ async def test_generate_answer_cloud_first_success(monkeypatch):
     assert calls == ["cloud"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_answer_raises_when_both_fail(monkeypatch):
     async def fail_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
         raise RuntimeError("cloud down")

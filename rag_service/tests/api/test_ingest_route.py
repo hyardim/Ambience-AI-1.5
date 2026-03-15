@@ -9,8 +9,8 @@ they are torn down after this module finishes and do not pollute other tests.
 import os
 import sys
 import types
-from enum import Enum
 from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
@@ -185,12 +185,14 @@ def main_app():
     sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
         return_value=None
     )  # type: ignore[attr-defined]
+
     class _ModelGenerationError(RuntimeError):
         def __init__(self, message: str, retryable: bool = False) -> None:
             super().__init__(message)
             self.retryable = retryable
 
     sys.modules["src.generation.client"].ModelGenerationError = _ModelGenerationError  # type: ignore[attr-defined]
+    sys.modules["src.generation.client"].ProviderName = Literal["local", "cloud"]  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].generate_answer = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].warmup_model = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"  # type: ignore[attr-defined]
@@ -200,8 +202,7 @@ def main_app():
     sys.modules["src.ingestion.pipeline"].load_sources = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock()  # type: ignore[attr-defined]
 
-    # src.generation.router only uses stdlib + src.config so let it load for real
-    # (fake_config already has FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD)
+    # src.generation.router only uses stdlib + the fake config above.
 
     try:
         import src.main as _main  # noqa: E402

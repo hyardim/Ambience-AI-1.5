@@ -1,11 +1,16 @@
-"""Tests for the streaming generation helper and streamed /answer + /revise responses."""
+"""Tests for the streaming helper and streamed /answer + /revise responses."""
 
 import json
 
-import pytest
 import httpx
+import pytest
 
 from src.generation.streaming import stream_generate
+
+
+@pytest.fixture()
+def anyio_backend() -> str:
+    return "asyncio"
 
 
 # ---------------------------------------------------------------------------
@@ -16,7 +21,7 @@ from src.generation.streaming import stream_generate
 class TestStreamGenerate:
     """Verify that stream_generate correctly parses Ollama NDJSON chunks."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_yields_tokens_from_ollama_stream(self, monkeypatch):
         """stream_generate should yield individual token strings."""
         chunks = [
@@ -57,7 +62,7 @@ class TestStreamGenerate:
 
         assert tokens == ["Hello", " world"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_accumulates_full_answer(self, monkeypatch):
         """Caller can accumulate tokens into a full answer."""
         chunks = [
@@ -98,7 +103,7 @@ class TestStreamGenerate:
 
         assert accumulated == "ABC"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_skips_blank_lines(self, monkeypatch):
         """Blank lines in the stream should be silently skipped."""
         chunks = [
@@ -140,7 +145,7 @@ class TestStreamGenerate:
 
         assert tokens == ["ok"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_raises_on_http_error(self, monkeypatch):
         """stream_generate should raise RuntimeError on HTTP failure."""
 
@@ -183,10 +188,10 @@ class TestStreamGenerate:
 class TestStreamingGenerator:
     """Test the _streaming_generator that produces NDJSON for /answer and /revise."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_produces_chunks_then_done(self, monkeypatch):
         """Should yield chunk lines followed by a done line."""
-        from src.main import _streaming_generator, SearchResult
+        from src.main import SearchResult, _streaming_generator
 
         tokens = ["Hello", " ", "world"]
 
@@ -217,10 +222,10 @@ class TestStreamingGenerator:
         assert lines[3]["answer"] == "Hello world"
         assert "citations_retrieved" in lines[3]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_produces_error_on_failure(self, monkeypatch):
         """Should yield an error line if generation fails."""
-        from src.main import _streaming_generator, SearchResult
+        from src.main import _streaming_generator
 
         async def failing_stream(prompt, max_tokens=None):
             raise RuntimeError("model crashed")

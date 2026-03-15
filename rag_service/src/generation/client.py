@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal, cast
 
 import httpx
 
@@ -89,8 +89,8 @@ async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> 
                 f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
             )
             resp.raise_for_status()
-            data = resp.json()
-            return data.get("response", "").strip()
+            data = cast(dict[str, Any], resp.json())
+            return str(data.get("response", "")).strip()
     except httpx.TimeoutException as exc:
         raise ProviderRequestError(
             f"Local model request timed out: {exc}",
@@ -140,13 +140,15 @@ async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> 
                 headers=headers,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return (
-                data.get("choices", [{}])[0]
+            data = cast(dict[str, Any], resp.json())
+            return str(
+                cast(
+                    dict[str, Any],
+                    cast(list[dict[str, Any]], data.get("choices", [{}]))[0],
+                )
                 .get("message", {})
                 .get("content", "")
-                .strip()
-            )
+            ).strip()
     except httpx.TimeoutException as exc:
         raise ProviderRequestError(
             f"Cloud model request timed out: {exc}",
@@ -219,7 +221,8 @@ async def generate_answer(
                 attempt_errors.append(exc)
             if index == 1:
                 print(
-                    f"⚠️ Primary generation provider failed (provider={current_provider}): {exc}. "
+                    "⚠️ Primary generation provider failed "
+                    f"(provider={current_provider}): {exc}. "
                     f"Trying fallback provider={_fallback_provider(current_provider)}."
                 )
 

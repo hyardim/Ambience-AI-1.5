@@ -4,67 +4,102 @@ import importlib
 import sys
 import types
 from enum import Enum
+from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
+_STUBBED_MODULES = [
+    "pydantic_settings",
+    "sentence_transformers",
+    "torch",
+    "pgvector",
+    "pgvector.sqlalchemy",
+    "pgvector.psycopg2",
+    "psycopg2",
+    "psycopg2.extras",
+    "psycopg2.errors",
+    "sqlalchemy",
+    "sqlalchemy.orm",
+    "sqlalchemy.pool",
+    "sqlalchemy.dialects",
+    "sqlalchemy.dialects.postgresql",
+    "sqlalchemy.engine",
+    "tqdm",
+    "nltk",
+    "nltk.tokenize",
+    "fitz",
+    "src.config",
+    "src.ingestion.embed",
+    "src.ingestion.pipeline",
+    "src.retrieval.vector_store",
+    "src.generation.client",
+    "src.generation.prompts",
+    "src.retry_queue",
+    "src.main",
+]
 
-def _make_stub(name: str, monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
-    mod = types.ModuleType(name)
-    monkeypatch.setitem(sys.modules, name, mod)
-    return sys.modules[name]
+
+def _make_stub(name: str) -> types.ModuleType:
+    module = types.ModuleType(name)
+    sys.modules[name] = module
+    return module
 
 
-@pytest.fixture()
-def client(monkeypatch):
-    # Stub heavy modules before importing src.main
-    ps = _make_stub("pydantic_settings", monkeypatch)
+def _install_stubs() -> None:
+    ps = _make_stub("pydantic_settings")
     ps.BaseSettings = object
     ps.SettingsConfigDict = lambda **kw: None  # type: ignore[assignment]
 
-    _make_stub("sentence_transformers", monkeypatch)
-    _make_stub("torch", monkeypatch)
-    _make_stub("pgvector", monkeypatch)
-    _make_stub("pgvector.sqlalchemy", monkeypatch)
-    _make_stub("psycopg2", monkeypatch)
-    _make_stub("psycopg2.extras", monkeypatch)
-    _make_stub("sqlalchemy", monkeypatch)
-    _make_stub("sqlalchemy.orm", monkeypatch)
-    _make_stub("sqlalchemy.pool", monkeypatch)
-    _make_stub("sqlalchemy.dialects", monkeypatch)
-    _make_stub("sqlalchemy.dialects.postgresql", monkeypatch)
+    st = _make_stub("sentence_transformers")
+    st.SentenceTransformer = MagicMock  # type: ignore[assignment]
 
-    tqdm_mod = _make_stub("tqdm", monkeypatch)
+    _make_stub("torch")
+    _make_stub("pgvector")
+    _make_stub("pgvector.sqlalchemy")
+    _make_stub("pgvector.psycopg2")
+    _make_stub("psycopg2")
+    _make_stub("psycopg2.extras")
+    _make_stub("psycopg2.errors")
+    _make_stub("sqlalchemy")
+    _make_stub("sqlalchemy.orm")
+    _make_stub("sqlalchemy.pool")
+    _make_stub("sqlalchemy.dialects")
+    _make_stub("sqlalchemy.dialects.postgresql")
+    _make_stub("sqlalchemy.engine")
+
+    tqdm_mod = _make_stub("tqdm")
     tqdm_mod.tqdm = lambda it, **kw: it  # type: ignore[assignment]
 
-    _make_stub("nltk", monkeypatch)
-    _make_stub("nltk.tokenize", monkeypatch)
-    _make_stub("fitz", monkeypatch)
+    _make_stub("nltk")
+    nltk_tok = _make_stub("nltk.tokenize")
+    nltk_tok.sent_tokenize = lambda text, **kw: text.split(". ")  # type: ignore[assignment]
+
+    _make_stub("fitz")
 
     fake_config = types.ModuleType("src.config")
     fake_config.DATABASE_URL = "postgresql://admin:pw@localhost/test"
     fake_config.OLLAMA_BASE_URL = "http://localhost:11434"
     fake_config.OLLAMA_MODEL = "fake"
     fake_config.OLLAMA_MAX_TOKENS = 512
-    fake_config.LLM_MAX_TOKENS = 512
-    fake_config.FORCE_CLOUD_LLM = False
-    fake_config.LLM_ROUTE_THRESHOLD = 0.65
-    fake_config.ROUTE_REVISIONS_TO_CLOUD = True
-    fake_config.LOCAL_LLM_MODEL = "local"
     fake_config.CLOUD_LLM_MODEL = "cloud"
+    fake_config.FORCE_CLOUD_LLM = False
+    fake_config.LLM_MAX_TOKENS = 512
+    fake_config.LLM_ROUTE_THRESHOLD = 0.65
+    fake_config.LOCAL_LLM_MODEL = "local"
+    fake_config.ROUTE_REVISIONS_TO_CLOUD = True
     fake_config.RETRY_ENABLED = True
     fake_config.REDIS_URL = "redis://localhost:6379/0"
-    fake_config.RETRY_BACKOFF_MULTIPLIER = 2
-    fake_config.RETRY_BACKOFF_SECONDS = 10
-    fake_config.RETRY_JOB_TTL_SECONDS = 86400
     fake_config.RETRY_MAX_ATTEMPTS = 3
-
+    fake_config.RETRY_BACKOFF_SECONDS = 10
+    fake_config.RETRY_BACKOFF_MULTIPLIER = 2
+    fake_config.RETRY_JOB_TTL_SECONDS = 86400
     path_config = MagicMock()
-    path_config.root = MagicMock()
+    path_config.root = Path("/app")
     fake_config.path_config = path_config
-
-    monkeypatch.setitem(sys.modules, "src.config", fake_config)
+    sys.modules["src.config"] = fake_config
 
     for module_name in (
         "src.ingestion.embed",
@@ -74,7 +109,7 @@ def client(monkeypatch):
         "src.generation.prompts",
         "src.retry_queue",
     ):
-        monkeypatch.setitem(sys.modules, module_name, types.ModuleType(module_name))
+        _make_stub(module_name)
 
     sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
         return_value=MagicMock()
@@ -89,17 +124,16 @@ def client(monkeypatch):
     sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
         return_value=None
     )
-    sys.modules["src.generation.client"].generate_answer = MagicMock()
-    sys.modules["src.generation.client"].warmup_model = MagicMock()
 
     class FakeModelGenerationError(RuntimeError):
         def __init__(self, message: str, retryable: bool) -> None:
             super().__init__(message)
             self.retryable = retryable
 
+    sys.modules["src.generation.client"].ProviderName = Literal["local", "cloud"]
+    sys.modules["src.generation.client"].ModelGenerationError = FakeModelGenerationError
     sys.modules["src.generation.client"].generate_answer = MagicMock()
     sys.modules["src.generation.client"].warmup_model = MagicMock()
-    sys.modules["src.generation.client"].ModelGenerationError = FakeModelGenerationError
 
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"
     sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(
@@ -124,7 +158,6 @@ def client(monkeypatch):
     class FakeRetryJobStatus(str, Enum):
         QUEUED = "queued"
 
-    retry_module = sys.modules["src.retry_queue"]
     retry_module.RetryJobStatus = FakeRetryJobStatus
     retry_module.create_retry_job = MagicMock(return_value=("job-1", "queued"))
     retry_module.get_retry_job = MagicMock(
@@ -138,17 +171,14 @@ def client(monkeypatch):
             "response": None,
         }
     )
-    retry_module.get_retry_job = MagicMock(
-        return_value={
-            "job_id": "job-1",
-            "status": "queued",
-            "attempt_count": 1,
-            "last_error": "",
-            "created_at": "now",
-            "updated_at": "now",
-            "response": None,
-        }
-    )
+
+
+def _restore_modules(originals: dict[str, types.ModuleType | None]) -> None:
+    for name, module in originals.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
 
 
 @pytest.fixture()
@@ -178,10 +208,8 @@ def test_jobs_status_endpoint_returns_state(client):
     assert body["status"] == "queued"
 
 
-def test_answer_returns_202_on_retryable_failure(monkeypatch, client):
-    from src import main
-
-    main.search_similar_chunks = MagicMock(
+def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_module):
+    main_module.search_similar_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",

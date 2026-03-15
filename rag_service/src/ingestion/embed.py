@@ -44,7 +44,10 @@ def load_embedder() -> SentenceTransformer:
 
 def get_vector_dim(model: SentenceTransformer) -> int:
     """Return embedding dimensionality for the provided model."""
-    return int(model.get_sentence_embedding_dimension())
+    dimension = model.get_sentence_embedding_dimension()
+    if dimension is None:
+        raise ValueError("Embedding model did not report a vector dimension")
+    return int(dimension)
 
 
 # -----------------------------------------------------------------------

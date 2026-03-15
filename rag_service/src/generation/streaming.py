@@ -8,7 +8,7 @@ use this to stream LLM output without duplicating chunk-parsing logic.
 from __future__ import annotations
 
 import json
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 

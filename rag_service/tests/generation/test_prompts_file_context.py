@@ -15,7 +15,10 @@ _CHUNKS = [
     }
 ]
 
-_FILE_CONTEXT = "[discharge_summary.txt]\nPatient is a 45F with RRMS. Recent MRI shows 3 new T2 lesions."
+_FILE_CONTEXT = (
+    "[discharge_summary.txt]\n"
+    "Patient is a 45F with RRMS. Recent MRI shows 3 new T2 lesions."
+)
 
 
 class TestGroundedPromptFileContext:
@@ -53,7 +56,7 @@ class TestGroundedPromptFileContext:
         assert prompt.index("UPLOADED DOCUMENTS") < prompt.index("Question:")
 
     def test_citation_hint_present_when_file_context_only(self):
-        """Even with no indexed chunks, citation hint should appear when file_context is set."""
+        """Even with no indexed chunks, citation hint should still appear."""
         prompt = build_grounded_prompt(
             "What DMT?", chunks=[], file_context=_FILE_CONTEXT
         )

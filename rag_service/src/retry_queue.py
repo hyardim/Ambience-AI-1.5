@@ -5,10 +5,10 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Awaitable
+from collections.abc import Coroutine, Mapping
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from redis import Redis
@@ -21,7 +21,7 @@ from .config import (
     RETRY_JOB_TTL_SECONDS,
     RETRY_MAX_ATTEMPTS,
 )
-from .generation.client import ModelGenerationError, generate_answer
+from .generation.client import ModelGenerationError, ProviderName, generate_answer
 
 logger = logging.getLogger("rag.retry")
 
@@ -68,11 +68,15 @@ def _deserialize(value: str | bytes | None, default: Any = None) -> Any:
         return default
 
 
-def _decode_mapping(raw: dict[bytes, bytes]) -> dict[str, Any]:
+def _decode_mapping(raw: Mapping[Any, Any]) -> dict[str, Any]:
     decoded: dict[str, Any] = {}
-    for key_bytes, value_bytes in raw.items():
-        key = key_bytes.decode("utf-8")
-        value = value_bytes.decode("utf-8")
+    for key_raw, value_raw in raw.items():
+        key = key_raw.decode("utf-8") if isinstance(key_raw, bytes) else str(key_raw)
+        value = (
+            value_raw.decode("utf-8")
+            if isinstance(value_raw, bytes)
+            else str(value_raw)
+        )
         decoded[key] = value
     return decoded
 
@@ -153,9 +157,15 @@ def create_retry_job(
             nx=True,
         )
         if not created:
-            stored_job_id = redis_conn.get(_idempotency_key(id_key))
+            stored_job_id = cast(
+                str | bytes | None, redis_conn.get(_idempotency_key(id_key))
+            )
             if stored_job_id:
-                existing_job_id = stored_job_id.decode("utf-8")
+                existing_job_id = (
+                    stored_job_id.decode("utf-8")
+                    if isinstance(stored_job_id, bytes)
+                    else stored_job_id
+                )
                 existing = get_retry_job(existing_job_id, connection=redis_conn)
                 if existing:
                     return existing_job_id, RetryJobStatus(existing["status"])
@@ -189,7 +199,7 @@ def get_retry_job(
     job_id: str, connection: Redis | None = None
 ) -> dict[str, Any] | None:
     redis_conn = connection or get_redis_connection()
-    raw = redis_conn.hgetall(_job_key(job_id))
+    raw = cast(Mapping[Any, Any], redis_conn.hgetall(_job_key(job_id)))
     if not raw:
         return None
 
@@ -200,7 +210,7 @@ def get_retry_job(
     return data
 
 
-def _run_async(coro: Awaitable[str]) -> str:
+def _run_async(coro: Coroutine[Any, Any, str]) -> str:
     return asyncio.run(coro)
 
 
@@ -307,7 +317,7 @@ def _build_revise_response(
 
 def _extract_retry_payload(
     payload: dict[str, Any],
-) -> tuple[str, str, int, list[dict[str, Any]], str | None]:
+) -> tuple[str, ProviderName, int, list[dict[str, Any]], str | None]:
     prompt = payload.get("prompt")
     provider = payload.get("provider")
     max_tokens = payload.get("max_tokens")
@@ -321,7 +331,13 @@ def _extract_retry_payload(
     if not isinstance(max_tokens, int) or max_tokens <= 0:
         raise RetryValidationError("Invalid max_tokens for retry job")
 
-    return prompt, provider, max_tokens, citations_retrieved, prompt_label
+    return (
+        prompt,
+        cast(ProviderName, provider),
+        max_tokens,
+        cast(list[dict[str, Any]], citations_retrieved),
+        cast(str | None, prompt_label),
+    )
 
 
 def process_retry_job(job_id: str) -> None:

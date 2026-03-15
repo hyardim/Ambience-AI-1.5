@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+from typing import Annotated
 
 from fastapi import Depends
 from pydantic import Field
@@ -36,5 +37,5 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def get_db_url(settings: Settings = Depends(get_settings)) -> str:
+def get_db_url(settings: Annotated[Settings, Depends(get_settings)]) -> str:
     return settings.database_url

@@ -1,8 +1,9 @@
 import shutil
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from src.api.dependencies import get_db_url, get_settings
+from src.api.dependencies import Settings, get_db_url, get_settings
 from src.api.schemas import (
     AskRequest,
     AskResponse,
@@ -46,9 +47,9 @@ def _to_response(result: RAGResponse) -> AskResponse:
 @router.post("/ask", response_model=AskResponse)
 async def ask_route(
     payload: AskRequest,
-    settings=Depends(get_settings),
-    db_url: str = Depends(get_db_url),
-):
+    settings: Annotated[Settings, Depends(get_settings)],
+    db_url: Annotated[str, Depends(get_db_url)],
+) -> AskResponse:
     try:
         result = ask(
             query=payload.query,
@@ -72,10 +73,10 @@ async def ask_route(
 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_guideline(
-    file: UploadFile = File(...),
-    source_name: str = Form(...),
-    db_url: str = Depends(get_db_url),
-):
+    file: Annotated[UploadFile, File(...)],
+    source_name: Annotated[str, Form(...)],
+    db_url: Annotated[str, Depends(get_db_url)],
+) -> IngestResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Only PDF files are supported.")
 

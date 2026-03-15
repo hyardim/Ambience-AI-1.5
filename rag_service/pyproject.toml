@@ -117,7 +117,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-addopts = "--cov=src --cov-report=html --cov-report=term"
+addopts = "-p no:langsmith --cov=src --cov-report=html --cov-report=term"
 
 # Coverage
 [tool.coverage.run]

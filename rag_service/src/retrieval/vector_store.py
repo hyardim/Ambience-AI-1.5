@@ -6,7 +6,7 @@ import psycopg2.extras
 from src.config import DATABASE_URL, HNSW_EF_CONSTRUCTION, HNSW_M
 
 
-def get_conn():
+def get_conn() -> Any:
     """
     Creates and returns a Postgres connection using DATABASE_URL.
     """
@@ -155,7 +155,7 @@ def search_similar_chunks(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT 
+                SELECT
                     id,
                     doc_id,
                     doc_version,
@@ -186,7 +186,7 @@ def search_similar_chunks(
                 "score": float(row[8]),
                 "page_start": (row[7] or {}).get("page_start"),
                 "page_end": (row[7] or {}).get("page_end"),
-                # section_path can be stored as a list in metadata; join for API compatibility.
+                # section_path can be stored as a list in metadata; join it here.
                 "section_path": _normalize_section_path(
                     (row[7] or {}).get("section_path")
                 ),

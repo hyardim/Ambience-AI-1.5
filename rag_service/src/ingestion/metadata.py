@@ -93,7 +93,7 @@ def attach_metadata(
 
     inferred = infer_from_path(source_path)
 
-    # Fill missing specialty/source_name from path; if both exist but differ, keep caller input
+    # Fill missing specialty/source_name from the path; otherwise keep caller input.
     if not source_info.get("specialty") and inferred.get("specialty"):
         source_info["specialty"] = inferred["specialty"]
     elif (

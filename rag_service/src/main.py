@@ -1,11 +1,13 @@
 import json
 import re
 import shutil
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .config import (
@@ -18,14 +20,19 @@ from .config import (
     RETRY_ENABLED,
     path_config,
 )
-from .generation.client import ModelGenerationError, generate_answer, warmup_model
-from .generation.streaming import stream_generate
+from .generation.client import (
+    ModelGenerationError,
+    ProviderName,
+    generate_answer,
+    warmup_model,
+)
 from .generation.prompts import (
     ACTIVE_PROMPT,
     build_grounded_prompt,
     build_revision_prompt,
 )
 from .generation.router import select_generation_provider
+from .generation.streaming import stream_generate
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from .retrieval.vector_store import (
@@ -35,17 +42,8 @@ from .retrieval.vector_store import (
 )
 from .retry_queue import RetryJobStatus, create_retry_job, get_retry_job
 
-app = FastAPI(title="Ambience Med42 RAG Service")
 
-# Load embedding model once and prepare DB schema (pgvector + tables).
-print("🏥 Loading Embedding Model...")
-model = load_embedder()
-VECTOR_DIM = get_vector_dim(model)
-print(f"✅ Model Loaded! Embedding dim = {VECTOR_DIM}")
-
-
-@app.on_event("startup")
-def ensure_schema():
+def ensure_schema() -> None:
     """Create pgvector extension and tables if missing."""
     try:
         init_db(vector_dim=VECTOR_DIM)
@@ -54,8 +52,7 @@ def ensure_schema():
         print(f"⚠️ Failed to initialize database: {exc}")
 
 
-@app.on_event("startup")
-async def warmup_ollama():
+async def warmup_ollama() -> None:
     """Pre-load the selected generation provider on service startup.
 
     Prevents the first request from hitting a cold provider when applicable.
@@ -67,6 +64,22 @@ async def warmup_ollama():
 
     print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
     await warmup_model()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+    ensure_schema()
+    await warmup_ollama()
+    yield
+
+
+app = FastAPI(title="Ambience Med42 RAG Service", lifespan=lifespan)
+
+# Load embedding model once and prepare DB schema (pgvector + tables).
+print("🏥 Loading Embedding Model...")
+model = load_embedder()
+VECTOR_DIM = get_vector_dim(model)
+print(f"✅ Model Loaded! Embedding dim = {VECTOR_DIM}")
 
 
 class QueryRequest(BaseModel):
@@ -211,7 +224,7 @@ def _extract_citation_indices(text: str) -> set[int]:
 
 
 def _rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
-    """Renumber valid citations to sequential display numbers; strip out-of-range ones."""
+    """Renumber valid citations and strip out-of-range references."""
 
     def _rewrite(match: re.Match) -> str:
         nums = _parse_citation_group(match.group(0)[1:-1])
@@ -232,7 +245,7 @@ async def _streaming_generator(
     prompt: str,
     max_tokens: int,
     citations_retrieved: list[SearchResult],
-    provider: str = "local",
+    provider: ProviderName = "local",
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
     accumulated = ""
@@ -323,9 +336,9 @@ class RetryJobResponse(BaseModel):
 
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest_guideline(
-    file: UploadFile = File(...),
-    source_name: str = Form(...),
-):
+    file: Annotated[UploadFile, File(...)],
+    source_name: Annotated[str, Form(...)],
+) -> IngestResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Only PDF files are supported.")
 
@@ -367,7 +380,7 @@ async def ingest_guideline(
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, Any]:
     return {
         "status": "ready",
         "local_model": LOCAL_LLM_MODEL,
@@ -379,7 +392,7 @@ async def health_check():
 
 
 @app.post("/query", response_model=list[SearchResult])
-async def clinical_query(request: QueryRequest):
+async def clinical_query(request: QueryRequest) -> list[SearchResult]:
     """Embed the query and return the top-k nearest chunks."""
     try:
         embeddings_result = embed_text(model, [request.query], batch_size=1)
@@ -415,7 +428,7 @@ async def clinical_query(request: QueryRequest):
 async def generate_clinical_answer(
     request: AnswerRequest,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-):
+) -> Any:
     """Retrieve supporting chunks, build a grounded prompt, and call Ollama
     for an answer."""
     try:
@@ -424,7 +437,7 @@ async def generate_clinical_answer(
 
         retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
 
-        # Filter out low-relevance hits and chunks missing source_path (broken citations).
+        # Filter out low-relevance hits and chunks missing source_path.
         filtered = [
             r
             for r in retrieved
@@ -437,7 +450,8 @@ async def generate_clinical_answer(
 
         no_result = (
             "I couldn't find any guideline passage in the indexed sources "
-            "that directly answers this question. Please rephrase or try a different query."
+            "that directly answers this question. Please rephrase or try a "
+            "different query."
         )
         if not top_chunks and not request.file_context:
             # Avoid making the model hallucinate when nothing relevant was retrieved
@@ -454,12 +468,6 @@ async def generate_clinical_answer(
                 citations=[],
             )
 
-        prompt = build_grounded_prompt(
-            request.query,
-            top_chunks,
-            patient_context=request.patient_context,
-            file_context=request.file_context,
-        )
         prompt = build_grounded_prompt(
             request.query,
             top_chunks,
@@ -568,7 +576,7 @@ async def generate_clinical_answer(
 async def revise_clinical_answer(
     request: ReviseRequest,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-):
+) -> Any:
     """Re-generate an AI answer incorporating specialist feedback.
 
     Retrieval is performed against the *original* patient query so that the
@@ -695,7 +703,7 @@ async def revise_clinical_answer(
 
 
 @app.get("/jobs/{job_id}", response_model=RetryJobResponse)
-async def get_retry_job_status(job_id: str):
+async def get_retry_job_status(job_id: str) -> RetryJobResponse:
     state = get_retry_job(job_id)
     if not state:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -712,7 +720,7 @@ async def get_retry_job_status(job_id: str):
 
 
 @app.get("/docs/{doc_id}")
-async def fetch_document(doc_id: str):
+async def fetch_document(doc_id: str) -> FileResponse:
     """Stream the source PDF for a given doc_id (for citation deep links)."""
     source_path = get_source_path_for_doc(doc_id)
     if not source_path:
@@ -723,8 +731,8 @@ async def fetch_document(doc_id: str):
 
     try:
         resolved = file_path.resolve(strict=True)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Document file missing")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document file missing") from exc
 
     if data_root not in resolved.parents and resolved != data_root:
         raise HTTPException(status_code=400, detail="Invalid document path")

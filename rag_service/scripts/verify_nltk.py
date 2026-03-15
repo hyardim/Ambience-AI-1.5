@@ -7,7 +7,6 @@ import shutil
 import sys
 from pathlib import Path
 
-
 RESOURCES = ("punkt", "punkt_tab")
 
 
