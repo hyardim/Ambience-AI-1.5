@@ -227,3 +227,69 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
     resp = client.post("/answer", json={"query": "headache", "top_k": 1})
     assert resp.status_code == 202
     assert resp.json()["job_id"] == "job-1"
+
+
+def test_answer_passes_specialty_to_similarity_search(client, main_module):
+    search_mock = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+    main_module.search_similar_chunks = search_mock
+
+    async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
+        return "ok"
+
+    main_module.generate_answer = ok_answer
+
+    resp = client.post(
+        "/answer",
+        json={"query": "headache", "top_k": 1, "specialty": "neurology"},
+    )
+
+    assert resp.status_code != 500
+    search_mock.assert_called_once_with(
+        [0.1],
+        limit=1,
+        specialty="neurology",
+    )
+
+
+def test_revise_passes_specialty_to_similarity_search(client, main_module):
+    search_mock = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+    main_module.search_similar_chunks = search_mock
+
+    async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
+        return "ok"
+
+    main_module.generate_answer = ok_answer
+
+    resp = client.post(
+        "/revise",
+        json={
+            "original_query": "headache",
+            "previous_answer": "old answer",
+            "feedback": "be more specific",
+            "top_k": 1,
+            "specialty": "neurology",
+        },
+    )
+
+    assert resp.status_code != 500
+    search_mock.assert_called_once_with(
+        [0.1],
+        limit=1,
+        specialty="neurology",
+    )

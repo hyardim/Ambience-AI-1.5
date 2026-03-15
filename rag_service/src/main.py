@@ -398,7 +398,11 @@ async def clinical_query(request: QueryRequest) -> list[SearchResult]:
         embeddings_result = embed_text(model, [request.query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        raw_results = search_similar_chunks(query_embedding, limit=request.top_k)
+        raw_results = search_similar_chunks(
+            query_embedding,
+            limit=request.top_k,
+            specialty=request.specialty,
+        )
 
         return [
             SearchResult(
@@ -435,7 +439,11 @@ async def generate_clinical_answer(
         embeddings_result = embed_text(model, [request.query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
+        retrieved = search_similar_chunks(
+            query_embedding,
+            limit=request.top_k,
+            specialty=request.specialty,
+        )
 
         # Filter out low-relevance hits and chunks missing source_path.
         filtered = [
@@ -589,7 +597,11 @@ async def revise_clinical_answer(
         embeddings_result = embed_text(model, [request.original_query], batch_size=1)
         query_embedding = embeddings_result[0]
 
-        retrieved = search_similar_chunks(query_embedding, limit=request.top_k)
+        retrieved = search_similar_chunks(
+            query_embedding,
+            limit=request.top_k,
+            specialty=request.specialty,
+        )
 
         filtered = [
             r

@@ -147,7 +147,9 @@ def insert_chunks(chunks: list[dict[str, Any]]) -> None:
 
 
 def search_similar_chunks(
-    query_embedding: list[float], limit: int = 5
+    query_embedding: list[float],
+    limit: int = 5,
+    specialty: str | None = None,
 ) -> list[dict[str, Any]]:
     """Performs a vector similarity search (Cosine Distance) to find relevant chunks."""
     conn = get_conn()
@@ -166,10 +168,17 @@ def search_similar_chunks(
                     metadata,
                     (1 - (embedding <=> %s::vector)) AS score
                 FROM rag_chunks
+                WHERE (%s::text IS NULL OR metadata->>'specialty' = %s)
                 ORDER BY embedding <=> %s::vector ASC
                 LIMIT %s;
                 """,
-                (query_embedding, query_embedding, limit),
+                (
+                    query_embedding,
+                    specialty,
+                    specialty,
+                    query_embedding,
+                    limit,
+                ),
             )
             results = cur.fetchall()
 
