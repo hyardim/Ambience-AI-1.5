@@ -73,9 +73,7 @@ def fake_backend(monkeypatch):
     redis_conn = FakeRedis()
     queue = FakeQueue()
     monkeypatch.setattr("src.jobs.retry.get_redis_connection", lambda: redis_conn)
-    monkeypatch.setattr(
-        "src.jobs.retry.get_retry_queue", lambda connection=None: queue
-    )
+    monkeypatch.setattr("src.jobs.retry.get_retry_queue", lambda connection=None: queue)
     return redis_conn, queue
 
 

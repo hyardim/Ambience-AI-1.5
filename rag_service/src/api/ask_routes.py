@@ -1,6 +1,4 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from src.api.ask_schemas import (
     AskRequest,
@@ -8,7 +6,8 @@ from src.api.ask_schemas import (
     CitationResponse,
     SourceResponse,
 )
-from src.api.dependencies import Settings, get_db_url, get_settings
+from src.api.dependencies import DbUrl
+from src.config import llm_config
 from src.orchestration.generate import GenerationError, RAGResponse
 from src.orchestration.pipeline import ask
 from src.retrieval.query import RetrievalError
@@ -43,8 +42,7 @@ def _to_response(result: RAGResponse) -> AskResponse:
 @router.post("/ask", response_model=AskResponse)
 async def ask_route(
     payload: AskRequest,
-    settings: Annotated[Settings, Depends(get_settings)],
-    db_url: Annotated[str, Depends(get_db_url)],
+    db_url: DbUrl,
 ) -> AskResponse:
     try:
         result = ask(
@@ -56,7 +54,7 @@ async def ask_route(
             doc_type=payload.doc_type,
             score_threshold=payload.score_threshold,
             expand_query=payload.expand_query,
-            settings=settings,
+            settings=llm_config,
         )
         return _to_response(result)
     except RetrievalError as e:

@@ -9,13 +9,13 @@ guideline passages, and generates grounded answers with citations.
 ```text
 src/
 ├── api/             # FastAPI app, routes, schemas, streaming, citation shaping
+├── config/          # Structured settings package and shared config objects
 ├── generation/      # Prompt building, provider routing, local/cloud LLM clients
 ├── ingestion/       # Extract, clean, chunk, embed, and store documents
 ├── jobs/            # Retry queue logic
 ├── orchestration/   # Retrieve-then-generate pipeline helpers
 ├── retrieval/       # Vector, keyword, fusion, rerank, and citation assembly
 ├── utils/           # Shared DB and logging utilities
-├── config.py        # Pydantic settings and compatibility shims
 └── main.py          # Thin app entrypoint / compatibility export
 ```
 
@@ -40,7 +40,7 @@ needed, and verifies the NLTK tokenizer data used by ingestion.
 
 ## Environment
 
-The service reads settings from `.env` via `src/config.py`.
+The service reads settings from `.env` via the `src/config/` package.
 
 Important groups in [`.env.example`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/.env.example):
 
@@ -212,6 +212,6 @@ At the time of this cleanup pass:
 
 ## Notes for maintainers
 
-- The authoritative settings live in [`src/config.py`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/config.py).
+- The authoritative settings live in [`src/config/__init__.py`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/config/__init__.py).
 - The main app entrypoint is [`src.main:app`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/main.py).
 - [`src/api/ask_routes.py`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/api/ask_routes.py) is still live because the app includes the `/ask` router.

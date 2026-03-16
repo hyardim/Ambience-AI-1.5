@@ -99,9 +99,7 @@ def test_score_ambiguity_no_hits() -> None:
 
 
 def test_score_ambiguity_moderate_branches() -> None:
-    score, reasons = _score_ambiguity(
-        [{"score": 0.4}, {"score": 0.35}, {"score": 0.2}]
-    )
+    score, reasons = _score_ambiguity([{"score": 0.4}, {"score": 0.35}, {"score": 0.2}])
 
     assert score > 0
     assert "moderate_top_score" in reasons

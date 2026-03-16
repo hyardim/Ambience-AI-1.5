@@ -117,9 +117,7 @@ def extract_citation_results(
         index for index in used_indices if 1 <= index <= len(citations_retrieved)
     )
     citations_used = [citations_retrieved[index - 1] for index in sorted_used]
-    renumber_map = {
-        original: new for new, original in enumerate(sorted_used, start=1)
-    }
+    renumber_map = {original: new for new, original in enumerate(sorted_used, start=1)}
     answer = rewrite_citations(answer_text, renumber_map)
     if strip_references:
         answer = re.sub(

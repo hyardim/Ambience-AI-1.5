@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.api.dependencies import Settings
 from src.config import llm_config
 from src.orchestration.generate import RAGResponse, generate
 from src.retrieval.retrieve import retrieve
@@ -16,7 +15,7 @@ def ask(
     doc_type: str | None = None,
     score_threshold: float = 0.3,
     expand_query: bool = False,
-    settings: Settings | None = None,
+    settings: object | None = None,
 ) -> RAGResponse:
     """Full RAG pipeline: retrieve context then generate an answer."""
 

@@ -241,6 +241,7 @@ def main_app():
 
     try:
         import src.main as _main  # noqa: E402
+
         _routes = importlib.import_module("src.api.routes")
 
         yield types.SimpleNamespace(app=_main.app, routes=_routes)
