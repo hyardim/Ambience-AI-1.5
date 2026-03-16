@@ -14,8 +14,10 @@ from ..config import (
     LOCAL_LLM_MODEL,
     LOCAL_LLM_TIMEOUT_SECONDS,
 )
+from ..utils.logger import setup_logger
 
 ProviderName = Literal["local", "cloud"]
+logger = setup_logger(__name__)
 
 
 class ProviderRequestError(RuntimeError):
@@ -53,7 +55,9 @@ async def warmup_model(provider: ProviderName = "local") -> None:
     Cloud models are managed remotely, so warmup is a no-op for the cloud path.
     """
     if provider != "local":
-        print("ℹ️ Cloud model warmup skipped; remote endpoint manages model lifecycle.")
+        logger.info(
+            "Cloud model warmup skipped; remote endpoint manages model lifecycle."
+        )
         return
 
     payload = {
@@ -69,9 +73,11 @@ async def warmup_model(provider: ProviderName = "local") -> None:
                 f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
             )
             resp.raise_for_status()
-        print(f"✅ Local model '{LOCAL_LLM_MODEL}' warmed up and kept alive.")
+        logger.info("Local model '%s' warmed up and kept alive.", LOCAL_LLM_MODEL)
     except Exception as exc:  # pragma: no cover
-        print(f"⚠️  Local model warmup failed (model may still be loading): {exc}")
+        logger.warning(
+            "Local model warmup failed (model may still be loading): %s", exc
+        )
 
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:
@@ -210,8 +216,9 @@ async def generate_answer(
                 )
 
             if index > 1:
-                print(
-                    f"🔁 Generation fallback succeeded with provider={current_provider}"
+                logger.info(
+                    "Generation fallback succeeded with provider=%s",
+                    current_provider,
                 )
 
             return response
@@ -220,10 +227,12 @@ async def generate_answer(
             if isinstance(exc, ProviderRequestError):
                 attempt_errors.append(exc)
             if index == 1:
-                print(
-                    "⚠️ Primary generation provider failed "
-                    f"(provider={current_provider}): {exc}. "
-                    f"Trying fallback provider={_fallback_provider(current_provider)}."
+                logger.warning(
+                    "Primary generation provider failed (provider=%s): %s. "
+                    "Trying fallback provider=%s.",
+                    current_provider,
+                    exc,
+                    _fallback_provider(current_provider),
                 )
 
     retryable = len(attempt_errors) == len(attempts) and all(

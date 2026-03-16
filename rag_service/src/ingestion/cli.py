@@ -32,9 +32,16 @@ def _resolve_db_url(db_url: str | None, dry_run: bool) -> str | None:
 
 
 def _configure_log_level(log_level: str) -> None:
-    """Set root logger level from CLI flag."""
+    """Set root logger level and update existing console handlers."""
     numeric = getattr(logging, log_level.upper(), logging.INFO)
     logging.getLogger().setLevel(numeric)
+    logger_dict = logging.Logger.manager.loggerDict
+    for existing in logger_dict.values():
+        if not isinstance(existing, logging.Logger):
+            continue
+        for handler in existing.handlers:
+            if type(handler) is logging.StreamHandler:
+                handler.setLevel(numeric)
 
 
 @click.group()

@@ -22,7 +22,7 @@ class DatabaseManager:
 
     def __init__(self) -> None:
         self._engine: Engine | None = None
-        self._session_local: sessionmaker | None = None  # type: ignore[type-arg]
+        self._session_local: sessionmaker[Session] | None = None
 
     @property
     def engine(self) -> Engine:
@@ -36,7 +36,7 @@ class DatabaseManager:
         return self._engine
 
     @property
-    def SessionLocal(self) -> sessionmaker:  # type: ignore[type-arg]
+    def SessionLocal(self) -> sessionmaker[Session]:
         if self._session_local is None:
             self._session_local = sessionmaker(
                 bind=self.engine,

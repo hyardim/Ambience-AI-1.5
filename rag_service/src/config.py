@@ -1,18 +1,22 @@
 import os
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+COMMON_SETTINGS_CONFIG = SettingsConfigDict(
+    env_file=".env",
+    env_file_encoding="utf-8",
+    case_sensitive=False,
+    extra="ignore",
+)
 
-class DatabaseConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
 
+class AppBaseSettings(BaseSettings):
+    model_config = COMMON_SETTINGS_CONFIG
+
+
+class DatabaseConfig(AppBaseSettings):
     postgres_host: str = Field(default="localhost")
     postgres_port: int = Field(default=5432)
     postgres_user: str = Field(default="admin")
@@ -27,76 +31,34 @@ class DatabaseConfig(BaseSettings):
         )
 
 
-class EmbeddingConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class EmbeddingConfig(AppBaseSettings):
     embedding_model: str = Field(default="all-MiniLM-L6-v2")
     embedding_dimension: int = Field(default=384)
 
 
-class ChunkingConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class ChunkingConfig(AppBaseSettings):
     chunk_size: int = Field(default=450)
     chunk_overlap: int = Field(default=100)
 
 
-class VectorIndexConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class VectorIndexConfig(AppBaseSettings):
     hnsw_m: int = Field(default=16)
     hnsw_ef_construction: int = Field(default=64)
 
 
-class LoggingConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class LoggingConfig(AppBaseSettings):
     log_level: str = Field(default="INFO")
     log_file: str = Field(default="logs/rag.log")
 
 
-class GenerationConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class GenerationConfig(AppBaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="thewindmom/llama3-med42-8b")
     ollama_max_tokens: int = Field(default=1024)
     ollama_timeout_seconds: float = Field(default=60.0)
 
 
-class LLMConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class LLMConfig(AppBaseSettings):
     llm_base_url: str = Field(default="http://localhost:11434/v1")
     llm_model: str = Field(default="thewindmom/llama3-med42-8b")
     llm_api_key: str = Field(default="ollama")
@@ -105,27 +67,13 @@ class LLMConfig(BaseSettings):
     llm_timeout_seconds: float = Field(default=120.0)
 
 
-class RoutingConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class RoutingConfig(AppBaseSettings):
     llm_route_threshold: float = Field(default=0.65)
     route_revisions_to_cloud: bool = Field(default=True)
     force_cloud_llm: bool = Field(default=False)
 
 
-class RetryConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class RetryConfig(AppBaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
     retry_enabled: bool = Field(default=True)
     retry_max_attempts: int = Field(default=3)
@@ -134,13 +82,26 @@ class RetryConfig(BaseSettings):
     retry_job_ttl_seconds: int = Field(default=86400)
 
 
-class PathConfig:
-    def __init__(self) -> None:
-        self.root: Path = Path(__file__).parent.parent
-        self.data_raw: Path = self.root / "data" / "raw"
-        self.data_processed: Path = self.root / "data" / "processed"
-        self.data_debug: Path = self.root / "data" / "debug"
-        self.logs: Path = self.root / "logs"
+class PathConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    root: Path = Field(default_factory=lambda: Path(__file__).parent.parent)
+
+    @property
+    def data_raw(self) -> Path:
+        return self.root / "data" / "raw"
+
+    @property
+    def data_processed(self) -> Path:
+        return self.root / "data" / "processed"
+
+    @property
+    def data_debug(self) -> Path:
+        return self.root / "data" / "debug"
+
+    @property
+    def logs(self) -> Path:
+        return self.root / "logs"
 
 
 def _first_non_empty(*values: str | None) -> str | None:

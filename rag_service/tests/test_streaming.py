@@ -191,7 +191,10 @@ class TestStreamingGenerator:
     @pytest.mark.anyio
     async def test_produces_chunks_then_done(self, monkeypatch):
         """Should yield chunk lines followed by a done line."""
-        from src.main import SearchResult, _streaming_generator
+        import src.main as main_module
+
+        SearchResult = main_module.SearchResult
+        _streaming_generator = main_module._streaming_generator
 
         tokens = ["Hello", " ", "world"]
 
@@ -199,7 +202,7 @@ class TestStreamingGenerator:
             for t in tokens:
                 yield t
 
-        monkeypatch.setattr("src.main.stream_generate", fake_stream_generate)
+        monkeypatch.setattr(main_module, "stream_generate", fake_stream_generate)
 
         citations_retrieved = [
             SearchResult(
@@ -225,13 +228,15 @@ class TestStreamingGenerator:
     @pytest.mark.anyio
     async def test_produces_error_on_failure(self, monkeypatch):
         """Should yield an error line if generation fails."""
-        from src.main import _streaming_generator
+        import src.main as main_module
+
+        _streaming_generator = main_module._streaming_generator
 
         async def failing_stream(prompt, max_tokens=None):
             raise RuntimeError("model crashed")
             yield  # pragma: no cover
 
-        monkeypatch.setattr("src.main.stream_generate", failing_stream)
+        monkeypatch.setattr(main_module, "stream_generate", failing_stream)
 
         lines = []
         async for line in _streaming_generator("prompt", 512, []):

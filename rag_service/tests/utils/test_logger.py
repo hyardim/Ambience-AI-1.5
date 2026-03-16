@@ -51,6 +51,11 @@ class TestSetupLogger:
             h for h in logger.handlers if type(h) is logging.StreamHandler
         )
         assert console_handler.level == logging.INFO
+        assert logger.level == logging.DEBUG
+
+    def test_logger_does_not_propagate(self) -> None:
+        logger = setup_logger("test.propagate")
+        assert logger.propagate is False
 
     def test_default_name(self) -> None:
         logger = setup_logger()

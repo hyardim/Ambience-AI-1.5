@@ -1,3 +1,4 @@
+import src.generation.router as router
 from src.generation.router import select_generation_provider
 
 
@@ -35,3 +36,34 @@ def test_select_generation_provider_routes_revisions_cloud() -> None:
 
     assert decision.provider == "cloud"
     assert "revision_flow" in decision.reasons
+
+
+def test_select_generation_provider_force_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "FORCE_CLOUD_LLM", True)
+
+    decision = select_generation_provider(query="q", retrieved_chunks=[])
+
+    assert decision.provider == "cloud"
+    assert decision.reasons == ("force_cloud_llm",)
+
+
+def test_select_generation_provider_scores_ambiguity_and_complexity() -> None:
+    decision = select_generation_provider(
+        query="Compare investigations. Another sentence! Third sentence?",
+        retrieved_chunks=[{"score": 0.34}, {"score": 0.33}],
+    )
+
+    assert "multi_sentence" in decision.reasons
+    assert "complex_reasoning_terms" in decision.reasons
+    assert "low_top_score" in decision.reasons
+    assert "small_top_gap" in decision.reasons
+
+
+def test_select_generation_provider_scores_emergency_severity() -> None:
+    decision = select_generation_provider(
+        query="Acute issue",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.5}, {"score": 0.49}],
+        severity="emergency",
+    )
+
+    assert "severity_emergency" in decision.reasons

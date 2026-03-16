@@ -208,6 +208,22 @@ def test_jobs_status_endpoint_returns_state(client):
     assert body["status"] == "queued"
 
 
+def test_health_endpoint_returns_runtime_settings(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ready"
+    assert body["local_model"] == "local"
+
+
+def test_jobs_status_returns_404_when_missing(client, main_module):
+    main_module.get_retry_job = MagicMock(return_value=None)
+
+    resp = client.get("/jobs/missing")
+
+    assert resp.status_code == 404
+
+
 def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_module):
     main_module.search_similar_chunks = MagicMock(
         return_value=[
@@ -227,6 +243,105 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
     resp = client.post("/answer", json={"query": "headache", "top_k": 1})
     assert resp.status_code == 202
     assert resp.json()["job_id"] == "job-1"
+
+
+def test_answer_returns_done_stream_when_no_results(client, main_module):
+    main_module.search_similar_chunks = MagicMock(return_value=[])
+
+    resp = client.post(
+        "/answer",
+        json={"query": "headache", "top_k": 1, "stream": True},
+    )
+
+    assert resp.status_code == 200
+    assert '"type": "done"' in resp.text
+
+
+def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_module):
+    main_module.search_similar_chunks = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+
+    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise main_module.ModelGenerationError("transient", retryable=True)
+
+    monkeypatch.setattr(main_module, "generate_answer", fail)
+
+    resp = client.post(
+        "/revise",
+        json={
+            "original_query": "headache",
+            "previous_answer": "old",
+            "feedback": "better",
+            "top_k": 1,
+        },
+    )
+
+    assert resp.status_code == 202
+    assert resp.json()["job_id"] == "job-1"
+
+
+def test_answer_returns_non_stream_empty_response(client, main_module):
+    main_module.search_similar_chunks = MagicMock(return_value=[])
+
+    resp = client.post(
+        "/answer",
+        json={"query": "headache", "top_k": 1},
+    )
+
+    assert resp.status_code == 200
+    assert "couldn't find any guideline passage" in resp.json()["answer"]
+
+
+def test_answer_streams_with_results(client, main_module):
+    main_module.search_similar_chunks = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+
+    resp = client.post(
+        "/answer",
+        json={"query": "headache", "top_k": 1, "stream": True},
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/x-ndjson")
+
+
+def test_answer_non_retryable_generation_error_returns_500(
+    monkeypatch,
+    client,
+    main_module,
+):
+    main_module.search_similar_chunks = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+
+    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise main_module.ModelGenerationError("fatal", retryable=False)
+
+    monkeypatch.setattr(main_module, "generate_answer", fail)
+
+    resp = client.post("/answer", json={"query": "headache", "top_k": 1})
+
+    assert resp.status_code == 500
 
 
 def test_answer_passes_specialty_to_similarity_search(client, main_module):
@@ -293,3 +408,95 @@ def test_revise_passes_specialty_to_similarity_search(client, main_module):
         limit=1,
         specialty="neurology",
     )
+
+
+def test_revise_streams_with_results(client, main_module):
+    main_module.search_similar_chunks = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+
+    resp = client.post(
+        "/revise",
+        json={
+            "original_query": "headache",
+            "previous_answer": "old answer",
+            "feedback": "be more specific",
+            "top_k": 1,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/x-ndjson")
+
+
+def test_revise_non_retryable_generation_error_returns_500(
+    monkeypatch,
+    client,
+    main_module,
+):
+    main_module.search_similar_chunks = MagicMock(
+        return_value=[
+            {
+                "text": "headache guidance",
+                "score": 0.9,
+                "metadata": {"source_path": "x"},
+            },
+        ]
+    )
+
+    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise main_module.ModelGenerationError("fatal", retryable=False)
+
+    monkeypatch.setattr(main_module, "generate_answer", fail)
+
+    resp = client.post(
+        "/revise",
+        json={
+            "original_query": "headache",
+            "previous_answer": "old answer",
+            "feedback": "be more specific",
+            "top_k": 1,
+        },
+    )
+
+    assert resp.status_code == 500
+
+
+def test_fetch_document_not_found(client, main_module):
+    main_module.get_source_path_for_doc = MagicMock(return_value=None)
+
+    resp = client.get("/docs/doc-1")
+
+    assert resp.status_code == 404
+
+
+def test_fetch_document_missing_file(client, main_module, tmp_path):
+    path = tmp_path / "data" / "missing.pdf"
+    main_module.path_config.root = tmp_path
+    main_module.get_source_path_for_doc = MagicMock(return_value=str(path))
+
+    resp = client.get("/docs/doc-1")
+
+    assert resp.status_code == 404
+    assert "missing" in resp.json()["detail"].lower()
+
+
+def test_fetch_document_success(client, main_module, tmp_path):
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    doc = data_root / "doc.pdf"
+    doc.write_bytes(b"pdf")
+    main_module.path_config.root = tmp_path
+    main_module.get_source_path_for_doc = MagicMock(return_value=str(doc))
+
+    resp = client.get("/docs/doc-1")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"

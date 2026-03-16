@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from ..config import FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD
 
@@ -40,8 +41,9 @@ _RISK_TERMS = {
 }
 
 
-@dataclass(frozen=True)
-class RouteDecision:
+class RouteDecision(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     provider: ProviderName
     score: float
     threshold: float

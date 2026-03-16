@@ -5,6 +5,10 @@ from pathlib import Path
 from ..config import logging_config
 
 
+def _resolve_log_level(level_name: str) -> int:
+    return getattr(logging, level_name.upper(), logging.INFO)
+
+
 def setup_logger(name: str = __name__) -> logging.Logger:
     """Get a logger for a given module."""
     logger = logging.getLogger(name)
@@ -13,7 +17,9 @@ def setup_logger(name: str = __name__) -> logging.Logger:
     if logger.handlers:
         return logger
 
-    logger.setLevel(logging_config.log_level)
+    configured_level = _resolve_log_level(logging_config.log_level)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
 
     console_format = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -29,7 +35,7 @@ def setup_logger(name: str = __name__) -> logging.Logger:
 
     # Console handler - uses configured log level
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging_config.log_level)
+    console_handler.setLevel(configured_level)
     console_handler.setFormatter(console_format)
 
     # File handler - always DEBUG for full verbosity

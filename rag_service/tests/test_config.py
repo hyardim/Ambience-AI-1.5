@@ -90,4 +90,25 @@ class TestPathConfig:
         config = PathConfig()
         assert config.data_raw == config.root / "data" / "raw"
         assert config.data_processed == config.root / "data" / "processed"
+        assert config.data_debug == config.root / "data" / "debug"
         assert config.logs == config.root / "logs"
+
+
+def test_first_non_empty_returns_first_truthy() -> None:
+    from src.config import _first_non_empty
+
+    assert _first_non_empty("", None, "value", "later") == "value"
+
+
+def test_default_runpod_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.config import _default_runpod_api_key, _default_runpod_base_url
+
+    monkeypatch.delenv("RUNPOD_POD_ID", raising=False)
+    assert _default_runpod_base_url() is None
+
+    monkeypatch.setenv("RUNPOD_POD_ID", "pod123")
+    monkeypatch.setenv("RUNPOD_PORT", "9000")
+    monkeypatch.delenv("RUNPOD_API_KEY", raising=False)
+
+    assert _default_runpod_base_url() == "https://pod123-9000.proxy.runpod.net/v1"
+    assert _default_runpod_api_key() == "sk-pod123"

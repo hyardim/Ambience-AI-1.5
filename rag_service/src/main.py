@@ -3,6 +3,7 @@ import re
 import shutil
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -41,15 +42,18 @@ from .retrieval.vector_store import (
     search_similar_chunks,
 )
 from .retry_queue import RetryJobStatus, create_retry_job, get_retry_job
+from .utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 def ensure_schema() -> None:
     """Create pgvector extension and tables if missing."""
     try:
-        init_db(vector_dim=VECTOR_DIM)
-        print("✅ Database schema ready (chunks/documents).")
+        init_db(vector_dim=get_embedding_dimension())
+        logger.info("Database schema ready (chunks/documents).")
     except Exception as exc:  # pragma: no cover - defensive log only
-        print(f"⚠️ Failed to initialize database: {exc}")
+        logger.warning("Failed to initialize database: %s", exc)
 
 
 async def warmup_ollama() -> None:
@@ -58,16 +62,18 @@ async def warmup_ollama() -> None:
     Prevents the first request from hitting a cold provider when applicable.
     """
     if FORCE_CLOUD_LLM:
-        print(f"☁️ Cloud-only mode enabled. Using cloud model '{CLOUD_LLM_MODEL}'.")
+        logger.info("Cloud-only mode enabled. Using cloud model '%s'.", CLOUD_LLM_MODEL)
         await warmup_model(provider="cloud")
         return
 
-    print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
+    logger.info("Warming up local model '%s'...", LOCAL_LLM_MODEL)
     await warmup_model()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    del app
+    get_embedding_dimension()
     ensure_schema()
     await warmup_ollama()
     yield
@@ -75,11 +81,18 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(title="Ambience Med42 RAG Service", lifespan=lifespan)
 
-# Load embedding model once and prepare DB schema (pgvector + tables).
-print("🏥 Loading Embedding Model...")
-model = load_embedder()
-VECTOR_DIM = get_vector_dim(model)
-print(f"✅ Model Loaded! Embedding dim = {VECTOR_DIM}")
+
+@lru_cache(maxsize=1)
+def get_embedding_model() -> Any:
+    logger.info("Loading embedding model...")
+    model = load_embedder()
+    logger.info("Embedding model loaded. dim=%s", get_vector_dim(model))
+    return model
+
+
+@lru_cache(maxsize=1)
+def get_embedding_dimension() -> int:
+    return get_vector_dim(get_embedding_model())
 
 
 class QueryRequest(BaseModel):
@@ -234,6 +247,95 @@ def _rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
     return _CITATION_RE.sub(_rewrite, text)
 
 
+def _to_search_result(res: dict[str, Any]) -> SearchResult:
+    metadata = res.get("metadata") or {}
+    return SearchResult(
+        text=res["text"],
+        source=metadata.get("filename", "Unknown Source"),
+        score=res["score"],
+        doc_id=res.get("doc_id"),
+        doc_version=res.get("doc_version"),
+        chunk_id=res.get("chunk_id"),
+        chunk_index=res.get("chunk_index"),
+        content_type=res.get("content_type"),
+        page_start=res.get("page_start"),
+        page_end=res.get("page_end"),
+        section_path=res.get("section_path"),
+        metadata=metadata,
+    )
+
+
+def _embed_query_text(query: str) -> list[float]:
+    embeddings_result = embed_text(
+        get_embedding_model(),
+        [query],
+        batch_size=1,
+    )
+    return embeddings_result[0]
+
+
+def _retrieve_chunks(
+    query: str,
+    *,
+    top_k: int,
+    specialty: str | None,
+) -> list[dict[str, Any]]:
+    return search_similar_chunks(
+        _embed_query_text(query),
+        limit=top_k,
+        specialty=specialty,
+    )
+
+
+def _filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        chunk
+        for chunk in retrieved
+        if chunk.get("score", 0) >= MIN_RELEVANCE
+        and (chunk.get("metadata") or {}).get("source_path")
+        and _has_query_overlap(query, chunk.get("text", ""))
+        and not _is_boilerplate(chunk)
+    ]
+
+
+def _extract_citation_results(
+    answer_text: str,
+    citations_retrieved: list[SearchResult],
+    *,
+    strip_references: bool,
+) -> tuple[str, list[SearchResult]]:
+    used_indices = _extract_citation_indices(answer_text)
+    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+    citations_used = [citations_retrieved[i - 1] for i in sorted_used]
+    renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
+    answer = _rewrite_citations(answer_text, renumber_map)
+    if strip_references:
+        answer = re.sub(
+            r"\n+\s*References?:.*",
+            "",
+            answer,
+            flags=re.DOTALL | re.IGNORECASE,
+        ).rstrip()
+    return answer, citations_used
+
+
+def _log_route_decision(
+    endpoint: str,
+    provider: ProviderName,
+    route_score: float,
+    threshold: float,
+    reasons: tuple[str, ...],
+) -> None:
+    logger.info(
+        "%s routing provider=%s score=%s threshold=%s reasons=%s",
+        endpoint,
+        provider,
+        route_score,
+        threshold,
+        ",".join(reasons) or "none",
+    )
+
+
 class AnswerResponse(BaseModel):
     answer: str
     citations_used: list[SearchResult]
@@ -264,17 +366,11 @@ async def _streaming_generator(
         yield json.dumps({"type": "error", "error": str(e)}) + "\n"
         return
 
-    used_indices = _extract_citation_indices(accumulated)
-    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
-    citations_used = [citations_retrieved[i - 1] for i in sorted_used]
-    renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
-    renumbered_answer = _rewrite_citations(accumulated, renumber_map)
-    renumbered_answer = re.sub(
-        r"\n+\s*References?:.*",
-        "",
-        renumbered_answer,
-        flags=re.DOTALL | re.IGNORECASE,
-    ).rstrip()
+    renumbered_answer, citations_used = _extract_citation_results(
+        accumulated,
+        citations_retrieved,
+        strip_references=True,
+    )
     fallback = citations_used if citations_used else citations_retrieved
 
     yield (
@@ -395,34 +491,14 @@ async def health_check() -> dict[str, Any]:
 async def clinical_query(request: QueryRequest) -> list[SearchResult]:
     """Embed the query and return the top-k nearest chunks."""
     try:
-        embeddings_result = embed_text(model, [request.query], batch_size=1)
-        query_embedding = embeddings_result[0]
-
-        raw_results = search_similar_chunks(
-            query_embedding,
-            limit=request.top_k,
+        raw_results = _retrieve_chunks(
+            request.query,
+            top_k=request.top_k,
             specialty=request.specialty,
         )
-
-        return [
-            SearchResult(
-                text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
-                score=res["score"],
-                doc_id=res.get("doc_id"),
-                doc_version=res.get("doc_version"),
-                chunk_id=res.get("chunk_id"),
-                chunk_index=res.get("chunk_index"),
-                content_type=res.get("content_type"),
-                page_start=res.get("page_start"),
-                page_end=res.get("page_end"),
-                section_path=res.get("section_path"),
-                metadata=res.get("metadata"),
-            )
-            for res in raw_results
-        ]
+        return [_to_search_result(res) for res in raw_results]
     except Exception as e:
-        print(f"❌ /query Error: {str(e)}")
+        logger.exception("/query failed")
         raise HTTPException(
             status_code=500, detail=f"RAG Inference Error: {str(e)}"
         ) from e
@@ -436,24 +512,12 @@ async def generate_clinical_answer(
     """Retrieve supporting chunks, build a grounded prompt, and call Ollama
     for an answer."""
     try:
-        embeddings_result = embed_text(model, [request.query], batch_size=1)
-        query_embedding = embeddings_result[0]
-
-        retrieved = search_similar_chunks(
-            query_embedding,
-            limit=request.top_k,
+        retrieved = _retrieve_chunks(
+            request.query,
+            top_k=request.top_k,
             specialty=request.specialty,
         )
-
-        # Filter out low-relevance hits and chunks missing source_path.
-        filtered = [
-            r
-            for r in retrieved
-            if r.get("score", 0) >= MIN_RELEVANCE
-            and (r.get("metadata") or {}).get("source_path")
-            and _has_query_overlap(request.query, r.get("text", ""))
-            and not _is_boilerplate(r)
-        ]
+        filtered = _filter_chunks(request.query, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
 
         no_result = (
@@ -487,28 +551,14 @@ async def generate_clinical_answer(
             retrieved_chunks=filtered or retrieved,
             severity=request.severity,
         )
-        print(
-            "🧭 /answer routing "
-            f"provider={route.provider} score={route.score} "
-            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        _log_route_decision(
+            "/answer",
+            route.provider,
+            route.score,
+            route.threshold,
+            route.reasons,
         )
-        citations_retrieved = [
-            SearchResult(
-                text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
-                score=res["score"],
-                doc_id=res.get("doc_id"),
-                doc_version=res.get("doc_version"),
-                chunk_id=res.get("chunk_id"),
-                chunk_index=res.get("chunk_index"),
-                content_type=res.get("content_type"),
-                page_start=res.get("page_start"),
-                page_end=res.get("page_end"),
-                section_path=res.get("section_path"),
-                metadata=res.get("metadata"),
-            )
-            for res in top_chunks
-        ]
+        citations_retrieved = [_to_search_result(res) for res in top_chunks]
 
         if request.stream:
             return StreamingResponse(
@@ -550,22 +600,11 @@ async def generate_clinical_answer(
                 )
             raise
 
-        used_indices = _extract_citation_indices(answer_text)
-
-        sorted_used = sorted(
-            i for i in used_indices if 1 <= i <= len(citations_retrieved)
+        renumbered_answer, citations_used = _extract_citation_results(
+            answer_text,
+            citations_retrieved,
+            strip_references=True,
         )
-        citations_used = [citations_retrieved[i - 1] for i in sorted_used]
-
-        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
-        renumbered_answer = _rewrite_citations(answer_text, renumber_map)
-        # Strip any fabricated plain-text "References:" section the model appends.
-        renumbered_answer = re.sub(
-            r"\n+\s*References?:.*",
-            "",
-            renumbered_answer,
-            flags=re.DOTALL | re.IGNORECASE,
-        ).rstrip()
 
         return AnswerResponse(
             answer=renumbered_answer,
@@ -574,7 +613,7 @@ async def generate_clinical_answer(
             citations=citations_used,
         )
     except Exception as e:
-        print(f"❌ /answer Error: {str(e)}")
+        logger.exception("/answer failed")
         raise HTTPException(
             status_code=500, detail=f"RAG Answer Error: {str(e)}"
         ) from e
@@ -593,24 +632,12 @@ async def revise_clinical_answer(
     specialist's feedback.
     """
     try:
-        # Retrieve using the original query so chunk relevance stays high.
-        embeddings_result = embed_text(model, [request.original_query], batch_size=1)
-        query_embedding = embeddings_result[0]
-
-        retrieved = search_similar_chunks(
-            query_embedding,
-            limit=request.top_k,
+        retrieved = _retrieve_chunks(
+            request.original_query,
+            top_k=request.top_k,
             specialty=request.specialty,
         )
-
-        filtered = [
-            r
-            for r in retrieved
-            if r.get("score", 0) >= MIN_RELEVANCE
-            and (r.get("metadata") or {}).get("source_path")
-            and _has_query_overlap(request.original_query, r.get("text", ""))
-            and not _is_boilerplate(r)
-        ]
+        filtered = _filter_chunks(request.original_query, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
 
         prompt = build_revision_prompt(
@@ -628,29 +655,15 @@ async def revise_clinical_answer(
             severity=request.severity,
             is_revision=True,
         )
-        print(
-            "🧭 /revise routing "
-            f"provider={route.provider} score={route.score} "
-            f"threshold={route.threshold} reasons={','.join(route.reasons) or 'none'}"
+        _log_route_decision(
+            "/revise",
+            route.provider,
+            route.score,
+            route.threshold,
+            route.reasons,
         )
 
-        citations_retrieved = [
-            SearchResult(
-                text=res["text"],
-                source=res.get("metadata", {}).get("filename", "Unknown Source"),
-                score=res["score"],
-                doc_id=res.get("doc_id"),
-                doc_version=res.get("doc_version"),
-                chunk_id=res.get("chunk_id"),
-                chunk_index=res.get("chunk_index"),
-                content_type=res.get("content_type"),
-                page_start=res.get("page_start"),
-                page_end=res.get("page_end"),
-                section_path=res.get("section_path"),
-                metadata=res.get("metadata"),
-            )
-            for res in top_chunks
-        ]
+        citations_retrieved = [_to_search_result(res) for res in top_chunks]
 
         if request.stream:
             return StreamingResponse(
@@ -691,15 +704,11 @@ async def revise_clinical_answer(
                 )
             raise
 
-        used_indices = _extract_citation_indices(answer_text)
-
-        sorted_used = sorted(
-            i for i in used_indices if 1 <= i <= len(citations_retrieved)
+        renumbered_answer, citations_used = _extract_citation_results(
+            answer_text,
+            citations_retrieved,
+            strip_references=False,
         )
-        citations_used = [citations_retrieved[i - 1] for i in sorted_used]
-
-        renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
-        renumbered_answer = _rewrite_citations(answer_text, renumber_map)
 
         return AnswerResponse(
             answer=renumbered_answer,
@@ -708,7 +717,7 @@ async def revise_clinical_answer(
             citations=citations_used,
         )
     except Exception as e:
-        print(f"\u274c /revise Error: {str(e)}")
+        logger.exception("/revise failed")
         raise HTTPException(
             status_code=500, detail=f"RAG Revise Error: {str(e)}"
         ) from e

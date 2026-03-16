@@ -102,6 +102,17 @@ class TestConfigureLogLevel:
         _configure_log_level("ERROR")
         assert logging.getLogger().level == logging.ERROR
 
+    def test_updates_existing_console_handlers(self) -> None:
+        logger = logging.getLogger("test.ingestion.cli")
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        logger.handlers[:] = [handler]
+
+        _configure_log_level("DEBUG")
+
+        assert handler.level == logging.DEBUG
+        logger.handlers.clear()
+
 
 # -----------------------------------------------------------------------
 # ingest command

@@ -1,6 +1,11 @@
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
+from src.ingestion.pipeline import PipelineError
 from src.rag.generate import GenerationError, RAGResponse
 from src.retrieval.citation import Citation, CitedResult
 from src.retrieval.query import RetrievalError
@@ -94,3 +99,137 @@ def test_ask_generation_failure(monkeypatch) -> None:
     resp = client.post("/ask", json={"query": "q"})
     assert resp.status_code == 502
     assert "Generation failed" in resp.json()["detail"]
+
+
+def test_ask_unexpected_failure(monkeypatch) -> None:
+    app = create_app()
+
+    def boom(**kwargs):
+        raise RuntimeError("oops")
+
+    monkeypatch.setattr("src.api.routes.ask", boom)
+    client = TestClient(app)
+
+    resp = client.post("/ask", json={"query": "q"})
+    assert resp.status_code == 500
+    assert resp.json()["detail"] == "Internal server error"
+
+
+def test_ingest_success(monkeypatch, tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    fake_path_config = SimpleNamespace(root=tmp_path)
+    monkeypatch.setattr("src.api.routes.path_config", fake_path_config)
+    monkeypatch.setattr(
+        "src.api.routes.load_sources",
+        lambda path: {"NICE": {"specialty": "neurology"}},
+    )
+    monkeypatch.setattr(
+        "src.api.routes.run_ingestion",
+        lambda **kwargs: {
+            "files_scanned": 1,
+            "files_succeeded": 1,
+            "files_failed": 0,
+            "total_chunks": 3,
+            "embeddings_succeeded": 3,
+            "embeddings_failed": 0,
+            "db": {"inserted": 3, "updated": 0, "skipped": 0, "failed": 0},
+        },
+    )
+
+    resp = client.post(
+        "/ingest",
+        files={"file": ("guide.pdf", b"%PDF", "application/pdf")},
+        data={"source_name": "NICE"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["filename"] == "guide.pdf"
+
+
+def test_ingest_rejects_non_pdf(monkeypatch, tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    monkeypatch.setattr("src.api.routes.path_config", SimpleNamespace(root=tmp_path))
+
+    resp = client.post(
+        "/ingest",
+        files={"file": ("guide.txt", b"text", "text/plain")},
+        data={"source_name": "NICE"},
+    )
+
+    assert resp.status_code == 422
+
+
+def test_ingest_unknown_source(monkeypatch, tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    monkeypatch.setattr("src.api.routes.path_config", SimpleNamespace(root=tmp_path))
+    monkeypatch.setattr("src.api.routes.load_sources", lambda path: {"NICE": {}})
+
+    resp = client.post(
+        "/ingest",
+        files={"file": ("guide.pdf", b"%PDF", "application/pdf")},
+        data={"source_name": "BSR"},
+    )
+
+    assert resp.status_code == 422
+    assert "Unknown source" in resp.json()["detail"]
+
+
+def test_ingest_pipeline_error(monkeypatch, tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    monkeypatch.setattr("src.api.routes.path_config", SimpleNamespace(root=tmp_path))
+    monkeypatch.setattr("src.api.routes.load_sources", lambda path: {"NICE": {}})
+
+    def boom(**kwargs):
+        raise PipelineError(stage="store", pdf_path="guide.pdf", message="failed")
+
+    monkeypatch.setattr("src.api.routes.run_ingestion", boom)
+
+    resp = client.post(
+        "/ingest",
+        files={"file": ("guide.pdf", b"%PDF", "application/pdf")},
+        data={"source_name": "NICE"},
+    )
+
+    assert resp.status_code == 500
+    assert "Pipeline failed" in resp.json()["detail"]
+
+
+def test_ingest_value_error(monkeypatch, tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    monkeypatch.setattr("src.api.routes.path_config", SimpleNamespace(root=tmp_path))
+    monkeypatch.setattr("src.api.routes.load_sources", lambda path: {"NICE": {}})
+    monkeypatch.setattr(
+        "src.api.routes.run_ingestion",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("bad input")),
+    )
+
+    resp = client.post(
+        "/ingest",
+        files={"file": ("guide.pdf", b"%PDF", "application/pdf")},
+        data={"source_name": "NICE"},
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "bad input"
+
+
+def test_ingest_save_error(monkeypatch, tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    monkeypatch.setattr("src.api.routes.path_config", SimpleNamespace(root=tmp_path))
+    monkeypatch.setattr("src.api.routes.load_sources", lambda path: {"NICE": {}})
+
+    with patch.object(Path, "open", side_effect=OSError("disk full")):
+        resp = client.post(
+            "/ingest",
+            files={"file": ("guide.pdf", b"%PDF", "application/pdf")},
+            data={"source_name": "NICE"},
+        )
+
+    assert resp.status_code == 500
+    assert "disk full" in resp.json()["detail"]

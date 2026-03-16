@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 import re
 from collections.abc import Coroutine, Mapping
 from datetime import datetime, timedelta, timezone
@@ -22,8 +21,9 @@ from .config import (
     RETRY_MAX_ATTEMPTS,
 )
 from .generation.client import ModelGenerationError, ProviderName, generate_answer
+from .utils.logger import setup_logger
 
-logger = logging.getLogger("rag.retry")
+logger = setup_logger("rag.retry")
 
 QUEUE_NAME = "rag_retry"
 JOB_KEY_PREFIX = "rag:job:"

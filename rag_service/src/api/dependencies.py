@@ -4,7 +4,6 @@ from typing import Annotated
 
 from fastapi import Depends
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.config import (
     DATABASE_URL,
@@ -13,17 +12,11 @@ from src.config import (
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_TEMPERATURE,
+    AppBaseSettings,
 )
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+class Settings(AppBaseSettings):
     database_url: str = Field(default=os.getenv("DATABASE_URL", DATABASE_URL))
     llm_base_url: str = Field(default=LLM_BASE_URL)
     llm_model: str = Field(default=LLM_MODEL)
