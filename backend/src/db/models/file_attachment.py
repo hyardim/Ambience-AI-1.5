@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 from src.db.base import Base
 from src.db.models.common import utc_now
@@ -6,6 +6,7 @@ from src.db.models.common import utc_now
 
 class FileAttachment(Base):
     __tablename__ = "file_attachments"
+    __table_args__ = (Index("ix_file_attachments_chat_id", "chat_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)

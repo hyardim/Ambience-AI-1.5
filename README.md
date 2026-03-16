@@ -137,7 +137,12 @@ Cached data:
 
 - chat list responses
 - chat detail payloads
-- admin user profile lookups
+- user profile lookups
+- specialist queue and assigned lists
+- admin stats
+- admin chat list/detail
+- admin audit logs
+- notifications list and unread count
 
 Useful backend env vars:
 
@@ -146,6 +151,11 @@ Useful backend env vars:
 - `CACHE_CHAT_LIST_TTL`
 - `CACHE_CHAT_DETAIL_TTL`
 - `CACHE_PROFILE_TTL`
+- `CACHE_SPECIALIST_LIST_TTL`
+- `CACHE_ADMIN_STATS_TTL`
+- `CACHE_ADMIN_CHAT_TTL`
+- `CACHE_ADMIN_AUDIT_LOG_TTL`
+- `CACHE_NOTIFICATION_TTL`
 - `CACHE_KEY_PREFIX`
 
 ## Notes

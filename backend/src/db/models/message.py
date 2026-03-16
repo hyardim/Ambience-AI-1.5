@@ -1,4 +1,13 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from src.db.base import Base
@@ -7,6 +16,11 @@ from src.db.models.common import utc_now
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_chat_id", "chat_id"),
+        Index("ix_messages_sender", "sender"),
+        Index("ix_messages_created_at", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text)

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from src.db.base import Base
@@ -7,6 +7,10 @@ from src.db.models.common import ENUM_VALUE_CONFIG, NotificationType, utc_now
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_id", "user_id"),
+        Index("ix_notifications_is_read", "is_read"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

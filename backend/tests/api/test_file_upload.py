@@ -47,6 +47,34 @@ class TestFileUploadSuccess:
         assert data["filename"] == "guideline.pdf"
         assert data["file_type"] == "application/pdf"
 
+    def test_upload_markdown_as_owner(self, client, gp_headers, created_chat, tmp_path):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("notes.md", io.BytesIO(b"# Note"), "text/markdown")},
+                headers=gp_headers,
+            )
+        assert resp.status_code == 201
+        assert resp.json()["filename"] == "notes.md"
+
+    def test_upload_sanitises_nested_filename(
+        self, client, gp_headers, created_chat, tmp_path
+    ):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={
+                    "file": (
+                        "../folder/clinical note?.txt",
+                        io.BytesIO(_TXT_CONTENT),
+                        "text/plain",
+                    )
+                },
+                headers=gp_headers,
+            )
+        assert resp.status_code == 201
+        assert resp.json()["filename"] == "clinical_note_.txt"
+
     def test_upload_multiple_files_to_same_chat(
         self, client, gp_headers, created_chat, tmp_path
     ):
@@ -226,3 +254,21 @@ class TestFileUploadLimits:
             )
         assert resp.status_code == 422
         assert "Maximum is 5" in resp.json()["detail"]
+
+    def test_disallowed_extension_returns_415(
+        self, client, gp_headers, created_chat, tmp_path
+    ):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={
+                    "file": (
+                        "malware.exe",
+                        io.BytesIO(b"boom"),
+                        "application/octet-stream",
+                    )
+                },
+                headers=gp_headers,
+            )
+        assert resp.status_code == 415
+        assert "not allowed" in resp.json()["detail"]

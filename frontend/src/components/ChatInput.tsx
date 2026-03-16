@@ -1,6 +1,9 @@
 import { useState, useRef } from 'react';
 import { Send, Paperclip, MoreVertical } from 'lucide-react';
 
+const CHAT_UPLOAD_ACCEPT =
+  '.pdf,.txt,.md,.rtf,.doc,.docx,.csv,.json,.xml';
+
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[]) => void;
   placeholder?: string;
@@ -84,6 +87,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
           type="file"
           onChange={handleFileChange}
           multiple
+          accept={CHAT_UPLOAD_ACCEPT}
           disabled={disabled}
           className="hidden"
         />

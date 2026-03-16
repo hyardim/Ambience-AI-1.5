@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Auth pages
@@ -32,6 +33,7 @@ import { ProfilePage } from './pages/ProfilePage';
 
 function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <Router>
         <Routes>
@@ -71,6 +73,7 @@ function App() {
         </Routes>
       </Router>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

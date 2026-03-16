@@ -174,6 +174,10 @@ def test_extract_text_returns_empty_on_failure(monkeypatch):
     assert chat_service._extract_text("/tmp/missing.txt", "text/plain") == ""
 
 
+def test_sanitise_filename_falls_back_when_name_is_empty():
+    assert chat_service._sanitise_filename("") == "upload"
+
+
 def test_build_conversation_history_ignores_empty_messages():
     messages = [
         Message(content=" Hello ", sender="user"),
@@ -505,7 +509,10 @@ async def test_async_generate_ai_response_streaming_error_chunk_falls_back(
     await chat_service._async_generate_ai_response(5, 9, "Question")
 
     update_kwargs = async_update.await_args.kwargs
-    assert "RAG service unavailable right now" in update_kwargs["content"]
+    assert (
+        "clinical knowledge service is temporarily unavailable"
+        in update_kwargs["content"]
+    )
     assert update_kwargs["citations"] is None
 
 
@@ -575,9 +582,13 @@ async def test_async_send_message_uses_background_task_for_non_sqlite(monkeypatc
     monkeypatch.setattr(chat_service.cache, "delete_pattern", AsyncMock())
     monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
     created = []
-    monkeypatch.setattr(
-        chat_service.asyncio, "create_task", lambda coro: created.append(coro)
-    )
+
+    def fake_create_task(coro, **kwargs):
+        created.append(coro)
+        fake_task = SimpleNamespace(add_done_callback=lambda cb: None)
+        return fake_task
+
+    monkeypatch.setattr(chat_service.asyncio, "create_task", fake_create_task)
     monkeypatch.setattr(chat_service, "_async_generate_ai_response", AsyncMock())
 
     result = await chat_service.async_send_message(
@@ -587,3 +598,55 @@ async def test_async_send_message_uses_background_task_for_non_sqlite(monkeypatc
     assert result["ai_generating"] is True
     assert created
     created[0].close()
+
+
+def test_on_generation_task_done_logs_cancelled_task(monkeypatch):
+    calls = []
+
+    class FakeTask:
+        def cancelled(self):
+            return True
+
+        def get_name(self):
+            return "ai-gen-chat-1"
+
+    monkeypatch.setattr(
+        chat_service.logger,
+        "info",
+        lambda message, *args: calls.append((message, args)),
+    )
+
+    chat_service._on_generation_task_done(FakeTask())  # type: ignore[arg-type]
+
+    assert calls == [("AI generation task %s was cancelled", ("ai-gen-chat-1",))]
+
+
+def test_on_generation_task_done_logs_task_exception(monkeypatch):
+    calls = []
+    exc = RuntimeError("boom")
+
+    class FakeTask:
+        def cancelled(self):
+            return False
+
+        def exception(self):
+            return exc
+
+        def get_name(self):
+            return "ai-gen-chat-2"
+
+    monkeypatch.setattr(
+        chat_service.logger,
+        "error",
+        lambda message, *args, **kwargs: calls.append((message, args, kwargs)),
+    )
+
+    chat_service._on_generation_task_done(FakeTask())  # type: ignore[arg-type]
+
+    assert calls == [
+        (
+            "AI generation task %s failed: %s",
+            ("ai-gen-chat-2", exc),
+            {"exc_info": exc},
+        )
+    ]

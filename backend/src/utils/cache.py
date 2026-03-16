@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import threading
 from typing import Any, Optional
 from urllib.parse import quote_plus
 
@@ -9,6 +10,32 @@ from redis.asyncio import Redis
 from src.core.config import settings
 
 logger = logging.getLogger("backend.cache")
+
+# A dedicated event loop on a daemon thread for running async cache
+# operations from synchronous (threadpool) contexts.  This avoids the
+# ``asyncio.run()`` anti-pattern which creates and tears down a fresh
+# event loop per call and fails when an event loop is already running.
+_sync_loop: asyncio.AbstractEventLoop | None = None
+_sync_loop_lock = threading.Lock()
+
+
+def _get_sync_loop() -> asyncio.AbstractEventLoop:
+    global _sync_loop
+    if _sync_loop is not None and not _sync_loop.is_closed():
+        return _sync_loop
+    with _sync_loop_lock:
+        if _sync_loop is None or _sync_loop.is_closed():
+            _sync_loop = asyncio.new_event_loop()
+            t = threading.Thread(target=_sync_loop.run_forever, daemon=True)
+            t.start()
+    return _sync_loop
+
+
+def _run_sync(coro) -> Any:  # type: ignore[type-arg]
+    """Run an async coroutine from a synchronous context."""
+    loop = _get_sync_loop()
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=5)
 
 
 class RedisCache:
@@ -174,7 +201,7 @@ class RedisCache:
     def get_sync(
         self, key: str, *, user_id: Optional[int] = None, resource: str = ""
     ) -> Optional[Any]:
-        return asyncio.run(self.get(key, user_id=user_id, resource=resource))
+        return _run_sync(self.get(key, user_id=user_id, resource=resource))
 
     def set_sync(
         self,
@@ -185,19 +212,19 @@ class RedisCache:
         user_id: Optional[int] = None,
         resource: str = "",
     ) -> bool:
-        return asyncio.run(
+        return _run_sync(
             self.set(key, value, ttl=ttl, user_id=user_id, resource=resource)
         )
 
     def delete_sync(
         self, key: str, *, user_id: Optional[int] = None, resource: str = ""
     ) -> int:
-        return asyncio.run(self.delete(key, user_id=user_id, resource=resource))
+        return _run_sync(self.delete(key, user_id=user_id, resource=resource))
 
     def delete_pattern_sync(
         self, pattern: str, *, user_id: Optional[int] = None, resource: str = ""
     ) -> int:
-        return asyncio.run(
+        return _run_sync(
             self.delete_pattern(pattern, user_id=user_id, resource=resource)
         )
 

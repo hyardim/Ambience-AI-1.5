@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+import types
+import warnings
 from types import SimpleNamespace
 
 import httpx
@@ -9,7 +12,8 @@ from fastapi.testclient import TestClient
 from src.api import deps, router
 from src.api.endpoints import health, rag
 from src.app.main import create_app
-from src.core import security
+from src.core import config as core_config
+from src.core import rate_limit, security
 from src.db.models import UserRole
 
 
@@ -26,7 +30,7 @@ def test_api_router_registers_expected_paths():
 
 
 def test_create_app_builds_fastapi_app(monkeypatch):
-    called = {"logging": 0, "db": 0}
+    called = {"logging": 0, "db": 0, "settings": 0}
 
     monkeypatch.setattr(
         "src.app.main.configure_logging", lambda: called.__setitem__("logging", 1)
@@ -34,12 +38,15 @@ def test_create_app_builds_fastapi_app(monkeypatch):
     monkeypatch.setattr(
         "src.app.main.prepare_database", lambda: called.__setitem__("db", 1)
     )
+    monkeypatch.setattr(
+        "src.app.main.validate_settings", lambda: called.__setitem__("settings", 1)
+    )
 
     app = create_app()
     client = TestClient(app)
     response = client.get("/")
 
-    assert called == {"logging": 1, "db": 1}
+    assert called == {"logging": 1, "db": 1, "settings": 1}
     assert response.status_code == 200
     assert response.json() == {"status": "Ambience Backend Running"}
 
@@ -53,6 +60,167 @@ def test_main_exposes_app(monkeypatch):
 
     reloaded = importlib.reload(main)
     assert reloaded.app is sentinel
+
+
+def test_validate_settings_warns_for_insecure_secret(monkeypatch, caplog):
+    warnings_seen = []
+
+    monkeypatch.setattr(
+        core_config.settings, "SECRET_KEY", "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with caplog.at_level("WARNING", logger="backend.config"):
+            core_config.validate_settings()
+        warnings_seen.extend(caught)
+
+    assert warnings_seen
+    assert "insecure default value" in str(warnings_seen[0].message)
+    assert "SECRET_KEY is using the insecure default" in caplog.text
+
+
+def test_validate_settings_is_silent_for_custom_secret(monkeypatch, caplog):
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with caplog.at_level("WARNING", logger="backend.config"):
+            core_config.validate_settings()
+
+    assert caught == []
+    assert caplog.text == ""
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
+    calls = []
+
+    class FakePipe:
+        def incr(self, key):
+            calls.append(("incr", key))
+            return self
+
+        def expire(self, key, ttl):
+            calls.append(("expire", key, ttl))
+            return self
+
+        def execute(self):
+            calls.append(("execute",))
+            return None
+
+    class FakeRedis:
+        def get(self, key):
+            assert key == "ratelimit:127.0.0.1"
+            return "1"
+
+        def pipeline(self):
+            return FakePipe()
+
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
+    await rate_limit.rate_limit_dependency(request)
+
+    assert calls == [
+        ("incr", "ratelimit:127.0.0.1"),
+        ("expire", "ratelimit:127.0.0.1", 60),
+        ("execute",),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_blocks_when_limit_reached(monkeypatch):
+    class FakeRedis:
+        def get(self, key):
+            return str(core_config.settings.RATE_LIMIT_PER_MINUTE)
+
+        def ttl(self, key):
+            return 12
+
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
+    with pytest.raises(HTTPException) as exc:
+        await rate_limit.rate_limit_dependency(request)
+
+    assert exc.value.status_code == 429
+    assert "12 seconds" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_degrades_gracefully_on_redis_error(monkeypatch):
+    class FakeRedis:
+        def get(self, key):
+            raise RuntimeError("redis down")
+
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
+    await rate_limit.rate_limit_dependency(request)
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_skips_when_redis_unavailable(monkeypatch):
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: None)
+    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
+    await rate_limit.rate_limit_dependency(request)
+
+
+def test_get_redis_returns_none_when_cache_disabled(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "CACHE_ENABLED", False)
+    monkeypatch.setattr(rate_limit, "_redis_client", None)
+    monkeypatch.setattr(rate_limit, "_redis_init_attempted", False)
+
+    assert rate_limit._get_redis() is None
+
+
+def test_get_redis_initialises_and_caches_client(monkeypatch):
+    pinged = {"value": 0}
+
+    class FakeClient:
+        def ping(self):
+            pinged["value"] += 1
+
+    client = FakeClient()
+
+    class FakeRedisClass:
+        @staticmethod
+        def from_url(url, decode_responses, socket_connect_timeout):
+            assert decode_responses is True
+            assert socket_connect_timeout == 2
+            return client
+
+    monkeypatch.setattr(core_config.settings, "CACHE_ENABLED", True)
+    monkeypatch.setattr(rate_limit, "_redis_client", None)
+    monkeypatch.setattr(rate_limit, "_redis_init_attempted", False)
+    monkeypatch.setitem(
+        sys.modules, "redis", types.SimpleNamespace(Redis=FakeRedisClass)
+    )
+
+    assert rate_limit._get_redis() is client
+    assert rate_limit._get_redis() is client
+    assert pinged["value"] == 1
+
+
+def test_get_redis_logs_and_returns_none_on_failure(monkeypatch, caplog):
+    class FakeRedisClass:
+        @staticmethod
+        def from_url(url, decode_responses, socket_connect_timeout):
+            raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(core_config.settings, "CACHE_ENABLED", True)
+    monkeypatch.setattr(rate_limit, "_redis_client", None)
+    monkeypatch.setattr(rate_limit, "_redis_init_attempted", False)
+    monkeypatch.setitem(
+        sys.modules, "redis", types.SimpleNamespace(Redis=FakeRedisClass)
+    )
+
+    with caplog.at_level("WARNING"):
+        assert rate_limit._get_redis() is None
+
+    assert "rate limiting disabled" in caplog.text
 
 
 @pytest.mark.asyncio

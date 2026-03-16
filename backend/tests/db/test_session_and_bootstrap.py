@@ -181,7 +181,9 @@ def test_run_migrations_upgrades_to_head(monkeypatch):
 def test_prepare_database_runs_migrations_then_bootstraps_users(monkeypatch):
     calls = []
     monkeypatch.setattr(bootstrap, "run_migrations", lambda: calls.append("migrate"))
-    monkeypatch.setattr(bootstrap, "ensure_default_users", lambda: calls.append("users"))
+    monkeypatch.setattr(
+        bootstrap, "ensure_default_users", lambda: calls.append("users")
+    )
 
     bootstrap.prepare_database()
 

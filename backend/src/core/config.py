@@ -1,6 +1,10 @@
+import logging
+import warnings
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_DEFAULT_KEY = "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
 
 
 class Settings(BaseSettings):
@@ -14,7 +18,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Ambience AI"
     PROJECT_VERSION: str = "1.5.0"
 
-    SECRET_KEY: str = "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
+    SECRET_KEY: str = _INSECURE_DEFAULT_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
     DATABASE_URL: str = (
@@ -25,6 +29,29 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "/app/uploads"
     AUTH_BOOTSTRAP_DEMO_USERS: bool = True
 
+    # CORS
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    # File upload limits
+    MAX_FILE_SIZE_BYTES: int = 3 * 1024 * 1024  # 3 MB per file
+    MAX_FILES_PER_CHAT: int = 5
+    FILE_CONTEXT_CHAR_LIMIT: int = 8_000
+    ALLOWED_UPLOAD_EXTENSIONS: list[str] = [
+        ".pdf",
+        ".txt",
+        ".md",
+        ".rtf",
+        ".doc",
+        ".docx",
+        ".csv",
+        ".json",
+        ".xml",
+    ]
+
+    # Rate limiting
+    RATE_LIMIT_PER_MINUTE: int = 60
+
+    # Cache
     CACHE_ENABLED: bool = True
     REDIS_URL: str = "redis://redis:6379/0"
     CACHE_KEY_PREFIX: str = "cache"
@@ -39,3 +66,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def validate_settings() -> None:
+    """Emit warnings for insecure defaults at startup."""
+    logger = logging.getLogger("backend.config")
+    if settings.SECRET_KEY == _INSECURE_DEFAULT_KEY:
+        warnings.warn(
+            "SECRET_KEY is using the insecure default value. "
+            "Set a strong SECRET_KEY via environment variable before deploying.",
+            stacklevel=1,
+        )
+        logger.warning(
+            "SECRET_KEY is using the insecure default — do NOT deploy to production"
+        )

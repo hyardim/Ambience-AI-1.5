@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from src.api.endpoints import admin, auth, chats, health, notifications, rag, specialist
+from src.core.rate_limit import rate_limit_dependency
 
-api_router = APIRouter()
+api_router = APIRouter(dependencies=[Depends(rate_limit_dependency)])
 api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(chats.router, prefix="/chats", tags=["Chats"])
 api_router.include_router(

@@ -69,6 +69,7 @@ describe('ChatInput', () => {
     const user = userEvent.setup({ applyAccept: false });
 
     const input = document.getElementById('chat-file-input') as HTMLInputElement;
+    expect(input).toHaveAttribute('accept', '.pdf,.txt,.md,.rtf,.doc,.docx,.csv,.json,.xml');
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
     await user.upload(input, file);
 

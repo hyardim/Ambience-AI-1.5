@@ -354,7 +354,7 @@ class TestSpecialistReview:
         assert len(detail_after["messages"]) == msgs_before + 1
         new_msg = detail_after["messages"][-1]
         assert new_msg["sender"] == "ai"
-        assert "Revised" in new_msg["content"]
+        assert "temporarily unavailable" in new_msg["content"]
 
     def test_review_request_changes_marks_old_ai_rejected(
         self, client, specialist_headers, submitted_chat, registered_specialist

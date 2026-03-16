@@ -1,4 +1,13 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -8,6 +17,13 @@ from src.db.models.common import ENUM_VALUE_CONFIG, ChatStatus, utc_now
 
 class Chat(Base):
     __tablename__ = "chats"
+    __table_args__ = (
+        Index("ix_chats_user_id", "user_id"),
+        Index("ix_chats_specialist_id", "specialist_id"),
+        Index("ix_chats_status", "status"),
+        Index("ix_chats_specialty", "specialty"),
+        Index("ix_chats_created_at", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, default="New Chat")

@@ -760,7 +760,9 @@ def test_regenerate_ai_response_task_stream_error_falls_back(monkeypatch):
     )
 
     specialist_service._regenerate_ai_response_task(3, 5, "Q", "A", "F", None, None)
-    assert "RAG service unavailable" in placeholder.content
+    assert (
+        "clinical knowledge service is temporarily unavailable" in placeholder.content
+    )
     assert placeholder.citations == []
 
 

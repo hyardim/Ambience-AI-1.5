@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 import httpx
@@ -28,9 +29,14 @@ from src.utils.sse import SSEEvent, chat_event_bus
 
 RAG_SERVICE_URL = settings.RAG_SERVICE_URL
 UPLOAD_DIR = Path(settings.UPLOAD_DIR)
-MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024  # 3 MB per file
-MAX_FILES_PER_CHAT = 5
+MAX_FILE_SIZE_BYTES = settings.MAX_FILE_SIZE_BYTES
+MAX_FILES_PER_CHAT = settings.MAX_FILES_PER_CHAT
+FILE_CONTEXT_CHAR_LIMIT = settings.FILE_CONTEXT_CHAR_LIMIT
+ALLOWED_UPLOAD_EXTENSIONS = {ext.lower() for ext in settings.ALLOWED_UPLOAD_EXTENSIONS}
 RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
+
+# Regex for sanitising filenames: keep alphanumerics, hyphens, underscores, dots
+_SAFE_FILENAME_RE = re.compile(r"[^\w\-.]", re.ASCII)
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +303,32 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _sanitise_filename(raw: str) -> str:
+    """Strip path components and unsafe characters from a user-supplied filename."""
+    # Remove any directory traversal components
+    name = PurePosixPath(raw).name
+    if not name:
+        name = "upload"
+    # Replace unsafe characters
+    name = _SAFE_FILENAME_RE.sub("_", name)
+    # Collapse repeated underscores and limit length
+    name = re.sub(r"_+", "_", name).strip("_")
+    return name[:255] if name else "upload"
+
+
+def _validate_upload_extension(filename: str) -> None:
+    """Raise 415 if the file extension is not in the allow-list."""
+    ext = PurePosixPath(filename).suffix.lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"File type '{ext or '(none)'}' is not allowed. "
+                f"Accepted types: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}"
+            ),
+        )
+
+
 def _extract_text(file_path: str, file_type: Optional[str]) -> str:
     """Extract plain text from an uploaded file (PDF or plain text)."""
     try:
@@ -358,16 +390,20 @@ async def upload_file(
             status_code=403, detail="Not authorised to upload to this chat"
         )
 
+    safe_name = _sanitise_filename(file.filename or "upload")
+    _validate_upload_extension(safe_name)
+
     dest_dir = UPLOAD_DIR / str(chat_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / (file.filename or "upload")
+    dest_path = dest_dir / safe_name
 
     contents = await file.read()
 
     if len(contents) > MAX_FILE_SIZE_BYTES:
+        limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
         raise HTTPException(
             status_code=413,
-            detail=f"File exceeds the 3 MB limit ({len(contents) // 1024} KB uploaded).",
+            detail=f"File exceeds the {limit_mb} MB limit ({len(contents) // 1024} KB uploaded).",
         )
 
     existing_count = (
@@ -382,7 +418,7 @@ async def upload_file(
     dest_path.write_bytes(contents)
 
     attachment = FileAttachment(
-        filename=file.filename or "upload",
+        filename=safe_name,
         file_path=str(dest_path),
         file_type=file.content_type,
         file_size=len(contents),
@@ -506,7 +542,6 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                 if text.strip():
                     file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
 
-            FILE_CONTEXT_CHAR_LIMIT = 8_000
             file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
             if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
                 file_context = (
@@ -600,9 +635,10 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                     f"chunks_used={len(citations) if citations else 0}"
                 )
             except Exception as exc:
+                logger.warning("RAG request failed for chat %s: %s", chat_id, exc)
                 ai_content = (
-                    "RAG service unavailable right now. Echoing your question while the "
-                    f"service recovers: {content} (detail: {exc})"
+                    "The clinical knowledge service is temporarily unavailable. "
+                    "Please try again shortly or contact support if the issue persists."
                 )
                 citations = None
                 rag_details = f"query_len={len(content)} error={type(exc).__name__}"
@@ -702,6 +738,21 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             await chat_event_bus.close_chat(chat_id)
 
 
+def _on_generation_task_done(task: asyncio.Task) -> None:  # type: ignore[type-arg]
+    """Log unhandled exceptions from background AI generation tasks."""
+    if task.cancelled():
+        logger.info("AI generation task %s was cancelled", task.get_name())
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(
+            "AI generation task %s failed: %s",
+            task.get_name(),
+            exc,
+            exc_info=exc,
+        )
+
+
 async def async_send_message(
     db: AsyncSession,
     user: User,
@@ -731,12 +782,16 @@ async def async_send_message(
             details=f"Chat {chat_id} auto-submitted after first GP message",
         )
 
-    # Fire-and-forget async task for AI generation.
+    # Async task for AI generation.
     # Under SQLite (tests) run inline so assertions can see the result.
     if db.bind.dialect.name == "sqlite":
         await _async_generate_ai_response(chat.id, user.id, content)
     else:
-        asyncio.create_task(_async_generate_ai_response(chat.id, user.id, content))
+        task = asyncio.create_task(
+            _async_generate_ai_response(chat.id, user.id, content),
+            name=f"ai-gen-chat-{chat.id}",
+        )
+        task.add_done_callback(_on_generation_task_done)
 
     await cache.delete_pattern(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"

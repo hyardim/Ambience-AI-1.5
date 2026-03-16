@@ -2,13 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import api_router
-from src.core.config import settings
+from src.core.config import settings, validate_settings
 from src.core.logging import configure_logging
 from src.db.bootstrap import prepare_database
 
 
 def create_app() -> FastAPI:
     configure_logging()
+    validate_settings()
     prepare_database()
 
     app = FastAPI(
@@ -18,7 +19,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

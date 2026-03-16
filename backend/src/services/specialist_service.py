@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 from typing import Optional
@@ -32,6 +33,8 @@ from src.services.chat_service import (
 from src.services.notification_service import invalidate_notification_caches
 from src.utils.cache import cache, cache_keys
 from src.utils.sse import SSEEvent, chat_event_bus
+
+logger = logging.getLogger(__name__)
 
 RAG_SERVICE_URL = settings.RAG_SERVICE_URL
 RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
@@ -590,9 +593,10 @@ def _regenerate_ai_response(
         if text.strip():
             file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
     file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
-    if file_context and len(file_context) > 8000:
+    if file_context and len(file_context) > settings.FILE_CONTEXT_CHAR_LIMIT:
         file_context = (
-            file_context[:8000] + "\n\n[Document truncated to fit context window]"
+            file_context[: settings.FILE_CONTEXT_CHAR_LIMIT]
+            + "\n\n[Document truncated to fit context window]"
         )
 
     # Create a temporary placeholder message so the specialist sees immediate
@@ -674,10 +678,10 @@ def _do_revise(
         revised_content = rag_json.get("answer", "")
         citations = _select_rag_citations(rag_json) or []
     except Exception as exc:  # pragma: no cover - network fallback
+        logger.warning("RAG /revise failed for chat %s: %s", placeholder.chat_id, exc)
         revised_content = (
-            f"[Revised after specialist feedback: {feedback}] "
-            f"RAG service unavailable — original question: {original_query} "
-            f"(detail: {exc})"
+            "The clinical knowledge service is temporarily unavailable for revision. "
+            "Please try again shortly."
         )
         citations = []
 
@@ -724,11 +728,19 @@ def _regenerate_ai_response_task(
     specialty: str | None,
     severity: str | None,
 ) -> None:
-    """Background task: stream from RAG /revise and publish SSE events."""
+    """Background thread: stream from RAG /revise and publish SSE events.
+
+    Uses its own ``SessionLocal`` because FastAPI dependency injection is
+    unavailable inside a plain ``threading.Thread``.  The session is always
+    closed in the ``finally`` block.
+    """
     db = SessionLocal()
     try:
         placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
         if not placeholder:
+            logger.warning(
+                "Placeholder message %s not found — aborting revision", placeholder_id
+            )
             return
 
         chat = db.query(Chat).filter(Chat.id == chat_id).first()
@@ -828,10 +840,10 @@ def _regenerate_ai_response_task(
                                 chunk.get("error", "RAG streaming error")
                             )
         except Exception as exc:
+            logger.warning("RAG streaming /revise failed for chat %s: %s", chat_id, exc)
             accumulated = (
-                f"[Revised after specialist feedback: {feedback}] "
-                f"RAG service unavailable — original question: {original_query} "
-                f"(detail: {exc})"
+                "The clinical knowledge service is temporarily unavailable for revision. "
+                "Please try again shortly."
             )
             citations = []
 
@@ -895,6 +907,11 @@ def _regenerate_ai_response_task(
         except Exception:
             pass
     except Exception:
+        logger.exception(
+            "Background revision thread failed for chat %s (placeholder %s)",
+            chat_id,
+            placeholder_id,
+        )
         db.rollback()
     finally:
         chat_event_bus.close_chat_threadsafe(chat_id)
