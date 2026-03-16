@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from ..config import LLM_MAX_TOKENS
+from ..config import llm_config
 from ..jobs.retry import RetryJobStatus
 
 
@@ -31,7 +31,7 @@ class SearchResult(BaseModel):
 
 
 class AnswerRequest(QueryRequest):
-    max_tokens: int = LLM_MAX_TOKENS
+    max_tokens: int = llm_config.llm_max_tokens
     patient_context: dict[str, Any] | None = None
     file_context: str | None = None
     stream: bool = False
@@ -44,7 +44,7 @@ class ReviseRequest(BaseModel):
     previous_answer: str
     feedback: str
     top_k: int = 5
-    max_tokens: int = LLM_MAX_TOKENS
+    max_tokens: int = llm_config.llm_max_tokens
     patient_context: dict[str, Any] | None = None
     file_context: str | None = None
     specialty: str | None = None

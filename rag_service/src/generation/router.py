@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from ..config import FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD
+from ..config import routing_config
 
 ProviderName = Literal["local", "cloud"]
 
@@ -56,13 +56,16 @@ def select_generation_provider(
     retrieved_chunks: list[dict],
     severity: str | None = None,
     is_revision: bool = False,
-    threshold: float = LLM_ROUTE_THRESHOLD,
+    threshold: float | None = None,
 ) -> RouteDecision:
-    if FORCE_CLOUD_LLM:
+    resolved_threshold = (
+        routing_config.llm_route_threshold if threshold is None else threshold
+    )
+    if routing_config.force_cloud_llm:
         return RouteDecision(
             provider="cloud",
             score=1.0,
-            threshold=threshold,
+            threshold=resolved_threshold,
             reasons=("force_cloud_llm",),
         )
 
@@ -84,16 +87,16 @@ def select_generation_provider(
         score += ambiguity_score
         reasons.extend(ambiguity_reasons)
 
-    if is_revision and ROUTE_REVISIONS_TO_CLOUD:
+    if is_revision and routing_config.route_revisions_to_cloud:
         reasons.append("revision_flow")
-        score = max(score, threshold)
+        score = max(score, resolved_threshold)
 
     score = min(score, 1.0)
-    provider: ProviderName = "cloud" if score >= threshold else "local"
+    provider: ProviderName = "cloud" if score >= resolved_threshold else "local"
     return RouteDecision(
         provider=provider,
         score=round(score, 3),
-        threshold=threshold,
+        threshold=resolved_threshold,
         reasons=tuple(reasons),
     )
 

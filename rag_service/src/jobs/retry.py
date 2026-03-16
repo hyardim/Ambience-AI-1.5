@@ -13,13 +13,7 @@ from uuid import uuid4
 from redis import Redis
 from rq import Queue
 
-from ..config import (
-    REDIS_URL,
-    RETRY_BACKOFF_MULTIPLIER,
-    RETRY_BACKOFF_SECONDS,
-    RETRY_JOB_TTL_SECONDS,
-    RETRY_MAX_ATTEMPTS,
-)
+from ..config import retry_config
 from ..generation.client import ModelGenerationError, ProviderName, generate_answer
 from ..utils.logger import setup_logger
 
@@ -82,7 +76,7 @@ def _decode_mapping(raw: Mapping[Any, Any]) -> dict[str, Any]:
 
 
 def get_redis_connection() -> Redis:
-    return Redis.from_url(REDIS_URL)
+    return Redis.from_url(retry_config.redis_url)
 
 
 def get_retry_queue(connection: Redis | None = None) -> Queue:
@@ -103,7 +97,9 @@ def _build_idempotency_identifier(
 
 def _compute_backoff_seconds(attempt_count: int) -> int:
     exponent = max(attempt_count - 1, 0)
-    seconds = RETRY_BACKOFF_SECONDS * (RETRY_BACKOFF_MULTIPLIER**exponent)
+    seconds = retry_config.retry_backoff_seconds * (
+        retry_config.retry_backoff_multiplier**exponent
+    )
     return max(int(seconds), 1)
 
 
@@ -134,7 +130,7 @@ def _update_job_state(
     key = _job_key(job_id)
     payload = {**fields, "updated_at": _now_iso()}
     connection.hset(key, mapping=payload)
-    connection.expire(key, RETRY_JOB_TTL_SECONDS)
+    connection.expire(key, retry_config.retry_job_ttl_seconds)
 
 
 def create_retry_job(
@@ -153,7 +149,7 @@ def create_retry_job(
         created = redis_conn.set(
             _idempotency_key(id_key),
             tentative_job_id,
-            ex=RETRY_JOB_TTL_SECONDS,
+            ex=retry_config.retry_job_ttl_seconds,
             nx=True,
         )
         if not created:
@@ -173,7 +169,7 @@ def create_retry_job(
             redis_conn.set(
                 _idempotency_key(id_key),
                 job_id,
-                ex=RETRY_JOB_TTL_SECONDS,
+                ex=retry_config.retry_job_ttl_seconds,
             )
         else:
             job_id = tentative_job_id
@@ -184,7 +180,7 @@ def create_retry_job(
         _job_key(job_id),
         mapping=_initial_state(job_id, request_type, payload),
     )
-    redis_conn.expire(_job_key(job_id), RETRY_JOB_TTL_SECONDS)
+    redis_conn.expire(_job_key(job_id), retry_config.retry_job_ttl_seconds)
 
     queue.enqueue("src.jobs.retry.process_retry_job", job_id=job_id)
     logger.info(
@@ -409,7 +405,7 @@ def process_retry_job(job_id: str) -> None:
         last_error = str(exc)
         retryable = exc.retryable
 
-        if retryable and next_attempt < RETRY_MAX_ATTEMPTS:
+        if retryable and next_attempt < retry_config.retry_max_attempts:
             backoff = _compute_backoff_seconds(next_attempt)
             queue = get_retry_queue(redis_conn)
             queue.enqueue_in(

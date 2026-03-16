@@ -32,6 +32,15 @@ class TestDatabaseConfig:
         config = DatabaseConfig()
         assert config.postgres_user in config.connection_string
 
+    def test_connection_string_escapes_special_characters(self) -> None:
+        config = DatabaseConfig(
+            postgres_user="user+name",
+            postgres_password="p@ss word",
+        )
+
+        assert "user%2Bname" in config.connection_string
+        assert "p%40ss+word" in config.connection_string
+
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("POSTGRES_HOST", "testhost")
         monkeypatch.setenv("POSTGRES_PORT", "5433")
@@ -92,6 +101,10 @@ class TestPathConfig:
         assert config.data_processed == config.root / "data" / "processed"
         assert config.data_debug == config.root / "data" / "debug"
         assert config.logs == config.root / "logs"
+
+    def test_root_is_resolved_project_path(self) -> None:
+        config = PathConfig()
+        assert config.root == Path(__file__).resolve().parents[2]
 
 
 def test_first_non_empty_returns_first_truthy() -> None:

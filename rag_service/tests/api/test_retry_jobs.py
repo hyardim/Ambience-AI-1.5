@@ -86,22 +86,45 @@ def _install_stubs() -> None:
     ask_routes.router = APIRouter()  # type: ignore[attr-defined]
 
     fake_config = types.ModuleType("src.config")
-    fake_config.DATABASE_URL = "postgresql://admin:pw@localhost/test"
-    fake_config.OLLAMA_BASE_URL = "http://localhost:11434"
-    fake_config.OLLAMA_MODEL = "fake"
-    fake_config.OLLAMA_MAX_TOKENS = 512
-    fake_config.CLOUD_LLM_MODEL = "cloud"
-    fake_config.FORCE_CLOUD_LLM = False
-    fake_config.LLM_MAX_TOKENS = 512
-    fake_config.LLM_ROUTE_THRESHOLD = 0.65
-    fake_config.LOCAL_LLM_MODEL = "local"
-    fake_config.ROUTE_REVISIONS_TO_CLOUD = True
-    fake_config.RETRY_ENABLED = True
-    fake_config.REDIS_URL = "redis://localhost:6379/0"
-    fake_config.RETRY_MAX_ATTEMPTS = 3
-    fake_config.RETRY_BACKOFF_SECONDS = 10
-    fake_config.RETRY_BACKOFF_MULTIPLIER = 2
-    fake_config.RETRY_JOB_TTL_SECONDS = 86400
+    fake_config.db_config = types.SimpleNamespace(
+        database_url="postgresql://admin:pw@localhost/test"
+    )
+    fake_config.local_llm_config = types.SimpleNamespace(
+        base_url="http://localhost:11434",
+        model="local",
+        api_key="ollama",
+        max_tokens=512,
+        timeout_seconds=60.0,
+    )
+    fake_config.cloud_llm_config = types.SimpleNamespace(
+        base_url="https://example.invalid/v1",
+        model="cloud",
+        api_key="",
+        max_tokens=512,
+        temperature=0.1,
+        timeout_seconds=120.0,
+    )
+    fake_config.routing_config = types.SimpleNamespace(
+        llm_route_threshold=0.65,
+        force_cloud_llm=False,
+        route_revisions_to_cloud=True,
+    )
+    fake_config.retry_config = types.SimpleNamespace(
+        redis_url="redis://localhost:6379/0",
+        retry_enabled=True,
+        retry_max_attempts=3,
+        retry_backoff_seconds=10,
+        retry_backoff_multiplier=2,
+        retry_job_ttl_seconds=86400,
+    )
+    fake_config.llm_config = types.SimpleNamespace(
+        llm_base_url="http://localhost:11434/v1",
+        llm_model="fake",
+        llm_api_key="ollama",
+        llm_max_tokens=512,
+        llm_temperature=0.1,
+        llm_timeout_seconds=120.0,
+    )
     path_config = MagicMock()
     path_config.root = Path("/app")
     fake_config.path_config = path_config

@@ -28,7 +28,7 @@ class DatabaseManager:
     def engine(self) -> Engine:
         if self._engine is None:
             self._engine = create_engine(
-                db_config.connection_string,
+                db_config.database_url,
                 pool_pre_ping=True,
                 pool_size=5,
                 max_overflow=10,
@@ -51,13 +51,7 @@ class DatabaseManager:
 
     def get_raw_connection(self) -> psycopg2.extensions.connection:
         """Get a raw psycopg2 connection for vector search queries."""
-        return psycopg2.connect(
-            host=db_config.postgres_host,
-            port=db_config.postgres_port,
-            dbname=db_config.postgres_db,
-            user=db_config.postgres_user,
-            password=db_config.postgres_password,
-        )
+        return psycopg2.connect(db_config.database_url)
 
     def test_connection(self) -> bool:
         """Test database is reachable."""

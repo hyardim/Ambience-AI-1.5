@@ -33,20 +33,37 @@ class TestDatabaseManager:
 
     def test_get_raw_connection(self) -> None:
         manager = DatabaseManager()
-        with patch("src.utils.db.psycopg2.connect") as mock_connect:
+        with (
+            patch(
+                "src.utils.db.db_config",
+                new=MagicMock(database_url="postgresql://db.example/test"),
+            ),
+            patch("src.utils.db.psycopg2.connect") as mock_connect,
+        ):
             mock_connect.return_value = MagicMock()
             conn = manager.get_raw_connection()
             assert conn is not None
-            mock_connect.assert_called_once()
+            mock_connect.assert_called_once_with("postgresql://db.example/test")
 
     def test_engine_created_lazily(self) -> None:
         manager = DatabaseManager()
         assert manager._engine is None  # not created yet
-        with patch("src.utils.db.create_engine") as mock_engine:
+        with (
+            patch(
+                "src.utils.db.db_config",
+                new=MagicMock(database_url="postgresql://db.example/test"),
+            ),
+            patch("src.utils.db.create_engine") as mock_engine,
+        ):
             mock_engine.return_value = MagicMock(spec=Engine)
             engine = manager.engine  # triggers creation
             assert engine is not None
-            mock_engine.assert_called_once()
+            mock_engine.assert_called_once_with(
+                "postgresql://db.example/test",
+                pool_pre_ping=True,
+                pool_size=5,
+                max_overflow=10,
+            )
 
     def test_engine_not_recreated(self) -> None:
         manager = DatabaseManager()

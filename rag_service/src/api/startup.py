@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from ..config import CLOUD_LLM_MODEL, FORCE_CLOUD_LLM, LOCAL_LLM_MODEL
+from ..config import cloud_llm_config, local_llm_config, routing_config
 from ..generation.client import ProviderName
 from ..utils.logger import setup_logger
 
@@ -49,12 +49,15 @@ def ensure_schema() -> None:
 
 async def warmup_ollama() -> None:
     """Pre-load the selected generation provider on service startup."""
-    if FORCE_CLOUD_LLM:
-        logger.info("Cloud-only mode enabled. Using cloud model '%s'.", CLOUD_LLM_MODEL)
+    if routing_config.force_cloud_llm:
+        logger.info(
+            "Cloud-only mode enabled. Using cloud model '%s'.",
+            cloud_llm_config.model,
+        )
         await warmup_model(provider="cloud")
         return
 
-    logger.info("Warming up local model '%s'...", LOCAL_LLM_MODEL)
+    logger.info("Warming up local model '%s'...", local_llm_config.model)
     await warmup_model()
 
 

@@ -3,16 +3,8 @@ from typing import Any, Literal, cast
 import httpx
 
 from ..config import (
-    CLOUD_LLM_API_KEY,
-    CLOUD_LLM_BASE_URL,
-    CLOUD_LLM_MAX_TOKENS,
-    CLOUD_LLM_MODEL,
-    CLOUD_LLM_TEMPERATURE,
-    CLOUD_LLM_TIMEOUT_SECONDS,
-    LOCAL_LLM_BASE_URL,
-    LOCAL_LLM_MAX_TOKENS,
-    LOCAL_LLM_MODEL,
-    LOCAL_LLM_TIMEOUT_SECONDS,
+    cloud_llm_config,
+    local_llm_config,
 )
 from ..utils.logger import setup_logger
 
@@ -61,19 +53,25 @@ async def warmup_model(provider: ProviderName = "local") -> None:
         return
 
     payload = {
-        "model": LOCAL_LLM_MODEL,
+        "model": local_llm_config.model,
         "prompt": "warmup",
         "stream": False,
         "keep_alive": -1,
         "options": {"num_predict": 1},
     }
     try:
-        async with httpx.AsyncClient(timeout=LOCAL_LLM_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=local_llm_config.timeout_seconds
+        ) as client:
             resp = await client.post(
-                f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
+                f"{local_llm_config.base_url.rstrip('/')}/api/generate",
+                json=payload,
             )
             resp.raise_for_status()
-        logger.info("Local model '%s' warmed up and kept alive.", LOCAL_LLM_MODEL)
+        logger.info(
+            "Local model '%s' warmed up and kept alive.",
+            local_llm_config.model,
+        )
     except Exception as exc:  # pragma: no cover
         logger.warning(
             "Local model warmup failed (model may still be loading): %s", exc
@@ -82,17 +80,20 @@ async def warmup_model(provider: ProviderName = "local") -> None:
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:
     payload = {
-        "model": LOCAL_LLM_MODEL,
+        "model": local_llm_config.model,
         "prompt": prompt,
         "stream": False,
         "keep_alive": -1,
-        "options": {"num_predict": max_tokens or LOCAL_LLM_MAX_TOKENS},
+        "options": {"num_predict": max_tokens or local_llm_config.max_tokens},
     }
 
     try:
-        async with httpx.AsyncClient(timeout=LOCAL_LLM_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=local_llm_config.timeout_seconds
+        ) as client:
             resp = await client.post(
-                f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
+                f"{local_llm_config.base_url.rstrip('/')}/api/generate",
+                json=payload,
             )
             resp.raise_for_status()
             data = cast(dict[str, Any], resp.json())
@@ -127,21 +128,23 @@ async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> 
 
 async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> str:
     payload = {
-        "model": CLOUD_LLM_MODEL,
+        "model": cloud_llm_config.model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens or CLOUD_LLM_MAX_TOKENS,
-        "temperature": CLOUD_LLM_TEMPERATURE,
+        "max_tokens": max_tokens or cloud_llm_config.max_tokens,
+        "temperature": cloud_llm_config.temperature,
         "stream": False,
     }
 
     headers: dict[str, str] = {}
-    if CLOUD_LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {CLOUD_LLM_API_KEY}"
+    if cloud_llm_config.api_key:
+        headers["Authorization"] = f"Bearer {cloud_llm_config.api_key}"
 
     try:
-        async with httpx.AsyncClient(timeout=CLOUD_LLM_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=cloud_llm_config.timeout_seconds
+        ) as client:
             resp = await client.post(
-                f"{CLOUD_LLM_BASE_URL.rstrip('/')}/chat/completions",
+                f"{cloud_llm_config.base_url.rstrip('/')}/chat/completions",
                 json=payload,
                 headers=headers,
             )

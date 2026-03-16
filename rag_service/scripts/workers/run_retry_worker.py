@@ -1,12 +1,12 @@
 from redis import Redis
 from rq import Connection, Worker
 
-from src.config import REDIS_URL
+from src.config import retry_config
 from src.jobs.retry import QUEUE_NAME
 
 
 def main() -> None:
-    connection = Redis.from_url(REDIS_URL)
+    connection = Redis.from_url(retry_config.redis_url)
     with Connection(connection):
         worker = Worker([QUEUE_NAME])
         worker.work(with_scheduler=True)

@@ -43,7 +43,7 @@ def test_select_generation_provider_routes_revisions_cloud() -> None:
 
 
 def test_select_generation_provider_force_cloud(monkeypatch) -> None:
-    monkeypatch.setattr(router, "FORCE_CLOUD_LLM", True)
+    monkeypatch.setattr(router.routing_config, "force_cloud_llm", True)
 
     decision = select_generation_provider(query="q", retrieved_chunks=[])
 

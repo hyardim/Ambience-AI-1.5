@@ -8,13 +8,12 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from ..config import (
-    CLOUD_LLM_MODEL,
-    DATABASE_URL,
-    FORCE_CLOUD_LLM,
-    LLM_ROUTE_THRESHOLD,
-    LOCAL_LLM_MODEL,
-    RETRY_ENABLED,
+    cloud_llm_config,
+    db_config,
+    local_llm_config,
     path_config,
+    retry_config,
+    routing_config,
 )
 from ..generation.client import ModelGenerationError, generate_answer
 from ..generation.prompts import (
@@ -86,7 +85,7 @@ async def ingest_guideline(
         report = run_ingestion(
             input_path=dest_path,
             source_name=source_name,
-            db_url=DATABASE_URL,
+            db_url=db_config.database_url,
         )
     except PipelineError as exc:
         raise HTTPException(
@@ -105,10 +104,10 @@ async def ingest_guideline(
 async def health_check() -> dict[str, Any]:
     return {
         "status": "ready",
-        "local_model": LOCAL_LLM_MODEL,
-        "cloud_model": CLOUD_LLM_MODEL,
-        "route_threshold": LLM_ROUTE_THRESHOLD,
-        "force_cloud_llm": FORCE_CLOUD_LLM,
+        "local_model": local_llm_config.model,
+        "cloud_model": cloud_llm_config.model,
+        "route_threshold": routing_config.llm_route_threshold,
+        "force_cloud_llm": routing_config.force_cloud_llm,
         "active_prompt": ACTIVE_PROMPT,
     }
 
@@ -201,7 +200,7 @@ async def generate_clinical_answer(
                 provider=route.provider,
             )
         except ModelGenerationError as exc:
-            if RETRY_ENABLED and exc.retryable:
+            if retry_config.retry_enabled and exc.retryable:
                 job_id, status = create_retry_job(
                     request_type="answer",
                     payload={
@@ -298,7 +297,7 @@ async def revise_clinical_answer(
                 provider=route.provider,
             )
         except ModelGenerationError as exc:
-            if RETRY_ENABLED and exc.retryable:
+            if retry_config.retry_enabled and exc.retryable:
                 job_id, status = create_retry_job(
                     request_type="revise",
                     payload={

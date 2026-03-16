@@ -41,7 +41,7 @@ def test_ensure_schema_logs_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.anyio
 async def test_warmup_ollama_cloud_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(startup, "FORCE_CLOUD_LLM", True)
+    monkeypatch.setattr(startup.routing_config, "force_cloud_llm", True)
     calls: list[str] = []
 
     async def fake_warmup(provider: str = "local") -> None:
@@ -56,7 +56,7 @@ async def test_warmup_ollama_cloud_only(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.anyio
 async def test_warmup_ollama_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(startup, "FORCE_CLOUD_LLM", False)
+    monkeypatch.setattr(startup.routing_config, "force_cloud_llm", False)
     calls: list[str] = []
 
     async def fake_warmup(provider: str = "local") -> None:

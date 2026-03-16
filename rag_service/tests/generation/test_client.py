@@ -366,7 +366,7 @@ async def test_generate_cloud_answer_success_without_api_key(monkeypatch):
             captured_headers.append(headers)
             return FakeResponse()
 
-    monkeypatch.setattr(client, "CLOUD_LLM_API_KEY", "")
+    monkeypatch.setattr(client.cloud_llm_config, "api_key", "")
     monkeypatch.setattr(client.httpx, "AsyncClient", lambda timeout: FakeClient())
 
     answer = await client._generate_cloud_answer("prompt")
@@ -402,7 +402,7 @@ async def test_generate_cloud_answer_includes_auth_header(monkeypatch):
             captured_headers.append(headers)
             return FakeResponse()
 
-    monkeypatch.setattr(client, "CLOUD_LLM_API_KEY", "secret")
+    monkeypatch.setattr(client.cloud_llm_config, "api_key", "secret")
     monkeypatch.setattr(client.httpx, "AsyncClient", lambda timeout: FakeClient())
 
     await client._generate_cloud_answer("prompt")

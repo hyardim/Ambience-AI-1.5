@@ -1,28 +1,19 @@
-import os
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
 from pydantic import Field
 
-from src.config import (
-    DATABASE_URL,
-    LLM_API_KEY,
-    LLM_BASE_URL,
-    LLM_MAX_TOKENS,
-    LLM_MODEL,
-    LLM_TEMPERATURE,
-    AppBaseSettings,
-)
+from src.config import AppBaseSettings, db_config, llm_config
 
 
 class Settings(AppBaseSettings):
-    database_url: str = Field(default=os.getenv("DATABASE_URL", DATABASE_URL))
-    llm_base_url: str = Field(default=LLM_BASE_URL)
-    llm_model: str = Field(default=LLM_MODEL)
-    llm_api_key: str = Field(default=LLM_API_KEY)
-    llm_max_tokens: int = Field(default=LLM_MAX_TOKENS)
-    llm_temperature: float = Field(default=LLM_TEMPERATURE)
+    database_url: str = Field(default=db_config.database_url)
+    llm_base_url: str = Field(default=llm_config.llm_base_url)
+    llm_model: str = Field(default=llm_config.llm_model)
+    llm_api_key: str = Field(default=llm_config.llm_api_key)
+    llm_max_tokens: int = Field(default=llm_config.llm_max_tokens)
+    llm_temperature: float = Field(default=llm_config.llm_temperature)
 
 
 @lru_cache(maxsize=1)

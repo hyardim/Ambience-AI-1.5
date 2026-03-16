@@ -6,6 +6,7 @@ import time
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
 
+from ..config import embed_config
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -14,8 +15,8 @@ logger = setup_logger(__name__)
 # Constants
 # -----------------------------------------------------------------------
 
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_DIMENSIONS = 384
+EMBEDDING_MODEL_NAME = f"sentence-transformers/{embed_config.embedding_model}"
+EMBEDDING_DIMENSIONS = embed_config.embedding_dimension
 MAX_TOKENS = 512
 
 # Simple rule-based expansion dictionary for medical terminology

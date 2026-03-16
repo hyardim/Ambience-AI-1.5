@@ -70,12 +70,18 @@ def test_search_similar_chunks_skips_specialty_filter_when_not_provided() -> Non
 
 def test_get_conn_enables_autocommit() -> None:
     conn = MagicMock()
-    with patch(
-        "src.retrieval.vector_store.psycopg2.connect", return_value=conn
-    ) as mock_connect:
+    with (
+        patch(
+            "src.retrieval.vector_store.db_config",
+            new=MagicMock(database_url="postgresql://db.example/test"),
+        ),
+        patch(
+            "src.retrieval.vector_store.psycopg2.connect", return_value=conn
+        ) as mock_connect,
+    ):
         result = vector_store.get_conn()
 
-    mock_connect.assert_called_once_with(vector_store.DATABASE_URL)
+    mock_connect.assert_called_once_with("postgresql://db.example/test")
     assert result is conn
     assert conn.autocommit is True
 

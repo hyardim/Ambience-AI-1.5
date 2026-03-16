@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 COMMON_SETTINGS_CONFIG = SettingsConfigDict(
-    env_file=".env",
+    env_file=PROJECT_ROOT / ".env",
     env_file_encoding="utf-8",
     case_sensitive=False,
     extra="ignore",
@@ -26,9 +29,14 @@ class DatabaseConfig(AppBaseSettings):
     @property
     def connection_string(self) -> str:
         return (
-            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"postgresql://{quote_plus(self.postgres_user)}:"
+            f"{quote_plus(self.postgres_password)}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def database_url(self) -> str:
+        return os.getenv("DATABASE_URL", self.connection_string)
 
 
 class EmbeddingConfig(AppBaseSettings):
@@ -67,6 +75,23 @@ class LLMConfig(AppBaseSettings):
     llm_timeout_seconds: float = Field(default=120.0)
 
 
+class LocalLLMConfig(BaseModel):
+    base_url: str
+    model: str
+    api_key: str
+    max_tokens: int
+    timeout_seconds: float
+
+
+class CloudLLMConfig(BaseModel):
+    base_url: str
+    model: str
+    api_key: str
+    max_tokens: int
+    temperature: float
+    timeout_seconds: float
+
+
 class RoutingConfig(AppBaseSettings):
     llm_route_threshold: float = Field(default=0.65)
     route_revisions_to_cloud: bool = Field(default=True)
@@ -85,7 +110,7 @@ class RetryConfig(AppBaseSettings):
 class PathConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    root: Path = Field(default_factory=lambda: Path(__file__).parent.parent)
+    root: Path = Field(default_factory=lambda: PROJECT_ROOT)
 
     @property
     def data_raw(self) -> Path:
@@ -127,6 +152,56 @@ def _default_runpod_api_key() -> str | None:
     )
 
 
+def _build_local_llm_config(
+    generation: GenerationConfig,
+) -> LocalLLMConfig:
+    return LocalLLMConfig(
+        base_url=os.getenv("LOCAL_LLM_BASE_URL", generation.ollama_base_url),
+        model=os.getenv("LOCAL_LLM_MODEL", generation.ollama_model),
+        api_key=os.getenv("LOCAL_LLM_API_KEY", "ollama"),
+        max_tokens=int(
+            os.getenv("LOCAL_LLM_MAX_TOKENS", str(generation.ollama_max_tokens))
+        ),
+        timeout_seconds=float(
+            os.getenv(
+                "LOCAL_LLM_TIMEOUT_SECONDS",
+                str(generation.ollama_timeout_seconds),
+            )
+        ),
+    )
+
+
+def _build_cloud_llm_config(llm: LLMConfig) -> CloudLLMConfig:
+    fallback_base_url = (
+        _first_non_empty(
+            os.getenv("CLOUD_LLM_BASE_URL"),
+            _default_runpod_base_url(),
+            llm.llm_base_url,
+        )
+        or llm.llm_base_url
+    )
+    fallback_api_key = (
+        _first_non_empty(
+            os.getenv("CLOUD_LLM_API_KEY"),
+            _default_runpod_api_key(),
+            llm.llm_api_key,
+        )
+        or llm.llm_api_key
+    )
+    return CloudLLMConfig(
+        base_url=fallback_base_url,
+        model=os.getenv("CLOUD_LLM_MODEL", llm.llm_model),
+        api_key=fallback_api_key,
+        max_tokens=int(os.getenv("CLOUD_LLM_MAX_TOKENS", str(llm.llm_max_tokens))),
+        temperature=float(
+            os.getenv("CLOUD_LLM_TEMPERATURE", str(llm.llm_temperature))
+        ),
+        timeout_seconds=float(
+            os.getenv("CLOUD_LLM_TIMEOUT_SECONDS", str(llm.llm_timeout_seconds))
+        ),
+    )
+
+
 db_config = DatabaseConfig()
 embed_config = EmbeddingConfig()
 chunk_config = ChunkingConfig()
@@ -134,67 +209,8 @@ vector_config = VectorIndexConfig()
 logging_config = LoggingConfig()
 generation_config = GenerationConfig()
 llm_config = LLMConfig()
+local_llm_config = _build_local_llm_config(generation_config)
+cloud_llm_config = _build_cloud_llm_config(llm_config)
 routing_config = RoutingConfig()
 retry_config = RetryConfig()
 path_config = PathConfig()
-
-# Compatibility shims for existing codepaths
-DATABASE_URL = os.getenv("DATABASE_URL", db_config.connection_string)
-MODEL_NAME = embed_config.embedding_model
-RAG_DATA_DIR = os.getenv("RAG_DATA_DIR", str(path_config.data_raw))
-CHUNK_SIZE = chunk_config.chunk_size
-CHUNK_OVERLAP = chunk_config.chunk_overlap
-HNSW_M = vector_config.hnsw_m
-HNSW_EF_CONSTRUCTION = vector_config.hnsw_ef_construction
-OLLAMA_BASE_URL = generation_config.ollama_base_url
-OLLAMA_MODEL = generation_config.ollama_model
-OLLAMA_MAX_TOKENS = generation_config.ollama_max_tokens
-OLLAMA_TIMEOUT_SECONDS = generation_config.ollama_timeout_seconds
-LLM_BASE_URL = llm_config.llm_base_url
-LLM_MODEL = llm_config.llm_model
-LLM_API_KEY = llm_config.llm_api_key
-LLM_MAX_TOKENS = llm_config.llm_max_tokens
-LLM_TEMPERATURE = llm_config.llm_temperature
-LLM_TIMEOUT_SECONDS = llm_config.llm_timeout_seconds
-
-LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", OLLAMA_BASE_URL)
-LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", OLLAMA_MODEL)
-LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "ollama")
-LOCAL_LLM_MAX_TOKENS = int(os.getenv("LOCAL_LLM_MAX_TOKENS", str(OLLAMA_MAX_TOKENS)))
-LOCAL_LLM_TIMEOUT_SECONDS = float(
-    os.getenv("LOCAL_LLM_TIMEOUT_SECONDS", str(OLLAMA_TIMEOUT_SECONDS))
-)
-
-CLOUD_LLM_BASE_URL = (
-    _first_non_empty(
-        os.getenv("CLOUD_LLM_BASE_URL"),
-        _default_runpod_base_url(),
-        LLM_BASE_URL,
-    )
-    or LLM_BASE_URL
-)
-CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", LLM_MODEL)
-CLOUD_LLM_API_KEY = (
-    _first_non_empty(
-        os.getenv("CLOUD_LLM_API_KEY"),
-        _default_runpod_api_key(),
-        LLM_API_KEY,
-    )
-    or LLM_API_KEY
-)
-CLOUD_LLM_MAX_TOKENS = int(os.getenv("CLOUD_LLM_MAX_TOKENS", str(LLM_MAX_TOKENS)))
-CLOUD_LLM_TEMPERATURE = float(os.getenv("CLOUD_LLM_TEMPERATURE", str(LLM_TEMPERATURE)))
-CLOUD_LLM_TIMEOUT_SECONDS = float(
-    os.getenv("CLOUD_LLM_TIMEOUT_SECONDS", str(LLM_TIMEOUT_SECONDS))
-)
-
-LLM_ROUTE_THRESHOLD = routing_config.llm_route_threshold
-ROUTE_REVISIONS_TO_CLOUD = routing_config.route_revisions_to_cloud
-FORCE_CLOUD_LLM = routing_config.force_cloud_llm
-
-REDIS_URL = retry_config.redis_url
-RETRY_ENABLED = retry_config.retry_enabled
-RETRY_MAX_ATTEMPTS = retry_config.retry_max_attempts
-RETRY_BACKOFF_SECONDS = retry_config.retry_backoff_seconds
-RETRY_BACKOFF_MULTIPLIER = retry_config.retry_backoff_multiplier
-RETRY_JOB_TTL_SECONDS = retry_config.retry_job_ttl_seconds

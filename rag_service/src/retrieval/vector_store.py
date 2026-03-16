@@ -3,15 +3,15 @@ from typing import Any
 import psycopg2
 import psycopg2.extras
 
-from src.config import DATABASE_URL, HNSW_EF_CONSTRUCTION, HNSW_M
+from src.config import db_config, vector_config
 
 
 def get_conn() -> Any:
     """
-    Creates and returns a Postgres connection using DATABASE_URL.
+    Creates and returns a Postgres connection using the configured database URL.
     """
     # Connect to Postgres with psycopg2 using the URL.
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(db_config.database_url)
     # Enable autocommit so DDL like CREATE TABLE works without manual commit.
     conn.autocommit = True
     return conn
@@ -58,7 +58,10 @@ def init_db(vector_dim: int) -> None:
                 CREATE INDEX idx_rag_chunks_embedding_hnsw
                 ON rag_chunks
                 USING hnsw (embedding vector_cosine_ops)
-                WITH (m = {HNSW_M}, ef_construction = {HNSW_EF_CONSTRUCTION});
+                WITH (
+                  m = {vector_config.hnsw_m},
+                  ef_construction = {vector_config.hnsw_ef_construction}
+                );
               END IF;
             END $$;
             """

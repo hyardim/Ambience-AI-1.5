@@ -208,8 +208,8 @@ def test_build_idempotency_identifier_prefers_explicit_key() -> None:
 def test_compute_backoff_seconds_never_below_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.jobs.retry.RETRY_BACKOFF_SECONDS", 0)
-    monkeypatch.setattr("src.jobs.retry.RETRY_BACKOFF_MULTIPLIER", 0)
+    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_seconds", 0)
+    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_multiplier", 0)
     assert _compute_backoff_seconds(0) == 1
 
 
