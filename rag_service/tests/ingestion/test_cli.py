@@ -33,6 +33,15 @@ FAILED_SUMMARY = {
     "files_failed": 1,
 }
 
+FAKE_NICE_SUMMARY = {
+    "scanned": 4,
+    "matched": 3,
+    "updated": 2,
+    "ingested": 2,
+    "skipped": 1,
+    "failed": 0,
+}
+
 
 def run_ingest(runner: CliRunner, args: list[str], input_path: str) -> Any:
     """Helper to invoke the ingest command with --input and --source-name always set."""
@@ -335,3 +344,37 @@ class TestIngestCommand:
             finally:
                 cli_module.__name__ = original
                 mock_main.assert_called_once()
+
+
+# -----------------------------------------------------------------------
+# update-nice command
+# -----------------------------------------------------------------------
+
+
+class TestUpdateNiceCommand:
+    @pytest.fixture()
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_dry_run_outputs_summary(self, runner: CliRunner) -> None:
+        with patch(
+            "src.ingestion.cli.update_nice_guidelines",
+            return_value=FAKE_NICE_SUMMARY,
+        ):
+            result = runner.invoke(cli, ["update-nice", "--dry-run"])
+        assert result.exit_code == 0
+        assert "NICE update summary" in result.output
+
+    def test_skip_ingest_avoids_db_resolution(self, runner: CliRunner) -> None:
+        with patch(
+            "src.ingestion.cli.update_nice_guidelines",
+            return_value=FAKE_NICE_SUMMARY,
+        ) as mock_update:
+            result = runner.invoke(cli, ["update-nice", "--skip-ingest"])
+        assert result.exit_code == 0
+        assert mock_update.call_args.kwargs["ingest"] is False
+
+    def test_missing_db_url_exits_when_ingesting(self, runner: CliRunner) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            result = runner.invoke(cli, ["update-nice"])
+        assert result.exit_code == 1
