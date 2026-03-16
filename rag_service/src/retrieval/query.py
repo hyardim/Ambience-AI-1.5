@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import math
 import time
 from typing import Any, Protocol, cast
 
+import tiktoken
 from pydantic import BaseModel, Field
 
 from ..config import embed_config
@@ -18,7 +18,7 @@ logger = setup_logger(__name__)
 
 EMBEDDING_MODEL_NAME = f"sentence-transformers/{embed_config.embedding_model}"
 EMBEDDING_DIMENSIONS = embed_config.embedding_dimension
-MAX_TOKENS = 512
+_ENCODER = tiktoken.get_encoding("cl100k_base")
 
 # Simple rule-based expansion dictionary for medical terminology
 EXPANSION_DICT: dict[str, list[str]] = {
@@ -32,6 +32,18 @@ EXPANSION_DICT: dict[str, list[str]] = {
     "dmard": ["disease modifying antirheumatic drug"],
     "nsaid": ["non-steroidal anti-inflammatory", "anti-inflammatory"],
     "methotrexate": ["mtx", "disease modifying antirheumatic drug"],
+    "gca": ["giant cell arteritis", "temporal arteritis"],
+    "pmr": ["polymyalgia rheumatica"],
+    "tnf": ["tumor necrosis factor"],
+    "csf": ["cerebrospinal fluid"],
+    "mri": ["magnetic resonance imaging"],
+    "ct": ["computed tomography"],
+    "edss": ["expanded disability status scale"],
+    "rrms": ["relapsing remitting multiple sclerosis"],
+    "spms": ["secondary progressive multiple sclerosis"],
+    "ppms": ["primary progressive multiple sclerosis"],
+    "cis": ["clinically isolated syndrome"],
+    "dmt": ["disease modifying therapy"],
 }
 
 
@@ -146,12 +158,12 @@ def process_query(
 
 def _validate_token_length(query: str) -> None:
     """Raise ValueError if query exceeds MAX_TOKENS tokens."""
-    word_count = len(query.split())
-    estimated_tokens = math.ceil(word_count * 1.3)
-    if estimated_tokens > MAX_TOKENS:
+    max_tokens = embed_config.query_max_tokens
+    token_count = len(_ENCODER.encode(query))
+    if token_count > max_tokens:
         raise ValueError(
-            f"Query exceeds {MAX_TOKENS} token limit "
-            f"(estimated {estimated_tokens} tokens)"
+            f"Query exceeds {max_tokens} token limit "
+            f"({token_count} tokens)"
         )
 
 

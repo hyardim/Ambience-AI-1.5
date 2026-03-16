@@ -115,22 +115,23 @@ class TestProcessQuery:
             )
 
     def test_query_exceeding_token_limit_raises_value_error(self):
-        # math.ceil(394 * 1.3) = ceil(512.2) = 513 — correctly exceeds limit
-        long_query = " ".join(["gout"] * 394)
-        with pytest.raises(ValueError, match="exceeds 512 token limit"):
-            process_query(long_query)
+        long_query = " ".join(["gout"] * 2000)
+        with patch("src.retrieval.query.embed_config.query_max_tokens", 32):
+            with pytest.raises(ValueError, match="exceeds 32 token limit"):
+                process_query(long_query)
 
     def test_expanded_query_exceeding_token_limit_raises_value_error(self):
         # Patch _expand_query to return a very long string
         # simulating expansion pushing query over the limit
         long_expansion = "gout " + " ".join(["urate"] * 400)
         mock_model = _make_mock_model()
-        with patch("src.retrieval.query._load_model", return_value=mock_model):
-            with patch(
-                "src.retrieval.query._expand_query", return_value=long_expansion
-            ):
-                with pytest.raises(ValueError, match="exceeds 512 token limit"):
-                    process_query("gout", expand=True)
+        with patch("src.retrieval.query.embed_config.query_max_tokens", 32):
+            with patch("src.retrieval.query._load_model", return_value=mock_model):
+                with patch(
+                    "src.retrieval.query._expand_query", return_value=long_expansion
+                ):
+                    with pytest.raises(ValueError, match="exceeds 32 token limit"):
+                        process_query("gout", expand=True)
 
     def test_invalid_embedding_wraps_as_retrieval_error(self):
         # Force _embed to return wrong dimensions so ProcessedQuery construction fails
@@ -193,6 +194,10 @@ class TestExpandQuery:
         # both "dmard" and "methotrexate" map to "disease modifying antirheumatic drug"
         result = _expand_query("methotrexate dmard dosage")
         assert result.count("disease modifying antirheumatic drug") == 1
+
+    def test_new_medical_abbreviation_expansion(self):
+        result = _expand_query("GCA headache")
+        assert "giant cell arteritis" in result
 
 
 # -----------------------------------------------------------------------

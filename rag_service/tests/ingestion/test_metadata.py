@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
+import src.ingestion.metadata as metadata_module
 from src.ingestion.metadata import (
     MetadataValidationError,
     _derive_source_url,
+    _load_allowed_sources,
     attach_metadata,
     extract_pdf_metadata,
     extract_title,
@@ -208,6 +212,62 @@ class TestValidateSourceInfo:
     def test_all_valid_source_names_pass(self) -> None:
         for source_name in ["NICE", "BSR", "Others"]:
             validate_source_info(make_source_info(source_name=source_name))
+
+
+def test_load_allowed_sources_falls_back_when_yaml_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(metadata_module, "path_config", SimpleNamespace(root=tmp_path))
+    _load_allowed_sources.cache_clear()
+
+    source_names, specialties = _load_allowed_sources()
+
+    assert source_names == set()
+    assert specialties == {"general"}
+    _load_allowed_sources.cache_clear()
+
+
+def test_load_allowed_sources_falls_back_when_yaml_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    configs_dir = tmp_path / "configs"
+    configs_dir.mkdir(parents=True)
+    (configs_dir / "sources.yaml").write_text("- invalid\n- list\n", encoding="utf-8")
+    monkeypatch.setattr(metadata_module, "path_config", SimpleNamespace(root=tmp_path))
+    _load_allowed_sources.cache_clear()
+
+    source_names, specialties = _load_allowed_sources()
+
+    assert source_names == set()
+    assert specialties == {"general"}
+    _load_allowed_sources.cache_clear()
+
+
+def test_load_allowed_sources_reads_specialties_from_yaml(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    configs_dir = tmp_path / "configs"
+    configs_dir.mkdir(parents=True)
+    (configs_dir / "sources.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "NICE": {"specialty": "neurology"},
+                "BSR": {"specialty": "rheumatology"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(metadata_module, "path_config", SimpleNamespace(root=tmp_path))
+    _load_allowed_sources.cache_clear()
+
+    source_names, specialties = _load_allowed_sources()
+
+    assert source_names == {"NICE", "BSR"}
+    assert specialties == {"general", "neurology", "rheumatology"}
+    _load_allowed_sources.cache_clear()
 
 
 # -----------------------------------------------------------------------

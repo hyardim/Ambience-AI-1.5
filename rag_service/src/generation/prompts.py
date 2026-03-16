@@ -10,7 +10,12 @@ def _truncate_chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> str
     return cleaned[: max_chars - 14].rstrip() + " …[truncated]"
 
 
-ACTIVE_PROMPT = generation_config.prompt_variant
+PROMPT_VARIANTS = {"new", "original"}
+ACTIVE_PROMPT = (
+    generation_config.prompt_variant
+    if generation_config.prompt_variant in PROMPT_VARIANTS
+    else "new"
+)
 
 # ---------------------------------------------------------------------------
 # Variant A — original: strict, context-only, refuses when no sources found
@@ -147,6 +152,7 @@ def build_grounded_prompt(
     chunks: list[dict],
     patient_context: dict | None = None,
     file_context: str | None = None,
+    evidence_note: str | None = None,
 ) -> str:
     context_block = _format_context(chunks)
     has_context = bool(chunks)
@@ -164,6 +170,8 @@ def build_grounded_prompt(
     parts = [_active_instructions()]
     if patient_block:
         parts.append(patient_block)
+    if evidence_note:
+        parts.append(f"EVIDENCE NOTE\n{evidence_note}")
     parts.append(context_section)
     # Uploaded documents come after numbered context and are not cited as [N].
     if file_context:
@@ -179,6 +187,7 @@ def build_revision_prompt(
     chunks: list[dict],
     patient_context: dict | None = None,
     file_context: str | None = None,
+    evidence_note: str | None = None,
 ) -> str:
     """Revise a previous answer based on specialist feedback, grounded in context."""
     context_block = _format_context(chunks)
@@ -212,6 +221,8 @@ def build_revision_prompt(
     parts = [instructions]
     if patient_block:
         parts.append(patient_block)
+    if evidence_note:
+        parts.append(f"EVIDENCE NOTE\n{evidence_note}")
     parts.append(context_section)
     if file_context:
         parts.append(f"UPLOADED DOCUMENTS\n{file_context}")

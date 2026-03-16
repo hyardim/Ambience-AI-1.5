@@ -10,13 +10,14 @@ from uuid import uuid4
 from redis import Redis
 from rq import Queue
 
-from ..config import retry_config
+from ..config import path_config, retry_config
 from ..generation.client import (
     ModelGenerationError,
     ProviderName,
     generate_answer,
 )
 from ..utils.logger import setup_logger
+from ..utils.telemetry import append_jsonl
 from .responses import (
     build_answer_response,
     build_revise_response,
@@ -41,6 +42,7 @@ from .state import (
 
 logger = setup_logger("rag.retry")
 QUEUE_NAME = "rag_retry"
+RETRY_TELEMETRY_PATH = path_config.logs / "retry_metrics.jsonl"
 
 
 class RetryJobStatus(str, Enum):
@@ -159,6 +161,16 @@ def create_retry_job(
     )
     redis_conn.expire(state_job_key(job_id), retry_config.retry_job_ttl_seconds)
     queue.enqueue("src.jobs.retry.process_retry_job", job_id=job_id)
+    append_jsonl(
+        RETRY_TELEMETRY_PATH,
+        {
+            "event": "enqueue",
+            "job_id": job_id,
+            "request_type": request_type,
+            "status": RetryJobStatus.QUEUED.value,
+            "provider": payload.get("provider"),
+        },
+    )
     logger.info(
         "retry_enqueue job_id=%s request_type=%s attempt=0",
         job_id,
@@ -260,6 +272,16 @@ def process_retry_job(job_id: str) -> None:
     next_attempt = int(state.get("attempt_count", 0)) + 1
 
     _mark_job_retrying(redis_conn, job_id, next_attempt)
+    append_jsonl(
+        RETRY_TELEMETRY_PATH,
+        {
+            "event": "attempt",
+            "job_id": job_id,
+            "request_type": request_type,
+            "attempt": next_attempt,
+            "status": RetryJobStatus.RETRYING.value,
+        },
+    )
     logger.info("retry_attempt job_id=%s attempt=%s", job_id, next_attempt)
 
     try:
@@ -283,9 +305,30 @@ def process_retry_job(job_id: str) -> None:
             )
 
         _mark_job_succeeded(redis_conn, job_id, response=response)
+        append_jsonl(
+            RETRY_TELEMETRY_PATH,
+            {
+                "event": "success",
+                "job_id": job_id,
+                "request_type": request_type,
+                "attempt": next_attempt,
+                "status": RetryJobStatus.SUCCEEDED.value,
+            },
+        )
         logger.info("retry_success job_id=%s attempt=%s", job_id, next_attempt)
     except RetryValidationError as exc:
         _mark_job_failed(redis_conn, job_id, last_error=str(exc))
+        append_jsonl(
+            RETRY_TELEMETRY_PATH,
+            {
+                "event": "validation_failure",
+                "job_id": job_id,
+                "request_type": request_type,
+                "attempt": next_attempt,
+                "status": RetryJobStatus.FAILED.value,
+                "error": str(exc),
+            },
+        )
         logger.info(
             "retry_non_retryable job_id=%s attempt=%s error=%s",
             job_id,
@@ -303,6 +346,19 @@ def process_retry_job(job_id: str) -> None:
                 next_attempt=next_attempt,
                 last_error=last_error,
             )
+            append_jsonl(
+                RETRY_TELEMETRY_PATH,
+                {
+                    "event": "requeue",
+                    "job_id": job_id,
+                    "request_type": request_type,
+                    "attempt": next_attempt,
+                    "status": RetryJobStatus.QUEUED.value,
+                    "retryable": retryable,
+                    "backoff_seconds": backoff,
+                    "error": last_error,
+                },
+            )
             logger.info(
                 "retry_requeue job_id=%s attempt=%s backoff_seconds=%s error=%s",
                 job_id,
@@ -313,6 +369,18 @@ def process_retry_job(job_id: str) -> None:
             return
 
         _mark_job_failed(redis_conn, job_id, last_error=last_error)
+        append_jsonl(
+            RETRY_TELEMETRY_PATH,
+            {
+                "event": "permanent_failure",
+                "job_id": job_id,
+                "request_type": request_type,
+                "attempt": next_attempt,
+                "status": RetryJobStatus.FAILED.value,
+                "retryable": retryable,
+                "error": last_error,
+            },
+        )
         logger.info(
             "retry_permanent_failure job_id=%s attempt=%s retryable=%s error=%s",
             job_id,
@@ -322,6 +390,17 @@ def process_retry_job(job_id: str) -> None:
         )
     except Exception as exc:
         _mark_job_failed(redis_conn, job_id, last_error=str(exc))
+        append_jsonl(
+            RETRY_TELEMETRY_PATH,
+            {
+                "event": "unexpected_failure",
+                "job_id": job_id,
+                "request_type": request_type,
+                "attempt": next_attempt,
+                "status": RetryJobStatus.FAILED.value,
+                "error": str(exc),
+            },
+        )
         logger.exception(
             "retry_unexpected_failure job_id=%s attempt=%s", job_id, next_attempt
         )

@@ -3,25 +3,18 @@ from __future__ import annotations
 import hashlib
 import os
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import fitz  # PyMuPDF
+import yaml
 
+from ..config import path_config
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-VALID_SPECIALTIES = {"neurology", "rheumatology", "general"}
-VALID_SOURCE_NAMES = {
-    "NICE",
-    "BSR",
-    "Others",
-    "NICE_NEURO",
-    "BNF_RHEUMATOLOGY",
-    "OTHER_RHEUMATOLOGY",
-    "OTHER",
-}
 VALID_DOC_TYPES = {
     "guideline",
     "protocol",
@@ -54,6 +47,35 @@ class MetadataValidationError(Exception):
     """Raised when metadata validation fails."""
 
     pass
+
+
+@lru_cache(maxsize=1)
+def _load_allowed_sources() -> tuple[set[str], set[str]]:
+    sources_path = path_config.root / "configs" / "sources.yaml"
+    try:
+        with sources_path.open("r", encoding="utf-8") as handle:
+            raw = yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        logger.warning(
+            "sources.yaml missing at %s; using inferred-only validation",
+            sources_path,
+        )
+        return set(), {"general"}
+
+    if not isinstance(raw, dict):
+        logger.warning(
+            "sources.yaml has invalid structure; using inferred-only validation"
+        )
+        return set(), {"general"}
+
+    source_names = {str(key) for key in raw}
+    specialties = {"general"}
+    for value in raw.values():
+        if isinstance(value, dict):
+            specialty = value.get("specialty")
+            if isinstance(specialty, str) and specialty.strip():
+                specialties.add(specialty.strip())
+    return source_names, specialties
 
 
 def attach_metadata(
@@ -241,16 +263,18 @@ def validate_source_info(source_info: dict[str, Any]) -> None:
                 f"source_info missing required field: {field}"
             )
 
-    if source_info["specialty"] not in VALID_SPECIALTIES:
+    valid_source_names, valid_specialties = _load_allowed_sources()
+
+    if source_info["specialty"] not in valid_specialties:
         raise MetadataValidationError(
             f"Invalid specialty '{source_info['specialty']}'. "
-            f"Must be one of: {VALID_SPECIALTIES}"
+            f"Must be one of: {valid_specialties}"
         )
 
-    if source_info["source_name"] not in VALID_SOURCE_NAMES:
+    if valid_source_names and source_info["source_name"] not in valid_source_names:
         raise MetadataValidationError(
             f"Invalid source_name '{source_info['source_name']}'. "
-            f"Must be one of: {VALID_SOURCE_NAMES}"
+            f"Must be one of: {valid_source_names}"
         )
 
     if source_info["doc_type"] not in VALID_DOC_TYPES:

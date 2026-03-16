@@ -265,6 +265,101 @@ async def test_generate_local_answer_maps_connect_error(monkeypatch):
     assert exc_info.value.provider == "local"
 
 
+def test_request_chat_completion_sync_returns_text(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": " cloud answer "}}]}
+
+    class FakeClient:
+        def __init__(self, *, timeout: float) -> None:
+            captured["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> FakeResponse:
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return FakeResponse()
+
+    monkeypatch.setattr(client.httpx, "Client", FakeClient)
+
+    answer = client._request_chat_completion_sync(
+        provider="cloud",
+        base_url="https://api.example.com/v1",
+        api_key="secret",
+        model="gpt-test",
+        messages=[{"role": "user", "content": "prompt"}],
+        max_tokens=50,
+        temperature=0.2,
+        timeout_seconds=33.0,
+    )
+
+    assert answer == "cloud answer"
+    assert captured["timeout"] == 33.0
+    assert captured["url"] == "https://api.example.com/v1/chat/completions"
+    assert captured["headers"] == {"Authorization": "Bearer secret"}
+
+
+def test_request_chat_completion_sync_wraps_http_errors(monkeypatch) -> None:
+    request = client.httpx.Request("POST", "https://api.example.com")
+    response = client.httpx.Response(502, request=request)
+
+    class FakeClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> object:
+            raise client.httpx.HTTPStatusError(
+                "bad",
+                request=request,
+                response=response,
+            )
+
+    monkeypatch.setattr(client.httpx, "Client", FakeClient)
+
+    with pytest.raises(client.ProviderRequestError) as exc_info:
+        client._request_chat_completion_sync(
+            provider="cloud",
+            base_url="https://api.example.com/v1",
+            api_key="secret",
+            model="gpt-test",
+            messages=[{"role": "user", "content": "prompt"}],
+            max_tokens=50,
+            temperature=0.2,
+            timeout_seconds=33.0,
+        )
+
+    assert exc_info.value.provider == "cloud"
+    assert exc_info.value.status_code == 502
+
 @pytest.mark.anyio
 async def test_generate_local_answer_maps_request_error(monkeypatch):
     request = client.httpx.Request("POST", "http://local")

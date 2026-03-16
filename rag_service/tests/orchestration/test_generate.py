@@ -34,33 +34,15 @@ def _context() -> list[CitedResult]:
 
 def test_generate_returns_response(monkeypatch) -> None:
     captured = {}
-    expected_json = {
-        "choices": [
-            {
-                "message": {
-                    "content": "answer",
-                }
-            }
-        ]
-    }
 
-    class FakeResponse:
-        def __init__(self, url: str, headers: dict, payload: dict) -> None:
-            captured["url"] = url
-            captured["headers"] = headers
-            captured["payload"] = payload
+    def fake_request(**kwargs):
+        captured.update(kwargs)
+        return "answer"
 
-        def raise_for_status(self) -> None:  # noqa: D401
-            return None
-
-        def json(self):  # noqa: D401
-            return expected_json
-
-    def fake_post(url: str, json: dict, headers: dict, timeout: float):
-        captured["timeout"] = timeout
-        return FakeResponse(url, headers, json)
-
-    monkeypatch.setattr("src.orchestration.generate.httpx.post", fake_post)
+    monkeypatch.setattr(
+        "src.orchestration.generate._request_chat_completion_sync",
+        fake_request,
+    )
 
     class DummySettings:
         llm_base_url = "http://localhost:1234"
@@ -75,29 +57,53 @@ def test_generate_returns_response(monkeypatch) -> None:
     assert isinstance(response, RAGResponse)
     assert response.answer == "answer"
     assert response.model == "model-x"
-    assert captured["url"] == "http://localhost:1234/chat/completions"
-    assert captured["headers"]["Authorization"] == "Bearer key"
-    assert captured["payload"]["model"] == "model-x"
-    assert captured["payload"]["max_tokens"] == 12
-    assert captured["payload"]["temperature"] == 0.5
-    assert captured["timeout"] == 45.0
+    assert captured["base_url"] == "http://localhost:1234"
+    assert captured["api_key"] == "key"
+    assert captured["model"] == "model-x"
+    assert captured["max_tokens"] == 12
+    assert captured["temperature"] == 0.5
+    assert captured["timeout_seconds"] == 45.0
+
+
+def test_generate_includes_evidence_note_in_prompt(monkeypatch) -> None:
+    captured = {}
+
+    def fake_request(**kwargs):
+        captured.update(kwargs)
+        return "answer"
+
+    monkeypatch.setattr(
+        "src.orchestration.generate._request_chat_completion_sync",
+        fake_request,
+    )
+
+    generate(query="q", context=_context(), evidence_note="Evidence is limited.")
+
+    prompt = captured["messages"][0]["content"]
+    assert "Evidence note: Evidence is limited." in prompt
 
 
 def test_generate_raises_generation_error(monkeypatch) -> None:
-    def boom(*_, **__):
+    def boom(**_kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("src.orchestration.generate.httpx.post", boom)
+    monkeypatch.setattr(
+        "src.orchestration.generate._request_chat_completion_sync",
+        boom,
+    )
 
     with pytest.raises(GenerationError):
         generate(query="q", context=_context())
 
 
 def test_generate_reraises_generation_error(monkeypatch) -> None:
-    def boom(*_, **__):
+    def boom(**_kwargs):
         raise GenerationError(query="q", message="already wrapped")
 
-    monkeypatch.setattr("src.orchestration.generate.httpx.post", boom)
+    monkeypatch.setattr(
+        "src.orchestration.generate._request_chat_completion_sync",
+        boom,
+    )
 
     with pytest.raises(GenerationError, match="already wrapped"):
         generate(query="q", context=_context())

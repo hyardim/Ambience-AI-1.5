@@ -457,6 +457,29 @@ class TestChunkSectionGroup:
         )
         assert "abc123" in chunks[0]["block_uids"]
 
+    def test_internal_overlap_preserves_block_uids_from_overlap_sentences(self) -> None:
+        blocks = [
+            make_block(
+                text=" ".join([f"Sentence {i}." for i in range(1, 40)]),
+                block_uid="block-a",
+            ),
+            make_block(
+                text=" ".join([f"Sentence {i}." for i in range(40, 80)]),
+                block_uid="block-b",
+            ),
+        ]
+        chunks, _ = chunk_section_group(
+            blocks,
+            make_doc_meta(),
+            0,
+            [],
+            max_chunk_tokens=60,
+            overlap_tokens=20,
+        )
+
+        assert len(chunks) > 1
+        assert any("block-a" in chunk["block_uids"] for chunk in chunks[:2])
+
     def test_page_start_page_end_set(self) -> None:
         blocks = [
             make_block(text="Page one.", block_uid="u1", page_number=3),

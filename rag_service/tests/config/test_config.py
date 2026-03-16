@@ -54,11 +54,15 @@ class TestEmbeddingConfig:
         config = EmbeddingConfig()
         assert config.embedding_model == "all-MiniLM-L6-v2"
         assert config.embedding_dimension == 384
+        assert config.query_max_tokens == 1024
+        assert config.reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("EMBEDDING_DIMENSION", "768")
+        monkeypatch.setenv("QUERY_MAX_TOKENS", "2048")
         config = EmbeddingConfig()
         assert config.embedding_dimension == 768
+        assert config.query_max_tokens == 2048
 
 
 class TestChunkingConfig:

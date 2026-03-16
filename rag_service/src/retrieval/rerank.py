@@ -10,6 +10,7 @@ except ImportError:
 
 from pydantic import BaseModel
 
+from ..config import embed_config
 from ..utils.logger import setup_logger
 from .fusion import FusedResult
 from .query import RetrievalError
@@ -48,7 +49,7 @@ def rerank(
     query: str,
     results: list[FusedResult],
     top_k: int = 10,
-    model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    model_name: str = embed_config.reranker_model,
 ) -> list[RankedResult]:
     """
     Rerank fused candidates using a cross-encoder model.

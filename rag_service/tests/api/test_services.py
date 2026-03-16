@@ -4,7 +4,12 @@ import pytest
 
 from src.api.schemas import SearchResult
 from src.api.services import (
+    NO_EVIDENCE_RESPONSE,
+    evidence_level,
     filter_chunks,
+    log_route_decision,
+    low_evidence_note,
+    query_fingerprint,
     retrieve_chunks,
     to_search_result,
 )
@@ -15,7 +20,7 @@ def test_filter_chunks_drops_low_quality_hits() -> None:
     kept = {
         "text": "migraine treatment guidance",
         "score": 0.9,
-        "metadata": {"source_path": "/tmp/doc.pdf"},
+        "metadata": {"source_url": "https://example.com/doc.pdf"},
     }
     dropped = {
         "text": "supplementary material",
@@ -94,12 +99,27 @@ def test_retrieve_chunks_uses_shared_retrieval_pipeline(
                 "publish_date": None,
                 "last_updated_date": None,
                 "source_url": "https://example.com/guide",
-                "source_path": "https://example.com/guide",
+                "source_path": None,
                 "content_type": "text",
             },
         }
     ]
     assert calls == [("headache", "postgresql://x", 3, "neurology")]
+
+
+def test_filter_chunks_keeps_high_confidence_semantic_hit_without_token_overlap(
+) -> None:
+    retrieved = [
+        {
+            "text": "Acetylsalicylic acid may be recommended in select scenarios.",
+            "score": 0.82,
+            "metadata": {"source_url": "https://example.com/doc.pdf"},
+        }
+    ]
+
+    filtered = filter_chunks("aspirin management", retrieved)
+
+    assert filtered == retrieved
 
 
 def test_to_search_result_uses_default_source_name() -> None:
@@ -127,3 +147,58 @@ def test_to_search_result_prefers_title_then_source_name() -> None:
     )
 
     assert result.source == "NICE Migraine Guideline"
+
+
+def test_evidence_level_handles_none_weak_and_strong_cases() -> None:
+    assert evidence_level([]) == "none"
+    assert evidence_level([{"score": 0.57}]) == "weak"
+    assert evidence_level([{"score": 0.57}, {"score": 0.61}, {"score": 0.4}]) == "weak"
+    assert evidence_level([{"score": 0.9}, {"score": 0.8}, {"score": 0.61}]) == "strong"
+
+
+def test_low_evidence_note_only_returns_text_for_weak_level() -> None:
+    assert low_evidence_note("strong") is None
+    assert low_evidence_note("none") is None
+    assert "limited" in (low_evidence_note("weak") or "")
+
+
+def test_query_fingerprint_is_stable() -> None:
+    assert query_fingerprint("migraine treatment") == query_fingerprint(
+        "migraine treatment"
+    )
+    assert len(query_fingerprint("migraine treatment")) == 12
+
+
+def test_log_route_decision_records_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(
+        "src.api.services.append_jsonl",
+        lambda path, payload: payloads.append((path, payload)),
+    )
+
+    log_route_decision(
+        "/answer",
+        "cloud",
+        0.8,
+        0.5,
+        ("high_complexity",),
+        query="How do I manage RRMS?",
+        retrieved_count=3,
+        top_score=0.91,
+        evidence="strong",
+        outcome=NO_EVIDENCE_RESPONSE,
+    )
+
+    assert payloads
+    _, payload = payloads[0]
+    assert payload["endpoint"] == "/answer"
+    assert payload["provider"] == "cloud"
+    assert payload["reasons"] == ["high_complexity"]
+    assert payload["retrieved_count"] == 3
+    assert payload["top_score"] == 0.91
+    assert payload["evidence"] == "strong"
+    assert payload["outcome"] == NO_EVIDENCE_RESPONSE
+    assert isinstance(payload["query_hash"], str)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.api.services import NO_EVIDENCE_RESPONSE, evidence_level, low_evidence_note
 from src.config import llm_config
 from src.orchestration.generate import RAGResponse, generate
 from src.retrieval.retrieve import retrieve
@@ -32,13 +33,18 @@ def ask(
     if not context:
         # Return a fixed response when retrieval returns no supporting context.
         return RAGResponse(
-            answer=(
-                "Sorry, I do not have sufficient supporting sources to answer this "
-                "question."
-            ),
+            answer=NO_EVIDENCE_RESPONSE,
             sources=[],
             query=query,
             model=getattr(settings, "llm_model", llm_config.llm_model),
         )
 
-    return generate(query=query, context=context, settings=settings)
+    evidence = evidence_level(
+        [{"score": source.rerank_score} for source in context]
+    )
+    return generate(
+        query=query,
+        context=context,
+        settings=settings,
+        evidence_note=low_evidence_note(evidence),
+    )

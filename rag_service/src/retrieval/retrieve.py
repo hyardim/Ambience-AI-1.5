@@ -7,6 +7,7 @@ from typing import Any
 
 from ..config import path_config
 from ..utils.logger import setup_logger
+from ..utils.telemetry import append_jsonl
 from .citation import CitedResult, assemble_citations
 from .filters import FilterConfig, apply_filters
 from .fusion import reciprocal_rank_fusion
@@ -18,6 +19,7 @@ from .vector_search import vector_search
 logger = setup_logger(__name__)
 
 DEBUG_ARTIFACT_DIR = path_config.data_debug / "retrieval"
+RETRIEVAL_TELEMETRY_PATH = path_config.logs / "retrieval_metrics.jsonl"
 
 
 def retrieve(
@@ -224,6 +226,30 @@ def retrieve(
 
     total_ms = _ms(total_start)
     logger.info(f"Retrieval complete in {total_ms}ms, returning {len(cited)} results")
+    append_jsonl(
+        RETRIEVAL_TELEMETRY_PATH,
+        {
+            "query_hash": query_hash,
+            "query_preview": query[:120],
+            "top_k": top_k,
+            "specialty": specialty,
+            "source_name": source_name,
+            "doc_type": doc_type,
+            "expand_query": expand_query,
+            "score_threshold": score_threshold,
+            "vector_result_count": len(vector_results),
+            "keyword_result_count": len(keyword_results),
+            "fused_count": len(fused),
+            "filtered_count": len(filtered),
+            "reranked_count": len(reranked),
+            "returned_count": len(cited),
+            "top_returned_score": cited[0].rerank_score if cited else None,
+            "bottom_returned_score": cited[-1].rerank_score if cited else None,
+            "vector_failed": vector_failed,
+            "keyword_failed": keyword_failed,
+            "latency_ms": total_ms,
+        },
+    )
 
     _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
     return cited

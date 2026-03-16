@@ -190,6 +190,39 @@ def _wrap_provider_request_error(
     )
 
 
+def _request_chat_completion_sync(
+    *,
+    provider: ProviderName,
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    temperature: float,
+    timeout_seconds: float,
+) -> str:
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": False,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout_seconds) as client:
+            resp = client.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                json=payload,
+                headers=_auth_headers(api_key),
+            )
+            resp.raise_for_status()
+            data = cast(dict[str, Any], resp.json())
+            return _extract_chat_completion_text(data)
+    except httpx.HTTPError as exc:
+        raise _wrap_provider_request_error(exc, provider=provider) from exc
+
+
 async def request_chat_completion(
     *,
     provider: ProviderName,

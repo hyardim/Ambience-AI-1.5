@@ -38,8 +38,11 @@ from .schemas import (
     SearchResult,
 )
 from .services import (
+    NO_EVIDENCE_RESPONSE,
+    evidence_level,
     filter_chunks,
     log_route_decision,
+    low_evidence_note,
     retrieve_chunks,
     to_search_result,
 )
@@ -47,6 +50,20 @@ from .streaming import ndjson_done_only, streaming_generator
 
 logger = setup_logger(__name__)
 router = APIRouter()
+
+
+def _no_evidence_response(stream: bool) -> AnswerResponse | StreamingResponse:
+    if stream:
+        return StreamingResponse(
+            ndjson_done_only(NO_EVIDENCE_RESPONSE),
+            media_type="application/x-ndjson",
+        )
+    return AnswerResponse(
+        answer=NO_EVIDENCE_RESPONSE,
+        citations_used=[],
+        citations_retrieved=[],
+        citations=[],
+    )
 
 
 @router.post("/ingest", response_model=IngestResponse)
@@ -143,30 +160,17 @@ async def generate_clinical_answer(
         )
         filtered = filter_chunks(request.query, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
-
-        no_result = (
-            "I couldn't find any guideline passage in the indexed sources "
-            "that directly answers this question. Please rephrase or try a "
-            "different query."
-        )
         if not top_chunks and not request.file_context:
-            if request.stream:
-                return StreamingResponse(
-                    ndjson_done_only(no_result),
-                    media_type="application/x-ndjson",
-                )
-            return AnswerResponse(
-                answer=no_result,
-                citations_used=[],
-                citations_retrieved=[],
-                citations=[],
-            )
+            return _no_evidence_response(request.stream)
+
+        evidence = evidence_level(top_chunks)
 
         prompt = build_grounded_prompt(
             request.query,
             top_chunks,
             patient_context=request.patient_context,
             file_context=request.file_context,
+            evidence_note=low_evidence_note(evidence),
         )
         route = select_generation_provider(
             query=request.query,
@@ -180,6 +184,11 @@ async def generate_clinical_answer(
             route.score,
             route.threshold,
             route.reasons,
+            query=request.query,
+            retrieved_count=len(filtered or retrieved),
+            top_score=top_chunks[0]["score"] if top_chunks else None,
+            evidence=evidence,
+            outcome="selected",
         )
         citations_retrieved = [to_search_result(result) for result in top_chunks]
 
@@ -258,6 +267,10 @@ async def revise_clinical_answer(
         )
         filtered = filter_chunks(request.original_query, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
+        if not top_chunks and not request.file_context:
+            return _no_evidence_response(request.stream)
+
+        evidence = evidence_level(top_chunks)
 
         prompt = build_revision_prompt(
             original_question=request.original_query,
@@ -266,6 +279,7 @@ async def revise_clinical_answer(
             chunks=top_chunks,
             patient_context=request.patient_context,
             file_context=request.file_context,
+            evidence_note=low_evidence_note(evidence),
         )
         route = select_generation_provider(
             query=request.original_query,
@@ -280,6 +294,11 @@ async def revise_clinical_answer(
             route.score,
             route.threshold,
             route.reasons,
+            query=request.original_query,
+            retrieved_count=len(filtered or retrieved),
+            top_score=top_chunks[0]["score"] if top_chunks else None,
+            evidence=evidence,
+            outcome="selected",
         )
         citations_retrieved = [to_search_result(result) for result in top_chunks]
 

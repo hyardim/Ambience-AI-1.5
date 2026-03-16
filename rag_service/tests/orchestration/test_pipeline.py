@@ -1,3 +1,4 @@
+from src.api.services import NO_EVIDENCE_RESPONSE
 from src.orchestration.generate import RAGResponse
 from src.orchestration.pipeline import ask
 from src.retrieval.citation import Citation, CitedResult
@@ -73,6 +74,7 @@ def test_ask_wires_retrieve_and_generate(monkeypatch) -> None:
     assert calls["generate"]["query"] == "q"
     assert calls["generate"]["context"] == context
     assert calls["generate"]["settings"] == {"k": "v"}
+    assert calls["generate"]["evidence_note"] is not None
 
 
 def test_ask_returns_polite_when_no_context(monkeypatch) -> None:
@@ -92,5 +94,5 @@ def test_ask_returns_polite_when_no_context(monkeypatch) -> None:
     result = ask(query="q", db_url="postgresql://x")
 
     assert result.sources == []
-    assert "sufficient supporting sources" in result.answer.lower()
+    assert result.answer == NO_EVIDENCE_RESPONSE
     assert calls["generate"] == {}

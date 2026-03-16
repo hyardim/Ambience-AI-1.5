@@ -339,19 +339,23 @@ def chunk_section_group(
     chunks: list[dict[str, Any]] = []
     chunk_index = chunk_index_start
 
-    current_sentences: list[str] = list(overlap_sentences)
-    current_blocks: list[dict[str, Any]] = []
+    current_pairs: list[tuple[str, dict[str, Any]]] = [
+        (sentence, blocks[0]) for sentence in overlap_sentences
+    ]
 
     i = 0
     while i < len(sentence_block_pairs):
         sentence, block = sentence_block_pairs[i]
-        candidate = current_sentences + [sentence]
+        candidate_pairs = current_pairs + [(sentence, block)]
+        candidate = [current_sentence for current_sentence, _ in candidate_pairs]
         candidate_tokens = count_tokens(" ".join(candidate))
 
-        if candidate_tokens > max_chunk_tokens and current_blocks:
+        if candidate_tokens > max_chunk_tokens and current_pairs:
             chunk = _build_text_chunk(
-                sentences=current_sentences,
-                contributing_blocks=current_blocks,
+                sentences=[current_sentence for current_sentence, _ in current_pairs],
+                contributing_blocks=[
+                    current_block for _, current_block in current_pairs
+                ],
                 doc_meta=doc_meta,
                 chunk_index=chunk_index,
             )
@@ -360,21 +364,22 @@ def chunk_section_group(
                 chunk_index += 1
 
             overlap_sentences = _compute_overlap(
-                current_sentences,
+                [current_sentence for current_sentence, _ in current_pairs],
                 overlap_tokens=overlap_tokens,
             )
-            current_sentences = list(overlap_sentences)
-            current_blocks = []
+            overlap_count = len(overlap_sentences)
+            current_pairs = (
+                current_pairs[-overlap_count:] if overlap_count > 0 else []
+            )
         else:
-            current_sentences.append(sentence)
-            current_blocks.append(block)
+            current_pairs.append((sentence, block))
             i += 1
 
     # Emit remaining
-    if current_blocks:
+    if current_pairs:
         chunk = _build_text_chunk(
-            sentences=current_sentences,
-            contributing_blocks=current_blocks,
+            sentences=[current_sentence for current_sentence, _ in current_pairs],
+            contributing_blocks=[current_block for _, current_block in current_pairs],
             doc_meta=doc_meta,
             chunk_index=chunk_index,
         )

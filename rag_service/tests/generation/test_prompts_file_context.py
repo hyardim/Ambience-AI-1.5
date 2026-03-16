@@ -78,6 +78,15 @@ class TestGroundedPromptFileContext:
         assert "Age: 45" in prompt
         assert "3 new T2 lesions" in prompt
 
+    def test_evidence_note_is_included_when_provided(self):
+        prompt = build_grounded_prompt(
+            "What DMT?",
+            _CHUNKS,
+            evidence_note="Evidence is limited.",
+        )
+        assert "EVIDENCE NOTE" in prompt
+        assert "Evidence is limited." in prompt
+
     def test_ordering_patient_context_then_context_then_uploaded_docs(self):
         """Section order: PATIENT CONTEXT → Context: → file content → Question:"""
         prompt = build_grounded_prompt(
@@ -106,6 +115,18 @@ class TestGroundedPromptFileContext:
         assert "Specialty: Neurology" in prompt
         assert "Severity: Urgent" in prompt
         assert "Clinical notes: Recent relapse after steroid taper." in prompt
+
+    def test_patient_context_includes_recent_chat_history(self):
+        prompt = build_grounded_prompt(
+            "What DMT?",
+            _CHUNKS,
+            patient_context={
+                "conversation_history": "User: relapse\nAssistant: review recent MRI",
+            },
+        )
+
+        assert "RECENT CHAT HISTORY" in prompt
+        assert "Assistant: review recent MRI" in prompt
 
 
 class TestRevisionPromptFileContext:
@@ -152,6 +173,18 @@ class TestRevisionPromptFileContext:
         assert "PATIENT CONTEXT" in prompt
         assert "Severity: High" in prompt
         assert "Clinical notes: Two relapses this year." in prompt
+
+    def test_revision_prompt_includes_evidence_note(self):
+        prompt = build_revision_prompt(
+            original_question="What DMT?",
+            previous_answer="Interferon.",
+            specialist_feedback="Escalate.",
+            chunks=_CHUNKS,
+            evidence_note="Evidence is limited.",
+        )
+
+        assert "EVIDENCE NOTE" in prompt
+        assert "Evidence is limited." in prompt
 
     def test_truncate_chunk_text_marks_truncated_content(self):
         text = "A" * 1300

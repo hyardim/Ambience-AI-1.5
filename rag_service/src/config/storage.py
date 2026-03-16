@@ -30,6 +30,8 @@ class DatabaseConfig(AppBaseSettings):
 class EmbeddingConfig(AppBaseSettings):
     embedding_model: str = Field(default="all-MiniLM-L6-v2")
     embedding_dimension: int = Field(default=384)
+    query_max_tokens: int = Field(default=1024)
+    reranker_model: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 
 class ChunkingConfig(AppBaseSettings):

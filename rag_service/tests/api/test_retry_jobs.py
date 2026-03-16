@@ -288,6 +288,9 @@ def _install_stubs() -> None:
     fake_api_services.filter_chunks = MagicMock(
         side_effect=lambda _query, retrieved: retrieved
     )
+    fake_api_services.NO_EVIDENCE_RESPONSE = "No evidence"
+    fake_api_services.evidence_level = MagicMock(return_value="strong")
+    fake_api_services.low_evidence_note = MagicMock(return_value=None)
     fake_api_services.log_route_decision = MagicMock()
     fake_api_services.to_search_result = MagicMock(side_effect=_fake_to_search_result)
 
@@ -420,7 +423,7 @@ def test_answer_returns_non_stream_empty_response(client, main_module):
     )
 
     assert resp.status_code == 200
-    assert "couldn't find any guideline passage" in resp.json()["answer"]
+    assert resp.json()["answer"] == "No evidence"
 
 
 def test_answer_streams_with_results(client, main_module):

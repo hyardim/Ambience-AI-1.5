@@ -162,3 +162,22 @@ async def test_revise_clinical_answer_preserves_http_exceptions(
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "bad stream"
+
+
+@pytest.mark.anyio
+async def test_revise_clinical_answer_returns_no_evidence_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(routes, "retrieve_chunks", lambda query, top_k, specialty: [])
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: [])
+
+    response = await routes.revise_clinical_answer(
+        routes.ReviseRequest(
+            original_query="q",
+            previous_answer="a",
+            feedback="f",
+            stream=False,
+        )
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE

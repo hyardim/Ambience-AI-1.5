@@ -321,6 +321,9 @@ def main_app():
     sys.modules["src.api.services"].filter_chunks = MagicMock(
         side_effect=lambda _query, retrieved: retrieved
     )  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].NO_EVIDENCE_RESPONSE = "No evidence"  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].evidence_level = MagicMock(return_value="strong")  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].low_evidence_note = MagicMock(return_value=None)  # type: ignore[attr-defined]
     sys.modules["src.api.services"].log_route_decision = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.api.services"].to_search_result = MagicMock(
         side_effect=_fake_to_search_result
