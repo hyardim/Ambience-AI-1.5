@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from typing import Any, Optional
+from urllib.parse import quote_plus
 
 from redis.asyncio import Redis
 
@@ -172,6 +173,81 @@ class CacheKeys:
 
     def user_profile(self, user_id: int) -> str:
         return f"{self._prefix}:user:{user_id}:profile"
+
+    def specialist_queue(self, specialty: Optional[str] = None) -> str:
+        specialty_part = specialty or "all"
+        return f"{self._prefix}:specialist:queue:{specialty_part}"
+
+    def specialist_queue_pattern(self) -> str:
+        return f"{self._prefix}:specialist:queue:*"
+
+    def specialist_assigned(self, specialist_id: int) -> str:
+        return f"{self._prefix}:specialist:{specialist_id}:assigned"
+
+    def specialist_assigned_pattern(self, specialist_id: Optional[int] = None) -> str:
+        if specialist_id is None:
+            return f"{self._prefix}:specialist:*:assigned"
+        return f"{self._prefix}:specialist:{specialist_id}:assigned"
+
+    def admin_stats(self) -> str:
+        return f"{self._prefix}:admin:stats"
+
+    def admin_chat_list(
+        self,
+        *,
+        status: Optional[str] = None,
+        specialty: Optional[str] = None,
+        user_id: Optional[int] = None,
+        specialist_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> str:
+        return (
+            f"{self._prefix}:admin:chats:"
+            f"{status or 'all'}:{specialty or 'all'}:{user_id or 'all'}:"
+            f"{specialist_id or 'all'}:{skip}:{limit}"
+        )
+
+    def admin_chat_list_pattern(self) -> str:
+        return f"{self._prefix}:admin:chats:*"
+
+    def admin_chat_detail(self, chat_id: int) -> str:
+        return f"{self._prefix}:admin:chat:{chat_id}"
+
+    def admin_chat_detail_pattern(self, chat_id: Optional[int] = None) -> str:
+        if chat_id is None:
+            return f"{self._prefix}:admin:chat:*"
+        return f"{self._prefix}:admin:chat:{chat_id}"
+
+    def admin_audit_logs(
+        self,
+        *,
+        action: Optional[str] = None,
+        category: Optional[str] = None,
+        search: Optional[str] = None,
+        user_id: Optional[int] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> str:
+        return (
+            f"{self._prefix}:admin:logs:"
+            f"{action or 'all'}:{category or 'all'}:{quote_plus(search or 'all')}:"
+            f"{user_id or 'all'}:{date_from or 'all'}:{date_to or 'all'}:{limit}"
+        )
+
+    def admin_audit_logs_pattern(self) -> str:
+        return f"{self._prefix}:admin:logs:*"
+
+    def notifications(self, user_id: int, *, unread_only: bool = False) -> str:
+        state = "unread" if unread_only else "all"
+        return f"{self._prefix}:user:{user_id}:notifications:{state}"
+
+    def notifications_pattern(self, user_id: int) -> str:
+        return f"{self._prefix}:user:{user_id}:notifications:*"
+
+    def notifications_unread_count(self, user_id: int) -> str:
+        return f"{self._prefix}:user:{user_id}:notifications:count:unread"
 
 
 cache = RedisCache()

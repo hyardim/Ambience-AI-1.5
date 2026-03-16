@@ -22,4 +22,8 @@ class RetryConfig(AppBaseSettings):
     retry_max_attempts: int = Field(default=3)
     retry_backoff_seconds: int = Field(default=10)
     retry_backoff_multiplier: int = Field(default=2)
+    retry_max_backoff_seconds: int = Field(default=300)
     retry_job_ttl_seconds: int = Field(default=86400)
+    retry_queue_job_timeout_seconds: int = Field(default=180)
+    retry_queue_result_ttl_seconds: int = Field(default=60)
+    retry_queue_failure_ttl_seconds: int = Field(default=86400)

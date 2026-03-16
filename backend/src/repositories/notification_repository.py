@@ -44,7 +44,7 @@ def list_for_user(
 
     query = db.query(Notification).filter(Notification.user_id == user_id)
     if unread_only:
-        query = query.filter(Notification.is_read == False)
+        query = query.filter(not Notification.is_read)
     return query.order_by(Notification.created_at.desc()).all()
 
 
@@ -66,8 +66,16 @@ def mark_read(
 def mark_all_read(db: Session, user_id: int) -> int:
     count = (
         db.query(Notification)
-        .filter(Notification.user_id == user_id, Notification.is_read == False)
+        .filter(Notification.user_id == user_id, not Notification.is_read)
         .update({"is_read": True})
     )
     db.commit()
     return count
+
+
+def count_unread(db: Session, user_id: int) -> int:
+    return (
+        db.query(Notification)
+        .filter(Notification.user_id == user_id, not Notification.is_read)
+        .count()
+    )

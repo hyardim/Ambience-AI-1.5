@@ -42,6 +42,7 @@ export function SpecialistQueryDetailPage() {
   const [showManualResponseModal, setShowManualResponseModal] = useState(false);
   const [manualResponseContent, setManualResponseContent] = useState('');
   const [manualResponseSources, setManualResponseSources] = useState('');
+  const [manualResponseFiles, setManualResponseFiles] = useState<File[]>([]);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Which message the current modal action targets
@@ -70,10 +71,35 @@ export function SpecialistQueryDetailPage() {
     { chatId: chat?.id ?? null, onRefresh: refreshData },
   );
 
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    if (!queryId) return;
+    if (!options?.silent) {
+      setLoading(true);
+      setError('');
+    }
+    try {
+      const [profile, chatData] = await Promise.all([
+        getProfile(),
+        getSpecialistChatDetail(Number(queryId)),
+      ]);
+      setMyUserId(profile.id);
+      setChat(chatData);
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
+    } catch (err) {
+      if (!options?.silent) {
+        setError(err instanceof Error ? err.message : 'Failed to load consultation');
+      }
+    } finally {
+      if (!options?.silent) {
+        setLoading(false);
+      }
+    }
+  }, [queryId, username]);
+
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
-    loadData();
-  }, [queryId]);
+    void loadData();
+  }, [loadData]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -100,31 +126,6 @@ export function SpecialistQueryDetailPage() {
       stopPolling();
     }
   }, [queryId, shouldPoll, startPolling, stopPolling]);
-
-  const loadData = async (options?: { silent?: boolean }) => {
-    if (!queryId) return;
-    if (!options?.silent) {
-      setLoading(true);
-      setError('');
-    }
-    try {
-      const [profile, chatData] = await Promise.all([
-        getProfile(),
-        getSpecialistChatDetail(Number(queryId)),
-      ]);
-      setMyUserId(profile.id);
-      setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
-    } catch (err) {
-      if (!options?.silent) {
-        setError(err instanceof Error ? err.message : 'Failed to load consultation');
-      }
-    } finally {
-      if (!options?.silent) {
-        setLoading(false);
-      }
-    }
-  };
 
   // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
@@ -218,6 +219,15 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
+      const MAX_FILE_SIZE = 3 * 1024 * 1024;
+      const oversized = manualResponseFiles.filter((file) => file.size > MAX_FILE_SIZE);
+      if (oversized.length > 0) {
+        setError(`File(s) too large: ${oversized.map((file) => file.name).join(', ')}. Maximum size is 3 MB.`);
+        return;
+      }
+      if (manualResponseFiles.length > 0) {
+        await Promise.all(manualResponseFiles.map((file) => uploadChatFile(chat.id, file)));
+      }
       const sources = manualResponseSources
         .split('\n')
         .map((line) => line.trim())
@@ -233,6 +243,7 @@ export function SpecialistQueryDetailPage() {
       setShowManualResponseModal(false);
       setManualResponseContent('');
       setManualResponseSources('');
+      setManualResponseFiles([]);
       setReviewTargetMessageId(null);
       await loadData();
     } catch (err) {
@@ -675,12 +686,30 @@ export function SpecialistQueryDetailPage() {
                 placeholder="Optional. Add one source per line."
               />
             </div>
+            <div className="mt-4 mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Attach files
+              </label>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.txt,.md,.rtf"
+                onChange={(e) => setManualResponseFiles(Array.from(e.target.files || []))}
+                className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:font-medium file:text-purple-700 hover:file:bg-purple-100"
+              />
+              {manualResponseFiles.length > 0 && (
+                <p className="mt-2 text-sm text-gray-500">
+                  {manualResponseFiles.length} file(s) will be uploaded to this chat before the manual response is sent.
+                </p>
+              )}
+            </div>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => {
                   setShowManualResponseModal(false);
                   setManualResponseContent('');
                   setManualResponseSources('');
+                  setManualResponseFiles([]);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
               >

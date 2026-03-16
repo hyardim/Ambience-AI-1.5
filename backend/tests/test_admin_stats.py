@@ -4,9 +4,6 @@ Tests for:
   Sub-issue 3 — Privacy hardening (identifiers, not PII, in admin list views)
 """
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # GET /admin/stats — sub-issue 1
 # ---------------------------------------------------------------------------
@@ -82,7 +79,11 @@ class TestAuditLogPrivacy:
 
     def test_audit_log_identifier_format_is_role_underscore_id(self, client, admin_headers, registered_gp):
         resp = client.get("/admin/logs", headers=admin_headers)
-        gp_logs = [l for l in resp.json() if l["user_identifier"] and l["user_identifier"].startswith("gp_")]
+        gp_logs = [
+            log
+            for log in resp.json()
+            if log["user_identifier"] and log["user_identifier"].startswith("gp_")
+        ]
         assert len(gp_logs) > 0
         for log in gp_logs:
             parts = log["user_identifier"].split("_")
@@ -105,7 +106,11 @@ class TestAuditLogPrivacy:
 
     def test_audit_log_auth_actions_are_categorised_correctly(self, client, admin_headers, registered_gp):
         resp = client.get("/admin/logs", headers=admin_headers)
-        auth_logs = [l for l in resp.json() if l["action"] in ("REGISTER", "LOGIN", "LOGOUT")]
+        auth_logs = [
+            log
+            for log in resp.json()
+            if log["action"] in ("REGISTER", "LOGIN", "LOGOUT")
+        ]
         for log in auth_logs:
             assert log["category"] == "AUTH"
 

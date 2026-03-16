@@ -64,7 +64,13 @@ def get_redis_connection() -> Redis:
 
 def get_retry_queue(connection: Redis | None = None) -> Queue:
     redis_conn = connection or get_redis_connection()
-    return Queue(name=QUEUE_NAME, connection=redis_conn)
+    return Queue(
+        name=QUEUE_NAME,
+        connection=redis_conn,
+        default_timeout=retry_config.retry_queue_job_timeout_seconds,
+        result_ttl=retry_config.retry_queue_result_ttl_seconds,
+        failure_ttl=retry_config.retry_queue_failure_ttl_seconds,
+    )
 
 
 def _extract_retry_payload(

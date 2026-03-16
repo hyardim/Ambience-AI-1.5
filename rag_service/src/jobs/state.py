@@ -67,7 +67,8 @@ def compute_backoff_seconds(attempt_count: int) -> int:
     seconds = retry_config.retry_backoff_seconds * (
         retry_config.retry_backoff_multiplier**exponent
     )
-    return max(int(seconds), 1)
+    capped = min(int(seconds), retry_config.retry_max_backoff_seconds)
+    return max(capped, 1)
 
 
 def update_job_state(connection: Any, job_id: str, **fields: str) -> None:

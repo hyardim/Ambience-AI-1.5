@@ -25,6 +25,7 @@ from src.services.chat_service import (
     _extract_text,
     _select_rag_citations,
 )
+from src.services.notification_service import invalidate_notification_caches
 from src.utils.cache import cache, cache_keys
 from src.core.chat_policy import can_view_chat
 
@@ -32,6 +33,43 @@ from src.core.chat_policy import can_view_chat
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 RAG_REQUEST_TIMEOUT_SECONDS = float(
     os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+
+
+def _invalidate_specialist_lists(
+    *,
+    specialty: str | None = None,
+    specialist_id: int | None = None,
+) -> None:
+    if specialty is not None:
+        cache.delete_sync(
+            cache_keys.specialist_queue(specialty), resource="specialist_queue"
+        )
+    cache.delete_pattern_sync(
+        cache_keys.specialist_queue_pattern(), resource="specialist_queue"
+    )
+    if specialist_id is not None:
+        cache.delete_sync(
+            cache_keys.specialist_assigned(specialist_id),
+            user_id=specialist_id,
+            resource="specialist_assigned",
+        )
+    else:
+        cache.delete_pattern_sync(
+            cache_keys.specialist_assigned_pattern(), resource="specialist_assigned"
+        )
+
+
+def _invalidate_admin_stats_cache() -> None:
+    cache.delete_sync(cache_keys.admin_stats(), resource="admin_stats")
+
+
+def _invalidate_admin_chat_caches(chat_id: int | None = None) -> None:
+    cache.delete_pattern_sync(
+        cache_keys.admin_chat_list_pattern(), resource="admin_chat_list"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.admin_chat_detail_pattern(chat_id), resource="admin_chat_detail"
+    )
 
 
 def _build_manual_citations(sources: list[str] | None) -> list[dict] | None:
@@ -58,14 +96,36 @@ def _build_manual_citations(sources: list[str] | None) -> list[dict] | None:
 
 
 def get_queue(db: Session, specialist: User) -> list[ChatResponse]:
+    cache_key = cache_keys.specialist_queue(specialist.specialty)
+    cached = cache.get_sync(
+        cache_key, user_id=specialist.id, resource="specialist_queue"
+    )
+    if cached is not None:
+        return [ChatResponse(**item) for item in cached]
+
     query = db.query(Chat).filter(Chat.status == ChatStatus.SUBMITTED)
     if specialist.specialty:
         query = query.filter(Chat.specialty == specialist.specialty)
     chats = query.order_by(Chat.created_at.asc()).all()
-    return [chat_to_response(c) for c in chats]
+    response = [chat_to_response(c) for c in chats]
+    cache.set_sync(
+        cache_key,
+        [item.model_dump() for item in response],
+        ttl=settings.CACHE_SPECIALIST_LIST_TTL,
+        user_id=specialist.id,
+        resource="specialist_queue",
+    )
+    return response
 
 
 def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
+    cache_key = cache_keys.specialist_assigned(specialist.id)
+    cached = cache.get_sync(
+        cache_key, user_id=specialist.id, resource="specialist_assigned"
+    )
+    if cached is not None:
+        return [ChatResponse(**item) for item in cached]
+
     chats = (
         db.query(Chat)
         .filter(
@@ -75,7 +135,15 @@ def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
         .order_by(Chat.assigned_at.asc())
         .all()
     )
-    return [chat_to_response(c) for c in chats]
+    response = [chat_to_response(c) for c in chats]
+    cache.set_sync(
+        cache_key,
+        [item.model_dump() for item in response],
+        ttl=settings.CACHE_SPECIALIST_LIST_TTL,
+        user_id=specialist.id,
+        resource="specialist_assigned",
+    )
+    return response
 
 
 def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMessages:
@@ -145,18 +213,19 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
         body=f"Your chat '{chat.title}' has been picked up by {specialist.full_name or specialist.email}.",
         chat_id=chat.id,
     )
+    invalidate_notification_caches(chat.user_id)
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=specialist.id, resource="chat_detail"
     )
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
-    cache.delete_pattern_sync(
-        cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
+    _invalidate_specialist_lists(
+        specialty=chat.specialty,
+        specialist_id=specialist.id,
     )
-    cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
-    )
+    _invalidate_admin_chat_caches(chat.id)
+    _invalidate_admin_stats_cache()
     return chat_to_response(chat)
 
 
@@ -219,6 +288,7 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
             ),
             chat_id=chat.id,
         )
+        invalidate_notification_caches(chat.user_id)
     else:
         # approve or reject → terminal state
         new_status = ChatStatus.APPROVED if body.action == "approve" else ChatStatus.REJECTED
@@ -242,6 +312,7 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
                 body=f"Your chat '{chat.title}' was approved by {specialist.full_name or specialist.email}.",
                 chat_id=chat.id,
             )
+            invalidate_notification_caches(chat.user_id)
         else:
             notification_repository.create(
                 db, user_id=chat.user_id,
@@ -250,6 +321,7 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
                 body=f"Your chat '{chat.title}' was rejected. Feedback: {body.feedback or 'none'}",
                 chat_id=chat.id,
             )
+            invalidate_notification_caches(chat.user_id)
 
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
@@ -257,6 +329,12 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
+    _invalidate_specialist_lists(
+        specialty=chat.specialty,
+        specialist_id=specialist.id,
+    )
+    _invalidate_admin_chat_caches(chat.id)
+    _invalidate_admin_stats_cache()
     return chat_to_response(chat)
 
 
@@ -324,6 +402,7 @@ def review_message(
             ),
             chat_id=chat.id,
         )
+        invalidate_notification_caches(chat.user_id)
     elif body.action == "manual_response":
         # Reject the AI message without regeneration; specialist provides replacement
         # Send the specialist's replacement as a specialist message
@@ -349,6 +428,7 @@ def review_message(
             ),
             chat_id=chat.id,
         )
+        invalidate_notification_caches(chat.user_id)
         # Ensure status is REVIEWING
         if chat.status != ChatStatus.REVIEWING:
             chat = chat_repository.update(
@@ -373,6 +453,12 @@ def review_message(
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
+    _invalidate_specialist_lists(
+        specialty=chat.specialty,
+        specialist_id=specialist.id,
+    )
+    _invalidate_admin_chat_caches(chat.id)
+    _invalidate_admin_stats_cache()
     return chat_to_response(chat)
 
 
@@ -532,13 +618,25 @@ def _do_revise(
     placeholder.is_generating = False
     db.commit()
     db.refresh(placeholder)
+    chat = db.query(Chat).filter(Chat.id == placeholder.chat_id).first()
 
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(placeholder.chat_id), resource="chat_detail"
     )
+    if chat:
+        cache.delete_pattern_sync(
+            cache_keys.chat_list_pattern(chat.user_id),
+            user_id=chat.user_id,
+            resource="chat_list",
+        )
+    _invalidate_admin_chat_caches(placeholder.chat_id)
+    _invalidate_specialist_lists(
+        specialty=chat.specialty if chat else None,
+        specialist_id=chat.specialist_id if chat else None,
+    )
+    _invalidate_admin_stats_cache()
 
     try:
-        chat = db.query(Chat).filter(Chat.id == placeholder.chat_id).first()
         audit_repository.log(
             db,
             user_id=chat.specialist_id if chat else None,
@@ -676,6 +774,24 @@ def _regenerate_ai_response_task(
         db.commit()
         db.refresh(placeholder)
 
+        if chat:
+            cache.delete_pattern_sync(
+                cache_keys.chat_detail_pattern(chat_id),
+                user_id=chat.user_id,
+                resource="chat_detail",
+            )
+            cache.delete_pattern_sync(
+                cache_keys.chat_list_pattern(chat.user_id),
+                user_id=chat.user_id,
+                resource="chat_list",
+            )
+            _invalidate_specialist_lists(
+                specialty=chat.specialty,
+                specialist_id=chat.specialist_id,
+            )
+        _invalidate_admin_chat_caches(chat_id)
+        _invalidate_admin_stats_cache()
+
         # Publish final content + complete
         chat_event_bus.publish_threadsafe(
             chat_id,
@@ -750,10 +866,17 @@ def send_message(db: Session, specialist: User, chat_id: int, content: str) -> d
         body=f"{specialist.full_name or specialist.email} sent a message in '{chat.title}'.",
         chat_id=chat.id,
     )
+    invalidate_notification_caches(chat.user_id)
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=specialist.id, resource="chat_detail"
     )
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
+    _invalidate_specialist_lists(
+        specialty=chat.specialty,
+        specialist_id=specialist.id,
+    )
+    _invalidate_admin_chat_caches(chat.id)
+    _invalidate_admin_stats_cache()
     return {"status": "Message sent", "message_id": msg.id}

@@ -7,11 +7,24 @@ from sqlalchemy.orm import Session
 
 from src.core.config import settings
 from src.db.models import AuditLog, Chat, ChatStatus, Message, User, UserRole
-from src.repositories import audit_repository, chat_repository, message_repository, user_repository
+from src.repositories import chat_repository, message_repository, user_repository
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
 from src.utils.cache import cache, cache_keys
+
+
+def _invalidate_admin_stats_cache() -> None:
+    cache.delete_sync(cache_keys.admin_stats(), resource="admin_stats")
+
+
+def _invalidate_admin_chat_caches(chat_id: Optional[int] = None) -> None:
+    cache.delete_pattern_sync(
+        cache_keys.admin_chat_list_pattern(), resource="admin_chat_list"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.admin_chat_detail_pattern(chat_id), resource="admin_chat_detail"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -19,6 +32,11 @@ from src.utils.cache import cache, cache_keys
 # ---------------------------------------------------------------------------
 
 def get_stats(db: Session) -> dict:
+    cache_key = cache_keys.admin_stats()
+    cached = cache.get_sync(cache_key, resource="admin_stats")
+    if cached is not None:
+        return cached
+
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
 
     total_ai = db.query(func.count(Message.id)).filter(
@@ -45,7 +63,7 @@ def get_stats(db: Session) -> dict:
     active_users_by_role = {
         row[0].value: row[1]
         for row in db.query(User.role, func.count(User.id))
-        .filter(User.is_active == True)
+        .filter(User.is_active)
         .group_by(User.role).all()
     }
 
@@ -60,7 +78,7 @@ def get_stats(db: Session) -> dict:
     daily_ai_queries = [
         {"date": str(row[0])[:10], "count": row[1]} for row in daily_rows]
 
-    return {
+    stats = {
         "total_ai_responses": total_ai,
         "rag_grounded_responses": rag_grounded,
         "specialist_responses": specialist_responses,
@@ -70,6 +88,13 @@ def get_stats(db: Session) -> dict:
         "active_users_by_role": active_users_by_role,
         "daily_ai_queries": daily_ai_queries,
     }
+    cache.set_sync(
+        cache_key,
+        stats,
+        ttl=settings.CACHE_ADMIN_STATS_TTL,
+        resource="admin_stats",
+    )
+    return stats
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +170,7 @@ def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
     user = user_repository.update(db, user, **fields)
     cache.delete_sync(cache_keys.user_profile(user_id),
                       user_id=user_id, resource="user_profile")
+    _invalidate_admin_stats_cache()
     return UserOut.model_validate(user)
 
 
@@ -155,6 +181,7 @@ def deactivate_user(db: Session, user_id: int) -> UserOut:
     user = user_repository.update(db, user, is_active=False)
     cache.delete_sync(cache_keys.user_profile(user_id),
                       user_id=user_id, resource="user_profile")
+    _invalidate_admin_stats_cache()
     return UserOut.model_validate(user)
 
 
@@ -171,6 +198,18 @@ def list_all_chats(
     skip: int = 0,
     limit: int = 100,
 ) -> list[dict]:
+    cache_key = cache_keys.admin_chat_list(
+        status=status,
+        specialty=specialty,
+        user_id=user_id,
+        specialist_id=specialist_id,
+        skip=skip,
+        limit=limit,
+    )
+    cached = cache.get_sync(cache_key, resource="admin_chat_list")
+    if cached is not None:
+        return cached
+
     query = db.query(Chat)
     if status:
         try:
@@ -194,16 +233,33 @@ def list_all_chats(
         entry["owner_identifier"] = f"{c.owner.role.value}_{c.owner.id}" if c.owner else None
         entry["specialist_identifier"] = f"{c.specialist.role.value}_{c.specialist.id}" if c.specialist else None
         result.append(entry)
+    cache.set_sync(
+        cache_key,
+        result,
+        ttl=settings.CACHE_ADMIN_CHAT_TTL,
+        resource="admin_chat_list",
+    )
     return result
 
 
 def get_any_chat(db: Session, chat_id: int) -> ChatWithMessages:
+    cache_key = cache_keys.admin_chat_detail(chat_id)
+    cached = cache.get_sync(cache_key, resource="admin_chat_detail")
+    if cached is not None:
+        return ChatWithMessages(**cached)
+
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     messages = message_repository.list_for_chat(db, chat.id)
     resp = ChatWithMessages(**chat_to_response(chat).model_dump())
     resp.messages = [msg_to_response(m) for m in messages]
+    cache.set_sync(
+        cache_key,
+        resp.model_dump(),
+        ttl=settings.CACHE_ADMIN_CHAT_TTL,
+        resource="admin_chat_detail",
+    )
     return resp
 
 
@@ -233,6 +289,8 @@ def update_any_chat(db: Session, chat_id: int, payload: ChatUpdate) -> dict:
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
+    _invalidate_admin_chat_caches(chat_id)
+    _invalidate_admin_stats_cache()
     entry = chat_to_response(chat).model_dump()
     entry["owner_identifier"] = f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
     entry["specialist_identifier"] = f"{chat.specialist.role.value}_{chat.specialist.id}" if chat.specialist else None
@@ -250,6 +308,8 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
     )
+    _invalidate_admin_chat_caches(chat_id)
+    _invalidate_admin_stats_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +341,19 @@ def list_audit_logs(
     date_to: Optional[datetime] = None,
     limit: int = 200,
 ) -> list[dict]:
+    cache_key = cache_keys.admin_audit_logs(
+        action=action.upper() if action else None,
+        category=category.upper() if category else None,
+        search=search,
+        user_id=user_id,
+        date_from=date_from.isoformat() if date_from else None,
+        date_to=date_to.isoformat() if date_to else None,
+        limit=limit,
+    )
+    cached = cache.get_sync(cache_key, resource="admin_audit_logs")
+    if cached is not None:
+        return cached
+
     query = db.query(AuditLog)
     if category:
         allowed = _ACTION_CATEGORIES.get(category.upper(), set())
@@ -299,7 +372,7 @@ def list_audit_logs(
             or_(AuditLog.action.ilike(term), AuditLog.details.ilike(term)))
 
     logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
-    return [
+    result = [
         {
             "id": log.id,
             "user_id": log.user_id,
@@ -311,3 +384,10 @@ def list_audit_logs(
         }
         for log in logs
     ]
+    cache.set_sync(
+        cache_key,
+        result,
+        ttl=settings.CACHE_ADMIN_AUDIT_LOG_TTL,
+        resource="admin_audit_logs",
+    )
+    return result

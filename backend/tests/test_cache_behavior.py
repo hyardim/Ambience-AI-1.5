@@ -2,7 +2,9 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from src.db.models import ChatStatus
+from src.services import admin_service
 from src.services import chat_service
+from src.services import specialist_service
 
 
 def test_list_chats_cache_hit_uses_cached_data(monkeypatch):
@@ -156,3 +158,139 @@ def test_create_chat_invalidates_list_cache(monkeypatch):
     result = chat_service.create_chat(db=None, user=user, data=payload)
     assert result.title == "New Chat"
     assert captured["pattern"] is not None
+
+
+def test_specialist_queue_cache_hit_uses_cached_data(monkeypatch):
+    cached = [
+        {
+            "id": 1,
+            "title": "Queued Chat",
+            "status": "submitted",
+            "specialty": "neurology",
+            "severity": None,
+            "patient_age": None,
+            "patient_gender": None,
+            "patient_notes": None,
+            "specialist_id": None,
+            "assigned_at": None,
+            "reviewed_at": None,
+            "review_feedback": None,
+            "created_at": "2024-01-01T00:00:00",
+            "user_id": 7,
+        }
+    ]
+
+    monkeypatch.setattr(specialist_service.cache, "get_sync", lambda *_a, **_k: cached)
+
+    specialist = SimpleNamespace(id=5, specialty="neurology")
+    result = specialist_service.get_queue(db=None, specialist=specialist)
+    assert result[0].title == "Queued Chat"
+
+
+def test_admin_stats_cache_hit_uses_cached_data(monkeypatch):
+    cached = {
+        "total_ai_responses": 1,
+        "rag_grounded_responses": 1,
+        "specialist_responses": 0,
+        "active_consultations": 1,
+        "chats_by_status": {"submitted": 1},
+        "chats_by_specialty": {"neurology": 1},
+        "active_users_by_role": {"gp": 1},
+        "daily_ai_queries": [],
+    }
+
+    monkeypatch.setattr(admin_service.cache, "get_sync", lambda *_a, **_k: cached)
+
+    result = admin_service.get_stats(db=None)
+    assert result == cached
+
+
+def test_list_notifications_cache_hit_uses_cached_data(monkeypatch):
+    from src.services import notification_service
+
+    cached = [
+        {
+            "id": 1,
+            "type": "chat_assigned",
+            "title": "Assigned",
+            "body": "A specialist picked this up",
+            "chat_id": 4,
+            "is_read": False,
+            "created_at": "2024-01-01T00:00:00",
+        }
+    ]
+
+    monkeypatch.setattr(notification_service.cache, "get_sync", lambda *_a, **_k: cached)
+    monkeypatch.setattr(
+        notification_service.notification_repository,
+        "list_for_user",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("repo should not be called when cache hits")),
+    )
+
+    user = SimpleNamespace(id=7)
+    result = notification_service.list_notifications(db=None, user=user)
+    assert result[0].title == "Assigned"
+
+
+def test_notification_unread_count_cache_hit_uses_cached_data(monkeypatch):
+    from src.services import notification_service
+
+    monkeypatch.setattr(
+        notification_service.cache,
+        "get_sync",
+        lambda *_a, **_k: {"unread_count": 4},
+    )
+    monkeypatch.setattr(
+        notification_service.notification_repository,
+        "count_unread",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("repo should not be called when cache hits")),
+    )
+
+    user = SimpleNamespace(id=7)
+    result = notification_service.get_unread_count(db=None, user=user)
+    assert result == {"unread_count": 4}
+
+
+def test_admin_chat_list_cache_hit_uses_cached_data(monkeypatch):
+    cached = [
+        {
+            "id": 2,
+            "title": "Admin Cached Chat",
+            "status": "open",
+            "specialty": "neurology",
+            "severity": None,
+            "patient_age": None,
+            "patient_gender": None,
+            "patient_notes": None,
+            "specialist_id": None,
+            "assigned_at": None,
+            "reviewed_at": None,
+            "review_feedback": None,
+            "created_at": "2024-01-01T00:00:00",
+            "user_id": 9,
+            "owner_identifier": "gp_9",
+            "specialist_identifier": None,
+        }
+    ]
+
+    monkeypatch.setattr(admin_service.cache, "get_sync", lambda *_a, **_k: cached)
+    result = admin_service.list_all_chats(db=None)
+    assert result == cached
+
+
+def test_admin_audit_logs_cache_hit_uses_cached_data(monkeypatch):
+    cached = [
+        {
+            "id": 1,
+            "user_id": 3,
+            "user_identifier": "gp_3",
+            "action": "REGISTER",
+            "category": "AUTH",
+            "details": None,
+            "timestamp": "2024-01-01T00:00:00",
+        }
+    ]
+
+    monkeypatch.setattr(admin_service.cache, "get_sync", lambda *_a, **_k: cached)
+    result = admin_service.list_audit_logs(db=None)
+    assert result == cached

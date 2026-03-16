@@ -18,6 +18,15 @@ class Settings:
     CACHE_CHAT_LIST_TTL: int = int(os.getenv("CACHE_CHAT_LIST_TTL", "30"))
     CACHE_CHAT_DETAIL_TTL: int = int(os.getenv("CACHE_CHAT_DETAIL_TTL", "60"))
     CACHE_PROFILE_TTL: int = int(os.getenv("CACHE_PROFILE_TTL", "300"))
+    CACHE_SPECIALIST_LIST_TTL: int = int(
+        os.getenv("CACHE_SPECIALIST_LIST_TTL", "30")
+    )
+    CACHE_ADMIN_STATS_TTL: int = int(os.getenv("CACHE_ADMIN_STATS_TTL", "30"))
+    CACHE_ADMIN_CHAT_TTL: int = int(os.getenv("CACHE_ADMIN_CHAT_TTL", "30"))
+    CACHE_ADMIN_AUDIT_LOG_TTL: int = int(
+        os.getenv("CACHE_ADMIN_AUDIT_LOG_TTL", "15")
+    )
+    CACHE_NOTIFICATION_TTL: int = int(os.getenv("CACHE_NOTIFICATION_TTL", "30"))
 
 
 settings = Settings()

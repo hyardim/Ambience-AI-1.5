@@ -121,6 +121,16 @@ class TestNotifications:
         assert resp.status_code == 200
         assert resp.json()["is_read"] is True
 
+    def test_unread_count_endpoint(
+        self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
+    ):
+        specialist_id = registered_specialist["user"]["id"]
+        _assign(client, specialist_headers, submitted_chat["id"], specialist_id)
+
+        resp = client.get("/notifications/unread-count", headers=gp_headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"unread_count": 1}
+
     def test_mark_all_read(
         self, client, gp_headers, specialist_headers, submitted_chat, registered_specialist
     ):

@@ -211,6 +211,15 @@ def test_compute_backoff_seconds_never_below_one(
     assert _compute_backoff_seconds(0) == 1
 
 
+def test_compute_backoff_seconds_respects_max_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_seconds", 100)
+    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_multiplier", 10)
+    monkeypatch.setattr("src.jobs.retry.retry_config.retry_max_backoff_seconds", 250)
+    assert _compute_backoff_seconds(4) == 250
+
+
 def test_parse_citation_group_handles_ranges_and_invalid_tokens() -> None:
     assert _parse_citation_group("1, 3-4, nope, 7-") == [1, 3, 4]
 
@@ -265,6 +274,26 @@ def test_get_retry_queue_uses_existing_connection(fake_backend) -> None:
     redis_conn, _ = fake_backend
     queue = get_retry_queue(redis_conn)
     assert queue.connection is redis_conn
+
+
+def test_get_retry_queue_applies_queue_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class DummyQueue:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("src.jobs.retry.Queue", DummyQueue)
+
+    queue = get_retry_queue(connection="redis-conn")
+
+    assert isinstance(queue, DummyQueue)
+    assert captured["connection"] == "redis-conn"
+    assert captured["default_timeout"] > 0
+    assert captured["result_ttl"] >= 0
+    assert captured["failure_ttl"] > 0
 
 
 def test_get_redis_connection_uses_config(monkeypatch: pytest.MonkeyPatch) -> None:
