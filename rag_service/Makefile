@@ -1,7 +1,9 @@
 -include .env
 export
 
-.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query run-retry-worker
+COMPOSE := docker compose
+
+.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-retry-worker
 
 help:
 	@echo "Available commands:"
@@ -23,7 +25,6 @@ help:
 	@echo "                           Required: INPUT=... SOURCE=..."
 	@echo "                           Optional: DRY_RUN=1 DB_URL=... SINCE=YYYY-MM-DD MAX_FILES=N WRITE_DEBUG=1 LOG_LEVEL=..."
 	@echo "  make run-retry-worker   - Start Redis retry worker for /answer and /revise"
-# 	@echo "  make run-query          - Run RAG query"
 
 install:
 	pip install -e .
@@ -43,17 +44,17 @@ setup:
 	@echo "Setup complete! Edit .env with your configuration"
 
 db-up:
-	docker-compose up -d
-	@echo "Waiting for database to be ready..."
+	$(COMPOSE) up -d db_vector redis
+	@echo "Waiting for services to be ready..."
 	@sleep 5
-	@echo "Database is ready!"
+	@echo "Database and Redis are ready."
 
 db-down:
-	docker-compose down
+	$(COMPOSE) down
 
 db-reset:
-	docker-compose down -v
-	docker-compose up -d
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d db_vector redis
 	@sleep 5
 
 db-migrate:
@@ -108,6 +109,3 @@ run-ingest:
 
 run-retry-worker:
 	python scripts/workers/run_retry_worker.py
-
-# run-query:
-# 	python scripts/query.py
