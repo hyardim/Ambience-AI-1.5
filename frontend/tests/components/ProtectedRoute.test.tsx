@@ -54,6 +54,7 @@ describe('ProtectedRoute', () => {
                 login: async () => 'gp',
                 register: async () => 'gp',
                 logout: () => {},
+                setUserProfile: () => {},
               }}
             >
               <ProtectedRoute allowedRoles={['gp']}>

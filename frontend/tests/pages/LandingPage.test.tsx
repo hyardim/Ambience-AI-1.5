@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Routes, Route } from 'react-router-dom';
 import { LandingPage } from '@/pages/LandingPage';
@@ -21,6 +21,7 @@ function renderLanding(route = '/', authOverride?: Partial<AuthContextValue>) {
     login: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
+    setUserProfile: vi.fn(),
   };
 
   const content = (
@@ -55,7 +56,9 @@ describe('LandingPage', () => {
     renderLanding();
     const user = userEvent.setup();
 
-    expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
+    });
     expect(screen.getByText(/Admin User/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open Portal/i })).toHaveAttribute('href', '/admin/users');
 
@@ -68,6 +71,9 @@ describe('LandingPage', () => {
     renderLanding();
     const user = userEvent.setup();
 
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Open Portal' })).toBeInTheDocument();
+    });
     await user.click(screen.getByRole('link', { name: 'Open Portal' }));
     expect(screen.getByText('Specialist Portal')).toBeInTheDocument();
   });
@@ -77,24 +83,31 @@ describe('LandingPage', () => {
     renderLanding();
     const user = userEvent.setup();
 
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Open Portal' })).toBeInTheDocument();
+    });
     await user.click(screen.getByRole('link', { name: 'Open Portal' }));
     expect(screen.getByText('GP Portal')).toBeInTheDocument();
 
     renderLanding('/');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+    });
     await user.click(screen.getByRole('button', { name: /logout/i }));
     expect(screen.getByRole('link', { name: 'Login' })).toBeInTheDocument();
   });
 
   it('falls back to gp portal for unknown stored roles', () => {
-    localStorage.setItem('access_token', 'stored-token');
     localStorage.setItem('username', 'Mystery User');
     localStorage.setItem('user_email', 'mystery@example.com');
     localStorage.setItem('user_role', 'mystery');
 
     renderLanding();
 
-    expect(screen.getByText(/\(Unknown\)/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /open portal/i })).toHaveAttribute('href', '/gp/queries');
+    return waitFor(() => {
+      expect(screen.getByText(/\(Unknown\)/i)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /open portal/i })).toHaveAttribute('href', '/gp/queries');
+    });
   });
 
   it('shows the loading session state and username fallback when auth is still resolving', () => {
@@ -107,6 +120,7 @@ describe('LandingPage', () => {
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
+      setUserProfile: vi.fn(),
     });
 
     expect(screen.getByText(/checking session/i)).toBeInTheDocument();
@@ -122,6 +136,7 @@ describe('LandingPage', () => {
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
+      setUserProfile: vi.fn(),
     });
 
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument();

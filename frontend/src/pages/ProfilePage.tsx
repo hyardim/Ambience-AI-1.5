@@ -11,7 +11,7 @@ import { orFallback } from '../utils/value';
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { username, role, logout } = useAuth();
+  const { username, role, logout, setUserProfile } = useAuth();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,10 +93,7 @@ export function ProfilePage() {
       setNewPassword('');
       setConfirmPassword('');
 
-      // Update localStorage so Header name is in sync
-      if (updated.full_name) {
-        localStorage.setItem('username', updated.full_name);
-      }
+      setUserProfile(updated);
 
       setSuccessMsg('Profile updated successfully');
     } catch (err) {

@@ -22,26 +22,66 @@ import { setOptionalSearchParam } from '../utils/url';
 
 /* v8 ignore next */
 const API_BASE = import.meta.env.MODE === 'test' ? '' : import.meta.env.VITE_API_URL || '';
+type ApiRequestInit = RequestInit & { skipAuthRefresh?: boolean };
+let refreshInFlight: Promise<boolean> | null = null;
 
 function redirectToLogin(): void {
   window.history.replaceState(null, '', '/login');
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+function clearStoredSession(): void {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('username');
+  localStorage.removeItem('user_role');
+  localStorage.removeItem('user_email');
+}
+
 // ── Helper ──────────────────────────────────────────────────────────────
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('access_token');
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
+  return {};
+}
+
+async function refreshSessionRequest(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const res = await globalThis.fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      return res.ok;
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+
+  return refreshInFlight;
+}
+
+async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Promise<Response> {
+  const { skipAuthRefresh = false, ...requestInit } = init;
+
+  const doFetch = () =>
+    globalThis.fetch(input, {
+      credentials: 'include',
+      ...requestInit,
+    });
+
+  let res = await doFetch();
+  if (res.status === 401 && !skipAuthRefresh) {
+    const refreshed = await refreshSessionRequest();
+    if (refreshed) {
+      res = await doFetch();
+    }
+  }
+
+  return res;
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('user_email');
+    clearStoredSession();
     redirectToLogin();
     throw new Error('Session expired');
   }
@@ -73,8 +113,9 @@ export async function login(username: string, password: string): Promise<LoginRe
   body.append('username', username);
   body.append('password', password);
 
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await apiFetch(`${API_BASE}/auth/login`, {
     method: 'POST',
+    skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
@@ -83,8 +124,9 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 export async function register(payload: RegisterRequest): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/auth/register`, {
+  const res = await apiFetch(`${API_BASE}/auth/register`, {
     method: 'POST',
+    skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
@@ -96,33 +138,43 @@ export async function resetPassword(
   email: string,
   newPassword: string,
 ): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+  const res = await apiFetch(`${API_BASE}/auth/reset-password`, {
     method: 'POST',
+    skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, new_password: newPassword }),
   });
   return handleResponse<{ message: string }>(res);
 }
 
-export async function logout(): Promise<{ success: boolean }> {
-  const res = await fetch(`${API_BASE}/auth/logout`, {
+export async function logout(): Promise<{ message?: string; success?: boolean }> {
+  const res = await apiFetch(`${API_BASE}/auth/logout`, {
     method: 'POST',
+    skipAuthRefresh: true,
     headers: authHeaders(),
   });
-  return handleResponse<{ success: boolean }>(res);
+  return handleResponse<{ message?: string; success?: boolean }>(res);
+}
+
+export async function refreshSession(): Promise<LoginResponse> {
+  const res = await apiFetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    skipAuthRefresh: true,
+  });
+  return handleResponse<LoginResponse>(res);
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────
 
 export async function getProfile(): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/auth/me`, {
+  const res = await apiFetch(`${API_BASE}/auth/me`, {
     headers: authHeaders(),
   });
   return handleResponse<UserProfile>(res);
 }
 
 export async function updateProfile(data: ProfileUpdateRequest): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/auth/profile`, {
+  const res = await apiFetch(`${API_BASE}/auth/profile`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(data),
@@ -151,21 +203,21 @@ export async function getChats(filters: ChatListFilters = {}): Promise<BackendCh
   if (filters.search) params.set('search', filters.search);
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
-  const res = await fetch(`${API_BASE}/chats/?${params}`, {
+  const res = await apiFetch(`${API_BASE}/chats/?${params}`, {
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
 export async function getChat(chatId: number): Promise<BackendChatWithMessages> {
-  const res = await fetch(`${API_BASE}/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
 }
 
 export async function createChat(data: ChatCreateRequest): Promise<BackendChat> {
-  const res = await fetch(`${API_BASE}/chats/`, {
+  const res = await apiFetch(`${API_BASE}/chats/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(data),
@@ -176,7 +228,7 @@ export async function createChat(data: ChatCreateRequest): Promise<BackendChat> 
 export async function uploadChatFile(chatId: number, file: File): Promise<FileAttachment> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch(`${API_BASE}/chats/${chatId}/files`, {
+  const res = await apiFetch(`${API_BASE}/chats/${chatId}/files`, {
     method: 'POST',
     headers: authHeaders(),  // no Content-Type — browser sets multipart boundary
     body: formData,
@@ -185,7 +237,7 @@ export async function uploadChatFile(chatId: number, file: File): Promise<FileAt
 }
 
 export async function deleteChat(chatId: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -196,7 +248,7 @@ export async function updateChat(
   chatId: number,
   payload: ChatUpdateRequest,
 ): Promise<BackendChat> {
-  const res = await fetch(`${API_BASE}/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
@@ -205,7 +257,7 @@ export async function updateChat(
 }
 
 export async function submitForReview(chatId: number): Promise<BackendChat> {
-  const res = await fetch(`${API_BASE}/chats/${chatId}/submit`, {
+  const res = await apiFetch(`${API_BASE}/chats/${chatId}/submit`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -217,7 +269,7 @@ export async function sendMessage(
   content: string,
 ): Promise<GPMessageResponse> {
   const body: MessageCreateRequest = { role: 'user', content };
-  const res = await fetch(`${API_BASE}/chats/${chatId}/message`, {
+  const res = await apiFetch(`${API_BASE}/chats/${chatId}/message`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -228,21 +280,21 @@ export async function sendMessage(
 // ── Specialist ───────────────────────────────────────────────────────────
 
 export async function getSpecialistQueue(): Promise<BackendChat[]> {
-  const res = await fetch(`${API_BASE}/specialist/queue`, {
+  const res = await apiFetch(`${API_BASE}/specialist/queue`, {
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
 export async function getAssignedChats(): Promise<BackendChat[]> {
-  const res = await fetch(`${API_BASE}/specialist/assigned`, {
+  const res = await apiFetch(`${API_BASE}/specialist/assigned`, {
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
 export async function getSpecialistChatDetail(chatId: number): Promise<BackendChatWithMessages> {
-  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}`, {
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -250,7 +302,7 @@ export async function getSpecialistChatDetail(chatId: number): Promise<BackendCh
 
 export async function assignChat(chatId: number, specialistId: number): Promise<BackendChat> {
   const body: AssignRequest = { specialist_id: specialistId };
-  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/assign`, {
+  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/assign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -264,7 +316,7 @@ export async function reviewChat(
   feedback?: string,
 ): Promise<BackendChat> {
   const body: ReviewRequest = { action, feedback };
-  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/review`, {
+  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -286,7 +338,7 @@ export async function reviewMessage(
     replacement_content: replacementContent,
     replacement_sources: replacementSources,
   };
-  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/messages/${messageId}/review`, {
+  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/messages/${messageId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -297,7 +349,7 @@ export async function reviewMessage(
 // ── Health ────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string; system: string }> {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await apiFetch(`${API_BASE}/health`);
   return handleResponse<{ status: string; system: string }>(res);
 }
 
@@ -307,7 +359,7 @@ export async function sendSpecialistMessage(
   chatId: number,
   content: string,
 ): Promise<{ status: string; message_id: number }> {
-  const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/message`, {
+  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/message`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ content }),
@@ -322,7 +374,7 @@ export async function getNotifications(
 ): Promise<NotificationResponse[]> {
   const params = new URLSearchParams();
   if (unreadOnly) params.set('unread_only', 'true');
-  const res = await fetch(`${API_BASE}/notifications/?${params}`, {
+  const res = await apiFetch(`${API_BASE}/notifications/?${params}`, {
     headers: authHeaders(),
   });
   return handleResponse<NotificationResponse[]>(res);
@@ -331,7 +383,7 @@ export async function getNotifications(
 export async function markNotificationRead(
   notificationId: number,
 ): Promise<NotificationResponse> {
-  const res = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+  const res = await apiFetch(`${API_BASE}/notifications/${notificationId}/read`, {
     method: 'PATCH',
     headers: authHeaders(),
   });
@@ -339,7 +391,7 @@ export async function markNotificationRead(
 }
 
 export async function markAllNotificationsRead(): Promise<{ marked_read: number }> {
-  const res = await fetch(`${API_BASE}/notifications/read-all`, {
+  const res = await apiFetch(`${API_BASE}/notifications/read-all`, {
     method: 'PATCH',
     headers: authHeaders(),
   });
@@ -351,14 +403,14 @@ export async function markAllNotificationsRead(): Promise<{ marked_read: number 
 export async function adminGetUsers(role?: string): Promise<UserProfile[]> {
   const params = new URLSearchParams();
   if (role) params.set('role', role);
-  const res = await fetch(`${API_BASE}/admin/users?${params}`, {
+  const res = await apiFetch(`${API_BASE}/admin/users?${params}`, {
     headers: authHeaders(),
   });
   return handleResponse<UserProfile[]>(res);
 }
 
 export async function adminGetUser(userId: number): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await apiFetch(`${API_BASE}/admin/users/${userId}`, {
     headers: authHeaders(),
   });
   return handleResponse<UserProfile>(res);
@@ -368,7 +420,7 @@ export async function adminUpdateUser(
   userId: number,
   payload: UserUpdateAdmin,
 ): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await apiFetch(`${API_BASE}/admin/users/${userId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
@@ -377,7 +429,7 @@ export async function adminUpdateUser(
 }
 
 export async function adminDeactivateUser(userId: number): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await apiFetch(`${API_BASE}/admin/users/${userId}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -402,14 +454,14 @@ export async function adminGetChats(filters?: {
   if (filters?.skip) params.set('skip', String(filters.skip));
   /* v8 ignore next */
   if (filters?.limit) params.set('limit', String(filters.limit));
-  const res = await fetch(`${API_BASE}/admin/chats?${params}`, {
+  const res = await apiFetch(`${API_BASE}/admin/chats?${params}`, {
     headers: authHeaders(),
   });
   return handleResponse<AdminChatResponse[]>(res);
 }
 
 export async function adminGetChat(chatId: number): Promise<BackendChatWithMessages> {
-  const res = await fetch(`${API_BASE}/admin/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -419,7 +471,7 @@ export async function adminUpdateChat(
   chatId: number,
   payload: ChatUpdateRequest,
 ): Promise<AdminChatResponse> {
-  const res = await fetch(`${API_BASE}/admin/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
@@ -428,7 +480,7 @@ export async function adminUpdateChat(
 }
 
 export async function adminDeleteChat(chatId: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/admin/chats/${chatId}`, {
+  const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -438,7 +490,7 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
 // ── Admin: Dashboard Stats ───────────────────────────────────────────────
 
 export async function adminGetStats(): Promise<AdminStatsResponse> {
-  const res = await fetch(`${API_BASE}/admin/stats`, { headers: authHeaders() });
+  const res = await apiFetch(`${API_BASE}/admin/stats`, { headers: authHeaders() });
   return handleResponse<AdminStatsResponse>(res);
 }
 
@@ -461,7 +513,7 @@ export async function adminGetLogs(filters?: {
   setOptionalSearchParam(params, 'date_from', filters?.date_from);
   setOptionalSearchParam(params, 'date_to', filters?.date_to);
   setOptionalSearchParam(params, 'limit', filters?.limit);
-  const res = await fetch(`${API_BASE}/admin/logs?${params}`, {
+  const res = await apiFetch(`${API_BASE}/admin/logs?${params}`, {
     headers: authHeaders(),
   });
   return handleResponse<AuditLogResponse[]>(res);
@@ -501,14 +553,8 @@ export function subscribeToChatStream(
   chatId: number,
   callbacks: ChatStreamCallbacks,
 ): () => void {
-  const token = localStorage.getItem('access_token');
-  if (!token) {
-    callbacks.onConnectionError?.();
-    return () => {};
-  }
-
-  const url = `${API_BASE}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`;
-  const source = new EventSource(url);
+  const url = `${API_BASE}/chats/${chatId}/stream`;
+  const source = new EventSource(url, { withCredentials: true });
 
   const handleEvent = (eventType: ChatStreamEventType) => (ev: MessageEvent) => {
     try {
@@ -587,7 +633,7 @@ export async function adminUploadGuideline(
   formData.append('file', file);
   formData.append('source_name', sourceName);
   // Do NOT set Content-Type — browser sets the multipart boundary automatically
-  const res = await fetch(`${API_BASE}/admin/guidelines/upload`, {
+  const res = await apiFetch(`${API_BASE}/admin/guidelines/upload`, {
     method: 'POST',
     headers: authHeaders(),
     body: formData,

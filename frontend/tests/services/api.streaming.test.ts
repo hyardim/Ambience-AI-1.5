@@ -61,18 +61,16 @@ Object.defineProperty(globalThis, 'EventSource', {
 describe('subscribeToChatStream', () => {
   beforeEach(() => {
     MockEventSource.instances = [];
-    localStorage.setItem('access_token', 'test-jwt');
   });
 
   afterEach(() => {
     localStorage.clear();
   });
 
-  it('opens an EventSource with the correct URL and token', () => {
+  it('opens an EventSource with the correct URL', () => {
     subscribeToChatStream(42, {});
     expect(MockEventSource.instances).toHaveLength(1);
     expect(MockEventSource.instances[0].url).toContain('/chats/42/stream');
-    expect(MockEventSource.instances[0].url).toContain('token=test-jwt');
   });
 
   it('calls onStreamStart when stream_start event arrives', () => {
@@ -139,16 +137,6 @@ describe('subscribeToChatStream', () => {
     expect(es.closed).toBe(false);
     cleanup();
     expect(es.closed).toBe(true);
-  });
-
-  it('returns noop and fires onConnectionError when no token', () => {
-    localStorage.removeItem('access_token');
-    const onConnectionError = vi.fn();
-    const cleanup = subscribeToChatStream(1, { onConnectionError });
-    expect(onConnectionError).toHaveBeenCalled();
-    expect(MockEventSource.instances).toHaveLength(0);
-    // cleanup should be safe to call even though nothing was opened
-    cleanup();
   });
 
   it('fires events in correct order: start → content → complete', () => {

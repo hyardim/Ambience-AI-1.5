@@ -172,14 +172,39 @@ export const mockIngestionReport: IngestionReport = {
 
 export const handlers = [
   // Auth
-  http.post('/auth/login', () => {
-    return HttpResponse.json(mockLoginResponse);
-  }),
-
-  http.post('/auth/register', () => {
+  http.post('/auth/login', async ({ request }) => {
+    const form = await request.formData();
+    const email = String(form.get('username') ?? mockGPUser.email);
     return HttpResponse.json({
       ...mockLoginResponse,
-      user: { ...mockGPUser, full_name: 'New User' },
+      user: {
+        ...mockGPUser,
+        email,
+        full_name: email === mockAdminUser.email
+          ? mockAdminUser.full_name
+          : email === mockSpecialistUser.email
+            ? mockSpecialistUser.full_name
+            : mockGPUser.full_name,
+        role: email === mockAdminUser.email
+          ? 'admin'
+          : email === mockSpecialistUser.email
+            ? 'specialist'
+            : 'gp',
+        specialty: email === mockSpecialistUser.email ? mockSpecialistUser.specialty : null,
+      },
+    });
+  }),
+
+  http.post('/auth/register', async ({ request }) => {
+    const body = await request.json() as Partial<UserProfile> & { email?: string; role?: string };
+    return HttpResponse.json({
+      ...mockLoginResponse,
+      user: {
+        ...mockGPUser,
+        email: body.email ?? mockGPUser.email,
+        full_name: body.full_name ?? 'New User',
+        role: (body.role as UserProfile['role']) ?? 'gp',
+      },
     });
   }),
 
@@ -187,12 +212,38 @@ export const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
+  http.post('/auth/refresh', () => {
+    const role = localStorage.getItem('user_role') ?? mockGPUser.role;
+    const email = localStorage.getItem('user_email') ?? mockGPUser.email;
+    const username = localStorage.getItem('username');
+
+    return HttpResponse.json({
+      ...mockLoginResponse,
+      user: {
+        ...mockGPUser,
+        email,
+        full_name: username,
+        role: role as UserProfile['role'],
+        specialty: role === 'specialist' ? mockSpecialistUser.specialty : null,
+      },
+    });
+  }),
+
   http.post('/auth/reset-password', () => {
     return HttpResponse.json({ message: 'Password reset successful' });
   }),
 
   http.get('/auth/me', () => {
-    return HttpResponse.json(mockGPUser);
+    const role = localStorage.getItem('user_role') ?? mockGPUser.role;
+    const email = localStorage.getItem('user_email') ?? mockGPUser.email;
+    const username = localStorage.getItem('username');
+    return HttpResponse.json({
+      ...mockGPUser,
+      email,
+      full_name: username,
+      role: role as UserProfile['role'],
+      specialty: role === 'specialist' ? mockSpecialistUser.specialty : null,
+    });
   }),
 
   http.patch('/auth/profile', () => {

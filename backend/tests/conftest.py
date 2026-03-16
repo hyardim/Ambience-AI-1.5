@@ -28,6 +28,7 @@ from sqlalchemy.pool import StaticPool
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
 from src.api.endpoints import admin, auth, chats, notifications, specialist
+from src.core.config import settings
 from src.db.base import Base
 from src.db.session import get_async_db, get_db
 
@@ -142,6 +143,11 @@ def client(db_session, monkeypatch):
         yield c
 
 
+@pytest.fixture(autouse=True)
+def enable_inline_ai_tasks(monkeypatch):
+    monkeypatch.setattr(settings, "INLINE_AI_TASKS", True)
+
+
 # ---------------------------------------------------------------------------
 # User data fixtures
 # ---------------------------------------------------------------------------
@@ -203,6 +209,7 @@ def registered_gp(client, gp_user_payload):
     """Register a GP user and return the full AuthResponse JSON."""
     resp = client.post("/auth/register", json=gp_user_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
@@ -211,6 +218,7 @@ def registered_specialist(client, specialist_user_payload):
     """Register a specialist user and return the full AuthResponse JSON."""
     resp = client.post("/auth/register", json=specialist_user_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
@@ -219,6 +227,7 @@ def registered_admin(client, admin_user_payload):
     """Register an admin user and return the full AuthResponse JSON."""
     resp = client.post("/auth/register", json=admin_user_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
@@ -227,6 +236,7 @@ def registered_second_gp(client, second_gp_payload):
     """Register a second GP user (for ownership isolation tests)."""
     resp = client.post("/auth/register", json=second_gp_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 

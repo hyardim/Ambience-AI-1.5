@@ -41,6 +41,16 @@ import {
   uploadChatFile,
 } from '@/services/api';
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 class MockEventSource {
   static instances: MockEventSource[] = [];
 
@@ -112,8 +122,6 @@ describe('API service', () => {
     });
 
     it('logs out and loads/updates profile', async () => {
-      localStorage.setItem('access_token', 'tok');
-
       await expect(logout()).resolves.toEqual({ success: true });
       await expect(getProfile()).resolves.toMatchObject({ email: 'gp@example.com' });
       await expect(updateProfile({ full_name: 'Updated' })).resolves.toMatchObject({
@@ -145,25 +153,109 @@ describe('API service', () => {
       );
       await expect(getProfile()).rejects.toThrow('Plain failure');
 
-      localStorage.setItem('access_token', 'tok');
       localStorage.setItem('username', 'Dr GP');
       localStorage.setItem('user_role', 'gp');
       localStorage.setItem('user_email', 'gp@example.com');
 
       server.use(
+        http.post('/auth/refresh', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
         http.get('/auth/me', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
       );
 
       await expect(getProfile()).rejects.toThrow('Session expired');
-      expect(localStorage.getItem('access_token')).toBeNull();
       expect(window.location.pathname).toBe('/login');
+    });
+
+    it('retries the original request after a successful refresh', async () => {
+      let meCalls = 0;
+      server.use(
+        http.post('/auth/refresh', () =>
+          HttpResponse.json({
+            access_token: 'refreshed-token',
+            token_type: 'bearer',
+            user: {
+              id: 1,
+              email: 'gp@example.com',
+              full_name: 'Dr GP',
+              role: 'gp',
+              specialty: null,
+              is_active: true,
+            },
+          }),
+        ),
+        http.get('/auth/me', () => {
+          meCalls += 1;
+          if (meCalls === 1) {
+            return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+          }
+          return HttpResponse.json({
+            id: 1,
+            email: 'gp@example.com',
+            full_name: 'Dr GP',
+            role: 'gp',
+            specialty: null,
+            is_active: true,
+          });
+        }),
+      );
+
+      await expect(getProfile()).resolves.toMatchObject({ email: 'gp@example.com' });
+      expect(meCalls).toBe(2);
+    });
+
+    it('shares one refresh request across concurrent 401 responses', async () => {
+      const refreshGate = deferred<void>();
+      let refreshCalls = 0;
+      let meCalls = 0;
+
+      server.use(
+        http.post('/auth/refresh', async () => {
+          refreshCalls += 1;
+          await refreshGate.promise;
+          return HttpResponse.json({
+            access_token: 'refreshed-token',
+            token_type: 'bearer',
+            user: {
+              id: 1,
+              email: 'gp@example.com',
+              full_name: 'Dr GP',
+              role: 'gp',
+              specialty: null,
+              is_active: true,
+            },
+          });
+        }),
+        http.get('/auth/me', () => {
+          meCalls += 1;
+          if (meCalls <= 2) {
+            return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+          }
+          return HttpResponse.json({
+            id: 1,
+            email: 'gp@example.com',
+            full_name: 'Dr GP',
+            role: 'gp',
+            specialty: null,
+            is_active: true,
+          });
+        }),
+      );
+
+      const first = getProfile();
+      const second = getProfile();
+      refreshGate.resolve();
+
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        expect.objectContaining({ email: 'gp@example.com' }),
+        expect.objectContaining({ email: 'gp@example.com' }),
+      ]);
+      expect(refreshCalls).toBe(1);
+      expect(meCalls).toBe(4);
     });
   });
 
   describe('gp chat APIs', () => {
     it('gets chats with filters and chat detail', async () => {
-      localStorage.setItem('access_token', 'tok');
-
       const chats = await getChats({
         status: 'submitted',
         specialty: 'rheumatology',
@@ -181,7 +273,6 @@ describe('API service', () => {
     });
 
     it('creates, updates, submits, deletes, uploads, and sends messages for chats', async () => {
-      localStorage.setItem('access_token', 'tok');
       server.use(
         http.post('/chats/:chatId/files', () =>
           HttpResponse.json({ id: 'file-1', name: 'report.pdf', size: '2MB', type: 'pdf' })),
@@ -198,8 +289,6 @@ describe('API service', () => {
 
   describe('specialist APIs', () => {
     it('gets specialist queues and chat detail', async () => {
-      localStorage.setItem('access_token', 'tok');
-
       await expect(getSpecialistQueue()).resolves.toHaveLength(1);
       await expect(getAssignedChats()).resolves.toHaveLength(1);
       await expect(getSpecialistChatDetail(1)).resolves.toMatchObject({
@@ -208,7 +297,6 @@ describe('API service', () => {
     });
 
     it('assigns, reviews, reviews messages, and sends specialist messages', async () => {
-      localStorage.setItem('access_token', 'tok');
       server.use(
         http.post('/specialist/chats/:chatId/messages/:messageId/review', async ({ request }) => {
           const body = await request.json() as Record<string, unknown>;
@@ -231,7 +319,6 @@ describe('API service', () => {
 
   describe('notifications', () => {
     it('loads notifications and respects unread-only filter', async () => {
-      localStorage.setItem('access_token', 'tok');
       server.use(
         http.get('/notifications/', ({ request }) => {
           const url = new URL(request.url);
@@ -261,7 +348,6 @@ describe('API service', () => {
 
   describe('admin APIs', () => {
     it('loads users and supports role-filtered queries and updates', async () => {
-      localStorage.setItem('access_token', 'tok');
       server.use(
         http.get('/admin/users', ({ request }) => {
           const url = new URL(request.url);
@@ -282,7 +368,6 @@ describe('API service', () => {
     });
 
     it('includes optional pagination and limit filters when provided', async () => {
-      localStorage.setItem('access_token', 'tok');
       server.use(
         http.get('/admin/chats', ({ request }) => {
           const url = new URL(request.url);
@@ -420,16 +505,15 @@ describe('API service', () => {
     });
 
     it('clears session storage on 401 responses', async () => {
-      localStorage.setItem('access_token', 'tok');
       localStorage.setItem('username', 'Dr GP');
       localStorage.setItem('user_role', 'gp');
       localStorage.setItem('user_email', 'gp@example.com');
       server.use(
+        http.post('/auth/refresh', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
         http.get('/auth/me', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
       );
 
       await expect(getProfile()).rejects.toThrow(/session expired/i);
-      expect(localStorage.getItem('access_token')).toBeNull();
       expect(localStorage.getItem('username')).toBeNull();
       expect(localStorage.getItem('user_role')).toBeNull();
       expect(localStorage.getItem('user_email')).toBeNull();
@@ -438,16 +522,15 @@ describe('API service', () => {
   });
 
   describe('subscribeToChatStream()', () => {
-    it('reports connection errors immediately without a token', () => {
-      const onConnectionError = vi.fn();
-      const cleanup = subscribeToChatStream(1, { onConnectionError });
+    it('opens a credentialed stream and returns a cleanup function', () => {
+      const cleanup = subscribeToChatStream(1, {});
+      const source = MockEventSource.instances[0];
 
-      expect(onConnectionError).toHaveBeenCalled();
+      expect(source.url).toContain('/chats/1/stream');
       expect(cleanup).toBeTypeOf('function');
     });
 
     it('wires event source callbacks and cleanup', () => {
-      localStorage.setItem('access_token', 'tok');
       const onOpen = vi.fn();
       const onStreamStart = vi.fn();
       const onContent = vi.fn();
@@ -465,7 +548,7 @@ describe('API service', () => {
       });
 
       const source = MockEventSource.instances[0];
-      expect(source.url).toContain('/chats/12/stream?token=tok');
+      expect(source.url).toContain('/chats/12/stream');
 
       source.onopen?.();
       source.emit('stream_start', { message_id: 7 });
@@ -486,7 +569,6 @@ describe('API service', () => {
     });
 
     it('falls back to empty payload values for stream content, completion, and errors', () => {
-      localStorage.setItem('access_token', 'tok');
       const onContent = vi.fn();
       const onComplete = vi.fn();
       const onError = vi.fn();

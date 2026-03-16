@@ -58,6 +58,14 @@ def test_logout_returns_message(db_session):
     }
 
 
+def test_refresh_returns_auth_response(db_session):
+    user = _user(db_session)
+    result = auth_service.refresh(user)
+    assert result.user.email == user.email
+    assert result.token_type == "bearer"
+    assert result.access_token
+
+
 def test_update_profile_requires_current_password_when_setting_new_one(db_session):
     user = _user(db_session)
     with pytest.raises(HTTPException) as exc:

@@ -12,21 +12,11 @@ from src.schemas.admin import UserUpdateAdmin
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
+from src.services.cache_invalidation import (
+    invalidate_admin_chat_caches_sync,
+    invalidate_admin_stats_sync,
+)
 from src.utils.cache import cache, cache_keys
-
-
-def _invalidate_admin_stats_cache() -> None:
-    cache.delete_sync(cache_keys.admin_stats(), resource="admin_stats")
-
-
-def _invalidate_admin_chat_caches(chat_id: Optional[int] = None) -> None:
-    cache.delete_pattern_sync(
-        cache_keys.admin_chat_list_pattern(), resource="admin_chat_list"
-    )
-    cache.delete_pattern_sync(
-        cache_keys.admin_chat_detail_pattern(chat_id), resource="admin_chat_detail"
-    )
-
 
 # ---------------------------------------------------------------------------
 # Dashboard stats
@@ -170,7 +160,7 @@ def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
     cache.delete_sync(
         cache_keys.user_profile(user_id), user_id=user_id, resource="user_profile"
     )
-    _invalidate_admin_stats_cache()
+    invalidate_admin_stats_sync()
     return UserOut.model_validate(user)
 
 
@@ -182,7 +172,7 @@ def deactivate_user(db: Session, user_id: int) -> UserOut:
     cache.delete_sync(
         cache_keys.user_profile(user_id), user_id=user_id, resource="user_profile"
     )
-    _invalidate_admin_stats_cache()
+    invalidate_admin_stats_sync()
     return UserOut.model_validate(user)
 
 
@@ -296,8 +286,8 @@ def update_any_chat(db: Session, chat_id: int, payload: ChatUpdate) -> dict:
         user_id=chat.user_id,
         resource="chat_list",
     )
-    _invalidate_admin_chat_caches(chat_id)
-    _invalidate_admin_stats_cache()
+    invalidate_admin_chat_caches_sync(chat_id)
+    invalidate_admin_stats_sync()
     entry = chat_to_response(chat).model_dump()
     entry["owner_identifier"] = (
         f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
@@ -323,8 +313,8 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
         user_id=chat.user_id,
         resource="chat_list",
     )
-    _invalidate_admin_chat_caches(chat_id)
-    _invalidate_admin_stats_cache()
+    invalidate_admin_chat_caches_sync(chat_id)
+    invalidate_admin_stats_sync()
 
 
 # ---------------------------------------------------------------------------

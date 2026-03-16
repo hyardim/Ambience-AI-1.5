@@ -6,6 +6,16 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { useAuth } from '@/contexts/useAuth';
 import type { RegisterRequest } from '@/types/api';
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function wrapper({ children }: { children: React.ReactNode }) {
   return <AuthProvider>{children}</AuthProvider>;
 }
@@ -24,7 +34,6 @@ describe('AuthContext', () => {
   });
 
   it('restores session from localStorage on mount', async () => {
-    localStorage.setItem('access_token', 'stored-token');
     localStorage.setItem('username', 'Stored User');
     localStorage.setItem('user_email', 'stored@example.com');
     localStorage.setItem('user_role', 'gp');
@@ -36,9 +45,166 @@ describe('AuthContext', () => {
     });
 
     expect(result.current.isAuthenticated).toBe(true);
-    expect(result.current.token).toBe('stored-token');
+    expect(result.current.token).toBe('mock-jwt-token');
     expect(result.current.username).toBe('Stored User');
     expect(result.current.role).toBe('gp');
+  });
+
+  it('falls back to loading profile when refresh fails but session is still valid', async () => {
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    server.use(
+      http.post('/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
+      http.get('/auth/me', () =>
+        HttpResponse.json({
+          id: 1,
+          email: 'stored@example.com',
+          full_name: 'Recovered User',
+          role: 'gp',
+          specialty: null,
+          is_active: true,
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.username).toBe('Recovered User');
+  });
+
+  it('clears identity when both refresh and profile recovery fail', async () => {
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    server.use(
+      http.post('/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
+      http.get('/auth/me', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(localStorage.getItem('username')).toBeNull();
+    expect(localStorage.getItem('user_email')).toBeNull();
+    expect(localStorage.getItem('user_role')).toBeNull();
+  });
+
+  it('does not update state after unmount when refresh fails late', async () => {
+    const refreshGate = deferred<void>();
+    let profileCalls = 0;
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    server.use(
+      http.post('/auth/refresh', async () => {
+        await refreshGate.promise;
+        return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+      }),
+      http.get('/auth/me', () => {
+        profileCalls += 1;
+        return HttpResponse.json({
+          id: 1,
+          email: 'stored@example.com',
+          full_name: 'Recovered User',
+          role: 'gp',
+          specialty: null,
+          is_active: true,
+        });
+      }),
+    );
+
+    const { unmount } = renderHook(() => useAuth(), { wrapper });
+    unmount();
+    refreshGate.resolve();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(profileCalls).toBe(0);
+  });
+
+  it('does not update state after unmount during profile fallback', async () => {
+    const profileGate = deferred<void>();
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    server.use(
+      http.post('/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
+      http.get('/auth/me', async () => {
+        await profileGate.promise;
+        return HttpResponse.json({
+          id: 1,
+          email: 'stored@example.com',
+          full_name: 'Recovered User',
+          role: 'gp',
+          specialty: null,
+          is_active: true,
+        });
+      }),
+    );
+
+    const { unmount } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    unmount();
+    profileGate.resolve();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(localStorage.getItem('username')).not.toBe('Recovered User');
+  });
+
+  it('does not clear state twice after unmount when profile fallback also fails', async () => {
+    const profileGate = deferred<void>();
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    server.use(
+      http.post('/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
+      http.get('/auth/me', async () => {
+        await profileGate.promise;
+        return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+      }),
+    );
+
+    const { unmount } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    unmount();
+    profileGate.resolve();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(localStorage.getItem('username')).toBeNull();
+    expect(localStorage.getItem('user_email')).toBeNull();
+    expect(localStorage.getItem('user_role')).toBeNull();
   });
 
   it('login() updates state and localStorage', async () => {
@@ -54,7 +220,6 @@ describe('AuthContext', () => {
     expect(role).toBe('gp');
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.token).toBe('mock-jwt-token');
-    expect(localStorage.getItem('access_token')).toBe('mock-jwt-token');
     expect(localStorage.getItem('user_role')).toBe('gp');
   });
 
@@ -74,7 +239,7 @@ describe('AuthContext', () => {
 
     expect(role).toBe('gp');
     expect(result.current.isAuthenticated).toBe(true);
-    expect(localStorage.getItem('access_token')).toBe('mock-jwt-token');
+    expect(localStorage.getItem('user_email')).toBe('new@example.com');
   });
 
   it('register() falls back to email when full_name is missing', async () => {
@@ -162,7 +327,6 @@ describe('AuthContext', () => {
   });
 
   it('logout() clears state and localStorage', async () => {
-    localStorage.setItem('access_token', 'stored-token');
     localStorage.setItem('username', 'User');
     localStorage.setItem('user_email', 'user@example.com');
     localStorage.setItem('user_role', 'gp');
@@ -176,7 +340,6 @@ describe('AuthContext', () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.token).toBeNull();
-    expect(localStorage.getItem('access_token')).toBeNull();
     expect(localStorage.getItem('username')).toBeNull();
     expect(localStorage.getItem('user_role')).toBeNull();
   });
@@ -185,7 +348,6 @@ describe('AuthContext', () => {
     server.use(
       http.post('/auth/logout', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })),
     );
-    localStorage.setItem('access_token', 'stored-token');
     localStorage.setItem('username', 'User');
     localStorage.setItem('user_email', 'user@example.com');
     localStorage.setItem('user_role', 'gp');
@@ -198,7 +360,7 @@ describe('AuthContext', () => {
     });
 
     expect(result.current.isAuthenticated).toBe(false);
-    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(localStorage.getItem('user_email')).toBeNull();
   });
 
   it('throws when useAuth is used outside AuthProvider', () => {

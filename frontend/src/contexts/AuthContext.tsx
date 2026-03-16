@@ -1,6 +1,7 @@
-import { useState, useCallback, type ReactNode } from 'react';
-import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/api';
-import type { RegisterRequest } from '../types/api';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+
+import { getProfile, login as apiLogin, logout as apiLogout, refreshSession, register as apiRegister } from '../services/api';
+import type { RegisterRequest, UserProfile } from '../types/api';
 import type { UserRole } from '../types';
 import { AuthContext } from './auth-context';
 
@@ -13,67 +14,116 @@ interface AuthState {
   isLoading: boolean;
 }
 
-function getInitialAuthState(): AuthState {
-  const token = localStorage.getItem('access_token');
+function readStoredIdentity(): Omit<AuthState, 'token' | 'isLoading'> {
   const username = localStorage.getItem('username');
-  const role = localStorage.getItem('user_role') as UserRole | null;
   const email = localStorage.getItem('user_email');
+  const role = localStorage.getItem('user_role') as UserRole | null;
 
-  if (!token) {
+  if (!email || !role) {
     return {
-      token: null,
       username: null,
       email: null,
       role: null,
       isAuthenticated: false,
-      isLoading: false,
     };
   }
 
   return {
-    token,
     username,
     email,
     role,
+    isAuthenticated: true,
+  };
+}
+
+function persistIdentity(user: Pick<UserProfile, 'full_name' | 'email' | 'role'>): void {
+  localStorage.setItem('username', user.full_name || user.email);
+  localStorage.setItem('user_email', user.email);
+  localStorage.setItem('user_role', user.role);
+}
+
+function clearIdentity(): void {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('username');
+  localStorage.removeItem('user_email');
+  localStorage.removeItem('user_role');
+}
+
+function buildStateFromUser(user: Pick<UserProfile, 'full_name' | 'email' | 'role'>, token: string | null): AuthState {
+  return {
+    token,
+    username: user.full_name || user.email,
+    email: user.email,
+    role: user.role,
     isAuthenticated: true,
     isLoading: false,
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(getInitialAuthState);
+  const storedIdentity = readStoredIdentity();
+  const [state, setState] = useState<AuthState>({
+    token: null,
+    ...storedIdentity,
+    isLoading: storedIdentity.isAuthenticated,
+  });
+
+  const setUserProfile = useCallback((user: Pick<UserProfile, 'full_name' | 'email' | 'role'>) => {
+    persistIdentity(user);
+    setState((prev) => buildStateFromUser(user, prev.token));
+  }, []);
+
+  useEffect(() => {
+    if (!storedIdentity.isAuthenticated) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void refreshSession()
+      .then((data) => {
+        if (cancelled) return;
+        persistIdentity(data.user);
+        setState(buildStateFromUser(data.user, data.access_token));
+      })
+      .catch(async () => {
+        if (cancelled) return;
+        try {
+          const profile = await getProfile();
+          if (cancelled) return;
+          persistIdentity(profile);
+          setState(buildStateFromUser(profile, null));
+          return;
+        } catch {
+          if (cancelled) return;
+          clearIdentity();
+          setState({
+            token: null,
+            username: null,
+            email: null,
+            role: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storedIdentity.isAuthenticated]);
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await apiLogin(username, password);
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('username', data.user.full_name || data.user.email);
-    localStorage.setItem('user_email', data.user.email);
-    localStorage.setItem('user_role', data.user.role);
-    setState({
-      token: data.access_token,
-      username: data.user.full_name || data.user.email,
-      email: data.user.email,
-      role: data.user.role,
-      isAuthenticated: true,
-      isLoading: false,
-    });
+    persistIdentity(data.user);
+    setState(buildStateFromUser(data.user, data.access_token));
     return data.user.role;
   }, []);
 
   const register = useCallback(async (payload: RegisterRequest) => {
     const data = await apiRegister(payload);
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('username', data.user.full_name || data.user.email);
-    localStorage.setItem('user_email', data.user.email);
-    localStorage.setItem('user_role', data.user.role);
-    setState({
-      token: data.access_token,
-      username: data.user.full_name || data.user.email,
-      email: data.user.email,
-      role: data.user.role,
-      isAuthenticated: true,
-      isLoading: false,
-    });
+    persistIdentity(data.user);
+    setState(buildStateFromUser(data.user, data.access_token));
     return data.user.role;
   }, []);
 
@@ -81,15 +131,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void apiLogout().catch(() => {
       // Best-effort server-side logout; local session is still cleared below.
     });
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('user_role');
-    setState({ token: null, username: null, email: null, role: null, isAuthenticated: false, isLoading: false });
+    clearIdentity();
+    setState({
+      token: null,
+      username: null,
+      email: null,
+      role: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout, setUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

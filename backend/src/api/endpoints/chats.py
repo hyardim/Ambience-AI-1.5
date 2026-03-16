@@ -1,6 +1,15 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -9,7 +18,6 @@ from src.api.deps import get_current_user_obj
 from src.core import security
 from src.db.models import User
 from src.db.session import get_async_db, get_db
-from src.repositories import user_repository
 from src.schemas.chat import (
     ChatCreate,
     ChatResponse,
@@ -127,23 +135,27 @@ def submit_for_review(
 @router.get("/{chat_id}/stream")
 async def stream_chat(
     chat_id: int,
-    token: str = Query(...),
+    request: Request,
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """SSE endpoint for real-time AI generation events.
 
-    EventSource does not support custom headers, so the JWT is passed as a
-    query parameter.  The token is validated before the stream begins.
+    Supports cookie-based auth for normal browser usage and an optional
+    access-token query parameter for compatibility with tests and fallback
+    clients.
     """
-    # Validate token and resolve user
-    try:
-        email = security.decode_token(token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = user_repository.get_by_email(db, email)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    user = None
+    if token:
+        try:
+            user = security.get_user_from_access_token(db, token)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    else:
+        try:
+            user = security.get_current_user_from_cookie_or_header(request, db)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     from src.core.chat_policy import can_stream_chat
     from src.db.models import Chat

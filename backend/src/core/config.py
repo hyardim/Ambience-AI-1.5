@@ -20,7 +20,8 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = _INSECURE_DEFAULT_KEY
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     DATABASE_URL: str = (
         "postgresql://admin:team20_password@db_vector:5432/ambience_knowledge"
     )
@@ -31,6 +32,13 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    # Session cookies
+    ACCESS_COOKIE_NAME: str = "ambience_access_token"
+    REFRESH_COOKIE_NAME: str = "ambience_refresh_token"
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SECURE: bool = False
+    COOKIE_DOMAIN: str | None = None
 
     # File upload limits
     MAX_FILE_SIZE_BYTES: int = 3 * 1024 * 1024  # 3 MB per file
@@ -50,6 +58,7 @@ class Settings(BaseSettings):
 
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
+    INLINE_AI_TASKS: bool = False
 
     # Cache
     CACHE_ENABLED: bool = True
@@ -63,6 +72,10 @@ class Settings(BaseSettings):
     CACHE_ADMIN_CHAT_TTL: int = 30
     CACHE_ADMIN_AUDIT_LOG_TTL: int = 15
     CACHE_NOTIFICATION_TTL: int = 30
+
+    # RAG / chat flow tuning
+    CHAT_RAG_TOP_K: int = 4
+    CHAT_HISTORY_MESSAGE_LIMIT: int = 8
 
 
 settings = Settings()

@@ -24,6 +24,13 @@ from src.schemas.chat import (
     FileAttachmentResponse,
 )
 from src.services._mappers import chat_to_response, msg_to_response
+from src.services.cache_invalidation import (
+    invalidate_admin_chat_caches_sync,
+    invalidate_admin_stats_sync,
+    invalidate_chat_related_async,
+    invalidate_chat_related_sync,
+    invalidate_specialist_lists_sync,
+)
 from src.utils.cache import cache, cache_keys
 from src.utils.sse import SSEEvent, chat_event_bus
 
@@ -34,6 +41,8 @@ MAX_FILES_PER_CHAT = settings.MAX_FILES_PER_CHAT
 FILE_CONTEXT_CHAR_LIMIT = settings.FILE_CONTEXT_CHAR_LIMIT
 ALLOWED_UPLOAD_EXTENSIONS = {ext.lower() for ext in settings.ALLOWED_UPLOAD_EXTENSIONS}
 RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
+CHAT_RAG_TOP_K = settings.CHAT_RAG_TOP_K
+CHAT_HISTORY_MESSAGE_LIMIT = settings.CHAT_HISTORY_MESSAGE_LIMIT
 
 # Regex for sanitising filenames: keep alphanumerics, hyphens, underscores, dots
 _SAFE_FILENAME_RE = re.compile(r"[^\w\-.]", re.ASCII)
@@ -46,35 +55,9 @@ def _invalidate_specialist_caches(
     specialty: str | None = None,
     specialist_id: int | None = None,
 ) -> None:
-    if specialty is not None:
-        cache.delete_sync(
-            cache_keys.specialist_queue(specialty), resource="specialist_queue"
-        )
-    cache.delete_pattern_sync(
-        cache_keys.specialist_queue_pattern(), resource="specialist_queue"
-    )
-    if specialist_id is not None:
-        cache.delete_sync(
-            cache_keys.specialist_assigned(specialist_id),
-            user_id=specialist_id,
-            resource="specialist_assigned",
-        )
-    else:
-        cache.delete_pattern_sync(
-            cache_keys.specialist_assigned_pattern(), resource="specialist_assigned"
-        )
-
-
-def _invalidate_admin_stats_cache() -> None:
-    cache.delete_sync(cache_keys.admin_stats(), resource="admin_stats")
-
-
-def _invalidate_admin_chat_caches(chat_id: int | None = None) -> None:
-    cache.delete_pattern_sync(
-        cache_keys.admin_chat_list_pattern(), resource="admin_chat_list"
-    )
-    cache.delete_pattern_sync(
-        cache_keys.admin_chat_detail_pattern(chat_id), resource="admin_chat_detail"
+    invalidate_specialist_lists_sync(
+        specialty=specialty,
+        specialist_id=specialist_id,
     )
 
 
@@ -108,8 +91,8 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(user.id), user_id=user.id, resource="chat_list"
     )
-    _invalidate_admin_chat_caches(chat.id)
-    _invalidate_admin_stats_cache()
+    invalidate_admin_chat_caches_sync(chat.id)
+    invalidate_admin_stats_sync()
     return chat_to_response(chat)
 
 
@@ -271,7 +254,7 @@ def update_chat(
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
-    _invalidate_admin_chat_caches(chat_id)
+    invalidate_admin_chat_caches_sync(chat_id)
     return chat_to_response(chat)
 
 
@@ -295,7 +278,7 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
-    _invalidate_admin_chat_caches(chat_id)
+    invalidate_admin_chat_caches_sync(chat_id)
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +329,7 @@ def _extract_text(file_path: str, file_type: Optional[str]) -> str:
 def _build_conversation_history_from_messages(
     messages: list[Message],
     *,
-    limit: int = 8,
+    limit: int = CHAT_HISTORY_MESSAGE_LIMIT,
 ) -> str | None:
     if not messages:
         return None
@@ -445,21 +428,14 @@ async def upload_file(
         resource="chat_list",
     )
     await cache.delete_pattern(
-        cache_keys.admin_chat_list_pattern(), resource="admin_chat_list"
-    )
-    await cache.delete_pattern(
-        cache_keys.admin_chat_detail_pattern(chat_id), resource="admin_chat_detail"
-    )
-    await cache.delete_pattern(
         cache_keys.admin_audit_logs_pattern(), resource="admin_audit_logs"
     )
-    await cache.delete_pattern(
-        cache_keys.specialist_queue_pattern(), resource="specialist_queue"
+    await invalidate_chat_related_async(
+        chat_id=chat_id,
+        user_id=chat.user_id,
+        specialty=chat.specialty,
+        specialist_id=chat.specialist_id,
     )
-    await cache.delete_pattern(
-        cache_keys.specialist_assigned_pattern(), resource="specialist_assigned"
-    )
-    await cache.delete(cache_keys.admin_stats(), resource="admin_stats")
 
     return FileAttachmentResponse(
         id=attachment.id,
@@ -551,7 +527,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
 
             rag_payload: dict = {
                 "query": content,
-                "top_k": 4,
+                "top_k": CHAT_RAG_TOP_K,
                 "stream": True,
                 "specialty": chat.specialty,
                 "severity": chat.severity,
@@ -565,9 +541,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             ai_content = ""
             citations = None
             try:
-                # Tests run on SQLite and rely on patched non-stream calls to inspect
-                # payloads; prefer a non-stream request there. Production keeps NDJSON.
-                if db.bind and db.bind.dialect.name == "sqlite":
+                if settings.INLINE_AI_TASKS:
                     try:
                         rag_response = httpx.post(
                             f"{RAG_SERVICE_URL}/answer",
@@ -631,7 +605,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
 
                 rag_action = "RAG_ANSWER"
                 rag_details = (
-                    f"query_len={len(content)} top_k=4 "
+                    f"query_len={len(content)} top_k={CHAT_RAG_TOP_K} "
                     f"chunks_used={len(citations) if citations else 0}"
                 )
             except Exception as exc:
@@ -677,33 +651,12 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                 details=f"AI response generated for chat {chat_id}",
             )
 
-            await cache.delete_pattern(
-                cache_keys.chat_detail_pattern(chat_id),
-                user_id=user_id,
-                resource="chat_detail",
-            )
-            await cache.delete_pattern(
-                cache_keys.chat_list_pattern(chat.user_id),
+            await invalidate_chat_related_async(
+                chat_id=chat_id,
                 user_id=chat.user_id,
-                resource="chat_list",
+                specialty=chat.specialty,
+                specialist_id=chat.specialist_id,
             )
-            await cache.delete_pattern(
-                cache_keys.admin_chat_list_pattern(),
-                resource="admin_chat_list",
-            )
-            await cache.delete_pattern(
-                cache_keys.admin_chat_detail_pattern(chat_id),
-                resource="admin_chat_detail",
-            )
-            await cache.delete_pattern(
-                cache_keys.specialist_queue_pattern(),
-                resource="specialist_queue",
-            )
-            await cache.delete_pattern(
-                cache_keys.specialist_assigned_pattern(),
-                resource="specialist_assigned",
-            )
-            await cache.delete(cache_keys.admin_stats(), resource="admin_stats")
 
             # 6. complete event
             await chat_event_bus.publish(
@@ -784,7 +737,7 @@ async def async_send_message(
 
     # Async task for AI generation.
     # Under SQLite (tests) run inline so assertions can see the result.
-    if db.bind.dialect.name == "sqlite":
+    if settings.INLINE_AI_TASKS:
         await _async_generate_ai_response(chat.id, user.id, content)
     else:
         task = asyncio.create_task(
@@ -793,27 +746,12 @@ async def async_send_message(
         )
         task.add_done_callback(_on_generation_task_done)
 
-    await cache.delete_pattern(
-        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
-    )
-    await cache.delete_pattern(
-        cache_keys.chat_list_pattern(chat.user_id),
+    await invalidate_chat_related_async(
+        chat_id=chat_id,
         user_id=chat.user_id,
-        resource="chat_list",
+        specialty=chat.specialty,
+        specialist_id=chat.specialist_id,
     )
-    await cache.delete_pattern(
-        cache_keys.admin_chat_list_pattern(), resource="admin_chat_list"
-    )
-    await cache.delete_pattern(
-        cache_keys.admin_chat_detail_pattern(chat_id), resource="admin_chat_detail"
-    )
-    await cache.delete_pattern(
-        cache_keys.specialist_queue_pattern(), resource="specialist_queue"
-    )
-    await cache.delete_pattern(
-        cache_keys.specialist_assigned_pattern(), resource="specialist_assigned"
-    )
-    await cache.delete(cache_keys.admin_stats(), resource="admin_stats")
 
     return {
         "status": "Message sent",
@@ -851,10 +789,10 @@ def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
-    _invalidate_admin_chat_caches(chat_id)
-    _invalidate_specialist_caches(
+    invalidate_chat_related_sync(
+        chat_id=chat_id,
+        user_id=chat.user_id,
         specialty=chat.specialty,
         specialist_id=chat.specialist_id,
     )
-    _invalidate_admin_stats_cache()
     return chat_to_response(chat)

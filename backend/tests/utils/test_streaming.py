@@ -109,7 +109,7 @@ class TestChatEventBus:
 class TestStreamEndpoint:
     def test_stream_requires_token(self, client, created_chat):
         resp = client.get(f"/chats/{created_chat['id']}/stream")
-        assert resp.status_code == 422  # missing required query param
+        assert resp.status_code == 401
 
     def test_stream_rejects_bad_token(self, client, created_chat):
         resp = client.get(f"/chats/{created_chat['id']}/stream?token=bad.jwt.token")

@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN groupadd --system appgroup && useradd --system --gid appgroup --create-home appuser
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -15,6 +17,10 @@ COPY src /app/src
 RUN PIP_CONFIG_FILE=/dev/null PIP_REQUIRE_HASHES=0 \
     pip install --isolated --no-cache-dir .
 
+RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app
+
 ENV PYTHONPATH=/app
+
+USER appuser
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

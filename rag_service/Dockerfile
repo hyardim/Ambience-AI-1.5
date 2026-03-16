@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN groupadd --system appgroup && useradd --system --gid appgroup --create-home appuser
+
 RUN apt-get update && apt-get install -y build-essential curl && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
@@ -18,6 +20,10 @@ RUN PIP_CONFIG_FILE=/dev/null PIP_REQUIRE_HASHES=0 \
     mkdir -p /app/data /app/logs && \
     python scripts/setup/verify_nltk.py
 
+RUN chown -R appuser:appgroup /app "$NLTK_DATA"
+
 ENV PYTHONPATH=/app
+
+USER appuser
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]

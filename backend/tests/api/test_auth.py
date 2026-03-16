@@ -1,5 +1,6 @@
 """Tests for /auth endpoints: register, login, and /me."""
 
+from src.core.config import settings
 
 # ---------------------------------------------------------------------------
 # POST /auth/register
@@ -16,6 +17,9 @@ class TestRegister:
         assert data["user"]["email"] == gp_user_payload["email"]
         assert data["user"]["role"] == "gp"
         assert data["user"]["full_name"] == "Alice GP"
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert settings.ACCESS_COOKIE_NAME in set_cookie
+        assert settings.REFRESH_COOKIE_NAME in set_cookie
 
     def test_register_specialist_success(self, client, specialist_user_payload):
         resp = client.post("/auth/register", json=specialist_user_payload)
@@ -100,6 +104,9 @@ class TestLogin:
         assert "access_token" in data
         assert data["token_type"] == "bearer"
         assert data["user"]["email"] == gp_user_payload["email"]
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert settings.ACCESS_COOKIE_NAME in set_cookie
+        assert settings.REFRESH_COOKIE_NAME in set_cookie
 
     def test_login_wrong_password_fails(self, client, gp_user_payload, registered_gp):
         resp = client.post(
@@ -188,3 +195,31 @@ class TestMe:
         assert resp.status_code == 200
         assert resp.json()["role"] == "specialist"
         assert resp.json()["email"] == specialist_user_payload["email"]
+
+
+class TestRefreshAndLogout:
+    def test_refresh_reissues_cookies(self, client, gp_user_payload):
+        register = client.post("/auth/register", json=gp_user_payload)
+        assert register.status_code == 201
+
+        resp = client.post("/auth/refresh")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["user"]["email"] == gp_user_payload["email"]
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert settings.ACCESS_COOKIE_NAME in set_cookie
+        assert settings.REFRESH_COOKIE_NAME in set_cookie
+
+    def test_refresh_requires_refresh_cookie(self, client):
+        resp = client.post("/auth/refresh")
+        assert resp.status_code == 401
+
+    def test_logout_clears_auth_cookies(self, client, gp_user_payload):
+        register = client.post("/auth/register", json=gp_user_payload)
+        assert register.status_code == 201
+
+        resp = client.post("/auth/logout")
+        assert resp.status_code == 200
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert f"{settings.ACCESS_COOKIE_NAME}=" in set_cookie
+        assert f"{settings.REFRESH_COOKIE_NAME}=" in set_cookie

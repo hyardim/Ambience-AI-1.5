@@ -44,6 +44,6 @@ describe('AccessDeniedPage', () => {
 
     await user.click(screen.getByRole('button', { name: /switch account/i }));
 
-    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(localStorage.getItem('user_email')).toBeNull();
   });
 });

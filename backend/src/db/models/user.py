@@ -15,6 +15,7 @@ class User(Base):
     role = Column(SQLEnum(UserRole, **ENUM_VALUE_CONFIG), default=UserRole.GP)
     specialty = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    session_version = Column(Integer, nullable=False, default=0)
 
     chats = relationship("Chat", back_populates="owner", foreign_keys="[Chat.user_id]")
     assigned_chats = relationship(

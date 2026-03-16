@@ -28,15 +28,13 @@ export function renderWithProviders(
 }
 
 /**
- * Seed localStorage with auth state so AuthContext restores it on mount.
+ * Seed localStorage with persisted identity so AuthContext restores it on mount.
  */
 export function seedAuth(overrides: {
-  token?: string;
   username?: string;
   email?: string;
   role?: string;
 } = {}) {
-  localStorage.setItem('access_token', overrides.token ?? 'mock-jwt-token');
   localStorage.setItem('username', overrides.username ?? 'Dr GP');
   localStorage.setItem('user_email', overrides.email ?? 'gp@example.com');
   localStorage.setItem('user_role', overrides.role ?? 'gp');

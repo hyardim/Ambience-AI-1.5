@@ -1,11 +1,9 @@
 import re
-from datetime import timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.core import security
-from src.core.config import settings
 from src.db.models import User, UserRole
 from src.repositories import audit_repository, user_repository
 from src.schemas.auth import (
@@ -37,13 +35,8 @@ def _validate_password(password: str) -> None:
 
 
 def _make_auth_response(user: User) -> AuthResponse:
-    expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = security.create_access_token(
-        data={"sub": user.email, "role": user.role.value},
-        expires_delta=expires,
-    )
     return AuthResponse(
-        access_token=token,
+        access_token=security.create_access_token_for_user(user),
         token_type="bearer",
         user=UserOut.model_validate(user),
     )
@@ -102,7 +95,10 @@ def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
         raise HTTPException(status_code=400, detail="Account is deactivated")
     _validate_password(payload.new_password)
     user_repository.update(
-        db, user, hashed_password=security.get_password_hash(payload.new_password)
+        db,
+        user,
+        hashed_password=security.get_password_hash(payload.new_password),
+        session_version=user.session_version + 1,
     )
     audit_repository.log(
         db, user_id=user.id, action="PASSWORD_RESET", details=f"user_id={user.id}"
@@ -114,6 +110,7 @@ def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
 
 
 def logout(db: Session, user: User) -> dict:
+    user_repository.update(db, user, session_version=user.session_version + 1)
     audit_repository.log(
         db, user_id=user.id, action="LOGOUT", details=f"user_id={user.id}"
     )
@@ -138,6 +135,7 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         _validate_password(payload.new_password)
         fields["hashed_password"] = security.get_password_hash(payload.new_password)
+        fields["session_version"] = user.session_version + 1
 
     user = user_repository.update(db, user, **fields)
     audit_repository.log(
@@ -147,3 +145,7 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
         cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile"
     )
     return user
+
+
+def refresh(user: User) -> AuthResponse:
+    return _make_auth_response(user)

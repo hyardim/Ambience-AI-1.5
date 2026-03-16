@@ -326,6 +326,7 @@ async def test_async_generate_ai_response_publishes_error_on_failure(
 async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done(
     monkeypatch,
 ):
+    monkeypatch.setattr(chat_service.settings, "INLINE_AI_TASKS", False)
     publish = AsyncMock()
     close_chat = AsyncMock()
     async_update = AsyncMock()
@@ -430,6 +431,7 @@ async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done
 async def test_async_generate_ai_response_streaming_error_chunk_falls_back(
     monkeypatch,
 ):
+    monkeypatch.setattr(chat_service.settings, "INLINE_AI_TASKS", False)
     publish = AsyncMock()
     close_chat = AsyncMock()
     async_update = AsyncMock()
@@ -518,7 +520,13 @@ async def test_async_generate_ai_response_streaming_error_chunk_falls_back(
 
 @pytest.mark.asyncio
 async def test_async_send_message_auto_submits_open_chat(monkeypatch):
-    chat = SimpleNamespace(id=1, status=ChatStatus.OPEN, user_id=1)
+    chat = SimpleNamespace(
+        id=1,
+        status=ChatStatus.OPEN,
+        user_id=1,
+        specialty=None,
+        specialist_id=None,
+    )
     fake_db = SimpleNamespace(
         bind=SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
     )
@@ -555,7 +563,13 @@ async def test_async_send_message_rejects_missing_chat(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_async_send_message_rejects_invalid_status(monkeypatch):
-    chat = SimpleNamespace(id=1, status=ChatStatus.APPROVED, user_id=1)
+    chat = SimpleNamespace(
+        id=1,
+        status=ChatStatus.APPROVED,
+        user_id=1,
+        specialty=None,
+        specialist_id=None,
+    )
     monkeypatch.setattr(
         chat_service.chat_repository, "async_get", AsyncMock(return_value=chat)
     )
@@ -569,7 +583,14 @@ async def test_async_send_message_rejects_invalid_status(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_async_send_message_uses_background_task_for_non_sqlite(monkeypatch):
-    chat = SimpleNamespace(id=1, status=ChatStatus.SUBMITTED, user_id=1)
+    monkeypatch.setattr(chat_service.settings, "INLINE_AI_TASKS", False)
+    chat = SimpleNamespace(
+        id=1,
+        status=ChatStatus.SUBMITTED,
+        user_id=1,
+        specialty=None,
+        specialist_id=None,
+    )
     fake_db = SimpleNamespace(
         bind=SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
     )

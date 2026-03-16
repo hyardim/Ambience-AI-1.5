@@ -7,7 +7,12 @@ import pytest
 from fastapi import HTTPException
 from src.db.models import Chat, ChatStatus, Message, User, UserRole
 from src.schemas.chat import ReviewRequest
-from src.services import specialist_service
+from src.services import (
+    cache_invalidation,
+    specialist_review,
+    specialist_service,
+    specialist_shared,
+)
 
 
 def _user(
@@ -148,16 +153,16 @@ def test_invalidate_specialist_lists_without_specialist_id(monkeypatch):
     deleted = []
     patterns = []
     monkeypatch.setattr(
-        specialist_service.cache,
+        cache_invalidation.cache,
         "delete_sync",
         lambda *args, **kwargs: deleted.append(args),
     )
     monkeypatch.setattr(
-        specialist_service.cache,
+        cache_invalidation.cache,
         "delete_pattern_sync",
         lambda *args, **kwargs: patterns.append(args),
     )
-    specialist_service._invalidate_specialist_lists(specialty=None, specialist_id=None)
+    specialist_shared._invalidate_specialist_lists(specialty=None, specialist_id=None)
     assert deleted == []
     assert patterns
 
@@ -297,7 +302,7 @@ def test_review_message_request_changes_path(monkeypatch, db_session):
     ai_message = _ai_message(db_session, chat)
     called = []
     monkeypatch.setattr(
-        specialist_service,
+        specialist_review,
         "_regenerate_ai_response",
         lambda db, current_chat, feedback: called.append(feedback),
     )
@@ -373,12 +378,14 @@ def test_review_message_rejects_missing_ai_message(db_session):
 
 
 def test_mark_last_ai_message_noop_when_none_pending(db_session):
-    specialist_service._mark_last_ai_message(
+    specialist_review._mark_last_ai_message(
         db_session, 999, ReviewRequest(action="approve")
     )
 
 
-def test_regenerate_ai_response_uses_sync_path_for_sqlite(monkeypatch, db_session):
+def test_regenerate_ai_response_uses_sync_path_when_inline_ai_enabled(
+    monkeypatch, db_session
+):
     owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
     specialist = _user(
         db_session,
@@ -400,8 +407,9 @@ def test_regenerate_ai_response_uses_sync_path_for_sqlite(monkeypatch, db_sessio
     def fake_do_revise(*args):
         called["args"] = args
 
-    monkeypatch.setattr(specialist_service, "_do_revise", fake_do_revise)
-    placeholder = specialist_service._regenerate_ai_response(
+    monkeypatch.setattr(specialist_review.settings, "INLINE_AI_TASKS", True)
+    monkeypatch.setattr(specialist_review, "_do_revise", fake_do_revise)
+    placeholder = specialist_review._regenerate_ai_response(
         db_session, chat, "feedback"
     )
     assert placeholder.is_generating is True
@@ -426,29 +434,31 @@ def test_regenerate_ai_response_handles_empty_context(monkeypatch):
     )
     called = {}
     monkeypatch.setattr(
-        specialist_service.message_repository,
+        specialist_review.message_repository,
         "list_for_chat",
         lambda db, chat_id: [],
     )
     monkeypatch.setattr(
-        specialist_service.message_repository,
+        specialist_review.message_repository,
         "create",
         lambda *args, **kwargs: SimpleNamespace(id=7, is_generating=True),
     )
-    monkeypatch.setattr(specialist_service, "_extract_text", lambda *args: "x" * 9000)
+    monkeypatch.setattr(specialist_review, "_extract_text", lambda *args: "x" * 9000)
 
     def fake_do_revise(*args):
         called["args"] = args
 
-    monkeypatch.setattr(specialist_service, "_do_revise", fake_do_revise)
-    specialist_service._regenerate_ai_response(fake_db, fake_chat, "feedback")
+    monkeypatch.setattr(specialist_review, "_do_revise", fake_do_revise)
+    specialist_review._regenerate_ai_response(fake_db, fake_chat, "feedback")
     assert called["args"][2] == "consultation"
     assert called["args"][6] is None
     assert called["args"][7] is None
     assert called["args"][8].endswith("[Document truncated to fit context window]")
 
 
-def test_regenerate_ai_response_uses_thread_for_non_sqlite(monkeypatch, db_session):
+def test_regenerate_ai_response_uses_thread_when_inline_ai_disabled(
+    monkeypatch, db_session
+):
     fake_db = SimpleNamespace(
         bind=SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
     )
@@ -460,12 +470,12 @@ def test_regenerate_ai_response_uses_thread_for_non_sqlite(monkeypatch, db_sessi
         files=[],
     )
     monkeypatch.setattr(
-        specialist_service.message_repository,
+        specialist_review.message_repository,
         "list_for_chat",
         lambda db, chat_id: [SimpleNamespace(sender="user", content="User asks")],
     )
     monkeypatch.setattr(
-        specialist_service.message_repository,
+        specialist_review.message_repository,
         "create",
         lambda *args, **kwargs: SimpleNamespace(id=7, is_generating=True),
     )
@@ -478,8 +488,9 @@ def test_regenerate_ai_response_uses_thread_for_non_sqlite(monkeypatch, db_sessi
         def start(self):
             started.append(self.args)
 
-    monkeypatch.setattr(specialist_service.threading, "Thread", FakeThread)
-    specialist_service._regenerate_ai_response(fake_db, fake_chat, "feedback")
+    monkeypatch.setattr(specialist_review.settings, "INLINE_AI_TASKS", False)
+    monkeypatch.setattr(specialist_review.threading, "Thread", FakeThread)
+    specialist_review._regenerate_ai_response(fake_db, fake_chat, "feedback")
 
     assert started
 
@@ -509,15 +520,15 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
         "citations_used": [{"title": "Doc"}],
     }
     monkeypatch.setattr(
-        specialist_service.httpx, "post", lambda *args, **kwargs: response
+        specialist_review.httpx, "post", lambda *args, **kwargs: response
     )
     monkeypatch.setattr(
-        specialist_service.audit_repository,
+        specialist_review.audit_repository,
         "log",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("audit fail")),
     )
 
-    specialist_service._do_revise(
+    specialist_review._do_revise(
         db_session,
         placeholder,
         "question",
@@ -534,6 +545,66 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
     assert placeholder.is_generating is False
 
 
+def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
+    placeholder = SimpleNamespace(
+        chat_id=5,
+        content="",
+        citations=None,
+        is_generating=True,
+    )
+
+    class FakeDB:
+        def commit(self):
+            return None
+
+        def refresh(self, obj):
+            return None
+
+        def query(self, model):
+            return SimpleNamespace(
+                filter=lambda *args, **kwargs: SimpleNamespace(first=lambda: None)
+            )
+
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {
+        "answer": "revised",
+        "citations_used": [{"title": "Doc"}],
+    }
+    invalidations = []
+
+    monkeypatch.setattr(specialist_review.httpx, "post", lambda *args, **kwargs: response)
+    monkeypatch.setattr(
+        specialist_review,
+        "_invalidate_admin_chat_caches",
+        lambda chat_id: invalidations.append(("chat", chat_id)),
+    )
+    monkeypatch.setattr(
+        specialist_review,
+        "_invalidate_admin_stats_cache",
+        lambda: invalidations.append(("stats", None)),
+    )
+    monkeypatch.setattr(
+        specialist_review.audit_repository,
+        "log",
+        lambda *args, **kwargs: None,
+    )
+
+    specialist_review._do_revise(
+        FakeDB(),
+        placeholder,
+        "question",
+        "old answer",
+        "feedback",
+        "neurology",
+        None,
+        None,
+        None,
+    )
+
+    assert invalidations == [("chat", 5), ("stats", None)]
+
+
 def test_regenerate_ai_response_task_returns_when_placeholder_missing(monkeypatch):
     fake_db = SimpleNamespace(
         query=lambda model: SimpleNamespace(
@@ -542,14 +613,14 @@ def test_regenerate_ai_response_task_returns_when_placeholder_missing(monkeypatc
         rollback=lambda: None,
         close=lambda: None,
     )
-    monkeypatch.setattr(specialist_service, "SessionLocal", lambda: fake_db)
+    monkeypatch.setattr(specialist_review, "SessionLocal", lambda: fake_db)
     closed = []
     monkeypatch.setattr(
-        specialist_service.chat_event_bus,
+        specialist_review.chat_event_bus,
         "close_chat_threadsafe",
         lambda chat_id: closed.append(chat_id),
     )
-    specialist_service._regenerate_ai_response_task(1, 9, "q", "a", "f", None, None)
+    specialist_review._regenerate_ai_response_task(1, 9, "q", "a", "f", None, None)
     assert closed == [9]
 
 
@@ -637,26 +708,26 @@ def test_regenerate_ai_response_task_streams_and_finalises(monkeypatch):
             return Ctx()
 
     published = []
-    monkeypatch.setattr(specialist_service, "SessionLocal", lambda: FakeDB())
+    monkeypatch.setattr(specialist_review, "SessionLocal", lambda: FakeDB())
     monkeypatch.setattr(
-        specialist_service.message_repository,
+        specialist_review.message_repository,
         "list_for_chat",
         lambda db, chat_id: messages,
     )
-    monkeypatch.setattr(specialist_service, "_extract_text", lambda *args: "x" * 9000)
-    monkeypatch.setattr(specialist_service.httpx, "Client", FakeClient)
+    monkeypatch.setattr(specialist_review, "_extract_text", lambda *args: "x" * 9000)
+    monkeypatch.setattr(specialist_review.httpx, "Client", FakeClient)
     monkeypatch.setattr(
-        specialist_service.chat_event_bus,
+        specialist_review.chat_event_bus,
         "publish_threadsafe",
         lambda chat_id, event: published.append(event.event),
     )
     monkeypatch.setattr(
-        specialist_service.chat_event_bus,
+        specialist_review.chat_event_bus,
         "close_chat_threadsafe",
         lambda chat_id: published.append("closed"),
     )
 
-    specialist_service._regenerate_ai_response_task(
+    specialist_review._regenerate_ai_response_task(
         3, 5, "Q", "A", "F", "neurology", None
     )
 
@@ -666,6 +737,102 @@ def test_regenerate_ai_response_task_streams_and_finalises(monkeypatch):
     assert published[0] == "stream_start"
     assert "complete" in published
     assert published[-1] == "closed"
+
+
+def test_regenerate_ai_response_task_invalidates_admin_caches_when_chat_missing(
+    monkeypatch,
+):
+    placeholder = SimpleNamespace(
+        id=3,
+        chat_id=5,
+        content="",
+        citations=None,
+        is_generating=True,
+    )
+
+    class FakeQuery:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            if self.model is Message:
+                return placeholder
+            return None
+
+    class FakeDB:
+        def query(self, model):
+            return FakeQuery(model)
+
+        def commit(self):
+            return None
+
+        def refresh(self, obj):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def iter_lines(self):
+            yield '{"type":"done","answer":"Hello","citations":[{"title":"Doc"}]}'
+
+    class FakeClient:
+        def __init__(self, timeout):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def stream(self, method, url, json):
+            class Ctx:
+                def __enter__(self_inner):
+                    return FakeResponse()
+
+                def __exit__(self_inner, exc_type, exc, tb):
+                    return None
+
+            return Ctx()
+
+    invalidations = []
+    monkeypatch.setattr(specialist_review, "SessionLocal", lambda: FakeDB())
+    monkeypatch.setattr(specialist_review.httpx, "Client", FakeClient)
+    monkeypatch.setattr(
+        specialist_review,
+        "_invalidate_admin_chat_caches",
+        lambda chat_id: invalidations.append(("chat", chat_id)),
+    )
+    monkeypatch.setattr(
+        specialist_review,
+        "_invalidate_admin_stats_cache",
+        lambda: invalidations.append(("stats", None)),
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "publish_threadsafe",
+        lambda chat_id, event: None,
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "close_chat_threadsafe",
+        lambda chat_id: None,
+    )
+
+    specialist_review._regenerate_ai_response_task(3, 5, "Q", "A", "F", None, None)
+
+    assert placeholder.content == "Hello"
+    assert invalidations == [("chat", 5), ("stats", None)]
 
 
 def test_regenerate_ai_response_task_stream_error_falls_back(monkeypatch):
@@ -741,25 +908,25 @@ def test_regenerate_ai_response_task_stream_error_falls_back(monkeypatch):
 
             return Ctx()
 
-    monkeypatch.setattr(specialist_service, "SessionLocal", lambda: FakeDB())
+    monkeypatch.setattr(specialist_review, "SessionLocal", lambda: FakeDB())
     monkeypatch.setattr(
-        specialist_service.message_repository,
+        specialist_review.message_repository,
         "list_for_chat",
         lambda db, chat_id: [],
     )
-    monkeypatch.setattr(specialist_service.httpx, "Client", FakeClient)
+    monkeypatch.setattr(specialist_review.httpx, "Client", FakeClient)
     monkeypatch.setattr(
-        specialist_service.chat_event_bus,
+        specialist_review.chat_event_bus,
         "publish_threadsafe",
         lambda chat_id, event: None,
     )
     monkeypatch.setattr(
-        specialist_service.chat_event_bus,
+        specialist_review.chat_event_bus,
         "close_chat_threadsafe",
         lambda chat_id: None,
     )
 
-    specialist_service._regenerate_ai_response_task(3, 5, "Q", "A", "F", None, None)
+    specialist_review._regenerate_ai_response_task(3, 5, "Q", "A", "F", None, None)
     assert (
         "clinical knowledge service is temporarily unavailable" in placeholder.content
     )
@@ -779,13 +946,13 @@ def test_regenerate_ai_response_task_rolls_back_on_outer_error(monkeypatch):
 
     db = FakeDB()
     closed = []
-    monkeypatch.setattr(specialist_service, "SessionLocal", lambda: db)
+    monkeypatch.setattr(specialist_review, "SessionLocal", lambda: db)
     monkeypatch.setattr(
-        specialist_service.chat_event_bus,
+        specialist_review.chat_event_bus,
         "close_chat_threadsafe",
         lambda chat_id: closed.append(chat_id),
     )
-    specialist_service._regenerate_ai_response_task(1, 2, "Q", "A", "F", None, None)
+    specialist_review._regenerate_ai_response_task(1, 2, "Q", "A", "F", None, None)
     assert getattr(db, "rolled_back", False) is True
     assert getattr(db, "closed", False) is True
     assert closed == [2]

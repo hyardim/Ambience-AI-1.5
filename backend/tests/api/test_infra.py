@@ -364,9 +364,12 @@ def test_stream_endpoint_rejects_token_without_subject(
 def test_stream_endpoint_rejects_missing_user_after_token_decode(
     client, created_chat, monkeypatch
 ):
-    monkeypatch.setattr(security, "decode_token", lambda token: "missing@example.com")
     monkeypatch.setattr(
-        "src.api.endpoints.chats.user_repository.get_by_email", lambda db, email: None
+        security,
+        "get_user_from_access_token",
+        lambda db, token: (_ for _ in ()).throw(
+            HTTPException(status_code=401, detail="Could not validate credentials")
+        ),
     )
     response = client.get(f"/chats/{created_chat['id']}/stream?token=good")
     assert response.status_code == 401
