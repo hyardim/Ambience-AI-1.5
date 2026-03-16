@@ -6,6 +6,7 @@ psycopg2, ollama client, etc.) are stubbed inside a module-scoped fixture so
 they are torn down after this module finishes and do not pollute other tests.
 """
 
+import importlib
 import os
 import sys
 import types
@@ -14,6 +15,7 @@ from typing import Literal
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
+from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -65,7 +67,7 @@ def _make_stub(name: str) -> types.ModuleType:
 
 @pytest.fixture(scope="module")
 def main_app():
-    """Stub heavy/unavailable deps, import src.main, then restore sys.modules."""
+    """Stub heavy deps, import the clinical app, then restore sys.modules."""
     _STUBBED = [
         "pydantic_settings",
         "sentence_transformers",
@@ -92,6 +94,10 @@ def main_app():
         "src.retrieval.vector_store",
         "src.generation.client",
         "src.generation.prompts",
+        "src.jobs.retry",
+        "src.api.app",
+        "src.api.routes",
+        "src.api.ask_routes",
         "src.main",
     ]
     saved = {k: sys.modules.pop(k) for k in _STUBBED if k in sys.modules}
@@ -137,6 +143,8 @@ def main_app():
 
     # fitz (PyMuPDF)
     _make_stub("fitz")
+    ask_routes = _make_stub("src.api.ask_routes")
+    ask_routes.router = APIRouter()  # type: ignore[attr-defined]
 
     # src.config - fake module with all symbols that src.main and its imports need
     fake_config = types.ModuleType("src.config")
@@ -170,6 +178,7 @@ def main_app():
         "src.retrieval.vector_store",
         "src.generation.client",
         "src.generation.prompts",
+        "src.jobs.retry",
     ):
         _make_stub(_mod_name)
 
@@ -201,13 +210,19 @@ def main_app():
     sys.modules["src.ingestion.pipeline"].PipelineError = _PipelineError  # type: ignore[attr-defined]
     sys.modules["src.ingestion.pipeline"].load_sources = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock()  # type: ignore[attr-defined]
+    sys.modules["src.jobs.retry"].RetryJobStatus = Literal["queued"]  # type: ignore[attr-defined]
+    sys.modules["src.jobs.retry"].create_retry_job = MagicMock(
+        return_value=("job-1", "queued")
+    )  # type: ignore[attr-defined]
+    sys.modules["src.jobs.retry"].get_retry_job = MagicMock(return_value=None)  # type: ignore[attr-defined]
 
     # src.generation.router only uses stdlib + the fake config above.
 
     try:
         import src.main as _main  # noqa: E402
+        _routes = importlib.import_module("src.api.routes")
 
-        yield _main
+        yield types.SimpleNamespace(app=_main.app, routes=_routes)
     finally:
         # Teardown: remove stubs and restore anything that was previously cached
         for k in _STUBBED:
@@ -222,17 +237,17 @@ def client(main_app):
 
 def _patch_ingest(monkeypatch, main_app, report=None, sources=None, side_effect=None):
     monkeypatch.setattr(
-        main_app,
+        main_app.routes,
         "load_sources",
         lambda path: sources if sources is not None else FAKE_SOURCES,
     )
     if side_effect:
         monkeypatch.setattr(
-            main_app, "run_ingestion", MagicMock(side_effect=side_effect)
+            main_app.routes, "run_ingestion", MagicMock(side_effect=side_effect)
         )
     else:
         monkeypatch.setattr(
-            main_app,
+            main_app.routes,
             "run_ingestion",
             MagicMock(return_value=report if report is not None else FAKE_REPORT),
         )
@@ -312,8 +327,8 @@ class TestIngestSuccess:
         self, client, main_app, monkeypatch
     ):
         mock_run = MagicMock(return_value=FAKE_REPORT)
-        monkeypatch.setattr(main_app, "load_sources", lambda path: FAKE_SOURCES)
-        monkeypatch.setattr(main_app, "run_ingestion", mock_run)
+        monkeypatch.setattr(main_app.routes, "load_sources", lambda path: FAKE_SOURCES)
+        monkeypatch.setattr(main_app.routes, "run_ingestion", mock_run)
 
         with (
             patch.object(Path, "mkdir"),

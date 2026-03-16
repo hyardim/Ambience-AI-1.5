@@ -13,15 +13,15 @@ from uuid import uuid4
 from redis import Redis
 from rq import Queue
 
-from .config import (
+from ..config import (
     REDIS_URL,
     RETRY_BACKOFF_MULTIPLIER,
     RETRY_BACKOFF_SECONDS,
     RETRY_JOB_TTL_SECONDS,
     RETRY_MAX_ATTEMPTS,
 )
-from .generation.client import ModelGenerationError, ProviderName, generate_answer
-from .utils.logger import setup_logger
+from ..generation.client import ModelGenerationError, ProviderName, generate_answer
+from ..utils.logger import setup_logger
 
 logger = setup_logger("rag.retry")
 
@@ -186,7 +186,7 @@ def create_retry_job(
     )
     redis_conn.expire(_job_key(job_id), RETRY_JOB_TTL_SECONDS)
 
-    queue.enqueue("src.retry_queue.process_retry_job", job_id=job_id)
+    queue.enqueue("src.jobs.retry.process_retry_job", job_id=job_id)
     logger.info(
         "retry_enqueue job_id=%s request_type=%s attempt=0",
         job_id,
@@ -414,7 +414,7 @@ def process_retry_job(job_id: str) -> None:
             queue = get_retry_queue(redis_conn)
             queue.enqueue_in(
                 timedelta(seconds=backoff),
-                "src.retry_queue.process_retry_job",
+                "src.jobs.retry.process_retry_job",
                 job_id=job_id,
             )
             _update_job_state(

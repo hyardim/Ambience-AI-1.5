@@ -3,7 +3,11 @@ Tests that build_grounded_prompt() and build_revision_prompt() correctly inject
 uploaded document content into the prompt string when provided.
 """
 
-from src.generation.prompts import build_grounded_prompt, build_revision_prompt
+from src.generation.prompts import (
+    _truncate_chunk_text,
+    build_grounded_prompt,
+    build_revision_prompt,
+)
 
 _CHUNKS = [
     {
@@ -88,6 +92,21 @@ class TestGroundedPromptFileContext:
         q_idx = prompt.index("Question:")
         assert pc_idx < ctx_idx < file_idx < q_idx
 
+    def test_patient_context_includes_specialty_severity_and_notes(self):
+        prompt = build_grounded_prompt(
+            "What DMT?",
+            _CHUNKS,
+            patient_context={
+                "specialty": "neurology",
+                "severity": "urgent",
+                "notes": "Recent relapse after steroid taper.",
+            },
+        )
+
+        assert "Specialty: Neurology" in prompt
+        assert "Severity: Urgent" in prompt
+        assert "Clinical notes: Recent relapse after steroid taper." in prompt
+
 
 class TestRevisionPromptFileContext:
     def test_file_context_in_revision_prompt(self):
@@ -120,3 +139,39 @@ class TestRevisionPromptFileContext:
             file_context=_FILE_CONTEXT,
         )
         assert prompt.index("Context:") < prompt.index("UPLOADED DOCUMENTS")
+
+    def test_patient_context_is_included_in_revision_prompt(self):
+        prompt = build_revision_prompt(
+            original_question="What DMT?",
+            previous_answer="Interferon.",
+            specialist_feedback="Escalate.",
+            chunks=_CHUNKS,
+            patient_context={"severity": "high", "notes": "Two relapses this year."},
+        )
+
+        assert "PATIENT CONTEXT" in prompt
+        assert "Severity: High" in prompt
+        assert "Clinical notes: Two relapses this year." in prompt
+
+    def test_truncate_chunk_text_marks_truncated_content(self):
+        text = "A" * 1300
+
+        result = _truncate_chunk_text(text)
+
+        assert result.endswith("…[truncated]")
+        assert len(result) <= 1200
+
+    def test_context_formats_page_ranges(self):
+        chunks = [
+            {
+                "text": "Methotrexate is first-line for RA.",
+                "metadata": {"title": "BSR RA Guideline"},
+                "score": 0.9,
+                "page_start": 5,
+                "page_end": 6,
+            }
+        ]
+
+        prompt = build_grounded_prompt("What DMT?", chunks)
+
+        assert "(pages 5-6)" in prompt

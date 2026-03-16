@@ -2,7 +2,7 @@ from redis import Redis
 from rq import Connection, Worker
 
 from src.config import REDIS_URL
-from src.retry_queue import QUEUE_NAME
+from src.jobs.retry import QUEUE_NAME
 
 
 def main() -> None:

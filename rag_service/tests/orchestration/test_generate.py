@@ -1,6 +1,6 @@
 import pytest
 
-from src.rag.generate import GenerationError, RAGResponse, generate
+from src.orchestration.generate import GenerationError, RAGResponse, generate
 from src.retrieval.citation import Citation, CitedResult
 
 
@@ -60,7 +60,7 @@ def test_generate_returns_response(monkeypatch) -> None:
         captured["timeout"] = timeout
         return FakeResponse(url, headers, json)
 
-    monkeypatch.setattr("src.rag.generate.httpx.post", fake_post)
+    monkeypatch.setattr("src.orchestration.generate.httpx.post", fake_post)
 
     class DummySettings:
         llm_base_url = "http://localhost:1234"
@@ -86,7 +86,17 @@ def test_generate_raises_generation_error(monkeypatch) -> None:
     def boom(*_, **__):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("src.rag.generate.httpx.post", boom)
+    monkeypatch.setattr("src.orchestration.generate.httpx.post", boom)
 
     with pytest.raises(GenerationError):
+        generate(query="q", context=_context())
+
+
+def test_generate_reraises_generation_error(monkeypatch) -> None:
+    def boom(*_, **__):
+        raise GenerationError(query="q", message="already wrapped")
+
+    monkeypatch.setattr("src.orchestration.generate.httpx.post", boom)
+
+    with pytest.raises(GenerationError, match="already wrapped"):
         generate(query="q", context=_context())

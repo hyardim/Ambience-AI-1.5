@@ -179,3 +179,42 @@ class TestStreamGenerate:
             async for _ in stream_generate("q"):
                 pass
 
+    @pytest.mark.anyio
+    async def test_skips_invalid_json_lines(self, monkeypatch):
+        chunks = [
+            "{bad json",
+            json.dumps({"response": "ok", "done": False}),
+            json.dumps({"response": "", "done": True}),
+        ]
+
+        class FakeStreamResponse:
+            async def aiter_lines(self):
+                for chunk in chunks:
+                    yield chunk
+
+            def raise_for_status(self):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        class FakeClient:
+            def stream(self, method, url, json=None):
+                return FakeStreamResponse()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: FakeClient())
+
+        tokens = []
+        async for token in stream_generate("q"):
+            tokens.append(token)
+
+        assert tokens == ["ok"]

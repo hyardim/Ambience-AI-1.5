@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.api.dependencies import Settings
 from src.config import llm_config
-from src.rag.generate import RAGResponse, generate
+from src.orchestration.generate import RAGResponse, generate
 from src.retrieval.retrieve import retrieve
 
 

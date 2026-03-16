@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from src.generation.client import ModelGenerationError
-from src.retry_queue import (
+from src.jobs.retry import (
     RetryJobStatus,
     _build_answer_response,
     _build_idempotency_identifier,
@@ -72,9 +72,9 @@ class FakeRedis:
 def fake_backend(monkeypatch):
     redis_conn = FakeRedis()
     queue = FakeQueue()
-    monkeypatch.setattr("src.retry_queue.get_redis_connection", lambda: redis_conn)
+    monkeypatch.setattr("src.jobs.retry.get_redis_connection", lambda: redis_conn)
     monkeypatch.setattr(
-        "src.retry_queue.get_retry_queue", lambda connection=None: queue
+        "src.jobs.retry.get_retry_queue", lambda connection=None: queue
     )
     return redis_conn, queue
 
@@ -99,7 +99,7 @@ def test_retries_on_transient_generation_error(fake_backend, monkeypatch):
     async def transient_fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise ModelGenerationError("temporary", retryable=True)
 
-    monkeypatch.setattr("src.retry_queue.generate_answer", transient_fail)
+    monkeypatch.setattr("src.jobs.retry.generate_answer", transient_fail)
 
     process_retry_job(job_id)
     state = get_retry_job(job_id, connection=redis_conn)
@@ -135,7 +135,7 @@ def test_status_transitions_to_succeeded(fake_backend, monkeypatch):
     async def succeed(*args, **kwargs):  # noqa: ANN002, ANN003
         return "Answer with citation [1]"
 
-    monkeypatch.setattr("src.retry_queue.generate_answer", succeed)
+    monkeypatch.setattr("src.jobs.retry.generate_answer", succeed)
 
     process_retry_job(job_id)
     state = get_retry_job(job_id, connection=redis_conn)
@@ -159,7 +159,7 @@ def test_exhausted_retries_marks_failed(fake_backend, monkeypatch):
     async def transient_fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise ModelGenerationError("temporary", retryable=True)
 
-    monkeypatch.setattr("src.retry_queue.generate_answer", transient_fail)
+    monkeypatch.setattr("src.jobs.retry.generate_answer", transient_fail)
 
     process_retry_job(job_id)
     state = get_retry_job(job_id, connection=redis_conn)
@@ -208,8 +208,8 @@ def test_build_idempotency_identifier_prefers_explicit_key() -> None:
 def test_compute_backoff_seconds_never_below_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.retry_queue.RETRY_BACKOFF_SECONDS", 0)
-    monkeypatch.setattr("src.retry_queue.RETRY_BACKOFF_MULTIPLIER", 0)
+    monkeypatch.setattr("src.jobs.retry.RETRY_BACKOFF_SECONDS", 0)
+    monkeypatch.setattr("src.jobs.retry.RETRY_BACKOFF_MULTIPLIER", 0)
     assert _compute_backoff_seconds(0) == 1
 
 
@@ -278,9 +278,9 @@ def test_get_redis_connection_uses_config(monkeypatch: pytest.MonkeyPatch) -> No
             calls.append(url)
             return "redis-conn"
 
-    monkeypatch.setattr("src.retry_queue.Redis", DummyRedis)
+    monkeypatch.setattr("src.jobs.retry.Redis", DummyRedis)
 
-    from src.retry_queue import get_redis_connection
+    from src.jobs.retry import get_redis_connection
 
     assert get_redis_connection() == "redis-conn"
     assert calls
@@ -314,7 +314,7 @@ def test_create_retry_job_generates_new_job_when_existing_lookup_missing(
     redis_conn.kv["rag:idempotency:idem"] = "stale-job"
 
     monkeypatch.setattr(
-        "src.retry_queue._build_idempotency_identifier",
+        "src.jobs.retry._build_idempotency_identifier",
         lambda idempotency_key, request_type, payload: "idem",
     )
 
@@ -335,7 +335,7 @@ def test_create_retry_job_without_identifier_still_queues(
 ) -> None:
     redis_conn, queue = fake_backend
     monkeypatch.setattr(
-        "src.retry_queue._build_idempotency_identifier",
+        "src.jobs.retry._build_idempotency_identifier",
         lambda idempotency_key, request_type, payload: None,
     )
 
@@ -361,7 +361,7 @@ def test_process_retry_job_marks_failed_on_unexpected_exception(
     async def explode(*args, **kwargs):  # noqa: ANN002, ANN003
         raise RuntimeError("unexpected")
 
-    monkeypatch.setattr("src.retry_queue.generate_answer", explode)
+    monkeypatch.setattr("src.jobs.retry.generate_answer", explode)
 
     process_retry_job(job_id)
     state = get_retry_job(job_id, connection=redis_conn)
@@ -382,7 +382,7 @@ def test_process_retry_job_builds_revise_response(fake_backend, monkeypatch) -> 
     async def succeed(*args, **kwargs):  # noqa: ANN002, ANN003
         return "Answer with citation [1]"
 
-    monkeypatch.setattr("src.retry_queue.generate_answer", succeed)
+    monkeypatch.setattr("src.jobs.retry.generate_answer", succeed)
 
     process_retry_job(job_id)
     state = get_retry_job(job_id, connection=redis_conn)

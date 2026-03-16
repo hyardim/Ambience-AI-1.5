@@ -9,6 +9,7 @@ from typing import Literal
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
 _STUBBED_MODULES = [
@@ -37,7 +38,10 @@ _STUBBED_MODULES = [
     "src.retrieval.vector_store",
     "src.generation.client",
     "src.generation.prompts",
-    "src.retry_queue",
+    "src.jobs.retry",
+    "src.api.app",
+    "src.api.routes",
+    "src.api.ask_routes",
     "src.main",
 ]
 
@@ -78,6 +82,8 @@ def _install_stubs() -> None:
     nltk_tok.sent_tokenize = lambda text, **kw: text.split(". ")  # type: ignore[assignment]
 
     _make_stub("fitz")
+    ask_routes = _make_stub("src.api.ask_routes")
+    ask_routes.router = APIRouter()  # type: ignore[attr-defined]
 
     fake_config = types.ModuleType("src.config")
     fake_config.DATABASE_URL = "postgresql://admin:pw@localhost/test"
@@ -107,7 +113,7 @@ def _install_stubs() -> None:
         "src.retrieval.vector_store",
         "src.generation.client",
         "src.generation.prompts",
-        "src.retry_queue",
+        "src.jobs.retry",
     ):
         _make_stub(module_name)
 
@@ -153,7 +159,7 @@ def _install_stubs() -> None:
     sys.modules["src.ingestion.pipeline"].load_sources = MagicMock()
     sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock()
 
-    retry_module = sys.modules["src.retry_queue"]
+    retry_module = sys.modules["src.jobs.retry"]
 
     class FakeRetryJobStatus(str, Enum):
         QUEUED = "queued"
@@ -185,9 +191,14 @@ def _restore_modules(originals: dict[str, types.ModuleType | None]) -> None:
 def main_module():
     originals = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
     _install_stubs()
+    sys.modules.pop("src.api.routes", None)
+    sys.modules.pop("src.api.app", None)
+    sys.modules.pop("src.api.ask_routes", None)
     sys.modules.pop("src.main", None)
 
     main = importlib.import_module("src.main")
+    routes = importlib.import_module("src.api.routes")
+    main.routes = routes
     try:
         yield main
     finally:
@@ -217,7 +228,7 @@ def test_health_endpoint_returns_runtime_settings(client):
 
 
 def test_jobs_status_returns_404_when_missing(client, main_module):
-    main_module.get_retry_job = MagicMock(return_value=None)
+    main_module.routes.get_retry_job = MagicMock(return_value=None)
 
     resp = client.get("/jobs/missing")
 
@@ -225,7 +236,7 @@ def test_jobs_status_returns_404_when_missing(client, main_module):
 
 
 def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_module):
-    main_module.retrieve_chunks = MagicMock(
+    main_module.routes.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -238,7 +249,7 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
     async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise main_module.ModelGenerationError("transient", retryable=True)
 
-    monkeypatch.setattr(main_module, "generate_answer", fail)
+    monkeypatch.setattr(main_module.routes, "generate_answer", fail)
 
     resp = client.post("/answer", json={"query": "headache", "top_k": 1})
     assert resp.status_code == 202
@@ -246,7 +257,7 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
 
 
 def test_answer_returns_done_stream_when_no_results(client, main_module):
-    main_module.retrieve_chunks = MagicMock(return_value=[])
+    main_module.routes.retrieve_chunks = MagicMock(return_value=[])
 
     resp = client.post(
         "/answer",
@@ -258,7 +269,7 @@ def test_answer_returns_done_stream_when_no_results(client, main_module):
 
 
 def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_module):
-    main_module.retrieve_chunks = MagicMock(
+    main_module.routes.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -271,7 +282,7 @@ def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_modul
     async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise main_module.ModelGenerationError("transient", retryable=True)
 
-    monkeypatch.setattr(main_module, "generate_answer", fail)
+    monkeypatch.setattr(main_module.routes, "generate_answer", fail)
 
     resp = client.post(
         "/revise",
@@ -288,7 +299,7 @@ def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_modul
 
 
 def test_answer_returns_non_stream_empty_response(client, main_module):
-    main_module.retrieve_chunks = MagicMock(return_value=[])
+    main_module.routes.retrieve_chunks = MagicMock(return_value=[])
 
     resp = client.post(
         "/answer",
@@ -300,7 +311,7 @@ def test_answer_returns_non_stream_empty_response(client, main_module):
 
 
 def test_answer_streams_with_results(client, main_module):
-    main_module.retrieve_chunks = MagicMock(
+    main_module.routes.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -324,7 +335,7 @@ def test_answer_non_retryable_generation_error_returns_500(
     client,
     main_module,
 ):
-    main_module.retrieve_chunks = MagicMock(
+    main_module.routes.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -337,7 +348,7 @@ def test_answer_non_retryable_generation_error_returns_500(
     async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise main_module.ModelGenerationError("fatal", retryable=False)
 
-    monkeypatch.setattr(main_module, "generate_answer", fail)
+    monkeypatch.setattr(main_module.routes, "generate_answer", fail)
 
     resp = client.post("/answer", json={"query": "headache", "top_k": 1})
 
@@ -354,12 +365,12 @@ def test_answer_passes_specialty_to_similarity_search(client, main_module):
             },
         ]
     )
-    main_module.retrieve_chunks = search_mock
+    main_module.routes.retrieve_chunks = search_mock
 
     async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
         return "ok"
 
-    main_module.generate_answer = ok_answer
+    main_module.routes.generate_answer = ok_answer
 
     resp = client.post(
         "/answer",
@@ -384,12 +395,12 @@ def test_revise_passes_specialty_to_similarity_search(client, main_module):
             },
         ]
     )
-    main_module.retrieve_chunks = search_mock
+    main_module.routes.retrieve_chunks = search_mock
 
     async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
         return "ok"
 
-    main_module.generate_answer = ok_answer
+    main_module.routes.generate_answer = ok_answer
 
     resp = client.post(
         "/revise",
@@ -411,7 +422,7 @@ def test_revise_passes_specialty_to_similarity_search(client, main_module):
 
 
 def test_revise_streams_with_results(client, main_module):
-    main_module.retrieve_chunks = MagicMock(
+    main_module.routes.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -441,7 +452,7 @@ def test_revise_non_retryable_generation_error_returns_500(
     client,
     main_module,
 ):
-    main_module.retrieve_chunks = MagicMock(
+    main_module.routes.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -454,7 +465,7 @@ def test_revise_non_retryable_generation_error_returns_500(
     async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
         raise main_module.ModelGenerationError("fatal", retryable=False)
 
-    monkeypatch.setattr(main_module, "generate_answer", fail)
+    monkeypatch.setattr(main_module.routes, "generate_answer", fail)
 
     resp = client.post(
         "/revise",
@@ -470,7 +481,7 @@ def test_revise_non_retryable_generation_error_returns_500(
 
 
 def test_fetch_document_not_found(client, main_module):
-    main_module.get_source_path_for_doc = MagicMock(return_value=None)
+    main_module.routes.get_source_path_for_doc = MagicMock(return_value=None)
 
     resp = client.get("/docs/doc-1")
 
@@ -479,8 +490,8 @@ def test_fetch_document_not_found(client, main_module):
 
 def test_fetch_document_missing_file(client, main_module, tmp_path):
     path = tmp_path / "data" / "missing.pdf"
-    main_module.path_config.root = tmp_path
-    main_module.get_source_path_for_doc = MagicMock(return_value=str(path))
+    main_module.routes.path_config.root = tmp_path
+    main_module.routes.get_source_path_for_doc = MagicMock(return_value=str(path))
 
     resp = client.get("/docs/doc-1")
 
@@ -493,8 +504,8 @@ def test_fetch_document_success(client, main_module, tmp_path):
     data_root.mkdir()
     doc = data_root / "doc.pdf"
     doc.write_bytes(b"pdf")
-    main_module.path_config.root = tmp_path
-    main_module.get_source_path_for_doc = MagicMock(return_value=str(doc))
+    main_module.routes.path_config.root = tmp_path
+    main_module.routes.get_source_path_for_doc = MagicMock(return_value=str(doc))
 
     resp = client.get("/docs/doc-1")
 

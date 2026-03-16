@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.clinical_api.schemas import SearchResult
-from src.clinical_api.services import (
+from src.api.schemas import SearchResult
+from src.api.services import (
     embed_query_text,
     filter_chunks,
     retrieve_chunks,
@@ -33,7 +33,7 @@ def test_retrieve_chunks_passes_embedding_and_options(
 ) -> None:
     search_calls: list[tuple[list[float], int, str | None]] = []
     monkeypatch.setattr(
-        "src.clinical_api.services.embed_query_text",
+        "src.api.services.embed_query_text",
         lambda query: [0.1, 0.2] if query == "headache" else [9.9],
     )
 
@@ -46,7 +46,7 @@ def test_retrieve_chunks_passes_embedding_and_options(
         search_calls.append((vector, limit, specialty))
         return [{"text": "chunk", "score": 0.8, "metadata": {}}]
 
-    monkeypatch.setattr("src.clinical_api.services.search_similar_chunks", fake_search)
+    monkeypatch.setattr("src.api.services.search_similar_chunks", fake_search)
 
     result = retrieve_chunks("headache", top_k=3, specialty="neurology")
 
@@ -58,7 +58,7 @@ def test_embed_query_text_uses_single_query_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = object()
-    monkeypatch.setattr("src.clinical_api.services.get_embedding_model", lambda: model)
+    monkeypatch.setattr("src.api.services.get_embedding_model", lambda: model)
 
     def fake_embed_text(
         loaded_model: object,
@@ -71,7 +71,7 @@ def test_embed_query_text_uses_single_query_batch(
         assert batch_size == 1
         return [[0.3, 0.4]]
 
-    monkeypatch.setattr("src.clinical_api.services.embed_text", fake_embed_text)
+    monkeypatch.setattr("src.api.services.embed_text", fake_embed_text)
 
     assert embed_query_text("question") == [0.3, 0.4]
 

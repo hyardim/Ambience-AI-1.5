@@ -7,6 +7,7 @@ import pytest
 
 from src.ingestion.metadata import (
     MetadataValidationError,
+    _derive_source_url,
     attach_metadata,
     extract_pdf_metadata,
     extract_title,
@@ -160,6 +161,17 @@ class TestInferFromPath:
         )
         assert result["specialty"] == "rheumatology"
         assert result["source_name"] == "Others"
+
+
+def test_derive_source_url_builds_nice_guidance_link() -> None:
+    source_url = _derive_source_url(
+        {
+            "source_url": "https://www.nice.org.uk/somewhere",
+            "source_path": "data/raw/neurology/NICE/NG128.pdf",
+        }
+    )
+
+    assert source_url == "https://www.nice.org.uk/guidance/ng128"
 
 
 # -----------------------------------------------------------------------

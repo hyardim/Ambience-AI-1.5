@@ -1,5 +1,5 @@
-from src.rag.generate import RAGResponse
-from src.rag.pipeline import ask
+from src.orchestration.generate import RAGResponse
+from src.orchestration.pipeline import ask
 from src.retrieval.citation import Citation, CitedResult
 
 
@@ -47,8 +47,8 @@ def test_ask_wires_retrieve_and_generate(monkeypatch) -> None:
         calls["generate"] = kwargs
         return _response()
 
-    monkeypatch.setattr("src.rag.pipeline.retrieve", fake_retrieve)
-    monkeypatch.setattr("src.rag.pipeline.generate", fake_generate)
+    monkeypatch.setattr("src.orchestration.pipeline.retrieve", fake_retrieve)
+    monkeypatch.setattr("src.orchestration.pipeline.generate", fake_generate)
 
     result = ask(
         query="q",
@@ -86,8 +86,8 @@ def test_ask_returns_polite_when_no_context(monkeypatch) -> None:
         calls["generate"] = kwargs
         raise AssertionError("generate should not be called when no context")
 
-    monkeypatch.setattr("src.rag.pipeline.retrieve", fake_retrieve)
-    monkeypatch.setattr("src.rag.pipeline.generate", fake_generate)
+    monkeypatch.setattr("src.orchestration.pipeline.retrieve", fake_retrieve)
+    monkeypatch.setattr("src.orchestration.pipeline.generate", fake_generate)
 
     result = ask(query="q", db_url="postgresql://x")
 

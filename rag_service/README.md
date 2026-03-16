@@ -119,7 +119,7 @@ docker compose up -d redis
 ### Start the retry worker
 
 ```bash
-python scripts/run_retry_worker.py
+python scripts/workers/run_retry_worker.py
 ```
 
 Or via Docker Compose:

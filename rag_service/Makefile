@@ -34,7 +34,7 @@ install-dev:
 
 nltk-download:
 	python -m nltk.downloader punkt punkt_tab
-	python scripts/verify_nltk.py
+	python scripts/setup/verify_nltk.py
 
 setup:
 	mkdir -p data/raw data/processed data/debug logs configs
@@ -58,9 +58,9 @@ db-reset:
 
 db-migrate:
 	@test -n "$(DATABASE_URL)" || (echo "ERROR: DATABASE_URL is not set. Check your .env file." && exit 1)
-	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/003_add_text_search_vector.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/001_create_rag_chunks.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/003_add_text_search_vector.sql
 	@echo "Migrations applied."
 
 db-migrate-reset:
@@ -68,9 +68,9 @@ db-migrate-reset:
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS chunks CASCADE;"
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
-	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/003_add_text_search_vector.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/001_create_rag_chunks.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/003_add_text_search_vector.sql
 	@echo "Migration reset complete."
 
 test:
@@ -107,7 +107,7 @@ run-ingest:
 	  $(if $(WRITE_DEBUG),--write-debug-artifacts)
 
 run-retry-worker:
-	python scripts/run_retry_worker.py
+	python scripts/workers/run_retry_worker.py
 
 # run-query:
 # 	python scripts/query.py

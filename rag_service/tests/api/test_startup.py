@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from src.clinical_api import startup
+from src.api import startup
 
 
 @pytest.fixture(autouse=True)

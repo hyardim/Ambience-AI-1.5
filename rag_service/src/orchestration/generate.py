@@ -6,7 +6,7 @@ import httpx
 from pydantic import BaseModel
 
 from src.config import llm_config
-from src.rag.prompt import build_system_prompt, format_context
+from src.orchestration.prompt import build_system_prompt, format_context
 from src.retrieval.citation import CitedResult
 
 

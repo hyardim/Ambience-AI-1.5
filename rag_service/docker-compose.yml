@@ -88,7 +88,7 @@ services:
       - ./rag_service/scripts:/app/scripts
     environment:
       - REDIS_URL=redis://redis:6379/0
-    command: python scripts/run_retry_worker.py
+    command: python scripts/workers/run_retry_worker.py
     networks:
       - ambience_net
 

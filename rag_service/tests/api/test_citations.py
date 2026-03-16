@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from src.clinical_api.citations import (
+from src.api.citations import (
     extract_citation_results,
     parse_citation_group,
 )
-from src.clinical_api.schemas import SearchResult
+from src.api.schemas import SearchResult
 
 
 def test_extract_citation_results_can_strip_references() -> None:

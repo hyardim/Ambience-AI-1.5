@@ -17,6 +17,9 @@ from src.ingestion.embed import (
     _make_failure_fields,
     _make_success_fields,
     embed_chunks,
+    embed_text,
+    get_vector_dim,
+    load_embedder,
 )
 
 # -----------------------------------------------------------------------
@@ -237,6 +240,43 @@ class TestEmbedSingle:
         assert vector is not None
         assert error is None
         assert call_count == 2
+
+
+class TestPublicHelpers:
+    def test_load_embedder_returns_shared_model(self) -> None:
+        sentinel = MagicMock()
+        with patch("src.ingestion.embed._load_model", return_value=sentinel):
+            assert load_embedder() is sentinel
+
+    def test_get_vector_dim_returns_integer_dimension(self) -> None:
+        model = MagicMock()
+        model.get_sentence_embedding_dimension.return_value = 768.0
+
+        assert get_vector_dim(model) == 768
+
+    def test_get_vector_dim_raises_when_missing(self) -> None:
+        model = MagicMock()
+        model.get_sentence_embedding_dimension.return_value = None
+
+        with pytest.raises(ValueError, match="vector dimension"):
+            get_vector_dim(model)
+
+    def test_embed_text_returns_empty_for_empty_inputs(self) -> None:
+        model = MagicMock()
+
+        assert embed_text(model, []) == []
+        model.encode.assert_not_called()
+
+    def test_embed_text_uses_requested_batch_size(self) -> None:
+        model = MagicMock()
+        model.encode.return_value = np.array([make_fake_vector()])
+
+        result = embed_text(model, ["hello"], batch_size=7)
+
+        assert len(result) == 1
+        _, kwargs = model.encode.call_args
+        assert kwargs["batch_size"] == 7
+        assert kwargs["normalize_embeddings"] is True
 
 
 # -----------------------------------------------------------------------

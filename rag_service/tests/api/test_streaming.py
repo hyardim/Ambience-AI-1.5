@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from src.clinical_api.schemas import SearchResult
-from src.clinical_api.streaming import streaming_generator
+from src.api.schemas import SearchResult
+from src.api.streaming import streaming_generator
 
 
 @pytest.mark.anyio
@@ -21,7 +21,7 @@ async def test_streaming_generator_uses_generate_answer_for_cloud(
         return "Cloud answer [1]"
 
     monkeypatch.setattr(
-        "src.clinical_api.streaming.generate_answer",
+        "src.api.streaming.generate_answer",
         fake_generate_answer,
     )
     citations = [SearchResult(text="A", source="S", score=0.9)]
@@ -49,7 +49,7 @@ async def test_produces_chunks_then_done(monkeypatch: pytest.MonkeyPatch) -> Non
             yield token
 
     monkeypatch.setattr(
-        "src.clinical_api.streaming.stream_generate",
+        "src.api.streaming.stream_generate",
         fake_stream_generate,
     )
 
@@ -82,7 +82,7 @@ async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> Non
         yield  # pragma: no cover
 
     monkeypatch.setattr(
-        "src.clinical_api.streaming.stream_generate",
+        "src.api.streaming.stream_generate",
         failing_stream,
     )
 
