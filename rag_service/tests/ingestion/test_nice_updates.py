@@ -47,7 +47,8 @@ def test_update_downloads_and_ingests(tmp_path: Path, monkeypatch: Any) -> None:
 
     monkeypatch.setattr(path_config, "root", tmp_path)
     monkeypatch.setattr(path_config, "data_raw", data_root)
-    monkeypatch.setattr(path_config, "data_processed", tmp_path / "data" / "processed")
+    monkeypatch.setattr(path_config, "data_processed",
+                        tmp_path / "data" / "processed")
     _write_mapping(tmp_path, {"nice_id": "ng128", "source_name": "NICE"})
 
     monkeypatch.setenv("NICE_API_KEY", "test-key")
@@ -63,9 +64,12 @@ def test_update_downloads_and_ingests(tmp_path: Path, monkeypatch: Any) -> None:
     )
 
     with (
-        patch.object(nice_updates.NiceSyndicationClient, "fetch_guideline", return_value=remote),
-        patch.object(nice_updates.NiceSyndicationClient, "download_pdf", return_value=True),
-        patch("src.ingestion.pipeline.run_ingestion", return_value={"files_failed": 0}),
+        patch.object(nice_updates.NiceSyndicationClient,
+                     "fetch_guideline", return_value=remote),
+        patch.object(nice_updates.NiceSyndicationClient,
+                     "download_pdf", return_value=True),
+        patch("src.ingestion.pipeline.run_ingestion",
+              return_value={"files_failed": 0}),
     ):
         summary = nice_updates.update_nice_guidelines(
             data_root=data_root,

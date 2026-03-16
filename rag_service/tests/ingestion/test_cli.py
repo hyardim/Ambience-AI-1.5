@@ -131,7 +131,8 @@ class TestIngestCommand:
         with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY):
             result = runner.invoke(
                 cli,
-                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+                ["ingest", "--input", input_dir,
+                    "--source-name", "NICE", "--dry-run"],
             )
         assert result.exit_code == 0
         assert "Ingestion complete" in result.output
@@ -142,7 +143,8 @@ class TestIngestCommand:
         with patch("src.ingestion.cli.run_ingestion", return_value=FAKE_SUMMARY):
             result = runner.invoke(
                 cli,
-                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+                ["ingest", "--input", input_dir,
+                    "--source-name", "NICE", "--dry-run"],
             )
         assert "Files scanned" in result.output
         assert "Succeeded" in result.output
@@ -155,7 +157,8 @@ class TestIngestCommand:
         with patch("src.ingestion.cli.run_ingestion", return_value=FAILED_SUMMARY):
             result = runner.invoke(
                 cli,
-                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+                ["ingest", "--input", input_dir,
+                    "--source-name", "NICE", "--dry-run"],
             )
         assert result.exit_code == 1
 
@@ -168,7 +171,8 @@ class TestIngestCommand:
         ):
             result = runner.invoke(
                 cli,
-                ["ingest", "--input", input_dir, "--source-name", "FOO", "--dry-run"],
+                ["ingest", "--input", input_dir,
+                    "--source-name", "FOO", "--dry-run"],
             )
         assert result.exit_code == 1
         assert "ERROR" in result.output
@@ -202,7 +206,8 @@ class TestIngestCommand:
         ) as mock_run:
             runner.invoke(
                 cli,
-                ["ingest", "--input", input_dir, "--source-name", "NICE", "--dry-run"],
+                ["ingest", "--input", input_dir,
+                    "--source-name", "NICE", "--dry-run"],
             )
         assert mock_run.call_args.kwargs["dry_run"] is True
 
@@ -320,13 +325,15 @@ class TestIngestCommand:
         assert mock_run.call_args.kwargs["db_url"] == "postgresql://env/db"
 
     def test_missing_input_flag_exits_nonzero(self, runner: CliRunner) -> None:
-        result = runner.invoke(cli, ["ingest", "--source-name", "NICE", "--dry-run"])
+        result = runner.invoke(
+            cli, ["ingest", "--source-name", "NICE", "--dry-run"])
         assert result.exit_code != 0
 
     def test_missing_source_name_exits_nonzero(
         self, runner: CliRunner, input_dir: str
     ) -> None:
-        result = runner.invoke(cli, ["ingest", "--input", input_dir, "--dry-run"])
+        result = runner.invoke(
+            cli, ["ingest", "--input", input_dir, "--dry-run"])
         assert result.exit_code != 0
 
     def test_main_entrypoint_is_callable(self) -> None:
