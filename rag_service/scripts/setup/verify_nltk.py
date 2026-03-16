@@ -12,7 +12,9 @@ RESOURCES = ("punkt", "punkt_tab")
 
 def _download_dir() -> Path:
     configured = os.getenv("NLTK_DATA", "").split(os.pathsep)[0].strip()
-    return Path(configured) if configured else Path("/usr/local/share/nltk_data")
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[2] / "data" / "nltk_data"
 
 
 def _cleanup_resource(download_dir: Path, resource: str) -> None:
@@ -57,6 +59,8 @@ def verify() -> None:
 
     download_dir = _download_dir()
     download_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["NLTK_DATA"] = str(download_dir)
+    nltk.data.path.insert(0, str(download_dir))
 
     for resource in RESOURCES:
         if not _ensure_resource(nltk, download_dir, resource):
