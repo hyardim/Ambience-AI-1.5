@@ -1,0 +1,15 @@
+# Map local PDFs to NICE identifiers when filename is not a NICE ID.
+# Keys can be relative paths under data/raw or just filenames.
+
+mappings:
+  # "rheumatology/NICE/NICE AS 2017.pdf":
+  #   nice_id: "ng65"
+  #   content_type: "guidance"
+  #   source_name: "NICE"
+  # "NICE OA 2025.pdf":
+  #   nice_id: "ng226"
+
+# Defaults applied when not set per mapping.
+# content_type values should align with NICE API content types.
+defaults:
+  content_type: "guidance"

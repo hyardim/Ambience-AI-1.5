@@ -160,7 +160,37 @@ make format         # Auto-fix formatting and imports (ruff)
 make lint           # Run ruff + mypy
 make test           # Run tests with coverage report
 make run-ingest     # Run ingestion pipeline
+make run-nice-update # Check NICE API for guideline updates
 make run-query      # Run RAG query
+```
+
+### NICE guideline updates
+
+The updater checks the NICE Syndication API for newer versions of existing
+NICE PDFs in `data/raw/...`. It downloads updates safely and re-runs ingestion
+for updated documents.
+
+Configuration (in `.env`):
+
+```env
+NICE_API_KEY=your_key_here
+NICE_API_BASE_URL=https://api.nice.org.uk
+NICE_API_GUIDANCE_ENDPOINT=/guidance/{nice_id}
+```
+
+To map filenames that are not NICE IDs (e.g. "NICE AS 2017.pdf"), update
+`configs/nice_guideline_map.yaml`.
+
+Run manually:
+
+```bash
+make run-nice-update
+```
+
+Schedule (example weekly cron):
+
+```cron
+0 3 * * 1 cd /path/to/rag_service && make run-nice-update
 ```
 
 ### Before Every Commit
