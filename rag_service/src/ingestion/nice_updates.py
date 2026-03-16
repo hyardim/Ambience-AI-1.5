@@ -197,7 +197,8 @@ class NiceSyndicationClient:
             logger.warning("NICE API request failed for %s: %s", nice_id, exc)
             return None
         except ValueError as exc:
-            logger.warning("NICE API returned invalid JSON for %s: %s", nice_id, exc)
+            logger.warning(
+                "NICE API returned invalid JSON for %s: %s", nice_id, exc)
             return None
 
         data = _extract_result(payload, self._settings.result_path)
@@ -229,7 +230,8 @@ class NiceSyndicationClient:
                 temp_path.unlink(missing_ok=True)
             return False
         except OSError as exc:
-            logger.warning("Failed to write NICE PDF to %s: %s", destination, exc)
+            logger.warning("Failed to write NICE PDF to %s: %s",
+                           destination, exc)
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)
             return False
@@ -259,7 +261,8 @@ def update_nice_guidelines(
         return {"scanned": 0, "matched": 0, "updated": 0, "skipped": 0}
 
     if not settings.base_url or not settings.guidance_endpoint:
-        logger.warning("NICE API base URL or endpoint not configured; skipping.")
+        logger.warning(
+            "NICE API base URL or endpoint not configured; skipping.")
         return {"scanned": 0, "matched": 0, "updated": 0, "skipped": 0}
 
     data_root = data_root or path_config.data_raw
@@ -293,7 +296,8 @@ def update_nice_guidelines(
 
     for pdf_path in pdfs:
         relative = str(pdf_path.relative_to(data_root))
-        mapping_entry = _resolve_mapping_entry(mappings, relative, pdf_path.name)
+        mapping_entry = _resolve_mapping_entry(
+            mappings, relative, pdf_path.name)
         nice_id = None
         content_type = content_default
 
@@ -341,10 +345,12 @@ def update_nice_guidelines(
 
         if ingest:
             if db_url is None and not dry_run:
-                raise ValueError("db_url is required when ingest=True and dry_run=False")
+                raise ValueError(
+                    "db_url is required when ingest=True and dry_run=False")
 
             source_meta = infer_from_path(str(pdf_path))
-            source_name = mapping_entry.get("source_name") if mapping_entry else None
+            source_name = mapping_entry.get(
+                "source_name") if mapping_entry else None
             if not source_name:
                 source_name = source_meta.get("source_name", "")
 

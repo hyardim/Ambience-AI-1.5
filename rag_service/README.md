@@ -166,9 +166,26 @@ make run-query      # Run RAG query
 
 ### NICE guideline updates
 
-The updater checks the NICE Syndication API for newer versions of existing
-NICE PDFs in `data/raw/...`. It downloads updates safely and re-runs ingestion
-for updated documents.
+The updater is wired up but currently runs in no-op mode because we do not yet
+have NICE API access. Without a configured API key and endpoints, it exits
+cleanly and leaves local PDFs untouched.
+
+How it works today (with no API access):
+
+- Scans `data/raw/...` for PDFs.
+- Attempts to match NICE IDs from filenames (e.g. `NG128.pdf`) or from
+	`configs/nice_guideline_map.yaml`.
+- If `NICE_API_KEY` or API endpoints are missing, it logs a warning and stops.
+
+How it works once API access is enabled:
+
+- For each matched guideline, calls the NICE Syndication API to fetch the
+	latest metadata.
+- Compares the remote last-updated/version fields to a local sync state cache.
+- If a newer version exists, downloads to a temp file, replaces the local PDF,
+	then re-runs ingestion for that document.
+- If the API is unavailable or returns errors, it keeps existing files as-is
+	and logs warnings.
 
 Configuration (in `.env`):
 
@@ -177,6 +194,9 @@ NICE_API_KEY=your_key_here
 NICE_API_BASE_URL=https://api.nice.org.uk
 NICE_API_GUIDANCE_ENDPOINT=/guidance/{nice_id}
 ```
+
+If you do not have an API key yet, leave these blank; the updater will skip
+updates safely.
 
 To map filenames that are not NICE IDs (e.g. "NICE AS 2017.pdf"), update
 `configs/nice_guideline_map.yaml`.

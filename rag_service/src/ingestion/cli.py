@@ -85,7 +85,8 @@ def cli() -> None:
 @click.option(
     "--log-level",
     default="INFO",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"],
+                      case_sensitive=False),
     help="Logging level (default: INFO).",
 )
 @click.option(
@@ -180,7 +181,8 @@ def ingest(
 @click.option(
     "--log-level",
     default="INFO",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"],
+                      case_sensitive=False),
     help="Logging level (default: INFO).",
 )
 def update_nice(
