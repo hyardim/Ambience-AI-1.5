@@ -7,7 +7,7 @@ type RawCitation = Record<string, unknown> & {
 
 /** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
 export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw)
+  const list = Array.isArray(raw) && raw.length > 0
     ? raw
     : Array.isArray(fallback)
       ? fallback
@@ -40,7 +40,7 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
           || readString(citation.source)
           || 'Source',
         specialty: readString(citation.specialty) || readString(meta.specialty),
-        section_path: sectionPath,
+        section_path: readSectionPath(sectionPath),
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
         page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
         source_url: readString(citation.source_url) || readString(meta.source_url),
@@ -54,6 +54,16 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function readSectionPath(value: unknown): string | string[] | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
+    return value;
+  }
+  return undefined;
 }
 
 /** Map a backend message to the frontend Message shape.

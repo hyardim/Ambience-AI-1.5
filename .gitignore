@@ -61,6 +61,12 @@ rag_service/data/debug/
 .ruff_cache/
 .coverage
 htmlcov/
+coverage/
+**/__pycache__/
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.coverage
 
 # Editor settings
 .vscode/

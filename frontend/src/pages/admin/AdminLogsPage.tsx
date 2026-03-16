@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, Loader2, RefreshCw } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetLogs } from '../../services/api';
 import type { AuditLogResponse } from '../../types/api';
+import { getErrorMessage } from '../../utils/errors';
+import { formatAuditUserIdentifier } from '../../utils/audit';
 
 export function AdminLogsPage() {
   const [logs, setLogs] = useState<AuditLogResponse[]>([]);
@@ -18,11 +20,7 @@ export function AdminLogsPage() {
   const [dateTo, setDateTo] = useState('');
   const [limitFilter, setLimitFilter] = useState(200);
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -37,11 +35,15 @@ export function AdminLogsPage() {
       });
       setLogs(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit logs');
+      setError(getErrorMessage(err, 'Failed to load audit logs'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [actionFilter, categoryFilter, dateFrom, dateTo, limitFilter, searchFilter, userIdFilter]);
+
+  useEffect(() => {
+    void fetchLogs();
+  }, [fetchLogs]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,7 +226,7 @@ export function AdminLogsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {log.user_identifier || (log.user_id ? `#${log.user_id}` : '—')}
+                      {formatAuditUserIdentifier(log.user_identifier, log.user_id)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={log.details || ''}>
                       {log.details || '—'}

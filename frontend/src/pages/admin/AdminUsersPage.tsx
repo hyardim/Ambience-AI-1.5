@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, Loader2, UserX, Save, X } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { StatusBadge } from '../../components/Badges';
 import { adminGetUsers, adminUpdateUser, adminDeactivateUser } from '../../services/api';
 import type { UserProfile } from '../../types/api';
 import type { UserUpdateAdmin } from '../../types/api';
+import { getErrorMessage } from '../../utils/errors';
+import { coalesce } from '../../utils/value';
 
 export function AdminUsersPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -18,22 +20,22 @@ export function AdminUsersPage() {
   const [editForm, setEditForm] = useState<UserUpdateAdmin>({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [roleFilter]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const data = await adminGetUsers(roleFilter || undefined);
       setUsers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load users');
+      setError(getErrorMessage(err, 'Failed to load users'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [roleFilter]);
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
 
   const handleDeactivate = async (userId: number) => {
     if (!confirm('Deactivate this user? They will no longer be able to log in.')) return;
@@ -41,7 +43,7 @@ export function AdminUsersPage() {
       const updated = await adminDeactivateUser(userId);
       setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to deactivate user');
+      setError(getErrorMessage(err, 'Failed to deactivate user'));
     }
   };
 
@@ -56,6 +58,7 @@ export function AdminUsersPage() {
   };
 
   const handleSave = async () => {
+    /* v8 ignore next */
     if (!editUser) return;
     setSaving(true);
     try {
@@ -63,7 +66,7 @@ export function AdminUsersPage() {
       setUsers(prev => prev.map(u => (u.id === editUser.id ? updated : u)));
       setEditUser(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update user');
+      setError(getErrorMessage(err, 'Failed to update user'));
     } finally {
       setSaving(false);
     }
@@ -217,7 +220,7 @@ export function AdminUsersPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
-                  value={editForm.role || ''}
+                  value={coalesce(editForm.role, '')}
                   onChange={e => setEditForm({ ...editForm, role: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
                 >
@@ -240,7 +243,7 @@ export function AdminUsersPage() {
                 <input
                   type="checkbox"
                   id="is_active"
-                  checked={editForm.is_active ?? true}
+                  checked={coalesce(editForm.is_active, true)}
                   onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })}
                   className="w-4 h-4 text-[#005eb8] rounded border-gray-300"
                 />

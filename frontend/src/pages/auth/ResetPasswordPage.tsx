@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
 import { resetPassword } from '../../services/api';
+import { getErrorMessage } from '../../utils/errors';
 
 export function ResetPasswordPage() {
   const [email, setEmail] = useState('');
@@ -32,7 +33,7 @@ export function ResetPasswordPage() {
       await resetPassword(email, newPassword);
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(getErrorMessage(err, 'Something went wrong'));
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +71,7 @@ export function ResetPasswordPage() {
                 </p>
 
                 {error && (
-                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     {error}
                   </div>
                 )}
@@ -88,6 +89,7 @@ export function ResetPasswordPage() {
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                       placeholder="you@example.com"
                       autoComplete="email"
+                      required
                     />
                   </div>
 
@@ -104,6 +106,7 @@ export function ResetPasswordPage() {
                         className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                         placeholder="At least 6 characters"
                         autoComplete="new-password"
+                        required
                       />
                       <button
                         type="button"
@@ -128,6 +131,7 @@ export function ResetPasswordPage() {
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                       placeholder="Re-enter new password"
                       autoComplete="new-password"
+                      required
                     />
                   </div>
 

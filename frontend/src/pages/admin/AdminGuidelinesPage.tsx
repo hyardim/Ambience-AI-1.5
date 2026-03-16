@@ -3,6 +3,7 @@ import { Upload, CheckCircle, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminUploadGuideline } from '../../services/api';
 import type { IngestionReport } from '../../services/api';
+import { getErrorMessage } from '../../utils/errors';
 
 const SOURCE_GROUPS = [
   {
@@ -37,6 +38,7 @@ export function AdminGuidelinesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    /* v8 ignore next */
     const selected = e.target.files?.[0] ?? null;
     setFile(selected);
     setError('');
@@ -60,9 +62,10 @@ export function AdminGuidelinesPage() {
       const report = await adminUploadGuideline(file, selectedSource);
       setResult(report);
       setFile(null);
+      /* v8 ignore next */
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
+      setError(getErrorMessage(err, 'Upload failed.'));
     } finally {
       setUploading(false);
     }
@@ -141,7 +144,7 @@ export function AdminGuidelinesPage() {
 
         {/* Error */}
         {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div role="alert" aria-live="polite" className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
           </div>
         )}

@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/api';
 import type { RegisterRequest } from '../types/api';
 import type { UserRole } from '../types';
+import { AuthContext } from './auth-context';
 
 interface AuthState {
   token: string | null;
@@ -12,36 +13,35 @@ interface AuthState {
   isLoading: boolean;
 }
 
-interface AuthContextValue extends AuthState {
-  login: (username: string, password: string) => Promise<UserRole>;
-  register: (payload: RegisterRequest) => Promise<UserRole>;
-  logout: () => void;
+function getInitialAuthState(): AuthState {
+  const token = localStorage.getItem('access_token');
+  const username = localStorage.getItem('username');
+  const role = localStorage.getItem('user_role') as UserRole | null;
+  const email = localStorage.getItem('user_email');
+
+  if (!token) {
+    return {
+      token: null,
+      username: null,
+      email: null,
+      role: null,
+      isAuthenticated: false,
+      isLoading: false,
+    };
+  }
+
+  return {
+    token,
+    username,
+    email,
+    role,
+    isAuthenticated: true,
+    isLoading: false,
+  };
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    token: null,
-    username: null,
-    email: null,
-    role: null,
-    isAuthenticated: false,
-    isLoading: true,
-  });
-
-  // Restore token from localStorage on mount
-  useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    const username = localStorage.getItem('username');
-    const role = localStorage.getItem('user_role') as UserRole | null;
-    const email = localStorage.getItem('user_email');
-    if (token) {
-      setState({ token, username, email, role, isAuthenticated: true, isLoading: false });
-    } else {
-      setState(s => ({ ...s, isLoading: false }));
-    }
-  }, []);
+  const [state, setState] = useState<AuthState>(getInitialAuthState);
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await apiLogin(username, password);
@@ -93,10 +93,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
 }

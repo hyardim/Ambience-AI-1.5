@@ -7,6 +7,8 @@ import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } fro
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetLogs, adminGetStats } from '../../services/api';
 import type { AdminStatsResponse, AuditLogResponse } from '../../types/api';
+import { getErrorMessage } from '../../utils/errors';
+import { coalesce } from '../../utils/value';
 
 const STATUS_COLOURS: Record<string, string> = {
   open:       '#94a3b8',
@@ -56,7 +58,7 @@ export default function AdminDashboardPage() {
       setStats(statsResponse);
       setRagLogs(ragLogResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load stats');
+      setError(getErrorMessage(err, 'Failed to load stats'));
     } finally {
       setLoading(false);
     }
@@ -88,6 +90,10 @@ export default function AdminDashboardPage() {
     new Date(iso).toLocaleString('en-GB', {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
     });
+
+  const activeUsersSummary = stats
+    ? `${coalesce(stats.active_users_by_role['gp'], 0)} GPs · ${coalesce(stats.active_users_by_role['specialist'], 0)} specialists`
+    : undefined;
 
   return (
     <AdminLayout>
@@ -141,7 +147,7 @@ export default function AdminDashboardPage() {
               <StatCard
                 label="Active Users"
                 value={activeUsers}
-                sub={`${stats.active_users_by_role['gp'] ?? 0} GPs · ${stats.active_users_by_role['specialist'] ?? 0} specialists`}
+                sub={activeUsersSummary}
                 icon={Users}
                 colour="bg-amber-500"
               />

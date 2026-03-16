@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Users, MessageSquare, ClipboardList, LayoutDashboard, Upload } from 'lucide-react';
 import { Header } from './Header';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 interface AdminLayoutProps {
   children: React.ReactNode;

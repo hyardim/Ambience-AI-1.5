@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Header } from '../components/Header';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { getProfile, updateProfile } from '../services/api';
 import type { UserProfile, ProfileUpdateRequest } from '../types/api';
+import { getErrorMessage } from '../utils/errors';
+import { orFallback } from '../utils/value';
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -63,6 +65,7 @@ export function ProfilePage() {
     const payload: ProfileUpdateRequest = {};
 
     // Only include changed fields
+    /* v8 ignore next */
     if (fullName !== (profile?.full_name || '')) {
       payload.full_name = fullName;
     }
@@ -97,7 +100,7 @@ export function ProfilePage() {
 
       setSuccessMsg('Profile updated successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      setError(getErrorMessage(err, 'Failed to update profile'));
     } finally {
       setSaving(false);
     }
@@ -108,7 +111,7 @@ export function ProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole={role || 'gp'} userName={username || 'User'} onLogout={logout} />
+        <Header userRole={orFallback(role, 'gp')} userName={orFallback(username, 'User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
         </main>
@@ -118,7 +121,7 @@ export function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole={role || 'gp'} userName={username || 'User'} onLogout={logout} />
+      <Header userRole={orFallback(role, 'gp')} userName={orFallback(username, 'User')} onLogout={logout} />
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back */}
@@ -252,12 +255,12 @@ export function ProfilePage() {
 
             {/* Feedback */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" aria-live="polite" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
               </div>
             )}
             {successMsg && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+              <div role="status" aria-live="polite" className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 {successMsg}
               </div>

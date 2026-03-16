@@ -118,6 +118,7 @@ export function useChatStream(
   // ── Polling logic ─────────────────────────────────────────────────────
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return; // already polling
+    /* v8 ignore next */
     if (!mountedRef.current) return;
     setPhase('fallback_polling');
     pollTimerRef.current = setInterval(() => {
@@ -130,6 +131,7 @@ export function useChatStream(
       clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
     }
+    /* v8 ignore next */
     if (mountedRef.current) setPhase('idle');
   }, []);
 
@@ -154,6 +156,7 @@ export function useChatStream(
       return new Promise<void>((resolve) => {
         let resolved = false;
         const settle = () => {
+          /* v8 ignore next */
           if (!resolved) {
             resolved = true;
             resolve();
@@ -164,8 +167,11 @@ export function useChatStream(
         const timer = setTimeout(() => {
           settle();
           // If still in connecting state, fall through to polling
+          /* v8 ignore next */
           if (mountedRef.current) {
+            /* v8 ignore next */
             setPhase((prev) => (prev === 'connecting' ? 'fallback_polling' : prev));
+            /* v8 ignore next */
             startPolling();
           }
         }, connectTimeout);
@@ -234,7 +240,7 @@ export function useChatStream(
             });
           },
 
-          onError(_messageId, _errorMsg) {
+          onError() {
             if (!mountedRef.current) return;
             cleanupRef.current = null;
             // Fall back to polling

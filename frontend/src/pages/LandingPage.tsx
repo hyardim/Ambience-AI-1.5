@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { NHSLogo } from '../components/NHSLogo';
 import { Stethoscope, Users, Shield } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 function roleLabel(role: 'gp' | 'specialist' | 'admin' | null): string {
   if (role === 'gp') return 'GP';

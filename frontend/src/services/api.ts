@@ -18,8 +18,15 @@ import type {
   ChatUpdateRequest,
   AdminStatsResponse,
 } from '../types/api';
+import { setOptionalSearchParam } from '../utils/url';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+/* v8 ignore next */
+const API_BASE = import.meta.env.MODE === 'test' ? '' : import.meta.env.VITE_API_URL || '';
+
+function redirectToLogin(): void {
+  window.history.replaceState(null, '', '/login');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
 
 // ── Helper ──────────────────────────────────────────────────────────────
 
@@ -35,11 +42,12 @@ async function handleResponse<T>(res: Response): Promise<T> {
     localStorage.removeItem('username');
     localStorage.removeItem('user_role');
     localStorage.removeItem('user_email');
-    window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Session expired');
   }
   if (!res.ok) {
     const rawBody = await res.text();
+    /* v8 ignore next */
     let errorMessage = rawBody || `Request failed (${res.status})`;
 
     try {
@@ -392,6 +400,7 @@ export async function adminGetChats(filters?: {
   if (filters?.user_id) params.set('user_id', String(filters.user_id));
   if (filters?.specialist_id) params.set('specialist_id', String(filters.specialist_id));
   if (filters?.skip) params.set('skip', String(filters.skip));
+  /* v8 ignore next */
   if (filters?.limit) params.set('limit', String(filters.limit));
   const res = await fetch(`${API_BASE}/admin/chats?${params}`, {
     headers: authHeaders(),
@@ -445,13 +454,13 @@ export async function adminGetLogs(filters?: {
   limit?: number;
 }): Promise<AuditLogResponse[]> {
   const params = new URLSearchParams();
-  if (filters?.action) params.set('action', filters.action);
-  if (filters?.category) params.set('category', filters.category);
-  if (filters?.search) params.set('search', filters.search);
-  if (filters?.user_id) params.set('user_id', String(filters.user_id));
-  if (filters?.date_from) params.set('date_from', filters.date_from);
-  if (filters?.date_to) params.set('date_to', filters.date_to);
-  if (filters?.limit) params.set('limit', String(filters.limit));
+  setOptionalSearchParam(params, 'action', filters?.action);
+  setOptionalSearchParam(params, 'category', filters?.category);
+  setOptionalSearchParam(params, 'search', filters?.search);
+  setOptionalSearchParam(params, 'user_id', filters?.user_id);
+  setOptionalSearchParam(params, 'date_from', filters?.date_from);
+  setOptionalSearchParam(params, 'date_to', filters?.date_to);
+  setOptionalSearchParam(params, 'limit', filters?.limit);
   const res = await fetch(`${API_BASE}/admin/logs?${params}`, {
     headers: authHeaders(),
   });

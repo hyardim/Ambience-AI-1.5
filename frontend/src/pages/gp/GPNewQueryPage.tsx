@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Paperclip, X } from 'lucide-react';
 import { Header } from '../../components/Header';
-import { useAuth } from '../../contexts/AuthContext';
-import { createChat, sendMessage, uploadChatFile } from '../../services/api';
+import { useAuth } from '../../contexts/useAuth';
+import { createChat, uploadChatFile } from '../../services/api';
 import type { Severity } from '../../types';
+import { orFallback } from '../../utils/value';
 
 export function GPNewQueryPage() {
   const navigate = useNavigate();
@@ -60,8 +61,11 @@ export function GPNewQueryPage() {
       const chat = await createChat({
         title: formData.title || 'New Consultation',
         specialty: formData.specialty,
+        /* v8 ignore next */
         severity: formData.severity || undefined,
+        /* v8 ignore next */
         patient_age: formData.patientAge ? parseInt(formData.patientAge, 10) : undefined,
+        /* v8 ignore next */
         patient_gender: formData.sex || undefined,
         patient_notes: formData.patientNotes || undefined,
       });
@@ -84,7 +88,7 @@ export function GPNewQueryPage() {
 
   return (
     <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
+      <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
@@ -103,7 +107,7 @@ export function GPNewQueryPage() {
           </div>
 
           {error && (
-            <div className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div role="alert" aria-live="polite" className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}

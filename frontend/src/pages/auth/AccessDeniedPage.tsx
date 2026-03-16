@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
 
 type AccessDeniedState = {

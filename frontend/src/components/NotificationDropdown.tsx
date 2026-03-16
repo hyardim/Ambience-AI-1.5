@@ -34,9 +34,16 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
 
   // Initial fetch + polling every 15s
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    const initialTimer = window.setTimeout(() => {
+      void fetchNotifications();
+    }, 0);
+    const interval = window.setInterval(() => {
+      void fetchNotifications();
+    }, POLL_INTERVAL);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+    };
   }, [fetchNotifications]);
 
   // Close on outside click

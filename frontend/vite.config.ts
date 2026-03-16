@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'node:path'
 
 // Use 'backend' service name in Docker, fallback to localhost for local dev
 const backendUrl = process.env.DOCKER_ENV === 'true'
@@ -10,6 +11,27 @@ const backendUrl = process.env.DOCKER_ENV === 'true'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '@test': path.resolve(__dirname, 'tests/support'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return;
+          }
+          if (id.includes('recharts')) {
+            return 'charts';
+          }
+          return 'vendor';
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,

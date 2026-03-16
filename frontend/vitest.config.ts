@@ -1,14 +1,21 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '@test': path.resolve(__dirname, 'tests/support'),
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    setupFiles: ['./tests/support/setup.ts'],
+    include: ['tests/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

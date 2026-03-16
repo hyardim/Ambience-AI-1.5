@@ -4,7 +4,8 @@ import { Eye, EyeOff } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
 import type { UserRole } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
+import { getErrorMessage } from '../../utils/errors';
 
 function routeForRole(role: UserRole): string {
   if (role === 'specialist') return '/specialist/queries';
@@ -59,7 +60,7 @@ export function RegisterPage() {
       });
       navigate(routeForRole(registeredRole));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create account');
+      setError(getErrorMessage(err, 'Failed to create account'));
     } finally {
       setIsSubmitting(false);
     }
@@ -77,7 +78,7 @@ export function RegisterPage() {
             </h1>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
               </div>
             )}
@@ -142,6 +143,7 @@ export function RegisterPage() {
                   value={formData.role}
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  required
                 >
                   <option value="gp">General Practitioner</option>
                   <option value="specialist">Specialist</option>
@@ -160,6 +162,7 @@ export function RegisterPage() {
                     value={formData.specialty}
                     onChange={handleChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    required
                   >
                     <option value="">Select specialty...</option>
                     <option value="neurology">Neurology</option>

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
+import { getErrorMessage } from '../../utils/errors';
 
 function routeForRole(role: UserRole | null): string {
   if (role === 'specialist') return '/specialist/queries';
@@ -40,7 +41,7 @@ export function LoginPage() {
       const loggedInRole = await login(email, password);
       navigate(routeForRole(loggedInRole));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Incorrect username or password');
+      setError(getErrorMessage(err, 'Incorrect username or password'));
     } finally {
       setIsSubmitting(false);
     }
@@ -79,7 +80,7 @@ export function LoginPage() {
             </div>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
               </div>
             )}
@@ -96,6 +97,7 @@ export function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                   placeholder="Enter your username or email"
+                  required
                 />
               </div>
 
@@ -111,6 +113,7 @@ export function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent pr-12"
                     placeholder="Enter your password"
+                    required
                   />
                   <button
                     type="button"
