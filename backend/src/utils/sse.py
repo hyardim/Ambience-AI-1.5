@@ -24,7 +24,7 @@ import asyncio
 import json
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,9 @@ class _ChatEventBus:
                     q.put_nowait(last)
             return q
 
-    async def unsubscribe(self, chat_id: int, q: asyncio.Queue[SSEEvent | None]) -> None:
+    async def unsubscribe(
+        self, chat_id: int, q: asyncio.Queue[SSEEvent | None]
+    ) -> None:
         async with self._lock:
             subs = self._subscribers.get(chat_id)
             if subs:
@@ -107,7 +109,9 @@ class _ChatEventBus:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                logger.warning("Dropping SSE event for chat %s – subscriber queue full", chat_id)
+                logger.warning(
+                    "Dropping SSE event for chat %s – subscriber queue full", chat_id
+                )
 
     async def close_chat(self, chat_id: int) -> None:
         """Send a sentinel (None) to all subscribers so they can exit cleanly."""
@@ -176,7 +180,9 @@ class _ChatEventBus:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                logger.warning("Dropping SSE event for chat %s – subscriber queue full", chat_id)
+                logger.warning(
+                    "Dropping SSE event for chat %s – subscriber queue full", chat_id
+                )
 
     def _sync_close(self, chat_id: int) -> None:
         """Send sentinel to all subscribers (runs on the event loop)."""

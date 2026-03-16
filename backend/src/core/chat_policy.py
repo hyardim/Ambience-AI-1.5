@@ -19,17 +19,17 @@ The ``can_*`` helpers return ``bool``; the ``require_*`` helpers raise
 
 from src.db.models import Chat, ChatStatus, User, UserRole
 
-
 # ---------------------------------------------------------------------------
 # Predicates
 # ---------------------------------------------------------------------------
 
+
 def _is_owner(user: User, chat: Chat) -> bool:
-    return chat.user_id == user.id
+    return bool(chat.user_id == user.id)
 
 
 def _is_assigned_specialist(user: User, chat: Chat) -> bool:
-    return (
+    return bool(
         user.role == UserRole.SPECIALIST
         and chat.specialist_id is not None
         and chat.specialist_id == user.id
@@ -50,12 +50,13 @@ def _is_queue_specialist(user: User, chat: Chat) -> bool:
 
 
 def _is_admin(user: User) -> bool:
-    return user.role == UserRole.ADMIN
+    return bool(user.role == UserRole.ADMIN)
 
 
 # ---------------------------------------------------------------------------
 # Public policy functions
 # ---------------------------------------------------------------------------
+
 
 def can_view_chat(user: User, chat: Chat) -> bool:
     """Can the user read this chat's detail / messages?"""
@@ -84,9 +85,7 @@ def can_upload_to_chat(user: User, chat: Chat) -> bool:
     Admins can also upload.
     """
     return (
-        _is_owner(user, chat)
-        or _is_assigned_specialist(user, chat)
-        or _is_admin(user)
+        _is_owner(user, chat) or _is_assigned_specialist(user, chat) or _is_admin(user)
     )
 
 
@@ -96,7 +95,5 @@ def can_send_message(user: User, chat: Chat) -> bool:
     Same scope as upload — owner, assigned specialist, or admin.
     """
     return (
-        _is_owner(user, chat)
-        or _is_assigned_specialist(user, chat)
-        or _is_admin(user)
+        _is_owner(user, chat) or _is_assigned_specialist(user, chat) or _is_admin(user)
     )

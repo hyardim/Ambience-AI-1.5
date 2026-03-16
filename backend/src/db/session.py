@@ -1,14 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-import os
+from src.core.config import settings
 
-# Get the URL from the environment (defined in docker-compose.yml)
-# Default fallback is provided just in case
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://admin:team20_password@db_vector:5432/ambience_knowledge",
-)
+DATABASE_URL = settings.DATABASE_URL
 
 # ---------------------------------------------------------------------------
 # Synchronous engine & session (used by all non-chat routes)
@@ -31,6 +26,7 @@ def get_db():
 # ---------------------------------------------------------------------------
 # Async engine & session (used by the chat/RAG generation path)
 # ---------------------------------------------------------------------------
+
 
 def _make_async_url(url: str) -> str:
     """Convert a psycopg2 / plain postgresql URL to an asyncpg URL."""

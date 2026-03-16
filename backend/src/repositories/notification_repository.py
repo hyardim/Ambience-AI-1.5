@@ -1,4 +1,5 @@
 from typing import Optional
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -44,17 +45,21 @@ def list_for_user(
 
     query = db.query(Notification).filter(Notification.user_id == user_id)
     if unread_only:
-        query = query.filter(not Notification.is_read)
+        query = query.filter(Notification.is_read.is_(False))
     return query.order_by(Notification.created_at.desc()).all()
 
 
 def mark_read(
     db: Session, notification_id: int, user_id: int
 ) -> Optional[Notification]:
-    notif = db.query(Notification).filter(
-        Notification.id == notification_id,
-        Notification.user_id == user_id,
-    ).first()
+    notif = (
+        db.query(Notification)
+        .filter(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+        )
+        .first()
+    )
     if not notif:
         return None
     notif.is_read = True
@@ -66,7 +71,7 @@ def mark_read(
 def mark_all_read(db: Session, user_id: int) -> int:
     count = (
         db.query(Notification)
-        .filter(Notification.user_id == user_id, not Notification.is_read)
+        .filter(Notification.user_id == user_id, Notification.is_read.is_(False))
         .update({"is_read": True})
     )
     db.commit()
@@ -76,6 +81,6 @@ def mark_all_read(db: Session, user_id: int) -> int:
 def count_unread(db: Session, user_id: int) -> int:
     return (
         db.query(Notification)
-        .filter(Notification.user_id == user_id, not Notification.is_read)
+        .filter(Notification.user_id == user_id, Notification.is_read.is_(False))
         .count()
     )

@@ -27,9 +27,9 @@ from sqlalchemy.pool import StaticPool
 # the in-memory test database without modifying production models.
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
+from src.api import admin, auth, chats, notifications, specialist
 from src.db.base import Base
 from src.db.session import get_async_db, get_db
-from src.api import auth, chats, specialist, admin, notifications
 
 # ---------------------------------------------------------------------------
 # File-based temp SQLite shared by the sync and async engines so that data
@@ -65,7 +65,9 @@ async_engine = create_async_engine(
     poolclass=StaticPool,
 )
 TestingAsyncSessionLocal = sessionmaker(
-    bind=async_engine, class_=AsyncSession, expire_on_commit=False,
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
 
@@ -73,14 +75,17 @@ TestingAsyncSessionLocal = sessionmaker(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_app() -> FastAPI:
     """Create a minimal FastAPI app with only the routers under test."""
     app = FastAPI()
-    app.include_router(auth.router,          prefix="/auth",          tags=["auth"])
-    app.include_router(chats.router,         prefix="/chats",         tags=["chats"])
-    app.include_router(specialist.router,    prefix="/specialist",    tags=["specialist"])
-    app.include_router(admin.router,         prefix="/admin",         tags=["admin"])
-    app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(chats.router, prefix="/chats", tags=["chats"])
+    app.include_router(specialist.router, prefix="/specialist", tags=["specialist"])
+    app.include_router(admin.router, prefix="/admin", tags=["admin"])
+    app.include_router(
+        notifications.router, prefix="/notifications", tags=["notifications"]
+    )
 
     @app.get("/health")
     def health_check():
@@ -92,6 +97,7 @@ def _build_app() -> FastAPI:
 # ---------------------------------------------------------------------------
 # Core fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def db_session():
@@ -125,6 +131,7 @@ def client(db_session, monkeypatch):
 
     # Ensure the background AI generation also uses the test async session
     import src.services.chat_service as _cs
+
     monkeypatch.setattr(_cs, "AsyncSessionLocal", TestingAsyncSessionLocal)
 
     app = _build_app()
@@ -138,6 +145,7 @@ def client(db_session, monkeypatch):
 # ---------------------------------------------------------------------------
 # User data fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def gp_user_payload():
@@ -188,6 +196,7 @@ def second_gp_payload():
 # ---------------------------------------------------------------------------
 # Pre-registered user + token fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def registered_gp(client, gp_user_payload):
@@ -249,10 +258,15 @@ def second_gp_headers(registered_second_gp):
 # Chat fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def created_chat(client, gp_headers):
     """Create a chat owned by the GP user and return the ChatResponse JSON."""
-    resp = client.post("/chats/", json={"title": "Test Chat", "specialty": "neurology"}, headers=gp_headers)
+    resp = client.post(
+        "/chats/",
+        json={"title": "Test Chat", "specialty": "neurology"},
+        headers=gp_headers,
+    )
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -261,7 +275,9 @@ def created_chat(client, gp_headers):
 def submitted_chat(client, gp_headers):
     """Create a neurology chat and auto-submit it by sending a message."""
     chat = client.post(
-        "/chats/", json={"title": "Submitted Chat", "specialty": "neurology"}, headers=gp_headers
+        "/chats/",
+        json={"title": "Submitted Chat", "specialty": "neurology"},
+        headers=gp_headers,
     ).json()
     client.post(
         f"/chats/{chat['id']}/message",

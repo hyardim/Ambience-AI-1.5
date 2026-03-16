@@ -1,4 +1,5 @@
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from src.db.models import User, UserRole

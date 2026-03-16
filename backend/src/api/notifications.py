@@ -18,7 +18,9 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_obj),
 ):
-    return notification_service.list_notifications(db, current_user, unread_only=unread_only)
+    return notification_service.list_notifications(
+        db, current_user, unread_only=unread_only
+    )
 
 
 @router.get("/unread-count")

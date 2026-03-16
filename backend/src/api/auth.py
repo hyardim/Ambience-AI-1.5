@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from src.api.deps import get_current_user_obj
 from src.db.models import User
 from src.db.session import get_db
-from src.schemas.auth import AuthResponse, PasswordResetRequest, ProfileUpdate, UserOut, UserRegister
+from src.schemas.auth import (
+    AuthResponse,
+    PasswordResetRequest,
+    ProfileUpdate,
+    UserOut,
+    UserRegister,
+)
 from src.services import auth_service
 
 router = APIRouter()
@@ -19,7 +25,9 @@ def login(
     return auth_service.login(db, form_data.username, form_data.password)
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
 def register(payload: UserRegister, db: Session = Depends(get_db)):
     return auth_service.register(db, payload)
 

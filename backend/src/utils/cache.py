@@ -19,34 +19,47 @@ class RedisCache:
         if not settings.CACHE_ENABLED:
             return None
         if self._client is None:
-            self._client = Redis.from_url(
-                settings.REDIS_URL, decode_responses=True)
+            self._client = Redis.from_url(settings.REDIS_URL, decode_responses=True)
         return self._client
 
-    async def get(self, key: str, *, user_id: Optional[int] = None, resource: str = "") -> Optional[Any]:
+    async def get(
+        self, key: str, *, user_id: Optional[int] = None, resource: str = ""
+    ) -> Optional[Any]:
         client = await self._get_client()
         if client is None:
-            logger.debug("cache.disabled", extra={
-                         "key": key, "user_id": user_id, "resource": resource})
+            logger.debug(
+                "cache.disabled",
+                extra={"key": key, "user_id": user_id, "resource": resource},
+            )
             return None
         try:
             value = await client.get(key)
             if value is None:
-                logger.debug("cache.miss", extra={
-                             "key": key, "user_id": user_id, "resource": resource})
+                logger.debug(
+                    "cache.miss",
+                    extra={"key": key, "user_id": user_id, "resource": resource},
+                )
                 return None
             ttl = await client.ttl(key)
             logger.debug(
                 "cache.hit",
-                extra={"key": key, "user_id": user_id,
-                       "resource": resource, "ttl": ttl},
+                extra={
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "ttl": ttl,
+                },
             )
             return json.loads(value)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"key": key, "user_id": user_id,
-                       "resource": resource, "error": str(exc)},
+                extra={
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
             )
             return None
 
@@ -61,27 +74,39 @@ class RedisCache:
     ) -> bool:
         client = await self._get_client()
         if client is None:
-            logger.debug("cache.disabled", extra={
-                         "key": key, "user_id": user_id, "resource": resource})
+            logger.debug(
+                "cache.disabled",
+                extra={"key": key, "user_id": user_id, "resource": resource},
+            )
             return False
         try:
             payload = json.dumps(value)
             await client.set(key, payload, ex=ttl)
             logger.debug(
                 "cache.set",
-                extra={"key": key, "user_id": user_id,
-                       "resource": resource, "ttl": ttl},
+                extra={
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "ttl": ttl,
+                },
             )
             return True
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"key": key, "user_id": user_id,
-                       "resource": resource, "error": str(exc)},
+                extra={
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
             )
             return False
 
-    async def delete(self, key: str, *, user_id: Optional[int] = None, resource: str = "") -> int:
+    async def delete(
+        self, key: str, *, user_id: Optional[int] = None, resource: str = ""
+    ) -> int:
         client = await self._get_client()
         if client is None:
             return 0
@@ -89,42 +114,66 @@ class RedisCache:
             count = await client.delete(key)
             logger.debug(
                 "cache.delete",
-                extra={"key": key, "user_id": user_id,
-                       "resource": resource, "count": count},
+                extra={
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "count": count,
+                },
             )
             return count
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"key": key, "user_id": user_id,
-                       "resource": resource, "error": str(exc)},
+                extra={
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
             )
             return 0
 
-    async def delete_pattern(self, pattern: str, *, user_id: Optional[int] = None, resource: str = "") -> int:
+    async def delete_pattern(
+        self, pattern: str, *, user_id: Optional[int] = None, resource: str = ""
+    ) -> int:
         client = await self._get_client()
         if client is None:
             return 0
         try:
-            keys = [key async for key in client.scan_iter(match=pattern)]
+            scan_iter = client.scan_iter(match=pattern)
+            if hasattr(scan_iter, "__aiter__"):
+                keys = [key async for key in scan_iter]
+            else:
+                keys = await scan_iter
             if not keys:
                 return 0
             count = await client.delete(*keys)
             logger.debug(
                 "cache.invalidate",
-                extra={"pattern": pattern, "user_id": user_id,
-                       "resource": resource, "count": count},
+                extra={
+                    "pattern": pattern,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "count": count,
+                },
             )
             return count
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "cache.error",
-                extra={"pattern": pattern, "user_id": user_id,
-                       "resource": resource, "error": str(exc)},
+                extra={
+                    "pattern": pattern,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
             )
             return 0
 
-    def get_sync(self, key: str, *, user_id: Optional[int] = None, resource: str = "") -> Optional[Any]:
+    def get_sync(
+        self, key: str, *, user_id: Optional[int] = None, resource: str = ""
+    ) -> Optional[Any]:
         return asyncio.run(self.get(key, user_id=user_id, resource=resource))
 
     def set_sync(
@@ -136,13 +185,21 @@ class RedisCache:
         user_id: Optional[int] = None,
         resource: str = "",
     ) -> bool:
-        return asyncio.run(self.set(key, value, ttl=ttl, user_id=user_id, resource=resource))
+        return asyncio.run(
+            self.set(key, value, ttl=ttl, user_id=user_id, resource=resource)
+        )
 
-    def delete_sync(self, key: str, *, user_id: Optional[int] = None, resource: str = "") -> int:
+    def delete_sync(
+        self, key: str, *, user_id: Optional[int] = None, resource: str = ""
+    ) -> int:
         return asyncio.run(self.delete(key, user_id=user_id, resource=resource))
 
-    def delete_pattern_sync(self, pattern: str, *, user_id: Optional[int] = None, resource: str = "") -> int:
-        return asyncio.run(self.delete_pattern(pattern, user_id=user_id, resource=resource))
+    def delete_pattern_sync(
+        self, pattern: str, *, user_id: Optional[int] = None, resource: str = ""
+    ) -> int:
+        return asyncio.run(
+            self.delete_pattern(pattern, user_id=user_id, resource=resource)
+        )
 
 
 # Cache keys include user scoping to avoid cross-tenant leakage.

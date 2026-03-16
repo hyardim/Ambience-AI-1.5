@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 from src.api.deps import get_specialist_user
 from src.db.models import User
 from src.db.session import get_db
-from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, MessageCreate, ReviewRequest
+from src.schemas.chat import (
+    AssignRequest,
+    ChatResponse,
+    ChatWithMessages,
+    MessageCreate,
+    ReviewRequest,
+)
 from src.services import specialist_service
 
 router = APIRouter()
@@ -57,7 +63,9 @@ def review_chat(
     return specialist_service.review(db, specialist, chat_id, body)
 
 
-@router.post("/chats/{chat_id}/messages/{message_id}/review", response_model=ChatResponse)
+@router.post(
+    "/chats/{chat_id}/messages/{message_id}/review", response_model=ChatResponse
+)
 def review_message(
     chat_id: int,
     message_id: int,

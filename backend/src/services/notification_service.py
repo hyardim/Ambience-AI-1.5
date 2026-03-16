@@ -1,7 +1,7 @@
-from src.core.config import settings
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.db.models import User
 from src.repositories import notification_repository
 from src.schemas.notification import NotificationResponse

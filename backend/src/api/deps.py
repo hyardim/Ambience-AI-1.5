@@ -23,7 +23,7 @@ def get_admin_user(
 ) -> User:
     user = user_repository.get_by_email(db, email)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="User not found")
     if user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -38,7 +38,7 @@ def get_specialist_user(
 ) -> User:
     user = user_repository.get_by_email(db, email)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="User not found")
     if user.role != UserRole.SPECIALIST:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

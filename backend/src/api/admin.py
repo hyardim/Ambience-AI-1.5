@@ -1,17 +1,20 @@
-import os
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
-
 from src.api.deps import get_admin_user
+from src.core.config import settings
 from src.db.models import User
 from src.db.session import get_db
-from src.schemas.admin import AdminChatResponse, AdminStatsResponse, AuditLogResponse, UserUpdateAdmin
+from src.schemas.admin import (
+    AdminChatResponse,
+    AdminStatsResponse,
+    AuditLogResponse,
+    UserUpdateAdmin,
+)
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services import admin_service
@@ -22,6 +25,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Dashboard stats
 # ---------------------------------------------------------------------------
+
 
 @router.get("/stats", response_model=AdminStatsResponse)
 def get_stats(
@@ -34,6 +38,7 @@ def get_stats(
 # ---------------------------------------------------------------------------
 # User management
 # ---------------------------------------------------------------------------
+
 
 @router.get("/users", response_model=List[UserOut])
 def list_users(
@@ -76,6 +81,7 @@ def deactivate_user(
 # Chat management
 # ---------------------------------------------------------------------------
 
+
 @router.get("/chats", response_model=List[AdminChatResponse])
 def list_all_chats(
     status: Optional[str] = None,
@@ -88,9 +94,13 @@ def list_all_chats(
     _admin: User = Depends(get_admin_user),
 ):
     return admin_service.list_all_chats(
-        db, status=status, specialty=specialty,
-        user_id=user_id, specialist_id=specialist_id,
-        skip=skip, limit=limit,
+        db,
+        status=status,
+        specialty=specialty,
+        user_id=user_id,
+        specialist_id=specialist_id,
+        skip=skip,
+        limit=limit,
     )
 
 
@@ -126,6 +136,7 @@ def delete_any_chat(
 # Audit logs
 # ---------------------------------------------------------------------------
 
+
 @router.get("/logs", response_model=List[AuditLogResponse])
 def list_audit_logs(
     action: Optional[str] = None,
@@ -139,14 +150,21 @@ def list_audit_logs(
     _admin: User = Depends(get_admin_user),
 ):
     return admin_service.list_audit_logs(
-        db, action=action, category=category, search=search,
-        user_id=user_id, date_from=date_from, date_to=date_to, limit=limit,
+        db,
+        action=action,
+        category=category,
+        search=search,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
     )
 
 
 # ---------------------------------------------------------------------------
 # Guideline upload
 # ---------------------------------------------------------------------------
+
 
 @router.post("/guidelines/upload")
 async def upload_guideline(
@@ -162,14 +180,20 @@ async def upload_guideline(
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
             response = await client.post(
-                f"{RAG_SERVICE_URL}/ingest",
+                f"{settings.RAG_SERVICE_URL}/ingest",
                 files={"file": (file.filename, file_bytes, "application/pdf")},
                 data={"source_name": source_name},
             )
         except httpx.ConnectError as e:
-            raise HTTPException(status_code=502, detail="RAG service is unavailable.") from e
+            raise HTTPException(
+                status_code=502,
+                detail="RAG service is unavailable.",
+            ) from e
         except httpx.TimeoutException as e:
-            raise HTTPException(status_code=504, detail="Ingestion timed out. The file may be too large.") from e
+            raise HTTPException(
+                status_code=504,
+                detail="Ingestion timed out. The file may be too large.",
+            ) from e
 
     if response.status_code != 200:
         try:

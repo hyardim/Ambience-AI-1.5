@@ -46,7 +46,7 @@ def list_for_user(
 ) -> list[Chat]:
     query = db.query(Chat).filter(Chat.user_id == user_id)
     if not include_archived:
-        query = query.filter(Chat.is_archived == False)
+        query = query.filter(Chat.is_archived.is_(False))
     if status:
         query = query.filter(Chat.status == ChatStatus(status))
     if specialty:

@@ -1,24 +1,28 @@
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
-import os
 
 import httpx
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from src.core.chat_policy import can_view_chat
 from src.core.config import settings
 from src.db.models import Chat, ChatStatus, Message, NotificationType, User
 from src.db.session import SessionLocal
-from src.utils.sse import SSEEvent, chat_event_bus
 from src.repositories import (
     audit_repository,
     chat_repository,
     message_repository,
     notification_repository,
 )
-from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, ReviewRequest
+from src.schemas.chat import (
+    AssignRequest,
+    ChatResponse,
+    ChatWithMessages,
+    ReviewRequest,
+)
 from src.services._mappers import chat_to_response, msg_to_response
 from src.services.chat_service import (
     _build_conversation_history_from_messages,
@@ -27,12 +31,10 @@ from src.services.chat_service import (
 )
 from src.services.notification_service import invalidate_notification_caches
 from src.utils.cache import cache, cache_keys
-from src.core.chat_policy import can_view_chat
+from src.utils.sse import SSEEvent, chat_event_bus
 
-
-RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
-RAG_REQUEST_TIMEOUT_SECONDS = float(
-    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+RAG_SERVICE_URL = settings.RAG_SERVICE_URL
+RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
 
 
 def _invalidate_specialist_lists(
@@ -76,7 +78,11 @@ def _build_manual_citations(sources: list[str] | None) -> list[dict] | None:
     if not sources:
         return None
 
-    cleaned = [source.strip() for source in sources if isinstance(source, str) and source.strip()]
+    cleaned = [
+        source.strip()
+        for source in sources
+        if isinstance(source, str) and source.strip()
+    ]
     if not cleaned:
         return None
 
@@ -148,8 +154,7 @@ def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
 
 def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMessages:
     cache_key = cache_keys.chat_detail(specialist.id, chat_id)
-    cached = cache.get_sync(
-        cache_key, user_id=specialist.id, resource="chat_detail")
+    cached = cache.get_sync(cache_key, user_id=specialist.id, resource="chat_detail")
     if cached is not None:
         return ChatWithMessages(**cached)
 
@@ -159,7 +164,8 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
 
     if not can_view_chat(specialist, chat):
         raise HTTPException(
-            status_code=403, detail="You do not have access to this chat")
+            status_code=403, detail="You do not have access to this chat"
+        )
 
     messages = message_repository.list_for_chat(db, chat.id)
     resp = ChatWithMessages(**chat_to_response(chat).model_dump())
@@ -174,7 +180,9 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
     return resp
 
 
-def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> ChatResponse:
+def assign(
+    db: Session, specialist: User, chat_id: int, body: AssignRequest
+) -> ChatResponse:
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -186,23 +194,31 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
         )
     if body.specialist_id != specialist.id:
         raise HTTPException(
-            status_code=403, detail="You can only assign yourself to a chat")
+            status_code=403, detail="You can only assign yourself to a chat"
+        )
 
     # Verify specialty match
-    if specialist.specialty and chat.specialty and specialist.specialty != chat.specialty:
+    if (
+        specialist.specialty
+        and chat.specialty
+        and specialist.specialty != chat.specialty
+    ):
         raise HTTPException(
             status_code=403,
             detail=f"Your specialty ({specialist.specialty}) does not match this chat's specialty ({chat.specialty})",
         )
 
     chat = chat_repository.update(
-        db, chat,
+        db,
+        chat,
         specialist_id=specialist.id,
         status=ChatStatus.ASSIGNED,
-        assigned_at=datetime.utcnow(),
+        assigned_at=datetime.now(timezone.utc),
     )
     audit_repository.log(
-        db, user_id=specialist.id, action="ASSIGN_SPECIALIST",
+        db,
+        user_id=specialist.id,
+        action="ASSIGN_SPECIALIST",
         details=f"Specialist #{specialist.id} assigned to chat {chat_id}",
     )
     notification_repository.create(
@@ -215,10 +231,14 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
     )
     invalidate_notification_caches(chat.user_id)
     cache.delete_pattern_sync(
-        cache_keys.chat_detail_pattern(chat_id), user_id=specialist.id, resource="chat_detail"
+        cache_keys.chat_detail_pattern(chat_id),
+        user_id=specialist.id,
+        resource="chat_detail",
     )
     cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
     )
     _invalidate_specialist_lists(
         specialty=chat.specialty,
@@ -229,19 +249,24 @@ def assign(db: Session, specialist: User, chat_id: int, body: AssignRequest) -> 
     return chat_to_response(chat)
 
 
-def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> ChatResponse:
+def review(
+    db: Session, specialist: User, chat_id: int, body: ReviewRequest
+) -> ChatResponse:
     if body.action not in ("approve", "reject", "request_changes"):
         raise HTTPException(
             status_code=400,
             detail="action must be 'approve', 'reject', or 'request_changes' (use per-message review for 'manual_response')",
         )
 
-    chat = db.query(Chat).filter(
-        Chat.id == chat_id, Chat.specialist_id == specialist.id
-    ).first()
+    chat = (
+        db.query(Chat)
+        .filter(Chat.id == chat_id, Chat.specialist_id == specialist.id)
+        .first()
+    )
     if not chat:
         raise HTTPException(
-            status_code=404, detail="Chat not found or not assigned to you")
+            status_code=404, detail="Chat not found or not assigned to you"
+        )
 
     if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
         raise HTTPException(
@@ -251,11 +276,15 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
 
     # Block approve/reject while any AI message is still being generated
     if body.action in ("approve", "reject"):
-        generating = db.query(Message).filter(
-            Message.chat_id == chat_id,
-            Message.sender == "ai",
-            Message.is_generating,
-        ).first()
+        generating = (
+            db.query(Message)
+            .filter(
+                Message.chat_id == chat_id,
+                Message.sender == "ai",
+                Message.is_generating,
+            )
+            .first()
+        )
         if generating:
             raise HTTPException(
                 status_code=400,
@@ -269,17 +298,20 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
         # Regenerate AI response and keep the chat active for continued review
         _regenerate_ai_response(db, chat, body.feedback)
         chat = chat_repository.update(
-            db, chat,
+            db,
+            chat,
             status=ChatStatus.REVIEWING,
             review_feedback=body.feedback,
         )
         audit_repository.log(
-            db, user_id=specialist.id,
+            db,
+            user_id=specialist.id,
             action="REVIEW_REQUEST_CHANGES",
             details=f"Chat {chat_id} revision requested. Feedback: {body.feedback or 'none'}",
         )
         notification_repository.create(
-            db, user_id=chat.user_id,
+            db,
+            user_id=chat.user_id,
             type=NotificationType.CHAT_REVISION,
             title="AI response is being revised",
             body=(
@@ -291,22 +323,27 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
         invalidate_notification_caches(chat.user_id)
     else:
         # approve or reject → terminal state
-        new_status = ChatStatus.APPROVED if body.action == "approve" else ChatStatus.REJECTED
+        new_status = (
+            ChatStatus.APPROVED if body.action == "approve" else ChatStatus.REJECTED
+        )
         chat = chat_repository.update(
-            db, chat,
+            db,
+            chat,
             status=new_status,
-            reviewed_at=datetime.utcnow(),
+            reviewed_at=datetime.now(timezone.utc),
             review_feedback=body.feedback,
         )
         audit_action = "REVIEW_APPROVE" if body.action == "approve" else "REVIEW_REJECT"
         audit_repository.log(
-            db, user_id=specialist.id,
+            db,
+            user_id=specialist.id,
             action=audit_action,
             details=f"Chat {chat_id} {body.action}d. Feedback: {body.feedback or 'none'}",
         )
         if body.action == "approve":
             notification_repository.create(
-                db, user_id=chat.user_id,
+                db,
+                user_id=chat.user_id,
                 type=NotificationType.CHAT_APPROVED,
                 title="Chat approved",
                 body=f"Your chat '{chat.title}' was approved by {specialist.full_name or specialist.email}.",
@@ -315,7 +352,8 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
             invalidate_notification_caches(chat.user_id)
         else:
             notification_repository.create(
-                db, user_id=chat.user_id,
+                db,
+                user_id=chat.user_id,
                 type=NotificationType.CHAT_REJECTED,
                 title="Chat rejected",
                 body=f"Your chat '{chat.title}' was rejected. Feedback: {body.feedback or 'none'}",
@@ -324,10 +362,14 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
             invalidate_notification_caches(chat.user_id)
 
     cache.delete_pattern_sync(
-        cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
+        cache_keys.chat_detail_pattern(chat.id),
+        user_id=specialist.id,
+        resource="chat_detail",
     )
     cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
     )
     _invalidate_specialist_lists(
         specialty=chat.specialty,
@@ -339,7 +381,11 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
 
 
 def review_message(
-    db: Session, specialist: User, chat_id: int, message_id: int, body: ReviewRequest,
+    db: Session,
+    specialist: User,
+    chat_id: int,
+    message_id: int,
+    body: ReviewRequest,
 ) -> ChatResponse:
     """Review a specific AI message."""
     if body.action not in ("approve", "reject", "request_changes", "manual_response"):
@@ -348,12 +394,15 @@ def review_message(
             detail="action must be 'approve', 'reject', 'request_changes', or 'manual_response'",
         )
 
-    chat = db.query(Chat).filter(
-        Chat.id == chat_id, Chat.specialist_id == specialist.id
-    ).first()
+    chat = (
+        db.query(Chat)
+        .filter(Chat.id == chat_id, Chat.specialist_id == specialist.id)
+        .first()
+    )
     if not chat:
         raise HTTPException(
-            status_code=404, detail="Chat not found or not assigned to you")
+            status_code=404, detail="Chat not found or not assigned to you"
+        )
 
     if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
         raise HTTPException(
@@ -362,12 +411,17 @@ def review_message(
         )
 
     # Find and validate the target message
-    target = db.query(Message).filter(
-        Message.id == message_id, Message.chat_id == chat_id, Message.sender == "ai",
-    ).first()
+    target = (
+        db.query(Message)
+        .filter(
+            Message.id == message_id,
+            Message.chat_id == chat_id,
+            Message.sender == "ai",
+        )
+        .first()
+    )
     if not target:
-        raise HTTPException(
-            status_code=404, detail="AI message not found in this chat")
+        raise HTTPException(status_code=404, detail="AI message not found in this chat")
 
     # Validate manual_response has replacement content before making any changes
     if body.action == "manual_response":
@@ -383,17 +437,20 @@ def review_message(
     if body.action == "request_changes":
         _regenerate_ai_response(db, chat, body.feedback)
         chat = chat_repository.update(
-            db, chat,
+            db,
+            chat,
             status=ChatStatus.REVIEWING,
             review_feedback=body.feedback,
         )
         audit_repository.log(
-            db, user_id=specialist.id,
+            db,
+            user_id=specialist.id,
             action="REVIEW_REQUEST_CHANGES",
             details=f"Chat {chat_id} msg {message_id} revision requested. Feedback: {body.feedback or 'none'}",
         )
         notification_repository.create(
-            db, user_id=chat.user_id,
+            db,
+            user_id=chat.user_id,
             type=NotificationType.CHAT_REVISION,
             title="AI response is being revised",
             body=(
@@ -414,12 +471,14 @@ def review_message(
             citations=_build_manual_citations(body.replacement_sources),
         )
         audit_repository.log(
-            db, user_id=specialist.id,
+            db,
+            user_id=specialist.id,
             action="REVIEW_MANUAL_RESPONSE",
             details=f"Chat {chat_id} msg {message_id} replaced with manual response. Feedback: {body.feedback or 'none'}",
         )
         notification_repository.create(
-            db, user_id=chat.user_id,
+            db,
+            user_id=chat.user_id,
             type=NotificationType.SPECIALIST_MSG,
             title="Specialist provided a manual response",
             body=(
@@ -431,27 +490,30 @@ def review_message(
         invalidate_notification_caches(chat.user_id)
         # Ensure status is REVIEWING
         if chat.status != ChatStatus.REVIEWING:
-            chat = chat_repository.update(
-                db, chat, status=ChatStatus.REVIEWING)
+            chat = chat_repository.update(db, chat, status=ChatStatus.REVIEWING)
     else:
         # approve or reject for this message
         audit_action = "REVIEW_APPROVE" if body.action == "approve" else "REVIEW_REJECT"
         audit_repository.log(
-            db, user_id=specialist.id,
+            db,
+            user_id=specialist.id,
             action=audit_action,
             details=f"Chat {chat_id} msg {message_id} {body.action}d. Feedback: {body.feedback or 'none'}",
         )
 
         # Ensure status is REVIEWING
         if chat.status != ChatStatus.REVIEWING:
-            chat = chat_repository.update(
-                db, chat, status=ChatStatus.REVIEWING)
+            chat = chat_repository.update(db, chat, status=ChatStatus.REVIEWING)
 
     cache.delete_pattern_sync(
-        cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
+        cache_keys.chat_detail_pattern(chat.id),
+        user_id=specialist.id,
+        resource="chat_detail",
     )
     cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
     )
     _invalidate_specialist_lists(
         specialty=chat.specialty,
@@ -471,7 +533,7 @@ def _mark_message(db: Session, msg: Message, body: ReviewRequest) -> None:
     else:
         msg.review_status = "rejected"
     msg.review_feedback = body.feedback
-    msg.reviewed_at = datetime.utcnow()
+    msg.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(msg)
 
@@ -492,7 +554,9 @@ def _mark_last_ai_message(db: Session, chat_id: int, body: ReviewRequest) -> Non
         _mark_message(db, last_ai, body)
 
 
-def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) -> Message:
+def _regenerate_ai_response(
+    db: Session, chat: Chat, feedback: Optional[str]
+) -> Message:
     """Create a placeholder AI message and kick off a RAG revision.
 
     When the database is SQLite (i.e. test / dev mode) the revision runs
@@ -521,13 +585,15 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
         patient_context = None
 
     file_texts = []
-    for attachment in (chat.files or []):
+    for attachment in chat.files or []:
         text = _extract_text(attachment.file_path, attachment.file_type)
         if text.strip():
             file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
     file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
     if file_context and len(file_context) > 8000:
-        file_context = file_context[:8000] + "\n\n[Document truncated to fit context window]"
+        file_context = (
+            file_context[:8000] + "\n\n[Document truncated to fit context window]"
+        )
 
     # Create a temporary placeholder message so the specialist sees immediate
     # feedback (matches the "ai_generating" pattern used for initial answers).
@@ -536,7 +602,9 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
         chat_id=chat.id,
         content="Revising response based on specialist feedback…",
         sender="ai",
-        citations=[],        is_generating=True,)
+        citations=[],
+        is_generating=True,
+    )
 
     is_sqlite = db.bind and db.bind.dialect.name == "sqlite"
 
@@ -684,7 +752,7 @@ def _regenerate_ai_response_task(
                 patient_context = None
 
             file_texts = []
-            for attachment in (chat.files or []):
+            for attachment in chat.files or []:
                 text = _extract_text(attachment.file_path, attachment.file_type)
                 if text.strip():
                     file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
@@ -834,12 +902,15 @@ def _regenerate_ai_response_task(
 
 
 def send_message(db: Session, specialist: User, chat_id: int, content: str) -> dict:
-    chat = db.query(Chat).filter(
-        Chat.id == chat_id, Chat.specialist_id == specialist.id
-    ).first()
+    chat = (
+        db.query(Chat)
+        .filter(Chat.id == chat_id, Chat.specialist_id == specialist.id)
+        .first()
+    )
     if not chat:
         raise HTTPException(
-            status_code=404, detail="Chat not found or not assigned to you")
+            status_code=404, detail="Chat not found or not assigned to you"
+        )
 
     if chat.status not in (ChatStatus.ASSIGNED, ChatStatus.REVIEWING):
         raise HTTPException(
@@ -855,7 +926,9 @@ def send_message(db: Session, specialist: User, chat_id: int, content: str) -> d
         db, chat_id=chat.id, content=content, sender="specialist"
     )
     audit_repository.log(
-        db, user_id=specialist.id, action="SPECIALIST_MESSAGE",
+        db,
+        user_id=specialist.id,
+        action="SPECIALIST_MESSAGE",
         details=f"Specialist sent message in chat {chat_id}",
     )
     notification_repository.create(
@@ -868,10 +941,14 @@ def send_message(db: Session, specialist: User, chat_id: int, content: str) -> d
     )
     invalidate_notification_caches(chat.user_id)
     cache.delete_pattern_sync(
-        cache_keys.chat_detail_pattern(chat_id), user_id=specialist.id, resource="chat_detail"
+        cache_keys.chat_detail_pattern(chat_id),
+        user_id=specialist.id,
+        resource="chat_detail",
     )
     cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
     )
     _invalidate_specialist_lists(
         specialty=chat.specialty,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 import tempfile
 from datetime import date
 from typing import Any
@@ -112,6 +114,30 @@ class TestConfigureLogLevel:
 
         assert handler.level == logging.DEBUG
         logger.handlers.clear()
+
+    def test_ignores_non_logger_entries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = logging.Logger.manager.loggerDict
+        monkeypatch.setattr(
+            logging.Logger.manager,
+            "loggerDict",
+            {"placeholder": object()},
+            raising=False,
+        )
+        _configure_log_level("INFO")
+        monkeypatch.setattr(logging.Logger.manager, "loggerDict", original, raising=False)
+
+
+def test_module_entrypoint_invokes_main() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "src.ingestion.cli", "--help"],
+        cwd="/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
 
 
 # -----------------------------------------------------------------------

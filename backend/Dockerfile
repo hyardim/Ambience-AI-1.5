@@ -9,12 +9,11 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY pyproject.toml README.md /app/
+COPY src /app/src
 
 RUN PIP_CONFIG_FILE=/dev/null PIP_REQUIRE_HASHES=0 \
-    pip install --isolated --no-cache-dir -r requirements.txt
-
-COPY src /app/src
+    pip install --isolated --no-cache-dir .
 
 ENV PYTHONPATH=/app
 

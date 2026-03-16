@@ -1,13 +1,14 @@
-from pydantic import BaseModel, EmailStr
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = "New User"
-    role: str = "gp"                    # "gp" | "specialist" | "admin"
-    specialty: Optional[str] = None     # required when role == "specialist"
+    role: str = "gp"  # "gp" | "specialist" | "admin"
+    specialty: Optional[str] = None  # required when role == "specialist"
 
 
 class ProfileUpdate(BaseModel):
@@ -18,15 +19,14 @@ class ProfileUpdate(BaseModel):
 
 
 class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     full_name: Optional[str]
     role: str
     specialty: Optional[str]
     is_active: bool
-
-    class Config:
-        from_attributes = True
 
 
 class PasswordResetRequest(BaseModel):
@@ -36,6 +36,7 @@ class PasswordResetRequest(BaseModel):
 
 class AuthResponse(BaseModel):
     """Returned by login & register — token plus basic user info."""
+
     access_token: str
     token_type: str = "bearer"
     user: UserOut

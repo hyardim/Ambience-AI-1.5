@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -101,7 +101,11 @@ async def send_message(
     )
 
 
-@router.post("/{chat_id}/files", response_model=FileAttachmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{chat_id}/files",
+    response_model=FileAttachmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def upload_file(
     chat_id: int,
     file: UploadFile = File(...),
@@ -141,8 +145,8 @@ async def stream_chat(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    from src.db.models import Chat
     from src.core.chat_policy import can_stream_chat
+    from src.db.models import Chat
 
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat or not can_stream_chat(user, chat):
