@@ -270,8 +270,14 @@ export async function reviewMessage(
   action: 'approve' | 'reject' | 'request_changes' | 'manual_response',
   feedback?: string,
   replacementContent?: string,
+  replacementSources?: string[],
 ): Promise<BackendChat> {
-  const body: ReviewRequest = { action, feedback, replacement_content: replacementContent };
+  const body: ReviewRequest = {
+    action,
+    feedback,
+    replacement_content: replacementContent,
+    replacement_sources: replacementSources,
+  };
   const res = await fetch(`${API_BASE}/specialist/chats/${chatId}/messages/${messageId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

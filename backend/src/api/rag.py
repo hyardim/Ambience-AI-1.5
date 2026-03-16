@@ -2,6 +2,7 @@ import httpx
 from fastapi import APIRouter, Depends
 from src.core.security import get_current_user
 import os
+from typing import Optional
 
 router = APIRouter()
 
@@ -11,7 +12,9 @@ RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 
 @router.post("/search")
 async def search_clinical_guidelines(
-    query: str, current_user=Depends(get_current_user)
+    query: str,
+    specialty: Optional[str] = None,
+    current_user=Depends(get_current_user),
 ):
     """
     Backend acts as the Secure Gateway. It verifies the GP user,
@@ -19,7 +22,12 @@ async def search_clinical_guidelines(
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{RAG_SERVICE_URL}/query", json={"query": query, "top_k": 3}
+            f"{RAG_SERVICE_URL}/query",
+            json={
+                "query": query,
+                "top_k": 3,
+                **({"specialty": specialty} if specialty else {}),
+            },
         )
 
     if response.status_code != 200:

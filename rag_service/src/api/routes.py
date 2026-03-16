@@ -172,6 +172,7 @@ async def generate_clinical_answer(
             query=request.query,
             retrieved_chunks=filtered or retrieved,
             severity=request.severity,
+            prompt_length_chars=len(prompt),
         )
         log_route_decision(
             "/answer",
@@ -271,6 +272,7 @@ async def revise_clinical_answer(
             retrieved_chunks=filtered or retrieved,
             severity=request.severity,
             is_revision=True,
+            prompt_length_chars=len(prompt),
         )
         log_route_decision(
             "/revise",

@@ -5,7 +5,7 @@ from typing import Optional
 import os
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
@@ -20,7 +20,11 @@ from src.repositories import (
 )
 from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, ReviewRequest
 from src.services._mappers import chat_to_response, msg_to_response
-from src.services.chat_service import _extract_text
+from src.services.chat_service import (
+    _build_conversation_history_from_messages,
+    _extract_text,
+    _select_rag_citations,
+)
 from src.utils.cache import cache, cache_keys
 from src.core.chat_policy import can_view_chat
 
@@ -28,6 +32,29 @@ from src.core.chat_policy import can_view_chat
 RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
 RAG_REQUEST_TIMEOUT_SECONDS = float(
     os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+
+
+def _build_manual_citations(sources: list[str] | None) -> list[dict] | None:
+    if not sources:
+        return None
+
+    cleaned = [source.strip() for source in sources if isinstance(source, str) and source.strip()]
+    if not cleaned:
+        return None
+
+    citations: list[dict] = []
+    for source in cleaned:
+        citations.append(
+            {
+                "title": source,
+                "source_name": "Manual source",
+                "metadata": {
+                    "title": source,
+                    "source_name": "Manual source",
+                },
+            }
+        )
+    return citations
 
 
 def get_queue(db: Session, specialist: User) -> list[ChatResponse]:
@@ -158,7 +185,7 @@ def review(db: Session, specialist: User, chat_id: int, body: ReviewRequest) -> 
         generating = db.query(Message).filter(
             Message.chat_id == chat_id,
             Message.sender == "ai",
-            Message.is_generating == True,
+            Message.is_generating,
         ).first()
         if generating:
             raise HTTPException(
@@ -301,7 +328,11 @@ def review_message(
         # Reject the AI message without regeneration; specialist provides replacement
         # Send the specialist's replacement as a specialist message
         message_repository.create(
-            db, chat_id=chat.id, content=body.replacement_content.strip(), sender="specialist",
+            db,
+            chat_id=chat.id,
+            content=body.replacement_content.strip(),
+            sender="specialist",
+            citations=_build_manual_citations(body.replacement_sources),
         )
         audit_repository.log(
             db, user_id=specialist.id,
@@ -336,6 +367,12 @@ def review_message(
             chat = chat_repository.update(
                 db, chat, status=ChatStatus.REVIEWING)
 
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat.id), user_id=specialist.id, resource="chat_detail"
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+    )
     return chat_to_response(chat)
 
 
@@ -383,6 +420,28 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
 
     original_query = user_messages[-1].content if user_messages else "consultation"
     previous_answer = ai_messages[-1].content if ai_messages else ""
+    ctx = chat.patient_context or {}
+    patient_context = {
+        **ctx,
+        **({"specialty": chat.specialty} if chat.specialty else {}),
+        **({"severity": chat.severity} if chat.severity else {}),
+    } or None
+    conversation_history = _build_conversation_history_from_messages(messages)
+    if patient_context is None:
+        patient_context = {}
+    if conversation_history:
+        patient_context["conversation_history"] = conversation_history
+    if not patient_context:
+        patient_context = None
+
+    file_texts = []
+    for attachment in (chat.files or []):
+        text = _extract_text(attachment.file_path, attachment.file_type)
+        if text.strip():
+            file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
+    file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
+    if file_context and len(file_context) > 8000:
+        file_context = file_context[:8000] + "\n\n[Document truncated to fit context window]"
 
     # Create a temporary placeholder message so the specialist sees immediate
     # feedback (matches the "ai_generating" pattern used for initial answers).
@@ -405,6 +464,8 @@ def _regenerate_ai_response(db: Session, chat: Chat, feedback: Optional[str]) ->
             feedback or "",
             chat.specialty,
             chat.severity,
+            patient_context,
+            file_context,
         )
     else:
         thread = threading.Thread(
@@ -433,6 +494,8 @@ def _do_revise(
     feedback: str,
     specialty: str | None,
     severity: str | None,
+    patient_context: dict | None,
+    file_context: str | None,
 ) -> None:
     """Call the RAG /revise endpoint and update the placeholder message in-place."""
     rag_payload = {
@@ -442,6 +505,8 @@ def _do_revise(
         "top_k": 4,
         "specialty": specialty,
         "severity": severity,
+        "patient_context": patient_context,
+        "file_context": file_context,
     }
 
     try:
@@ -453,7 +518,7 @@ def _do_revise(
         rag_response.raise_for_status()
         rag_json = rag_response.json()
         revised_content = rag_json.get("answer", "")
-        citations = rag_json.get("citations", [])
+        citations = _select_rag_citations(rag_json) or []
     except Exception as exc:  # pragma: no cover - network fallback
         revised_content = (
             f"[Revised after specialist feedback: {feedback}] "
@@ -510,6 +575,15 @@ def _regenerate_ai_response_task(
                 **({"specialty": chat.specialty} if chat.specialty else {}),
                 **({"severity": chat.severity} if chat.severity else {}),
             } or None
+            conversation_history = _build_conversation_history_from_messages(
+                message_repository.list_for_chat(db, chat.id)
+            )
+            if patient_context is None:
+                patient_context = {}
+            if conversation_history:
+                patient_context["conversation_history"] = conversation_history
+            if not patient_context:
+                patient_context = None
 
             file_texts = []
             for attachment in (chat.files or []):
@@ -552,7 +626,7 @@ def _regenerate_ai_response_task(
         citations: list = []
 
         try:
-            with httpx.Client(timeout=120) as client:
+            with httpx.Client(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
                 with client.stream(
                     "POST",
                     f"{RAG_SERVICE_URL}/revise",
@@ -582,7 +656,7 @@ def _regenerate_ai_response_task(
                             )
                         elif chunk.get("type") == "done":
                             accumulated = chunk.get("answer", accumulated)
-                            citations = chunk.get("citations", [])
+                            citations = _select_rag_citations(chunk) or []
                         elif chunk.get("type") == "error":
                             raise RuntimeError(
                                 chunk.get("error", "RAG streaming error")

@@ -5,8 +5,8 @@ import {
 } from 'recharts';
 import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
-import { adminGetStats } from '../../services/api';
-import type { AdminStatsResponse } from '../../types/api';
+import { adminGetLogs, adminGetStats } from '../../services/api';
+import type { AdminStatsResponse, AuditLogResponse } from '../../types/api';
 
 const STATUS_COLOURS: Record<string, string> = {
   open:       '#94a3b8',
@@ -41,6 +41,7 @@ function StatCard({ label, value, sub, icon: Icon, colour }: {
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
+  const [ragLogs, setRagLogs] = useState<AuditLogResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -48,7 +49,12 @@ export default function AdminDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      setStats(await adminGetStats());
+      const [statsResponse, ragLogResponse] = await Promise.all([
+        adminGetStats(),
+        adminGetLogs({ category: 'RAG', limit: 8 }),
+      ]);
+      setStats(statsResponse);
+      setRagLogs(ragLogResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load stats');
     } finally {
@@ -77,6 +83,11 @@ export default function AdminDashboardPage() {
   const specialtyData = stats
     ? Object.entries(stats.chats_by_specialty).map(([name, value]) => ({ name, value }))
     : [];
+
+  const formatTimestamp = (iso: string) =>
+    new Date(iso).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
 
   return (
     <AdminLayout>
@@ -187,34 +198,60 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Daily AI queries area chart */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-sm font-medium text-gray-700 mb-4">AI Queries — Last 30 Days</h2>
-              {stats.daily_ai_queries.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-12">No query data in the last 30 days</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="aiGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#005eb8" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#005eb8" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip labelFormatter={(d) => `Date: ${d}`} />
-                    <Area
-                      type="monotone"
-                      dataKey="count"
-                      stroke="#005eb8"
-                      strokeWidth={2}
-                      fill="url(#aiGradient)"
-                      name="AI Queries"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h2 className="text-sm font-medium text-gray-700 mb-4">AI Queries — Last 30 Days</h2>
+                {stats.daily_ai_queries.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-12">No query data in the last 30 days</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="aiGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#005eb8" stopOpacity={0.15} />
+                          <stop offset="95%" stopColor="#005eb8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip labelFormatter={(d) => `Date: ${d}`} />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke="#005eb8"
+                        strokeWidth={2}
+                        fill="url(#aiGradient)"
+                        name="AI Queries"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-medium text-gray-700">Recent RAG Logs</h2>
+                  <span className="text-xs text-gray-400">Last 8 events</span>
+                </div>
+                {ragLogs.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-12">No recent RAG activity</p>
+                ) : (
+                  <div className="space-y-3">
+                    {ragLogs.map((log) => (
+                      <div key={log.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
+                            {log.action}
+                          </span>
+                          <span className="text-xs text-gray-400">{formatTimestamp(log.timestamp)}</span>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600 break-words">{log.details || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

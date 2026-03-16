@@ -37,8 +37,13 @@ _STUBBED_MODULES = [
     "src.ingestion.pipeline",
     "src.retrieval.vector_store",
     "src.generation.client",
+    "src.generation.streaming",
     "src.generation.prompts",
     "src.jobs.retry",
+    "src.orchestration.generate",
+    "src.orchestration.pipeline",
+    "src.retrieval.query",
+    "src.api.services",
     "src.api.app",
     "src.api.routes",
     "src.api.ask_routes",
@@ -50,6 +55,44 @@ def _make_stub(name: str) -> types.ModuleType:
     module = types.ModuleType(name)
     sys.modules[name] = module
     return module
+
+
+class _FakeSearchResult(dict):
+    def model_dump(self) -> dict[str, object]:
+        return dict(self)
+
+
+def _fake_to_search_result(value: dict[str, object]) -> _FakeSearchResult:
+    metadata = value.get("metadata") or {}
+    source = "Unknown Source"
+    if isinstance(metadata, dict):
+        source = (
+            metadata.get("title")
+            or metadata.get("source_name")
+            or metadata.get("filename")
+            or metadata.get("source_path")
+            or source
+        )
+
+    return _FakeSearchResult(
+        {
+            "text": value.get("text", ""),
+            "source": source,
+            "score": value.get("score", 0.0),
+            "doc_id": value.get("doc_id"),
+            "doc_version": value.get("doc_version"),
+            "chunk_id": value.get("chunk_id"),
+            "chunk_index": value.get("chunk_index"),
+            "content_type": value.get("content_type"),
+            "page_start": value.get("page_start"),
+            "page_end": value.get("page_end"),
+            "section_path": value.get("section_path"),
+            "creation_date": None,
+            "publish_date": None,
+            "last_updated_date": None,
+            "metadata": metadata if isinstance(metadata, dict) else {},
+        }
+    )
 
 
 def _install_stubs() -> None:
@@ -108,6 +151,8 @@ def _install_stubs() -> None:
         llm_route_threshold=0.65,
         force_cloud_llm=False,
         route_revisions_to_cloud=True,
+        medium_prompt_chars=3500,
+        long_prompt_chars=7000,
     )
     fake_config.retry_config = types.SimpleNamespace(
         redis_url="redis://localhost:6379/0",
@@ -117,6 +162,10 @@ def _install_stubs() -> None:
         retry_backoff_multiplier=2,
         retry_job_ttl_seconds=86400,
     )
+    fake_config.logging_config = types.SimpleNamespace(
+        log_level="INFO",
+        log_file="logs/test.log",
+    )
     fake_config.llm_config = types.SimpleNamespace(
         llm_base_url="http://localhost:11434/v1",
         llm_model="fake",
@@ -124,6 +173,13 @@ def _install_stubs() -> None:
         llm_max_tokens=512,
         llm_temperature=0.1,
         llm_timeout_seconds=120.0,
+    )
+    fake_config.generation_config = types.SimpleNamespace(
+        ollama_base_url="http://localhost:11434",
+        ollama_model="fake-local-model",
+        ollama_max_tokens=512,
+        ollama_timeout_seconds=60.0,
+        prompt_variant="test",
     )
     path_config = MagicMock()
     path_config.root = Path("/app")
@@ -135,8 +191,13 @@ def _install_stubs() -> None:
         "src.ingestion.pipeline",
         "src.retrieval.vector_store",
         "src.generation.client",
+        "src.generation.streaming",
         "src.generation.prompts",
         "src.jobs.retry",
+        "src.orchestration.generate",
+        "src.orchestration.pipeline",
+        "src.retrieval.query",
+        "src.api.services",
     ):
         _make_stub(module_name)
 
@@ -163,6 +224,11 @@ def _install_stubs() -> None:
     sys.modules["src.generation.client"].ModelGenerationError = FakeModelGenerationError
     sys.modules["src.generation.client"].generate_answer = MagicMock()
     sys.modules["src.generation.client"].warmup_model = MagicMock()
+    sys.modules["src.generation.client"]._auth_headers = MagicMock(return_value={})
+    sys.modules["src.generation.client"]._extract_chat_completion_text = MagicMock(
+        return_value="answer"
+    )
+    sys.modules["src.generation.streaming"].stream_generate = MagicMock()
 
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"
     sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(
@@ -200,6 +266,30 @@ def _install_stubs() -> None:
             "response": None,
         }
     )
+
+    class FakeGenerationError(RuntimeError):
+        pass
+
+    fake_orchestration_generate = sys.modules["src.orchestration.generate"]
+    fake_orchestration_generate.GenerationError = FakeGenerationError
+    fake_orchestration_generate.RAGResponse = type("RAGResponse", (), {})
+
+    fake_orchestration_pipeline = sys.modules["src.orchestration.pipeline"]
+    fake_orchestration_pipeline.ask = MagicMock()
+
+    class FakeRetrievalError(RuntimeError):
+        pass
+
+    fake_retrieval_query = sys.modules["src.retrieval.query"]
+    fake_retrieval_query.RetrievalError = FakeRetrievalError
+
+    fake_api_services = sys.modules["src.api.services"]
+    fake_api_services.retrieve_chunks = MagicMock(return_value=[])
+    fake_api_services.filter_chunks = MagicMock(
+        side_effect=lambda _query, retrieved: retrieved
+    )
+    fake_api_services.log_route_decision = MagicMock()
+    fake_api_services.to_search_result = MagicMock(side_effect=_fake_to_search_result)
 
 
 def _restore_modules(originals: dict[str, types.ModuleType | None]) -> None:

@@ -156,3 +156,43 @@ class TestPatientContextRAGPayload:
             assert ctx.get("age") is None
             assert ctx.get("gender") is None
             assert ctx.get("notes") is None
+
+    def test_recent_conversation_history_forwarded_to_rag(self, client, gp_headers):
+        from unittest.mock import MagicMock, patch
+
+        chat = client.post("/chats/", json={"specialty": "neurology"}, headers=gp_headers).json()
+
+        second_payload = {}
+        call_count = {"value": 0}
+
+        def fake_rag(url, json, timeout):
+            del url, timeout
+            call_count["value"] += 1
+            if call_count["value"] == 2:
+                second_payload.update(json)
+            response = MagicMock()
+            response.raise_for_status = MagicMock()
+            response.json.return_value = {
+                "answer": "First answer" if call_count["value"] == 1 else "ok",
+                "citations": [],
+                "citations_used": [],
+                "citations_retrieved": [],
+            }
+            return response
+
+        with patch("src.services.chat_service.httpx.post", side_effect=fake_rag):
+            client.post(
+                f"/chats/{chat['id']}/message",
+                json={"role": "user", "content": "Initial question"},
+                headers=gp_headers,
+            )
+            client.post(
+                f"/chats/{chat['id']}/message",
+                json={"role": "user", "content": "Follow-up question"},
+                headers=gp_headers,
+            )
+
+        history = (second_payload.get("patient_context") or {}).get("conversation_history", "")
+        assert "GP: Initial question" in history
+        assert "AI: First answer" in history
+        assert "GP: Follow-up question" in history

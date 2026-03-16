@@ -37,7 +37,6 @@ async def streaming_generator(
         citations_retrieved,
         strip_references=True,
     )
-    fallback = citations_used if citations_used else citations_retrieved
 
     yield (
         json.dumps(
@@ -50,7 +49,7 @@ async def streaming_generator(
                 "citations_retrieved": [
                     citation.model_dump() for citation in citations_retrieved
                 ],
-                "citations": [citation.model_dump() for citation in fallback],
+                "citations": [citation.model_dump() for citation in citations_used],
             }
         )
         + "\n"

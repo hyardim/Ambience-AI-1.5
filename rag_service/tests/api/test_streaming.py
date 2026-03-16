@@ -75,6 +75,32 @@ async def test_produces_chunks_then_done(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.anyio
+async def test_done_payload_keeps_empty_used_citations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_stream_generate(prompt: str, max_tokens: int | None = None):
+        del prompt, max_tokens
+        yield "No inline citations here"
+
+    monkeypatch.setattr(
+        "src.api.streaming.stream_generate",
+        fake_stream_generate,
+    )
+
+    citations_retrieved = [
+        SearchResult(text="evidence", source="guideline.pdf", score=0.9)
+    ]
+
+    lines = []
+    async for line in streaming_generator("prompt", 128, citations_retrieved):
+        lines.append(json.loads(line.strip()))
+
+    assert lines[-1]["type"] == "done"
+    assert lines[-1]["citations_used"] == []
+    assert lines[-1]["citations"] == []
+
+
+@pytest.mark.anyio
 async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     async def failing_stream(prompt: str, max_tokens: int | None = None):
         del prompt, max_tokens

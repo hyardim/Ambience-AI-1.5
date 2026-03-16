@@ -126,6 +126,7 @@ export interface ReviewRequest {
   action: 'approve' | 'reject' | 'request_changes' | 'manual_response';
   feedback?: string | null;
   replacement_content?: string | null;
+  replacement_sources?: string[] | null;
 }
 
 // ---------------------------------------------------------------------------

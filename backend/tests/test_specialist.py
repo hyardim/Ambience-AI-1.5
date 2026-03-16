@@ -439,6 +439,64 @@ class TestSpecialistPerMessageReview:
         )
         assert resp.status_code == 400
 
+    def test_manual_response_can_store_sources(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        self._assign(client, specialist_headers, submitted_chat["id"], registered_specialist["user"]["id"])
+        msg_id = self._get_first_ai_message_id(client, specialist_headers, submitted_chat["id"])
+        assert msg_id is not None
+
+        client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={
+                "action": "manual_response",
+                "replacement_content": "Manual answer with supporting sources.",
+                "replacement_sources": ["NICE NG220", "Local trust protocol"],
+            },
+            headers=specialist_headers,
+        )
+
+        detail = client.get(f"/specialist/chats/{submitted_chat['id']}", headers=specialist_headers).json()
+        new_msg = detail["messages"][-1]
+        assert new_msg["sender"] == "specialist"
+        assert len(new_msg["citations"]) == 2
+        assert new_msg["citations"][0]["title"] == "NICE NG220"
+
+    def test_message_review_invalidates_caches(
+        self, monkeypatch, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        invalidated: list[str] = []
+
+        def fake_delete_pattern_sync(pattern, *_args, **_kwargs):
+            invalidated.append(pattern)
+            return 1
+
+        monkeypatch.setattr(
+            "src.services.specialist_service.cache.delete_pattern_sync",
+            fake_delete_pattern_sync,
+        )
+
+        self._assign(
+            client,
+            specialist_headers,
+            submitted_chat["id"],
+            registered_specialist["user"]["id"],
+        )
+        msg_id = self._get_first_ai_message_id(
+            client, specialist_headers, submitted_chat["id"]
+        )
+        assert msg_id is not None
+
+        resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/messages/{msg_id}/review",
+            json={"action": "approve"},
+            headers=specialist_headers,
+        )
+
+        assert resp.status_code == 200
+        assert any(f":chat:{submitted_chat['id']}" in pattern for pattern in invalidated)
+        assert any(":chats:" in pattern for pattern in invalidated)
+
     def test_approve_all_then_manually_close(
         self, client, specialist_headers, submitted_chat, registered_specialist
     ):

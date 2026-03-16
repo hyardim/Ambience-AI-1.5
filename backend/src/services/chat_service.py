@@ -8,11 +8,12 @@ from typing import Optional
 
 import httpx
 from fastapi import BackgroundTasks, HTTPException, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.db.models import ChatStatus, FileAttachment, User
+from src.db.models import ChatStatus, FileAttachment, Message, User
 from src.db.session import AsyncSessionLocal, SessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
@@ -269,6 +270,36 @@ def _extract_text(file_path: str, file_type: Optional[str]) -> str:
         return ""
 
 
+def _build_conversation_history_from_messages(
+    messages: list[Message],
+    *,
+    limit: int = 8,
+) -> str | None:
+    if not messages:
+        return None
+
+    history_lines: list[str] = []
+    for message in messages[-limit:]:
+        if not message.content:
+            continue
+        speaker = {
+            "user": "GP",
+            "specialist": "Specialist",
+            "ai": "AI",
+        }.get(message.sender, message.sender.title())
+        history_lines.append(f"{speaker}: {message.content.strip()}")
+
+    return "\n".join(history_lines) if history_lines else None
+
+
+def _select_rag_citations(payload: dict) -> list | None:
+    for key in ("citations_used", "citations"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+    return None
+
+
 async def upload_file(
     db: Session,
     user: User,
@@ -365,6 +396,15 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             **({"specialty": chat.specialty} if chat.specialty else {}),
             **({"severity": chat.severity} if chat.severity else {}),
         } or None
+        conversation_history = _build_conversation_history_from_messages(
+            message_repository.list_for_chat(db, chat.id)
+        )
+        if patient_context is None:
+            patient_context = {}
+        if conversation_history:
+            patient_context["conversation_history"] = conversation_history
+        if not patient_context:
+            patient_context = None
 
         file_texts = []
         for attachment in (chat.files or []):
@@ -398,8 +438,7 @@ def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str)
             rag_response.raise_for_status()
             rag_json = rag_response.json()
             ai_content = rag_json.get("answer", "")
-            # Use only citations the model actually cited; empty list means no sources shown.
-            citations = rag_json.get("citations") or None
+            citations = _select_rag_citations(rag_json)
             rag_action = "RAG_ANSWER"
             rag_details = f"query_len={len(content)} top_k=4 chunks_used={len(citations) if citations else 0}"
         except Exception as exc:  # pragma: no cover - network fallback
@@ -538,6 +577,20 @@ async def _async_generate_ai_response(
                 **({"specialty": chat.specialty} if chat.specialty else {}),
                 **({"severity": chat.severity} if chat.severity else {}),
             } or None
+            message_rows = await db.execute(
+                select(Message)
+                .where(Message.chat_id == chat.id)
+                .order_by(Message.created_at.asc())
+            )
+            conversation_history = _build_conversation_history_from_messages(
+                list(message_rows.scalars())
+            )
+            if patient_context is None:
+                patient_context = {}
+            if conversation_history:
+                patient_context["conversation_history"] = conversation_history
+            if not patient_context:
+                patient_context = None
 
             file_texts = []
             for attachment in (chat.files or []):
@@ -591,12 +644,7 @@ async def _async_generate_ai_response(
                             rag_json = rag_response.json()
 
                     ai_content = rag_json.get("answer", "")
-                    citations = (
-                        rag_json.get("citations_used")
-                        or rag_json.get("citations")
-                        or rag_json.get("citations_retrieved")
-                        or None
-                    )
+                    citations = _select_rag_citations(rag_json)
                 else:
                     async with httpx.AsyncClient(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
                         async with client.stream(
@@ -628,12 +676,7 @@ async def _async_generate_ai_response(
                                     )
                                 elif chunk.get("type") == "done":
                                     ai_content = chunk.get("answer", ai_content)
-                                    citations = (
-                                        chunk.get("citations_used")
-                                        or chunk.get("citations")
-                                        or chunk.get("citations_retrieved")
-                                        or None
-                                    )
+                                    citations = _select_rag_citations(chunk)
                                 elif chunk.get("type") == "error":
                                     raise RuntimeError(chunk.get("error", "RAG streaming error"))
 

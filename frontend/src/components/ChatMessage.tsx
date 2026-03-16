@@ -1,4 +1,4 @@
-import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
+import { FileText, Bot, User, CheckCircle, Clock, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
 import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
@@ -64,7 +64,6 @@ export function ChatMessage({
   const reviewStatus = message.reviewStatus;
 
   const renderCitations = () => {
-    if (!isAI) return null;
     const citations = message.citations || [];
     if (citations.length === 0) return null;
 

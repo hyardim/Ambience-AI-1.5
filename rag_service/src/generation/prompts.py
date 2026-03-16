@@ -136,6 +136,9 @@ def _format_patient_context(patient_context: dict | None) -> str:
     block = "PATIENT CONTEXT\n" + header
     if notes:
         block += f"\nClinical notes: {notes}"
+    conversation_history = patient_context.get("conversation_history", "")
+    if conversation_history:
+        block += f"\n\nRECENT CHAT HISTORY\n{conversation_history}"
     return block
 
 

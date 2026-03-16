@@ -65,6 +65,44 @@ def _make_stub(name: str) -> types.ModuleType:
     return mod
 
 
+class _FakeSearchResult(dict):
+    def model_dump(self) -> dict[str, object]:
+        return dict(self)
+
+
+def _fake_to_search_result(value: dict[str, object]) -> _FakeSearchResult:
+    metadata = value.get("metadata") or {}
+    source = "Unknown Source"
+    if isinstance(metadata, dict):
+        source = (
+            metadata.get("title")
+            or metadata.get("source_name")
+            or metadata.get("filename")
+            or metadata.get("source_path")
+            or source
+        )
+
+    return _FakeSearchResult(
+        {
+            "text": value.get("text", ""),
+            "source": source,
+            "score": value.get("score", 0.0),
+            "doc_id": value.get("doc_id"),
+            "doc_version": value.get("doc_version"),
+            "chunk_id": value.get("chunk_id"),
+            "chunk_index": value.get("chunk_index"),
+            "content_type": value.get("content_type"),
+            "page_start": value.get("page_start"),
+            "page_end": value.get("page_end"),
+            "section_path": value.get("section_path"),
+            "creation_date": None,
+            "publish_date": None,
+            "last_updated_date": None,
+            "metadata": metadata if isinstance(metadata, dict) else {},
+        }
+    )
+
+
 @pytest.fixture(scope="module")
 def main_app():
     """Stub heavy deps, import the clinical app, then restore sys.modules."""
@@ -91,11 +129,16 @@ def main_app():
         "src.config",
         "src.ingestion.embed",
         "src.ingestion.pipeline",
-        "src.retrieval.vector_store",
-        "src.generation.client",
-        "src.generation.prompts",
+            "src.retrieval.vector_store",
+            "src.generation.client",
+            "src.generation.streaming",
+            "src.generation.prompts",
         "src.jobs.retry",
-        "src.api.app",
+            "src.orchestration.generate",
+            "src.orchestration.pipeline",
+            "src.retrieval.query",
+            "src.api.services",
+            "src.api.app",
         "src.api.routes",
         "src.api.ask_routes",
         "src.main",
@@ -170,6 +213,8 @@ def main_app():
         llm_route_threshold=0.65,
         force_cloud_llm=False,
         route_revisions_to_cloud=True,
+        medium_prompt_chars=3500,
+        long_prompt_chars=7000,
     )  # type: ignore[attr-defined]
     fake_config.retry_config = types.SimpleNamespace(
         redis_url="redis://localhost:6379/0",
@@ -179,6 +224,10 @@ def main_app():
         retry_backoff_multiplier=2,
         retry_job_ttl_seconds=86400,
     )  # type: ignore[attr-defined]
+    fake_config.logging_config = types.SimpleNamespace(
+        log_level="INFO",
+        log_file="logs/test.log",
+    )  # type: ignore[attr-defined]
     fake_config.llm_config = types.SimpleNamespace(
         llm_base_url="http://localhost:11434/v1",
         llm_model="fake-model",
@@ -186,6 +235,13 @@ def main_app():
         llm_max_tokens=512,
         llm_temperature=0.1,
         llm_timeout_seconds=120.0,
+    )  # type: ignore[attr-defined]
+    fake_config.generation_config = types.SimpleNamespace(
+        ollama_base_url="http://localhost:11434",
+        ollama_model="fake-local-model",
+        ollama_max_tokens=512,
+        ollama_timeout_seconds=60.0,
+        prompt_variant="test",
     )  # type: ignore[attr-defined]
     _path_config = MagicMock()
     _path_config.root = Path("/app")
@@ -196,12 +252,17 @@ def main_app():
     for _mod_name in (
         "src.ingestion.embed",
         "src.ingestion.pipeline",
-        "src.retrieval.vector_store",
-        "src.generation.client",
-        "src.generation.prompts",
+            "src.retrieval.vector_store",
+            "src.generation.client",
+            "src.generation.streaming",
+            "src.generation.prompts",
         "src.jobs.retry",
-    ):
-        _make_stub(_mod_name)
+            "src.orchestration.generate",
+            "src.orchestration.pipeline",
+            "src.retrieval.query",
+            "src.api.services",
+        ):
+            _make_stub(_mod_name)
 
     sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
         return_value=MagicMock()
@@ -225,6 +286,11 @@ def main_app():
     sys.modules["src.generation.client"].ProviderName = Literal["local", "cloud"]  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].generate_answer = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.client"].warmup_model = MagicMock()  # type: ignore[attr-defined]
+    sys.modules["src.generation.client"]._auth_headers = MagicMock(return_value={})  # type: ignore[attr-defined]
+    sys.modules["src.generation.client"]._extract_chat_completion_text = MagicMock(
+        return_value="answer"
+    )  # type: ignore[attr-defined]
+    sys.modules["src.generation.streaming"].stream_generate = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock()  # type: ignore[attr-defined]
@@ -236,6 +302,29 @@ def main_app():
         return_value=("job-1", "queued")
     )  # type: ignore[attr-defined]
     sys.modules["src.jobs.retry"].get_retry_job = MagicMock(return_value=None)  # type: ignore[attr-defined]
+
+    class _GenerationError(RuntimeError):
+        pass
+
+    sys.modules["src.orchestration.generate"].GenerationError = _GenerationError  # type: ignore[attr-defined]
+    sys.modules["src.orchestration.generate"].RAGResponse = type("RAGResponse", (), {})  # type: ignore[attr-defined]
+    sys.modules["src.orchestration.pipeline"].ask = MagicMock()  # type: ignore[attr-defined]
+
+    class _RetrievalError(RuntimeError):
+        pass
+
+    sys.modules["src.retrieval.query"].RetrievalError = _RetrievalError  # type: ignore[attr-defined]
+
+    sys.modules["src.api.services"].retrieve_chunks = MagicMock(
+        return_value=[]
+    )  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].filter_chunks = MagicMock(
+        side_effect=lambda _query, retrieved: retrieved
+    )  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].log_route_decision = MagicMock()  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].to_search_result = MagicMock(
+        side_effect=_fake_to_search_result
+    )  # type: ignore[attr-defined]
 
     # src.generation.router only uses stdlib + the fake config above.
 

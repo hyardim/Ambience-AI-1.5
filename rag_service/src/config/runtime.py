@@ -12,6 +12,8 @@ class RoutingConfig(AppBaseSettings):
     llm_route_threshold: float = Field(default=0.65)
     route_revisions_to_cloud: bool = Field(default=True)
     force_cloud_llm: bool = Field(default=False)
+    medium_prompt_chars: int = Field(default=3500)
+    long_prompt_chars: int = Field(default=7000)
 
 
 class RetryConfig(AppBaseSettings):

@@ -2,6 +2,7 @@ import src.generation.router as router
 from src.generation.router import (
     _score_ambiguity,
     _score_complexity,
+    _score_prompt_size,
     select_generation_provider,
 )
 
@@ -73,6 +74,17 @@ def test_select_generation_provider_scores_emergency_severity() -> None:
     assert "severity_emergency" in decision.reasons
 
 
+def test_select_generation_provider_routes_large_prompts_cloud() -> None:
+    decision = select_generation_provider(
+        query="What is migraine guidance?",
+        retrieved_chunks=[{"score": 0.72}, {"score": 0.66}, {"score": 0.51}],
+        prompt_length_chars=8000,
+    )
+
+    assert decision.provider == "cloud"
+    assert "long_prompt" in decision.reasons
+
+
 def test_score_complexity_medium_query_reason() -> None:
     query = "x" * 150
 
@@ -89,6 +101,20 @@ def test_score_complexity_long_query_reason() -> None:
 
     assert score > 0
     assert "long_query" in reasons
+
+
+def test_score_prompt_size_medium_prompt_reason() -> None:
+    score, reasons = _score_prompt_size(4000)
+
+    assert score > 0
+    assert "medium_prompt" in reasons
+
+
+def test_score_prompt_size_long_prompt_reason() -> None:
+    score, reasons = _score_prompt_size(8000)
+
+    assert score > 0
+    assert "long_prompt" in reasons
 
 
 def test_score_ambiguity_no_hits() -> None:

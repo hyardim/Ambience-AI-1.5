@@ -56,6 +56,7 @@ def select_generation_provider(
     retrieved_chunks: list[dict],
     severity: str | None = None,
     is_revision: bool = False,
+    prompt_length_chars: int | None = None,
     threshold: float | None = None,
 ) -> RouteDecision:
     resolved_threshold = (
@@ -76,6 +77,11 @@ def select_generation_provider(
     if complexity_score:
         score += complexity_score
         reasons.extend(complexity_reasons)
+
+    prompt_score, prompt_reasons = _score_prompt_size(prompt_length_chars)
+    if prompt_score:
+        score += prompt_score
+        reasons.extend(prompt_reasons)
 
     risk_score, risk_reasons = _score_risk(query, severity)
     if risk_score:
@@ -122,6 +128,23 @@ def _score_complexity(query: str) -> tuple[float, list[str]]:
     if matched_terms:
         score += min(0.18, 0.06 * len(matched_terms))
         reasons.append("complex_reasoning_terms")
+
+    return score, reasons
+
+
+def _score_prompt_size(prompt_length_chars: int | None) -> tuple[float, list[str]]:
+    if prompt_length_chars is None or prompt_length_chars <= 0:
+        return 0.0, []
+
+    score = 0.0
+    reasons: list[str] = []
+
+    if prompt_length_chars >= routing_config.long_prompt_chars:
+        score += 0.70
+        reasons.append("long_prompt")
+    elif prompt_length_chars >= routing_config.medium_prompt_chars:
+        score += 0.30
+        reasons.append("medium_prompt")
 
     return score, reasons
 

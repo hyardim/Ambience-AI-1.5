@@ -41,6 +41,7 @@ export function SpecialistQueryDetailPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [showManualResponseModal, setShowManualResponseModal] = useState(false);
   const [manualResponseContent, setManualResponseContent] = useState('');
+  const [manualResponseSources, setManualResponseSources] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Which message the current modal action targets
@@ -217,9 +218,21 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
-      await reviewMessage(chat.id, reviewTargetMessageId, 'manual_response', undefined, manualResponseContent.trim());
+      const sources = manualResponseSources
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      await reviewMessage(
+        chat.id,
+        reviewTargetMessageId,
+        'manual_response',
+        undefined,
+        manualResponseContent.trim(),
+        sources,
+      );
       setShowManualResponseModal(false);
       setManualResponseContent('');
+      setManualResponseSources('');
       setReviewTargetMessageId(null);
       await loadData();
     } catch (err) {
@@ -647,14 +660,27 @@ export function SpecialistQueryDetailPage() {
               onChange={(e) => setManualResponseContent(e.target.value)}
               rows={6}
               autoFocus
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none mb-6"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
               placeholder="Type your replacement response..."
             />
+            <div className="mt-4 mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Sources
+              </label>
+              <textarea
+                value={manualResponseSources}
+                onChange={(e) => setManualResponseSources(e.target.value)}
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                placeholder="Optional. Add one source per line."
+              />
+            </div>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => {
                   setShowManualResponseModal(false);
                   setManualResponseContent('');
+                  setManualResponseSources('');
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
               >

@@ -15,7 +15,7 @@ class GenerationConfig(AppBaseSettings):
 
 class LLMConfig(AppBaseSettings):
     llm_base_url: str = Field(default="http://localhost:11434/v1")
-    llm_model: str = Field(default="thewindmom/llama3-med42-8b")
+    llm_model: str = Field(default="m42-health/Llama3-Med42-70B")
     llm_api_key: str = Field(default="ollama")
     llm_max_tokens: int = Field(default=1024)
     llm_temperature: float = Field(default=0.1)
