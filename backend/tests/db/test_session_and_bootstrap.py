@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+import importlib
 
 import pytest
 from src.db import bootstrap, session
@@ -149,67 +149,69 @@ def test_ensure_default_users_skips_existing(monkeypatch):
     assert fake_session.added == []
 
 
-def test_prepare_database_runs_all_bootstrap_steps(monkeypatch):
+def test_bootstrap_module_reload_sets_expected_paths():
+    reloaded = importlib.reload(bootstrap)
+
+    assert reloaded.PROJECT_ROOT.name == "backend"
+    assert reloaded.ALEMBIC_INI_PATH.name == "alembic.ini"
+    assert reloaded.ALEMBIC_SCRIPT_PATH.name == "alembic"
+
+
+def test_build_alembic_config_sets_expected_paths_and_url():
+    config = bootstrap.build_alembic_config()
+
+    assert config.get_main_option("script_location").endswith("/backend/alembic")
+    assert config.get_main_option("sqlalchemy.url") == bootstrap.settings.DATABASE_URL
+
+
+def test_run_migrations_upgrades_to_head(monkeypatch):
     calls = []
+    monkeypatch.setattr(bootstrap, "build_alembic_config", lambda: "cfg")
     monkeypatch.setattr(
-        bootstrap.Base.metadata, "create_all", lambda bind: calls.append("create_all")
+        bootstrap.command,
+        "upgrade",
+        lambda cfg, target: calls.append((cfg, target)),
     )
-    monkeypatch.setattr(bootstrap, "ensure_auth_columns", lambda: calls.append("auth"))
-    monkeypatch.setattr(
-        bootstrap, "ensure_notification_fk", lambda: calls.append("notif")
-    )
-    monkeypatch.setattr(
-        bootstrap, "ensure_message_columns", lambda: calls.append("message")
-    )
-    monkeypatch.setattr(
-        bootstrap, "ensure_chat_archive_column", lambda: calls.append("archive")
-    )
-    monkeypatch.setattr(bootstrap, "ensure_chat_columns", lambda: calls.append("chat"))
-    monkeypatch.setattr(
-        bootstrap, "ensure_enum_columns_lowercase", lambda: calls.append("enum")
-    )
-    monkeypatch.setattr(
-        bootstrap, "ensure_default_users", lambda: calls.append("users")
-    )
+
+    bootstrap.run_migrations()
+
+    assert calls == [("cfg", "head")]
+
+
+def test_prepare_database_runs_migrations_then_bootstraps_users(monkeypatch):
+    calls = []
+    monkeypatch.setattr(bootstrap, "run_migrations", lambda: calls.append("migrate"))
+    monkeypatch.setattr(bootstrap, "ensure_default_users", lambda: calls.append("users"))
 
     bootstrap.prepare_database()
 
-    assert calls == [
-        "create_all",
-        "auth",
-        "notif",
-        "message",
-        "archive",
-        "chat",
-        "enum",
-        "users",
-    ]
+    assert calls == ["migrate", "users"]
 
 
-def test_ensure_column_helpers_execute_expected_sql(monkeypatch):
-    statements = []
+def test_main_runs_migrate(monkeypatch):
+    calls = []
+    monkeypatch.setattr(bootstrap, "run_migrations", lambda: calls.append("migrate"))
 
-    class FakeConnection:
-        def execute(self, statement):
-            statements.append(str(statement))
+    bootstrap.main(["migrate"])
 
-    @contextmanager
-    def fake_begin():
-        yield FakeConnection()
+    assert calls == ["migrate"]
 
-    monkeypatch.setattr(bootstrap.engine, "begin", fake_begin)
 
-    bootstrap.ensure_auth_columns()
-    bootstrap.ensure_notification_fk()
-    bootstrap.ensure_message_columns()
-    bootstrap.ensure_chat_columns()
-    bootstrap.ensure_chat_archive_column()
-    bootstrap.ensure_enum_columns_lowercase()
+def test_main_runs_seed_demo_users(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        bootstrap, "ensure_default_users", lambda: calls.append("seed-demo-users")
+    )
 
-    joined = "\n".join(statements)
-    assert "ALTER TABLE users ADD COLUMN IF NOT EXISTS role" in joined
-    assert "ALTER TABLE notifications" in joined
-    assert "ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations JSONB" in joined
-    assert "ALTER TABLE chats ADD COLUMN IF NOT EXISTS patient_context JSONB" in joined
-    assert "ALTER TABLE chats ADD COLUMN IF NOT EXISTS is_archived BOOLEAN" in joined
-    assert "UPDATE users SET role = LOWER(role)" in joined
+    bootstrap.main(["seed-demo-users"])
+
+    assert calls == ["seed-demo-users"]
+
+
+def test_main_runs_prepare(monkeypatch):
+    calls = []
+    monkeypatch.setattr(bootstrap, "prepare_database", lambda: calls.append("prepare"))
+
+    bootstrap.main(["prepare"])
+
+    assert calls == ["prepare"]

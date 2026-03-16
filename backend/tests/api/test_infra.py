@@ -6,8 +6,9 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from src.api import deps, health, rag, router
-from src.app import create_app
+from src.api import deps, router
+from src.api.endpoints import health, rag
+from src.app.main import create_app
 from src.core import security
 from src.db.models import UserRole
 
@@ -28,9 +29,11 @@ def test_create_app_builds_fastapi_app(monkeypatch):
     called = {"logging": 0, "db": 0}
 
     monkeypatch.setattr(
-        "src.app.configure_logging", lambda: called.__setitem__("logging", 1)
+        "src.app.main.configure_logging", lambda: called.__setitem__("logging", 1)
     )
-    monkeypatch.setattr("src.app.prepare_database", lambda: called.__setitem__("db", 1))
+    monkeypatch.setattr(
+        "src.app.main.prepare_database", lambda: called.__setitem__("db", 1)
+    )
 
     app = create_app()
     client = TestClient(app)
@@ -43,7 +46,7 @@ def test_create_app_builds_fastapi_app(monkeypatch):
 
 def test_main_exposes_app(monkeypatch):
     sentinel = object()
-    monkeypatch.setattr("src.app.create_app", lambda: sentinel)
+    monkeypatch.setattr("src.app.main.create_app", lambda: sentinel)
     import importlib
 
     import src.main as main
@@ -73,7 +76,7 @@ async def test_rag_search_proxy_success(monkeypatch):
             assert json["specialty"] == "neurology"
             return FakeResponse()
 
-    monkeypatch.setattr("src.api.rag.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
     result = await rag.search_clinical_guidelines(
         "query", "neurology", current_user="user@nhs.uk"
     )
@@ -92,7 +95,7 @@ async def test_rag_search_proxy_connection_error(monkeypatch):
         async def post(self, url, json):
             raise httpx.ConnectError("boom")
 
-    monkeypatch.setattr("src.api.rag.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
     with pytest.raises(HTTPException) as exc:
         await rag.search_clinical_guidelines("query", current_user="user@nhs.uk")
     assert exc.value.status_code == 502
@@ -110,7 +113,7 @@ async def test_rag_search_proxy_timeout(monkeypatch):
         async def post(self, url, json):
             raise httpx.TimeoutException("slow")
 
-    monkeypatch.setattr("src.api.rag.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
     with pytest.raises(HTTPException) as exc:
         await rag.search_clinical_guidelines("query", current_user="user@nhs.uk")
     assert exc.value.status_code == 504
@@ -132,7 +135,7 @@ async def test_rag_search_proxy_non_200(monkeypatch):
         async def post(self, url, json):
             return FakeResponse()
 
-    monkeypatch.setattr("src.api.rag.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
     with pytest.raises(HTTPException) as exc:
         await rag.search_clinical_guidelines("query", current_user="user@nhs.uk")
     assert exc.value.status_code == 503
@@ -195,7 +198,7 @@ def test_stream_endpoint_rejects_missing_user_after_token_decode(
 ):
     monkeypatch.setattr(security, "decode_token", lambda token: "missing@example.com")
     monkeypatch.setattr(
-        "src.api.chats.user_repository.get_by_email", lambda db, email: None
+        "src.api.endpoints.chats.user_repository.get_by_email", lambda db, email: None
     )
     response = client.get(f"/chats/{created_chat['id']}/stream?token=good")
     assert response.status_code == 401
@@ -230,7 +233,7 @@ def test_admin_guideline_upload_uses_plain_text_error_detail(
         async def post(self, *args, **kwargs):
             return FakeResponse()
 
-    monkeypatch.setattr("src.api.admin.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("src.api.endpoints.admin.httpx.AsyncClient", FakeClient)
     response = client.post(
         "/admin/guidelines/upload",
         headers=admin_headers,

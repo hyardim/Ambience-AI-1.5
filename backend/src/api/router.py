@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.api import admin, auth, chats, health, notifications, rag, specialist
+from src.api.endpoints import admin, auth, chats, health, notifications, rag, specialist
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])

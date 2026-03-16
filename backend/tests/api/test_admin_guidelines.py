@@ -103,7 +103,7 @@ class TestGuidelinesUploadSuccess:
     def test_successful_upload_returns_report(self, client, admin_headers):
         mock_resp = _mock_rag_success()
 
-        with patch("src.api.admin.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
             mock_async_client = AsyncMock()
             mock_async_client.post = AsyncMock(return_value=mock_resp)
             mock_client_cls.return_value.__aenter__ = AsyncMock(
@@ -130,7 +130,7 @@ class TestGuidelinesUploadSuccess:
     def test_rag_called_with_correct_args(self, client, admin_headers):
         mock_resp = _mock_rag_success()
 
-        with patch("src.api.admin.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
             mock_async_client = AsyncMock()
             mock_async_client.post = AsyncMock(return_value=mock_resp)
             mock_client_cls.return_value.__aenter__ = AsyncMock(
@@ -157,7 +157,7 @@ class TestGuidelinesUploadSuccess:
 
 class TestGuidelinesUploadRagErrors:
     def test_rag_unavailable_returns_502(self, client, admin_headers):
-        with patch("src.api.admin.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
             mock_async_client = AsyncMock()
             mock_async_client.post = AsyncMock(
                 side_effect=httpx.ConnectError("refused")
@@ -177,7 +177,7 @@ class TestGuidelinesUploadRagErrors:
         assert resp.status_code == 502
 
     def test_rag_timeout_returns_504(self, client, admin_headers):
-        with patch("src.api.admin.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
             mock_async_client = AsyncMock()
             mock_async_client.post = AsyncMock(
                 side_effect=httpx.TimeoutException("timeout")
@@ -199,7 +199,7 @@ class TestGuidelinesUploadRagErrors:
     def test_rag_422_propagated(self, client, admin_headers):
         mock_resp = _mock_rag_error(422, "Unknown source 'FAKE'.")
 
-        with patch("src.api.admin.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
             mock_async_client = AsyncMock()
             mock_async_client.post = AsyncMock(return_value=mock_resp)
             mock_client_cls.return_value.__aenter__ = AsyncMock(
@@ -220,7 +220,7 @@ class TestGuidelinesUploadRagErrors:
     def test_rag_500_propagated(self, client, admin_headers):
         mock_resp = _mock_rag_error(500, "Pipeline failed at stage embed: OOM")
 
-        with patch("src.api.admin.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
             mock_async_client = AsyncMock()
             mock_async_client.post = AsyncMock(return_value=mock_resp)
             mock_client_cls.return_value.__aenter__ = AsyncMock(

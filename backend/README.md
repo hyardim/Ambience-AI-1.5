@@ -4,12 +4,15 @@ FastAPI backend for Ambience-AI-1.5.
 
 ## Structure
 
-- `src/api/`: route handlers and dependencies
+- `src/app/`: app creation and FastAPI wiring
+- `src/api/`: router composition and shared API dependencies
+- `src/api/endpoints/`: thin route handlers grouped by feature
 - `src/services/`: business logic
 - `src/repositories/`: database access
 - `src/schemas/`: request and response models
 - `src/core/`: config, security, logging, policy
-- `src/db/`: ORM models, sessions, bootstrap helpers
+- `src/db/`: sessions, base metadata, models, bootstrap helpers
+- `alembic/`: database migrations
 - `tests/`: backend test suite
 
 ## Commands
@@ -20,6 +23,8 @@ Run these from `backend/` in an environment with the backend dependencies instal
 - `make format`
 - `make typecheck`
 - `make test`
+- `make migrate`
+- `make seed-demo-users`
 - `make check`
 
 ## App Entry Point

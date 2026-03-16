@@ -316,7 +316,9 @@ class TestSpecialistStreamAuthorization:
         async def _one_event(_: int):
             yield "event: stream_start\ndata: {}\n\n"
 
-        with patch("src.api.chats.sse_event_generator", side_effect=_one_event):
+        with patch(
+            "src.api.endpoints.chats.sse_event_generator", side_effect=_one_event
+        ):
             resp = client.get(f"/chats/{chat_id}/stream?token={token}")
             assert resp.status_code == 200
 
@@ -343,7 +345,9 @@ class TestSpecialistStreamAuthorization:
         async def _one_event(_: int):
             yield "event: stream_start\ndata: {}\n\n"
 
-        with patch("src.api.chats.sse_event_generator", side_effect=_one_event):
+        with patch(
+            "src.api.endpoints.chats.sse_event_generator", side_effect=_one_event
+        ):
             resp = client.get(f"/chats/{chat_id}/stream?token={token}")
             # Should not be 404 – should be 200 (SSE stream)
             assert resp.status_code == 200

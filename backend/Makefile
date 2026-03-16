@@ -3,7 +3,7 @@ PYTEST ?= $(PYTHON) -m pytest
 RUFF ?= $(PYTHON) -m ruff
 MYPY ?= $(PYTHON) -m mypy
 
-.PHONY: test lint format typecheck check
+.PHONY: test lint format typecheck check migrate seed-demo-users
 
 test:
 	PYTHONPATH=src $(PYTEST) tests
@@ -16,5 +16,11 @@ format:
 
 typecheck:
 	PYTHONPATH=src $(MYPY) src
+
+migrate:
+	PYTHONPATH=src $(PYTHON) -m src.db.bootstrap migrate
+
+seed-demo-users:
+	PYTHONPATH=src $(PYTHON) -m src.db.bootstrap seed-demo-users
 
 check: lint typecheck test

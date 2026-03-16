@@ -27,7 +27,7 @@ from sqlalchemy.pool import StaticPool
 # the in-memory test database without modifying production models.
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
-from src.api import admin, auth, chats, notifications, specialist
+from src.api.endpoints import admin, auth, chats, notifications, specialist
 from src.db.base import Base
 from src.db.session import get_async_db, get_db
 
