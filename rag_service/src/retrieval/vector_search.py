@@ -146,6 +146,18 @@ def _run_query(
             metadata->>'content_type'                      AS content_type,
             metadata->>'section_title'                     AS section_title,
             metadata->>'title'                             AS title,
+            COALESCE(
+                metadata->>'creation_date',
+                metadata->'citation'->>'creation_date'
+            )                                             AS creation_date,
+            COALESCE(
+                metadata->>'publish_date',
+                metadata->'citation'->>'publish_date'
+            )                                             AS publish_date,
+            COALESCE(
+                metadata->>'last_updated_date',
+                metadata->'citation'->>'last_updated_date'
+            )                                             AS last_updated_date,
             (COALESCE(metadata->>'page_start', '0'))::int  AS page_start,
             (COALESCE(metadata->>'page_end', '0'))::int    AS page_end,
             metadata->'section_path'                       AS section_path
@@ -198,9 +210,12 @@ def _run_query(
                     "content_type": row[8],
                     "section_title": row[9],
                     "title": row[10],
-                    "page_start": row[11] if row[11] is not None else 0,
-                    "page_end": row[12] if row[12] is not None else 0,
-                    "section_path": row[13],
+                    "creation_date": row[11],
+                    "publish_date": row[12],
+                    "last_updated_date": row[13],
+                    "page_start": row[14] if row[14] is not None else 0,
+                    "page_end": row[15] if row[15] is not None else 0,
+                    "section_path": row[16],
                 },
             )
         )

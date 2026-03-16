@@ -34,6 +34,9 @@ class Citation(BaseModel):
     source_name: str
     specialty: str
     doc_type: str
+    creation_date: str | None = None
+    publish_date: str | None = None
+    last_updated_date: str | None = None
     section_path: list[str]
     section_title: str
     page_start: int
@@ -207,6 +210,9 @@ def _build_citation(result: RankedResult) -> Citation:
         source_name=metadata["source_name"],
         specialty=metadata["specialty"],
         doc_type=metadata["doc_type"],
+        creation_date=metadata.get("creation_date"),
+        publish_date=metadata.get("publish_date"),
+        last_updated_date=metadata.get("last_updated_date"),
         section_path=section_path,
         section_title=metadata["section_title"],
         page_start=page_start,

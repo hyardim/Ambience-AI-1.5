@@ -8,6 +8,7 @@ import pytest
 import src.ingestion.chunk as chunk_module
 from src.ingestion.chunk import (
     MAX_CHUNK_TOKENS,
+    _resolve_chunk_settings,
     build_citation,
     chunk_document,
     chunk_section_group,
@@ -63,6 +64,7 @@ def make_doc_meta(
     specialty: str = "rheumatology",
     author_org: str = "NICE",
     creation_date: str = "2020-01-01",
+    publish_date: str = "2021-06-30",
     last_updated_date: str = "2024-01-15",
     source_url: str = "https://nice.org.uk",
     ingestion_date: str = "2024-06-01",
@@ -75,6 +77,7 @@ def make_doc_meta(
         "specialty": specialty,
         "author_org": author_org,
         "creation_date": creation_date,
+        "publish_date": publish_date,
         "last_updated_date": last_updated_date,
         "source_url": source_url,
         "ingestion_date": ingestion_date,
@@ -233,6 +236,7 @@ class TestBuildCitation:
             "title",
             "author_org",
             "creation_date",
+            "publish_date",
             "last_updated_date",
             "section_path",
             "section_title",
@@ -255,6 +259,29 @@ class TestBuildCitation:
             make_doc_meta(ingestion_date="2024-06-01"),
         )
         assert citation["access_date"] == "2024-06-01"
+
+    def test_publish_date_carried_through(self) -> None:
+        citation = build_citation(
+            {"section_path": [], "section_title": "", "page_range": "1"},
+            make_doc_meta(publish_date="2021-06-30"),
+        )
+        assert citation["publish_date"] == "2021-06-30"
+
+
+class TestResolveChunkSettings:
+    def test_uses_explicit_overlap_tokens_when_provided(self) -> None:
+        settings = _resolve_chunk_settings(
+            {"target_chunk_size": 512, "overlap_tokens": 64}
+        )
+        assert settings["max_chunk_tokens"] == 512
+        assert settings["overlap_tokens"] == 64
+
+    def test_derives_overlap_tokens_from_percentage(self) -> None:
+        settings = _resolve_chunk_settings(
+            {"target_chunk_size": 500, "overlap_percentage": 0.2}
+        )
+        assert settings["max_chunk_tokens"] == 500
+        assert settings["overlap_tokens"] == 100
 
 
 # -----------------------------------------------------------------------

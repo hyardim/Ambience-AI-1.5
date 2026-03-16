@@ -23,24 +23,23 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2.0  # seconds, doubled each retry
 
 # -----------------------------------------------------------------------
-# Model — loaded once at module level
+# Model cache, keyed by model name
 # -----------------------------------------------------------------------
 
-_MODEL: SentenceTransformer | None = None
+_MODELS: dict[str, SentenceTransformer] = {}
 
 
-def _load_model() -> SentenceTransformer:
-    """Load and return the embedding model. Called once at module level."""
-    global _MODEL
-    if _MODEL is None:
-        logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
-        _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    return _MODEL
+def _load_model(model_name: str = EMBEDDING_MODEL_NAME) -> SentenceTransformer:
+    """Load and cache embedding models by name."""
+    if model_name not in _MODELS:
+        logger.info(f"Loading embedding model: {model_name}")
+        _MODELS[model_name] = SentenceTransformer(model_name)
+    return _MODELS[model_name]
 
 
-def load_embedder() -> SentenceTransformer:
+def load_embedder(model_name: str = EMBEDDING_MODEL_NAME) -> SentenceTransformer:
     """Public accessor for the shared embedding model."""
-    return _load_model()
+    return _load_model(model_name)
 
 
 def get_vector_dim(model: SentenceTransformer) -> int:
@@ -56,7 +55,20 @@ def get_vector_dim(model: SentenceTransformer) -> int:
 # -----------------------------------------------------------------------
 
 
-def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
+def _resolve_embedding_settings(config: dict[str, Any] | None) -> dict[str, Any]:
+    settings = config or {}
+    return {
+        "model_name": settings.get("model_name", EMBEDDING_MODEL_NAME),
+        "model_version": settings.get("model_version", EMBEDDING_MODEL_VERSION),
+        "dimensions": int(settings.get("dimensions", EMBEDDING_DIMENSIONS)),
+        "batch_size": int(settings.get("batch_size", EMBEDDING_BATCH_SIZE)),
+    }
+
+
+def embed_chunks(
+    chunked_doc: dict[str, Any],
+    embedding_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Generate embeddings for all chunks in a ChunkedDocument.
 
@@ -80,21 +92,30 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
         logger.info("No chunks to embed.")
         return {**chunked_doc, "chunks": chunks}
 
-    model = _load_model()
-    logger.info(f"Embedding {len(chunks)} chunks in batches of {EMBEDDING_BATCH_SIZE}")
+    settings = _resolve_embedding_settings(embedding_config)
+    model = _load_model(settings["model_name"])
+    batch_size = settings["batch_size"]
+    logger.info(f"Embedding {len(chunks)} chunks in batches of {batch_size}")
 
     n_success = 0
     n_failed = 0
 
-    for batch_start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
-        batch = chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
-        batch_num = batch_start // EMBEDDING_BATCH_SIZE + 1
+    for batch_start in range(0, len(chunks), batch_size):
+        batch = chunks[batch_start : batch_start + batch_size]
+        batch_num = batch_start // batch_size + 1
         texts = [c.get("text", "") for c in batch]
 
         try:
             vectors = _embed_batch(model, texts)
             for chunk, vector in zip(batch, vectors, strict=True):
-                chunk.update(_make_success_fields(vector))
+                chunk.update(
+                    _make_success_fields(
+                        vector,
+                        model_name=settings["model_name"],
+                        model_version=settings["model_version"],
+                        dimensions=settings["dimensions"],
+                    )
+                )
                 n_success += 1
         except Exception:
             # Batch failed after all retries — fall back to per-chunk
@@ -106,11 +127,23 @@ def embed_chunks(chunked_doc: dict[str, Any]) -> dict[str, Any]:
                 text = chunk.get("text", "")
                 single_vector, error = _embed_single(model, text)
                 if single_vector is not None:
-                    chunk.update(_make_success_fields(single_vector))
+                    chunk.update(
+                        _make_success_fields(
+                            single_vector,
+                            model_name=settings["model_name"],
+                            model_version=settings["model_version"],
+                            dimensions=settings["dimensions"],
+                        )
+                    )
                     n_success += 1
                 else:
                     chunk.update(
-                        _make_failure_fields(error or "Failed after all retries")
+                        _make_failure_fields(
+                            error or "Failed after all retries",
+                            model_name=settings["model_name"],
+                            model_version=settings["model_version"],
+                            dimensions=settings["dimensions"],
+                        )
                     )
                     n_failed += 1
                     logger.error(
@@ -221,25 +254,37 @@ def _embed_single(
 # -----------------------------------------------------------------------
 
 
-def _make_success_fields(embedding: list[float]) -> dict[str, Any]:
+def _make_success_fields(
+    embedding: list[float],
+    *,
+    model_name: str = EMBEDDING_MODEL_NAME,
+    model_version: str = EMBEDDING_MODEL_VERSION,
+    dimensions: int = EMBEDDING_DIMENSIONS,
+) -> dict[str, Any]:
     """Return embedding metadata dict for a successful embed."""
     return {
         "embedding": embedding,
         "embedding_status": "success",
-        "embedding_model_name": EMBEDDING_MODEL_NAME,
-        "embedding_model_version": EMBEDDING_MODEL_VERSION,
-        "embedding_dimensions": EMBEDDING_DIMENSIONS,
+        "embedding_model_name": model_name,
+        "embedding_model_version": model_version,
+        "embedding_dimensions": dimensions,
         "embedding_error": None,
     }
 
 
-def _make_failure_fields(error: str) -> dict[str, Any]:
+def _make_failure_fields(
+    error: str,
+    *,
+    model_name: str = EMBEDDING_MODEL_NAME,
+    model_version: str = EMBEDDING_MODEL_VERSION,
+    dimensions: int = EMBEDDING_DIMENSIONS,
+) -> dict[str, Any]:
     """Return embedding metadata dict for a failed embed."""
     return {
         "embedding": None,
         "embedding_status": "failed",
-        "embedding_model_name": EMBEDDING_MODEL_NAME,
-        "embedding_model_version": EMBEDDING_MODEL_VERSION,
-        "embedding_dimensions": EMBEDDING_DIMENSIONS,
+        "embedding_model_name": model_name,
+        "embedding_model_version": model_version,
+        "embedding_dimensions": dimensions,
         "embedding_error": error,
     }

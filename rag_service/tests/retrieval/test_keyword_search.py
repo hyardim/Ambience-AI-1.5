@@ -27,6 +27,9 @@ def make_row(
     content_type: str = "text",
     section_title: str = "Treatment",
     title: str = "RA Guidelines",
+    creation_date: str | None = "2020-01-01",
+    publish_date: str | None = "2021-06-30",
+    last_updated_date: str | None = "2024-01-15",
     page_start: int = 1,
     page_end: int = 2,
     section_path: list[str] | None = None,
@@ -43,6 +46,9 @@ def make_row(
         content_type,
         section_title,
         title,
+        creation_date,
+        publish_date,
+        last_updated_date,
         page_start,
         page_end,
         section_path or ["Treatment"],
@@ -206,6 +212,16 @@ class TestKeywordSearch:
         assert args[4] is None  # source_name
         assert args[5] is None  # doc_type
 
+    def test_result_metadata_includes_document_dates(self):
+        mock_conn = make_mock_conn([make_row()])
+        with patch(
+            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+        ):
+            results = keyword_search(QUERY, db_url="postgresql://fake")
+        assert results[0].metadata["creation_date"] == "2020-01-01"
+        assert results[0].metadata["publish_date"] == "2021-06-30"
+        assert results[0].metadata["last_updated_date"] == "2024-01-15"
+
     def test_empty_result_returns_empty_list(self):
         mock_conn = make_mock_conn([])
         with patch(
@@ -329,7 +345,7 @@ class TestKeywordSearch:
 
     def test_null_page_values_default_to_zero(self):
         row = make_row()
-        row = row[:11] + (None, None) + row[13:]
+        row = row[:14] + (None, None) + row[16:]
         mock_conn = make_mock_conn([row])
         with patch(
             "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn

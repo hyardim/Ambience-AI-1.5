@@ -92,6 +92,9 @@ def test_init_db_executes_schema_sql() -> None:
         vector_store.init_db(384)
 
     assert cur.execute.call_count == 3
+    schema_sql = cur.execute.call_args_list[2].args[0]
+    assert "rag_chunks_embedding_idx" in schema_sql
+    assert "idx_rag_chunks_embedding_hnsw" in schema_sql
     conn.close.assert_called_once()
 
 

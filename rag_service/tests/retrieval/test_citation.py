@@ -30,6 +30,9 @@ def make_metadata(
     section_title: str = "Treatment",
     page_start: int | None = 12,
     page_end: int | None = 13,
+    creation_date: str | None = "2020-01-01",
+    publish_date: str | None = "2021-06-30",
+    last_updated_date: str | None = "2024-01-15",
 ) -> dict[str, Any]:
     return {
         "title": title,
@@ -38,6 +41,9 @@ def make_metadata(
         "doc_type": doc_type,
         "source_url": source_url,
         "content_type": content_type,
+        "creation_date": creation_date,
+        "publish_date": publish_date,
+        "last_updated_date": last_updated_date,
         "section_path": (
             section_path
             if section_path is not None
@@ -103,6 +109,9 @@ class TestAssembleCitations:
         assert c.source_name == "NICE"
         assert c.specialty == "rheumatology"
         assert c.doc_type == "guideline"
+        assert c.creation_date == "2020-01-01"
+        assert c.publish_date == "2021-06-30"
+        assert c.last_updated_date == "2024-01-15"
         assert c.source_url == "https://www.nice.org.uk/guidance/cg56"
         assert c.content_type == "text"
         assert c.section_path == ["Treatment", "Urate-lowering therapy"]
@@ -220,6 +229,18 @@ class TestAssembleCitations:
         output = assemble_citations([result])
         assert output[0].citation.page_start == 0
         assert output[0].citation.page_end == 0
+
+    def test_optional_date_fields_can_be_missing(self):
+        metadata = make_metadata(
+            creation_date=None,
+            publish_date=None,
+            last_updated_date=None,
+        )
+        result = make_ranked_result(metadata=metadata)
+        output = assemble_citations([result])
+        assert output[0].citation.creation_date is None
+        assert output[0].citation.publish_date is None
+        assert output[0].citation.last_updated_date is None
 
     def test_citation_error_message_contains_field_and_chunk(self):
         metadata = make_metadata()

@@ -52,7 +52,10 @@ def _ensure_nltk_data() -> None:
 # -----------------------------------------------------------------------
 
 
-def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
+def chunk_document(
+    metadata_doc: dict[str, Any],
+    chunking_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Split a MetadataDocument into citation-safe chunks.
 
@@ -83,6 +86,10 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
             if block.get("include_in_chunks", False):
                 all_blocks.append(block)
 
+    chunk_settings = _resolve_chunk_settings(chunking_config)
+    max_chunk_tokens = chunk_settings["max_chunk_tokens"]
+    overlap_tokens = chunk_settings["overlap_tokens"]
+
     # Step 2: separate tables from text
     table_blocks = [b for b in all_blocks if b.get("content_type") == "table"]
     text_blocks = [b for b in all_blocks if b.get("content_type") != "table"]
@@ -110,6 +117,8 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
             doc_meta=doc_meta,
             chunk_index_start=chunk_index,
             overlap_sentences=overlap_sentences,
+            max_chunk_tokens=max_chunk_tokens,
+            overlap_tokens=overlap_tokens,
         )
         chunks.extend(new_chunks)
         chunk_index += len(new_chunks)
@@ -138,6 +147,27 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
     return {
         **metadata_doc,
         "chunks": chunks,
+    }
+
+
+def _resolve_chunk_settings(config: dict[str, Any] | None) -> dict[str, int]:
+    """Resolve runtime chunking settings with backward-compatible defaults."""
+    settings = config or {}
+    target_chunk_size = int(settings.get("target_chunk_size", MAX_CHUNK_TOKENS))
+
+    if "overlap_tokens" in settings:
+        overlap_tokens = int(settings["overlap_tokens"])
+    elif "overlap_percentage" in settings:
+        overlap_tokens = max(
+            int(target_chunk_size * float(settings["overlap_percentage"])),
+            0,
+        )
+    else:
+        overlap_tokens = OVERLAP_TOKENS
+
+    return {
+        "max_chunk_tokens": target_chunk_size,
+        "overlap_tokens": overlap_tokens,
     }
 
 
@@ -285,6 +315,8 @@ def chunk_section_group(
     doc_meta: dict[str, Any],
     chunk_index_start: int,
     overlap_sentences: list[str],
+    max_chunk_tokens: int = MAX_CHUNK_TOKENS,
+    overlap_tokens: int = OVERLAP_TOKENS,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Split a section group into sentence-aligned chunks with overlap.
 
@@ -316,7 +348,7 @@ def chunk_section_group(
         candidate = current_sentences + [sentence]
         candidate_tokens = count_tokens(" ".join(candidate))
 
-        if candidate_tokens > MAX_CHUNK_TOKENS and current_blocks:
+        if candidate_tokens > max_chunk_tokens and current_blocks:
             chunk = _build_text_chunk(
                 sentences=current_sentences,
                 contributing_blocks=current_blocks,
@@ -327,7 +359,10 @@ def chunk_section_group(
                 chunks.append(chunk)
                 chunk_index += 1
 
-            overlap_sentences = _compute_overlap(current_sentences)
+            overlap_sentences = _compute_overlap(
+                current_sentences,
+                overlap_tokens=overlap_tokens,
+            )
             current_sentences = list(overlap_sentences)
             current_blocks = []
         else:
@@ -407,12 +442,15 @@ def _build_text_chunk(
     }
 
 
-def _compute_overlap(sentences: list[str]) -> list[str]:
+def _compute_overlap(
+    sentences: list[str],
+    overlap_tokens: int = OVERLAP_TOKENS,
+) -> list[str]:
     """Take sentences from end of list until overlap token budget is reached."""
     overlap: list[str] = []
     for sentence in reversed(sentences):
         candidate = [sentence] + overlap
-        if count_tokens(" ".join(candidate)) > OVERLAP_TOKENS:
+        if count_tokens(" ".join(candidate)) > overlap_tokens:
             break
         overlap = candidate
     return overlap
@@ -436,6 +474,7 @@ def build_citation(
         "title": doc_meta.get("title", ""),
         "author_org": doc_meta.get("author_org", ""),
         "creation_date": doc_meta.get("creation_date", ""),
+        "publish_date": doc_meta.get("publish_date", ""),
         "last_updated_date": doc_meta.get("last_updated_date", ""),
         "section_path": chunk_meta.get("section_path", []),
         "section_title": chunk_meta.get("section_title", ""),

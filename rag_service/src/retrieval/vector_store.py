@@ -53,9 +53,12 @@ def init_db(vector_dim: int) -> None:
                 SELECT 1
                 FROM   pg_class c
                 JOIN   pg_namespace n ON n.oid = c.relnamespace
-                WHERE  c.relname = 'idx_rag_chunks_embedding_hnsw'
+                WHERE  c.relname IN (
+                  'idx_rag_chunks_embedding_hnsw',
+                  'rag_chunks_embedding_idx'
+                )
               ) THEN
-                CREATE INDEX idx_rag_chunks_embedding_hnsw
+                CREATE INDEX rag_chunks_embedding_idx
                 ON rag_chunks
                 USING hnsw (embedding vector_cosine_ops)
                 WITH (
