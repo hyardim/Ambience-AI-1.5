@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
-import re
-from collections.abc import Coroutine, Mapping
+from collections.abc import Coroutine
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, cast
@@ -14,14 +11,36 @@ from redis import Redis
 from rq import Queue
 
 from ..config import retry_config
-from ..generation.client import ModelGenerationError, ProviderName, generate_answer
+from ..generation.client import (
+    ModelGenerationError,
+    ProviderName,
+    generate_answer,
+)
 from ..utils.logger import setup_logger
+from .responses import (
+    build_answer_response,
+    build_revise_response,
+    parse_citation_group,
+    rewrite_citations,
+    select_citations,
+)
+from .state import (
+    build_idempotency_identifier,
+    compute_backoff_seconds,
+    decode_mapping,
+    deserialize,
+    serialize,
+    update_job_state,
+)
+from .state import (
+    idempotency_key as state_idempotency_key,
+)
+from .state import (
+    job_key as state_job_key,
+)
 
 logger = setup_logger("rag.retry")
-
 QUEUE_NAME = "rag_retry"
-JOB_KEY_PREFIX = "rag:job:"
-IDEMPOTENCY_KEY_PREFIX = "rag:idempotency:"
 
 
 class RetryJobStatus(str, Enum):
@@ -35,44 +54,8 @@ class RetryValidationError(ValueError):
     """Raised when queued payload is invalid and must not be retried."""
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _job_key(job_id: str) -> str:
-    return f"{JOB_KEY_PREFIX}{job_id}"
-
-
-def _idempotency_key(key: str) -> str:
-    return f"{IDEMPOTENCY_KEY_PREFIX}{key}"
-
-
-def _serialize(value: Any) -> str:
-    return json.dumps(value, separators=(",", ":"), default=str)
-
-
-def _deserialize(value: str | bytes | None, default: Any = None) -> Any:
-    if value is None:
-        return default
-    if isinstance(value, bytes):
-        value = value.decode("utf-8")
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return default
-
-
-def _decode_mapping(raw: Mapping[Any, Any]) -> dict[str, Any]:
-    decoded: dict[str, Any] = {}
-    for key_raw, value_raw in raw.items():
-        key = key_raw.decode("utf-8") if isinstance(key_raw, bytes) else str(key_raw)
-        value = (
-            value_raw.decode("utf-8")
-            if isinstance(value_raw, bytes)
-            else str(value_raw)
-        )
-        decoded[key] = value
-    return decoded
+def _run_async(coro: Coroutine[Any, Any, str]) -> str:
+    return asyncio.run(coro)
 
 
 def get_redis_connection() -> Redis:
@@ -82,233 +65,6 @@ def get_redis_connection() -> Redis:
 def get_retry_queue(connection: Redis | None = None) -> Queue:
     redis_conn = connection or get_redis_connection()
     return Queue(name=QUEUE_NAME, connection=redis_conn)
-
-
-def _build_idempotency_identifier(
-    idempotency_key: str | None,
-    request_type: str,
-    payload: dict[str, Any],
-) -> str | None:
-    if idempotency_key and idempotency_key.strip():
-        return idempotency_key.strip()
-    canonical = _serialize({"request_type": request_type, "payload": payload})
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _compute_backoff_seconds(attempt_count: int) -> int:
-    exponent = max(attempt_count - 1, 0)
-    seconds = retry_config.retry_backoff_seconds * (
-        retry_config.retry_backoff_multiplier**exponent
-    )
-    return max(int(seconds), 1)
-
-
-def _initial_state(
-    job_id: str,
-    request_type: str,
-    payload: dict[str, Any],
-) -> dict[str, str]:
-    now = _now_iso()
-    return {
-        "job_id": job_id,
-        "request_type": request_type,
-        "status": RetryJobStatus.QUEUED.value,
-        "attempt_count": "0",
-        "last_error": "",
-        "response": "",
-        "payload": _serialize(payload),
-        "created_at": now,
-        "updated_at": now,
-    }
-
-
-def _update_job_state(
-    connection: Redis,
-    job_id: str,
-    **fields: str,
-) -> None:
-    key = _job_key(job_id)
-    payload = {**fields, "updated_at": _now_iso()}
-    connection.hset(key, mapping=payload)
-    connection.expire(key, retry_config.retry_job_ttl_seconds)
-
-
-def create_retry_job(
-    *,
-    request_type: str,
-    payload: dict[str, Any],
-    idempotency_key: str | None = None,
-    connection: Redis | None = None,
-) -> tuple[str, RetryJobStatus]:
-    redis_conn = connection or get_redis_connection()
-    queue = get_retry_queue(redis_conn)
-    id_key = _build_idempotency_identifier(idempotency_key, request_type, payload)
-
-    if id_key:
-        tentative_job_id = str(uuid4())
-        created = redis_conn.set(
-            _idempotency_key(id_key),
-            tentative_job_id,
-            ex=retry_config.retry_job_ttl_seconds,
-            nx=True,
-        )
-        if not created:
-            stored_job_id = cast(
-                str | bytes | None, redis_conn.get(_idempotency_key(id_key))
-            )
-            if stored_job_id:
-                existing_job_id = (
-                    stored_job_id.decode("utf-8")
-                    if isinstance(stored_job_id, bytes)
-                    else stored_job_id
-                )
-                existing = get_retry_job(existing_job_id, connection=redis_conn)
-                if existing:
-                    return existing_job_id, RetryJobStatus(existing["status"])
-            job_id = str(uuid4())
-            redis_conn.set(
-                _idempotency_key(id_key),
-                job_id,
-                ex=retry_config.retry_job_ttl_seconds,
-            )
-        else:
-            job_id = tentative_job_id
-    else:
-        job_id = str(uuid4())
-
-    redis_conn.hset(
-        _job_key(job_id),
-        mapping=_initial_state(job_id, request_type, payload),
-    )
-    redis_conn.expire(_job_key(job_id), retry_config.retry_job_ttl_seconds)
-
-    queue.enqueue("src.jobs.retry.process_retry_job", job_id=job_id)
-    logger.info(
-        "retry_enqueue job_id=%s request_type=%s attempt=0",
-        job_id,
-        request_type,
-    )
-    return job_id, RetryJobStatus.QUEUED
-
-
-def get_retry_job(
-    job_id: str, connection: Redis | None = None
-) -> dict[str, Any] | None:
-    redis_conn = connection or get_redis_connection()
-    raw = cast(Mapping[Any, Any], redis_conn.hgetall(_job_key(job_id)))
-    if not raw:
-        return None
-
-    data = _decode_mapping(raw)
-    data["attempt_count"] = int(data.get("attempt_count", "0"))
-    data["response"] = _deserialize(data.get("response"), default=None)
-    data["payload"] = _deserialize(data.get("payload"), default=None)
-    return data
-
-
-def _run_async(coro: Coroutine[Any, Any, str]) -> str:
-    return asyncio.run(coro)
-
-
-_CITATION_RE = re.compile(r"\[[\d,\s\-]+\]")
-
-
-def _parse_citation_group(raw: str) -> list[int]:
-    numbers: list[int] = []
-    for part in raw.split(","):
-        token = part.strip()
-        if "-" in token:
-            try:
-                start_str, end_str = token.split("-", 1)
-                start, end = int(start_str), int(end_str)
-                numbers.extend(range(start, end + 1))
-            except ValueError:
-                continue
-            continue
-        try:
-            numbers.append(int(token))
-        except ValueError:
-            continue
-    return numbers
-
-
-def _extract_citation_indices(text: str) -> set[int]:
-    return {
-        n
-        for match in _CITATION_RE.findall(text)
-        for n in _parse_citation_group(match[1:-1])
-    }
-
-
-def _rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
-    def _rewrite(match: re.Match) -> str:
-        numbers = _parse_citation_group(match.group(0)[1:-1])
-        kept = sorted({renumber_map[n] for n in numbers if n in renumber_map})
-        return f"[{', '.join(str(k) for k in kept)}]" if kept else ""
-
-    return _CITATION_RE.sub(_rewrite, text)
-
-
-def _select_citations(
-    answer_text: str,
-    citations_retrieved: list[dict[str, Any]],
-    strip_references: bool,
-) -> tuple[str, list[dict[str, Any]]]:
-    used_indices = _extract_citation_indices(answer_text)
-    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
-    citations_used = [citations_retrieved[i - 1] for i in sorted_used]
-    renumber_map = {original: new for new, original in enumerate(sorted_used, start=1)}
-    rewritten = _rewrite_citations(answer_text, renumber_map)
-    if strip_references:
-        rewritten = re.sub(
-            r"\n+\s*References?:.*",
-            "",
-            rewritten,
-            flags=re.DOTALL | re.IGNORECASE,
-        ).rstrip()
-    return rewritten, citations_used
-
-
-def _build_answer_response(
-    *,
-    answer_text: str,
-    prompt_label: str,
-    citations_retrieved: list[dict[str, Any]],
-) -> dict[str, Any]:
-    rewritten_answer, citations_used = _select_citations(
-        answer_text,
-        citations_retrieved,
-        strip_references=True,
-    )
-    answer = (
-        f"[Prompt: {prompt_label}]\n\n{rewritten_answer}"
-        if prompt_label
-        else rewritten_answer
-    )
-    return {
-        "answer": answer,
-        "citations_used": citations_used,
-        "citations_retrieved": citations_retrieved,
-        "citations": citations_used,
-    }
-
-
-def _build_revise_response(
-    *,
-    answer_text: str,
-    citations_retrieved: list[dict[str, Any]],
-) -> dict[str, Any]:
-    rewritten_answer, citations_used = _select_citations(
-        answer_text,
-        citations_retrieved,
-        strip_references=False,
-    )
-    return {
-        "answer": rewritten_answer,
-        "citations_used": citations_used,
-        "citations_retrieved": citations_retrieved,
-        "citations": citations_used,
-    }
 
 
 def _extract_retry_payload(
@@ -336,6 +92,151 @@ def _extract_retry_payload(
     )
 
 
+def create_retry_job(
+    *,
+    request_type: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None = None,
+    connection: Redis | None = None,
+) -> tuple[str, RetryJobStatus]:
+    redis_conn = connection or get_redis_connection()
+    queue = get_retry_queue(redis_conn)
+    id_key = _build_idempotency_identifier(idempotency_key, request_type, payload)
+
+    if id_key:
+        tentative_job_id = str(uuid4())
+        created = redis_conn.set(
+            state_idempotency_key(id_key),
+            tentative_job_id,
+            ex=retry_config.retry_job_ttl_seconds,
+            nx=True,
+        )
+        if not created:
+            stored_job_id = cast(
+                str | bytes | None, redis_conn.get(state_idempotency_key(id_key))
+            )
+            if stored_job_id:
+                existing_job_id = (
+                    stored_job_id.decode("utf-8")
+                    if isinstance(stored_job_id, bytes)
+                    else stored_job_id
+                )
+                existing = get_retry_job(existing_job_id, connection=redis_conn)
+                if existing:
+                    return existing_job_id, RetryJobStatus(existing["status"])
+            job_id = str(uuid4())
+            redis_conn.set(
+                state_idempotency_key(id_key),
+                job_id,
+                ex=retry_config.retry_job_ttl_seconds,
+            )
+        else:
+            job_id = tentative_job_id
+    else:
+        job_id = str(uuid4())
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    redis_conn.hset(
+        state_job_key(job_id),
+        mapping={
+            "job_id": job_id,
+            "request_type": request_type,
+            "status": RetryJobStatus.QUEUED.value,
+            "attempt_count": "0",
+            "last_error": "",
+            "response": "",
+            "payload": serialize(payload),
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    redis_conn.expire(state_job_key(job_id), retry_config.retry_job_ttl_seconds)
+    queue.enqueue("src.jobs.retry.process_retry_job", job_id=job_id)
+    logger.info(
+        "retry_enqueue job_id=%s request_type=%s attempt=0",
+        job_id,
+        request_type,
+    )
+    return job_id, RetryJobStatus.QUEUED
+
+
+def get_retry_job(
+    job_id: str, connection: Redis | None = None
+) -> dict[str, Any] | None:
+    redis_conn = connection or get_redis_connection()
+    raw = cast(dict[Any, Any], redis_conn.hgetall(state_job_key(job_id)))
+    if not raw:
+        return None
+
+    data = decode_mapping(raw)
+    data["attempt_count"] = int(data.get("attempt_count", "0"))
+    data["response"] = deserialize(data.get("response"), default=None)
+    data["payload"] = deserialize(data.get("payload"), default=None)
+    return data
+
+
+def _mark_job_retrying(redis_conn: Redis, job_id: str, next_attempt: int) -> None:
+    update_job_state(
+        redis_conn,
+        job_id,
+        status=RetryJobStatus.RETRYING.value,
+        attempt_count=str(next_attempt),
+    )
+
+
+def _mark_job_failed(
+    redis_conn: Redis,
+    job_id: str,
+    *,
+    last_error: str,
+) -> None:
+    update_job_state(
+        redis_conn,
+        job_id,
+        status=RetryJobStatus.FAILED.value,
+        last_error=last_error,
+    )
+
+
+def _mark_job_succeeded(
+    redis_conn: Redis,
+    job_id: str,
+    *,
+    response: dict[str, Any],
+) -> None:
+    update_job_state(
+        redis_conn,
+        job_id,
+        status=RetryJobStatus.SUCCEEDED.value,
+        response=serialize(response),
+        last_error="",
+    )
+
+
+def _requeue_retry_job(
+    redis_conn: Redis,
+    job_id: str,
+    *,
+    next_attempt: int,
+    last_error: str,
+) -> int:
+    backoff = compute_backoff_seconds(next_attempt)
+    queue = get_retry_queue(redis_conn)
+    queue.enqueue_in(
+        timedelta(seconds=backoff),
+        "src.jobs.retry.process_retry_job",
+        job_id=job_id,
+    )
+    update_job_state(
+        redis_conn,
+        job_id,
+        status=RetryJobStatus.QUEUED.value,
+        last_error=last_error,
+    )
+    return backoff
+
+
 def process_retry_job(job_id: str) -> None:
     redis_conn = get_redis_connection()
     state = get_retry_job(job_id, connection=redis_conn)
@@ -352,12 +253,7 @@ def process_retry_job(job_id: str) -> None:
     request_type = state.get("request_type", "answer")
     next_attempt = int(state.get("attempt_count", 0)) + 1
 
-    _update_job_state(
-        redis_conn,
-        job_id,
-        status=RetryJobStatus.RETRYING.value,
-        attempt_count=str(next_attempt),
-    )
+    _mark_job_retrying(redis_conn, job_id, next_attempt)
     logger.info("retry_attempt job_id=%s attempt=%s", job_id, next_attempt)
 
     try:
@@ -369,32 +265,21 @@ def process_retry_job(job_id: str) -> None:
         )
 
         if request_type == "revise":
-            response = _build_revise_response(
+            response = build_revise_response(
                 answer_text=answer_text,
                 citations_retrieved=citations_retrieved,
             )
         else:
-            response = _build_answer_response(
+            response = build_answer_response(
                 answer_text=answer_text,
                 prompt_label=prompt_label or "",
                 citations_retrieved=citations_retrieved,
             )
 
-        _update_job_state(
-            redis_conn,
-            job_id,
-            status=RetryJobStatus.SUCCEEDED.value,
-            response=_serialize(response),
-            last_error="",
-        )
+        _mark_job_succeeded(redis_conn, job_id, response=response)
         logger.info("retry_success job_id=%s attempt=%s", job_id, next_attempt)
     except RetryValidationError as exc:
-        _update_job_state(
-            redis_conn,
-            job_id,
-            status=RetryJobStatus.FAILED.value,
-            last_error=str(exc),
-        )
+        _mark_job_failed(redis_conn, job_id, last_error=str(exc))
         logger.info(
             "retry_non_retryable job_id=%s attempt=%s error=%s",
             job_id,
@@ -406,17 +291,10 @@ def process_retry_job(job_id: str) -> None:
         retryable = exc.retryable
 
         if retryable and next_attempt < retry_config.retry_max_attempts:
-            backoff = _compute_backoff_seconds(next_attempt)
-            queue = get_retry_queue(redis_conn)
-            queue.enqueue_in(
-                timedelta(seconds=backoff),
-                "src.jobs.retry.process_retry_job",
-                job_id=job_id,
-            )
-            _update_job_state(
+            backoff = _requeue_retry_job(
                 redis_conn,
                 job_id,
-                status=RetryJobStatus.QUEUED.value,
+                next_attempt=next_attempt,
                 last_error=last_error,
             )
             logger.info(
@@ -428,12 +306,7 @@ def process_retry_job(job_id: str) -> None:
             )
             return
 
-        _update_job_state(
-            redis_conn,
-            job_id,
-            status=RetryJobStatus.FAILED.value,
-            last_error=last_error,
-        )
+        _mark_job_failed(redis_conn, job_id, last_error=last_error)
         logger.info(
             "retry_permanent_failure job_id=%s attempt=%s retryable=%s error=%s",
             job_id,
@@ -442,12 +315,18 @@ def process_retry_job(job_id: str) -> None:
             last_error,
         )
     except Exception as exc:
-        _update_job_state(
-            redis_conn,
-            job_id,
-            status=RetryJobStatus.FAILED.value,
-            last_error=str(exc),
-        )
+        _mark_job_failed(redis_conn, job_id, last_error=str(exc))
         logger.exception(
             "retry_unexpected_failure job_id=%s attempt=%s", job_id, next_attempt
         )
+
+
+_build_answer_response = build_answer_response
+_build_revise_response = build_revise_response
+_build_idempotency_identifier = build_idempotency_identifier
+_compute_backoff_seconds = compute_backoff_seconds
+_decode_mapping = decode_mapping
+_deserialize = deserialize
+_parse_citation_group = parse_citation_group
+_rewrite_citations = rewrite_citations
+_select_citations = select_citations

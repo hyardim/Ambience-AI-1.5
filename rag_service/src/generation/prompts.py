@@ -1,3 +1,5 @@
+from ..config import generation_config
+
 MAX_CHARS_PER_CHUNK = 1200
 
 
@@ -8,12 +10,7 @@ def _truncate_chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> str
     return cleaned[: max_chars - 14].rstrip() + " …[truncated]"
 
 
-# ---------------------------------------------------------------------------
-# PROMPT VARIANT TOGGLE
-# Set ACTIVE_PROMPT = "original" to use the strict citation-only prompt.
-# Set ACTIVE_PROMPT = "new"      to use the balanced health-LLM prompt.
-# ---------------------------------------------------------------------------
-ACTIVE_PROMPT = "new"
+ACTIVE_PROMPT = generation_config.prompt_variant
 
 # ---------------------------------------------------------------------------
 # Variant A — original: strict, context-only, refuses when no sources found
@@ -85,8 +82,9 @@ _INSTRUCTIONS_NEW = (
     "If there are no safety implications, omit this section entirely."
 )
 
-# Active selection — change ACTIVE_PROMPT above to switch
-_INSTRUCTIONS = _INSTRUCTIONS_NEW if ACTIVE_PROMPT == "new" else _INSTRUCTIONS_ORIGINAL
+
+def _active_instructions() -> str:
+    return _INSTRUCTIONS_NEW if ACTIVE_PROMPT == "new" else _INSTRUCTIONS_ORIGINAL
 
 
 def _format_context(chunks: list[dict]) -> str:
@@ -160,7 +158,7 @@ def build_grounded_prompt(
         else "Answer (no citations):"
     )
 
-    parts = [_INSTRUCTIONS]
+    parts = [_active_instructions()]
     if patient_block:
         parts.append(patient_block)
     parts.append(context_section)

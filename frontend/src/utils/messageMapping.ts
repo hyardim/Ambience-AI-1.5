@@ -17,6 +17,9 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
       const sectionPath = (c as any).section_path ?? meta.section_path;
       const pageStart = (c as any).page_start ?? meta.page_start;
       const pageEnd = (c as any).page_end ?? meta.page_end;
+      const creationDate = (c as any).creation_date ?? meta.creation_date;
+      const publishDate = (c as any).publish_date ?? meta.publish_date;
+      const lastUpdatedDate = (c as any).last_updated_date ?? meta.last_updated_date;
 
       return {
         doc_id: docId || undefined,
@@ -27,6 +30,9 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
         page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
         source_url: meta.source_url,
+        creation_date: typeof creationDate === 'string' ? creationDate : undefined,
+        publish_date: typeof publishDate === 'string' ? publishDate : undefined,
+        last_updated_date: typeof lastUpdatedDate === 'string' ? lastUpdatedDate : undefined,
       } satisfies Citation;
     })
     .filter(Boolean) as Citation[];

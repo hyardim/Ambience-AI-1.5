@@ -181,6 +181,19 @@ class TestRetrieve:
         assert isinstance(output, list)
         assert all(isinstance(r, CitedResult) for r in output)
 
+    def test_debug_artifacts_use_shared_path_config(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        mocks = make_all_stage_mocks()
+        monkeypatch.setattr("src.retrieval.retrieve.DEBUG_ARTIFACT_DIR", tmp_path)
+
+        run_retrieve(mocks, write_debug_artifacts=True)
+
+        written = list(tmp_path.glob("*/*.json"))
+        assert written
+
     def test_all_stages_called_in_order(self):
         mocks = make_all_stage_mocks()
         call_order: list[str] = []

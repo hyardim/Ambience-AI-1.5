@@ -36,6 +36,9 @@ export interface Citation {
   page_start?: number;
   page_end?: number;
   source_url?: string;
+  creation_date?: string;
+  publish_date?: string;
+  last_updated_date?: string;
 }
 
 export interface Message {

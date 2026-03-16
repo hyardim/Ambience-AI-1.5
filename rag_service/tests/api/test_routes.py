@@ -111,3 +111,54 @@ def test_ingest_guideline_wraps_unexpected_errors(
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Ingestion error: unexpected"
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_preserves_http_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(routes, "retrieve_chunks", lambda query, top_k, specialty: [{}])
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "build_grounded_prompt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            HTTPException(status_code=418, detail="teapot")
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await routes.generate_clinical_answer(
+            routes.AnswerRequest(query="q", stream=True)
+        )
+
+    assert exc_info.value.status_code == 418
+    assert exc_info.value.detail == "teapot"
+
+
+@pytest.mark.anyio
+async def test_revise_clinical_answer_preserves_http_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(routes, "retrieve_chunks", lambda query, top_k, specialty: [{}])
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "build_revision_prompt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            HTTPException(status_code=422, detail="bad stream")
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await routes.revise_clinical_answer(
+            routes.ReviseRequest(
+                original_query="q",
+                previous_answer="a",
+                feedback="f",
+                stream=True,
+            )
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "bad stream"

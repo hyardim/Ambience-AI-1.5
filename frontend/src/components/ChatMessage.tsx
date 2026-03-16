@@ -82,6 +82,13 @@ export function ChatMessage({
       return null;
     };
 
+    const formatDate = (c: Citation) => {
+      if (c.publish_date) return `Published ${c.publish_date}`;
+      if (c.last_updated_date) return `Updated ${c.last_updated_date}`;
+      if (c.creation_date) return `Created ${c.creation_date}`;
+      return null;
+    };
+
     return (
       <div className="mt-4 border-t border-gray-200 pt-3">
         <p className="text-xs font-semibold text-gray-700 mb-2">Sources</p>
@@ -89,6 +96,7 @@ export function ChatMessage({
           {citations.map((c, idx) => {
             const page = formatPage(c);
             const section = formatSection(c);
+            const docDate = formatDate(c);
             const href = c.doc_id ? `http://localhost:8001/docs/${c.doc_id}${c.page_start ? `#page=${c.page_start}` : ''}` : undefined;
             return (
               <div key={idx} className="text-sm text-gray-800 flex flex-col gap-0.5">
@@ -110,6 +118,7 @@ export function ChatMessage({
                 <div className="text-xs text-gray-600">
                   {[c.source_name, page, section].filter(Boolean).join(' • ')}
                 </div>
+                {docDate ? <div className="text-xs text-gray-500">{docDate}</div> : null}
               </div>
             );
           })}

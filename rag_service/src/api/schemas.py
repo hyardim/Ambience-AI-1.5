@@ -27,6 +27,9 @@ class SearchResult(BaseModel):
     page_start: int | None = None
     page_end: int | None = None
     section_path: str | None = None
+    creation_date: str | None = None
+    publish_date: str | None = None
+    last_updated_date: str | None = None
     metadata: dict[str, Any] | None = None
 
 

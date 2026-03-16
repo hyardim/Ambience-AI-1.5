@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from pathlib import Path
 from typing import Any
 
+from ..config import path_config
 from ..utils.logger import setup_logger
 from .citation import CitedResult, assemble_citations
 from .filters import FilterConfig, apply_filters
@@ -17,7 +17,7 @@ from .vector_search import vector_search
 
 logger = setup_logger(__name__)
 
-DEBUG_ARTIFACT_DIR = Path("data/debug/retrieval")
+DEBUG_ARTIFACT_DIR = path_config.data_debug / "retrieval"
 
 
 def retrieve(

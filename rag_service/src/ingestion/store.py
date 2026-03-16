@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import psycopg2
@@ -61,13 +61,16 @@ def store_chunks(
         for chunk in eligible:
             chunk_id = chunk.get("chunk_id", "")
             try:
+                _begin_savepoint(conn, chunk_id)
                 action = _upsert_chunk(conn, chunk, doc_id, doc_version)
+                _release_savepoint(conn, chunk_id)
                 report[action] += 1
                 logger.debug(f"Chunk {chunk_id}: {action}")
             except Exception as e:
                 report["failed"] += 1
                 logger.warning(f"Chunk {chunk_id} failed to write: {e}")
-                conn.rollback()
+                _rollback_to_savepoint(conn, chunk_id)
+        conn.commit()
     finally:
         conn.close()
 
@@ -94,7 +97,6 @@ def _upsert_chunk(
     chunk_id = chunk["chunk_id"]
     text = chunk["text"]
     metadata = _build_metadata(chunk)
-    metadata_str = _metadata_json(metadata)
 
     with conn.cursor() as cur:
         # Look up existing row
@@ -129,12 +131,9 @@ def _upsert_chunk(
                     json.dumps(metadata),
                 ),
             )
-            conn.commit()
             return "inserted"
 
         existing_text, existing_metadata = existing
-        existing_metadata_str = _metadata_json(existing_metadata)
-
         if existing_text != text:
             # Case B — text changed, update text + embedding + metadata
             embedding = np.array(chunk["embedding"], dtype=np.float32)
@@ -156,10 +155,9 @@ def _upsert_chunk(
                     chunk_id,
                 ),
             )
-            conn.commit()
             return "updated"
 
-        if existing_metadata_str != metadata_str:
+        if not _metadata_equals(existing_metadata, metadata):
             # Case C — metadata only changed
             cur.execute(
                 """
@@ -170,7 +168,6 @@ def _upsert_chunk(
                 """,
                 (json.dumps(metadata), doc_id, doc_version, chunk_id),
             )
-            conn.commit()
             return "updated"
 
         # Case D — identical, skip
@@ -202,3 +199,44 @@ def _metadata_json(metadata: dict[str, Any]) -> str:
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
     return json.dumps(metadata, sort_keys=True)
+
+
+def _metadata_equals(left: Any, right: Any) -> bool:
+    return bool(_normalise_metadata(left) == _normalise_metadata(right))
+
+
+def _normalise_metadata(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return _normalise_metadata(json.loads(value))
+        except json.JSONDecodeError:
+            return value
+    if isinstance(value, dict):
+        return {key: _normalise_metadata(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_normalise_metadata(item) for item in value]
+    return value
+
+
+def _savepoint_name(chunk_id: str) -> str:
+    return f"chunk_{abs(hash(chunk_id))}"
+
+
+def _begin_savepoint(conn: Any, chunk_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(f"SAVEPOINT {_savepoint_name(chunk_id)}")
+
+
+def _release_savepoint(conn: Any, chunk_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(f"RELEASE SAVEPOINT {_savepoint_name(chunk_id)}")
+
+
+def _rollback_to_savepoint(conn: Any, chunk_id: str) -> None:
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"ROLLBACK TO SAVEPOINT {_savepoint_name(chunk_id)}")
+    except Exception:
+        rollback = cast(Any, getattr(conn, "rollback", None))
+        if callable(rollback):
+            rollback()

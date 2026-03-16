@@ -35,7 +35,9 @@ async def stream_generate(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(
+            timeout=generation_config.ollama_timeout_seconds
+        ) as client:
             async with client.stream(
                 "POST",
                 f"{generation_config.ollama_base_url}/api/generate",

@@ -4,11 +4,11 @@ import pytest
 
 from src.api.schemas import SearchResult
 from src.api.services import (
-    embed_query_text,
     filter_chunks,
     retrieve_chunks,
     to_search_result,
 )
+from src.retrieval.citation import Citation, CitedResult
 
 
 def test_filter_chunks_drops_low_quality_hits() -> None:
@@ -28,52 +28,78 @@ def test_filter_chunks_drops_low_quality_hits() -> None:
     assert filtered == [kept]
 
 
-def test_retrieve_chunks_passes_embedding_and_options(
+def test_retrieve_chunks_uses_shared_retrieval_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    search_calls: list[tuple[list[float], int, str | None]] = []
-    monkeypatch.setattr(
-        "src.api.services.embed_query_text",
-        lambda query: [0.1, 0.2] if query == "headache" else [9.9],
+    calls: list[tuple[str, str, int, str | None]] = []
+
+    citation = Citation(
+        title="Migraine Guide",
+        source_name="NICE",
+        specialty="neurology",
+        doc_type="guideline",
+        section_path=["Treatment"],
+        section_title="Treatment",
+        page_start=2,
+        page_end=3,
+        source_url="https://example.com/guide",
+        doc_id="doc-1",
+        chunk_id="chunk-1",
+        content_type="text",
+    )
+    result = CitedResult(
+        chunk_id="chunk-1",
+        text="chunk",
+        rerank_score=0.8,
+        rrf_score=0.7,
+        vector_score=0.6,
+        keyword_rank=0.5,
+        citation=citation,
     )
 
-    def fake_search(
-        vector: list[float],
+    def fake_retrieve(
+        query: str,
+        db_url: str,
         *,
-        limit: int,
+        top_k: int,
         specialty: str | None,
-    ) -> list[dict[str, object]]:
-        search_calls.append((vector, limit, specialty))
-        return [{"text": "chunk", "score": 0.8, "metadata": {}}]
+    ) -> list[CitedResult]:
+        calls.append((query, db_url, top_k, specialty))
+        return [result]
 
-    monkeypatch.setattr("src.api.services.search_similar_chunks", fake_search)
+    monkeypatch.setattr("src.api.services.retrieve", fake_retrieve)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
 
-    result = retrieve_chunks("headache", top_k=3, specialty="neurology")
+    chunks = retrieve_chunks("headache", top_k=3, specialty="neurology")
 
-    assert result == [{"text": "chunk", "score": 0.8, "metadata": {}}]
-    assert search_calls == [([0.1, 0.2], 3, "neurology")]
-
-
-def test_embed_query_text_uses_single_query_batch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    model = object()
-    monkeypatch.setattr("src.api.services.get_embedding_model", lambda: model)
-
-    def fake_embed_text(
-        loaded_model: object,
-        texts: list[str],
-        *,
-        batch_size: int,
-    ) -> list[list[float]]:
-        assert loaded_model is model
-        assert texts == ["question"]
-        assert batch_size == 1
-        return [[0.3, 0.4]]
-
-    monkeypatch.setattr("src.api.services.embed_text", fake_embed_text)
-
-    assert embed_query_text("question") == [0.3, 0.4]
+    assert chunks == [
+        {
+            "text": "chunk",
+            "score": 0.8,
+            "doc_id": "doc-1",
+            "doc_version": None,
+            "chunk_id": "chunk-1",
+            "chunk_index": None,
+            "content_type": "text",
+            "page_start": 2,
+            "page_end": 3,
+            "section_path": "Treatment",
+            "metadata": {
+                "title": "Migraine Guide",
+                "source_name": "NICE",
+                "filename": "Migraine Guide",
+                "specialty": "neurology",
+                "doc_type": "guideline",
+                "creation_date": None,
+                "publish_date": None,
+                "last_updated_date": None,
+                "source_url": "https://example.com/guide",
+                "source_path": "https://example.com/guide",
+                "content_type": "text",
+            },
+        }
+    ]
+    assert calls == [("headache", "postgresql://x", 3, "neurology")]
 
 
 def test_to_search_result_uses_default_source_name() -> None:
@@ -85,3 +111,19 @@ def test_to_search_result_uses_default_source_name() -> None:
         score=0.6,
         metadata={},
     )
+
+
+def test_to_search_result_prefers_title_then_source_name() -> None:
+    result = to_search_result(
+        {
+            "text": "chunk",
+            "score": 0.9,
+            "metadata": {
+                "title": "NICE Migraine Guideline",
+                "source_name": "NICE",
+                "filename": "migraine.pdf",
+            },
+        }
+    )
+
+    assert result.source == "NICE Migraine Guideline"

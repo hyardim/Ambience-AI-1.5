@@ -294,7 +294,7 @@ def discover_pdfs(
 
     Args:
         input_path: Path to PDF file or folder
-        since: Only include files modified after this date
+        since: Only include files modified on or after this date
         max_files: Maximum number of files to return
 
     Returns:
@@ -313,7 +313,7 @@ def discover_pdfs(
         raise ValueError(f"Input path does not exist: {input_path}")
 
     if since is not None:
-        pdfs = [p for p in pdfs if date.fromtimestamp(p.stat().st_mtime) > since]
+        pdfs = [p for p in pdfs if date.fromtimestamp(p.stat().st_mtime) >= since]
 
     if max_files is not None:
         pdfs = pdfs[:max_files]

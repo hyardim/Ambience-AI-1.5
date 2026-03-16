@@ -268,6 +268,15 @@ class TestDiscoverPdfs:
         assert new in result
         assert old not in result
 
+    def test_since_includes_same_day_files(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "same-day.pdf"
+        pdf.touch()
+        same_day = date.fromtimestamp(pdf.stat().st_mtime)
+
+        result = discover_pdfs(tmp_path, since=same_day)
+
+        assert pdf in result
+
     def test_nonexistent_path_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="does not exist"):
             discover_pdfs(tmp_path / "nonexistent")

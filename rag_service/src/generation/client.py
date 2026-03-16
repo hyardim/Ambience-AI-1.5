@@ -127,63 +127,100 @@ async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> 
 
 
 async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> str:
+    return await request_chat_completion(
+        provider="cloud",
+        base_url=cloud_llm_config.base_url,
+        api_key=cloud_llm_config.api_key,
+        model=cloud_llm_config.model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens or cloud_llm_config.max_tokens,
+        temperature=cloud_llm_config.temperature,
+        timeout_seconds=cloud_llm_config.timeout_seconds,
+    )
+
+
+def _extract_chat_completion_text(data: dict[str, Any]) -> str:
+    return str(
+        cast(
+            dict[str, Any],
+            cast(list[dict[str, Any]], data.get("choices", [{}]))[0],
+        )
+        .get("message", {})
+        .get("content", "")
+    ).strip()
+
+
+def _auth_headers(api_key: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
+def _wrap_provider_request_error(
+    exc: httpx.HTTPError,
+    *,
+    provider: ProviderName,
+) -> ProviderRequestError:
+    provider_name = "Cloud" if provider == "cloud" else "Local"
+    if isinstance(exc, httpx.TimeoutException):
+        return ProviderRequestError(
+            f"{provider_name} model request timed out: {exc}",
+            provider=provider,
+            retryable=True,
+        )
+    if isinstance(exc, httpx.ConnectError):
+        return ProviderRequestError(
+            f"{provider_name} model connection failed: {exc}",
+            provider=provider,
+            retryable=True,
+        )
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        return ProviderRequestError(
+            f"{provider_name} model returned HTTP {status_code}",
+            provider=provider,
+            retryable=status_code >= 500,
+            status_code=status_code,
+        )
+    return ProviderRequestError(
+        f"{provider_name} model request failed: {exc}",
+        provider=provider,
+        retryable=True,
+    )
+
+
+async def request_chat_completion(
+    *,
+    provider: ProviderName,
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    temperature: float,
+    timeout_seconds: float,
+) -> str:
     payload = {
-        "model": cloud_llm_config.model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens or cloud_llm_config.max_tokens,
-        "temperature": cloud_llm_config.temperature,
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
         "stream": False,
     }
 
-    headers: dict[str, str] = {}
-    if cloud_llm_config.api_key:
-        headers["Authorization"] = f"Bearer {cloud_llm_config.api_key}"
-
     try:
-        async with httpx.AsyncClient(
-            timeout=cloud_llm_config.timeout_seconds
-        ) as client:
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             resp = await client.post(
-                f"{cloud_llm_config.base_url.rstrip('/')}/chat/completions",
+                f"{base_url.rstrip('/')}/chat/completions",
                 json=payload,
-                headers=headers,
+                headers=_auth_headers(api_key),
             )
             resp.raise_for_status()
             data = cast(dict[str, Any], resp.json())
-            return str(
-                cast(
-                    dict[str, Any],
-                    cast(list[dict[str, Any]], data.get("choices", [{}]))[0],
-                )
-                .get("message", {})
-                .get("content", "")
-            ).strip()
-    except httpx.TimeoutException as exc:
-        raise ProviderRequestError(
-            f"Cloud model request timed out: {exc}",
-            provider="cloud",
-            retryable=True,
-        ) from exc
-    except httpx.ConnectError as exc:
-        raise ProviderRequestError(
-            f"Cloud model connection failed: {exc}",
-            provider="cloud",
-            retryable=True,
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        status_code = exc.response.status_code
-        raise ProviderRequestError(
-            f"Cloud model returned HTTP {status_code}",
-            provider="cloud",
-            retryable=status_code >= 500,
-            status_code=status_code,
-        ) from exc
-    except httpx.RequestError as exc:
-        raise ProviderRequestError(
-            f"Cloud model request failed: {exc}",
-            provider="cloud",
-            retryable=True,
-        ) from exc
+            return _extract_chat_completion_text(data)
+    except httpx.HTTPError as exc:
+        raise _wrap_provider_request_error(exc, provider=provider) from exc
 
 
 async def _call_local_model(prompt: str, max_tokens: int | None = None) -> str:

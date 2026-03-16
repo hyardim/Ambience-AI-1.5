@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import math
 import time
+from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer
 
 from ..config import embed_config
+from ..ingestion.embed import load_embedder
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -33,20 +34,21 @@ EXPANSION_DICT: dict[str, list[str]] = {
     "methotrexate": ["mtx", "disease modifying antirheumatic drug"],
 }
 
-# -----------------------------------------------------------------------
-# Model — loaded once at module level
-# -----------------------------------------------------------------------
 
-_MODEL: SentenceTransformer | None = None
+def _load_model() -> object:
+    """Load and return the shared embedding model."""
+    logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
+    return load_embedder(model_name=EMBEDDING_MODEL_NAME)
 
 
-def _load_model() -> SentenceTransformer:
-    """Load and return the embedding model. Cached after first call."""
-    global _MODEL
-    if _MODEL is None:
-        logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
-        _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    return _MODEL
+class _EmbeddingModel(Protocol):
+    def encode(
+        self,
+        texts: list[str],
+        *,
+        normalize_embeddings: bool,
+        show_progress_bar: bool,
+    ) -> object: ...
 
 
 # -----------------------------------------------------------------------
@@ -179,14 +181,18 @@ def _expand_query(query: str) -> str:
     return query + " " + " ".join(additions)
 
 
-def _embed(model: SentenceTransformer, text: str) -> list[float]:
+def _embed(model: object, text: str) -> list[float]:
     """Embed text and return normalised float vector.
 
     Normalisation required for cosine similarity to work correctly
     with pgvector's <=> operator.
     """
-    vector = model.encode([text], normalize_embeddings=True, show_progress_bar=False)
-    return vector[0].tolist()
+    encoder = cast(_EmbeddingModel, model)
+    vector = cast(
+        Any,
+        encoder.encode([text], normalize_embeddings=True, show_progress_bar=False),
+    )
+    return cast(list[float], vector[0].tolist())
 
 
 # -----------------------------------------------------------------------

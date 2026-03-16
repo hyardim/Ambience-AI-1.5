@@ -28,12 +28,27 @@ class MessageBase(BaseModel):
 class MessageCreate(MessageBase):
     pass
 
+
+class CitationResponse(BaseModel):
+    doc_id: Optional[str] = None
+    title: str
+    source_name: str
+    specialty: Optional[str] = None
+    section_path: Optional[str | List[str]] = None
+    page_start: Optional[int] = None
+    page_end: Optional[int] = None
+    source_url: Optional[str] = None
+    creation_date: Optional[str] = None
+    publish_date: Optional[str] = None
+    last_updated_date: Optional[str] = None
+    metadata: Optional[dict] = None
+
 class MessageResponse(BaseModel):
     id: int
     content: str
     sender: str
     created_at: str
-    citations: Optional[List] = None
+    citations: Optional[List[CitationResponse]] = None
     is_generating: bool = False
     review_status: Optional[str] = None
     review_feedback: Optional[str] = None

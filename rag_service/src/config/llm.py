@@ -10,6 +10,7 @@ class GenerationConfig(AppBaseSettings):
     ollama_model: str = Field(default="thewindmom/llama3-med42-8b")
     ollama_max_tokens: int = Field(default=1024)
     ollama_timeout_seconds: float = Field(default=60.0)
+    prompt_variant: str = Field(default="new")
 
 
 class LLMConfig(AppBaseSettings):

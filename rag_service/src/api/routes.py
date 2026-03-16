@@ -234,6 +234,8 @@ async def generate_clinical_answer(
             citations_retrieved=citations_retrieved,
             citations=citations_used,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("/answer failed")
         raise HTTPException(
@@ -330,6 +332,8 @@ async def revise_clinical_answer(
             citations_retrieved=citations_retrieved,
             citations=citations_used,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("/revise failed")
         raise HTTPException(

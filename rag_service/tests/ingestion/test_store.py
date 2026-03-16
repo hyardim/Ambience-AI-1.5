@@ -8,6 +8,7 @@ import pytest
 
 from src.ingestion.store import (
     _build_metadata,
+    _metadata_equals,
     _metadata_json,
     _upsert_chunk,
     store_chunks,
@@ -167,6 +168,13 @@ class TestMetadataJson:
         assert _metadata_json(as_string) == _metadata_json(meta)
 
 
+class TestMetadataEquals:
+    def test_compares_semantically_equal_metadata(self) -> None:
+        left = {"b": 2, "a": {"y": 2, "x": 1}}
+        right = {"a": {"x": 1, "y": 2}, "b": 2}
+        assert _metadata_equals(left, right) is True
+
+
 # -----------------------------------------------------------------------
 # _upsert_chunk
 # -----------------------------------------------------------------------
@@ -178,7 +186,7 @@ class TestUpsertChunk:
         result = _upsert_chunk(conn, make_chunk(), "doc123", "v1")
         assert result == "inserted"
         assert cur.execute.call_count == 2  # SELECT + INSERT
-        conn.commit.assert_called_once()
+        conn.commit.assert_not_called()
 
     def test_skips_identical_chunk(self) -> None:
         chunk = make_chunk()
@@ -195,7 +203,7 @@ class TestUpsertChunk:
         conn, cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "updated"
-        conn.commit.assert_called_once()
+        conn.commit.assert_not_called()
 
     def test_updates_on_metadata_change(self) -> None:
         chunk = make_chunk()
@@ -212,7 +220,7 @@ class TestUpsertChunk:
         conn, cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "updated"
-        conn.commit.assert_called_once()
+        conn.commit.assert_not_called()
 
     def test_raises_on_db_error(self) -> None:
         conn, cur = make_mock_conn(existing_row=None)
@@ -240,6 +248,7 @@ class TestStoreChunks:
         assert report["updated"] == 0
         assert report["skipped"] == 0
         assert report["failed"] == 0
+        conn.commit.assert_called_once()
 
     def test_skips_identical_chunk(self) -> None:
         chunk = make_chunk()
@@ -255,6 +264,7 @@ class TestStoreChunks:
             report = store_chunks(doc)
         assert report["skipped"] == 1
         assert report["inserted"] == 0
+        conn.commit.assert_called_once()
 
     def test_failed_embedding_not_written(self) -> None:
         chunk = make_chunk(embedding_status="failed")
@@ -296,6 +306,7 @@ class TestStoreChunks:
 
         assert report["failed"] >= 1
         assert report["inserted"] + report["failed"] == 2
+        conn.commit.assert_called_once()
 
     def test_mixed_batch_counts_correct(self) -> None:
         chunk_new = make_chunk("new")
@@ -310,6 +321,7 @@ class TestStoreChunks:
             report = store_chunks(doc)
         assert report["inserted"] == 1
         assert report["failed"] == 1
+        conn.commit.assert_called_once()
 
     def test_empty_document_returns_zero_counts(self) -> None:
         doc = make_embedded_doc(chunks=[])

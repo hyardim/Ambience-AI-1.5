@@ -68,6 +68,7 @@ def test_generate_returns_response(monkeypatch) -> None:
         llm_model = "model-x"
         llm_max_tokens = 12
         llm_temperature = 0.5
+        llm_timeout_seconds = 45.0
 
     response = generate(query="q", context=_context(), settings=DummySettings)
 
@@ -79,7 +80,7 @@ def test_generate_returns_response(monkeypatch) -> None:
     assert captured["payload"]["model"] == "model-x"
     assert captured["payload"]["max_tokens"] == 12
     assert captured["payload"]["temperature"] == 0.5
-    assert captured["timeout"] == 30.0
+    assert captured["timeout"] == 45.0
 
 
 def test_generate_raises_generation_error(monkeypatch) -> None:

@@ -6,6 +6,7 @@ import httpx
 from pydantic import BaseModel
 
 from src.config import llm_config
+from src.generation.client import _auth_headers, _extract_chat_completion_text
 from src.orchestration.prompt import build_system_prompt, format_context
 from src.retrieval.citation import CitedResult
 
@@ -39,6 +40,9 @@ def generate(
     model = getattr(settings, "llm_model", llm_config.llm_model)
     max_tokens = getattr(settings, "llm_max_tokens", llm_config.llm_max_tokens)
     temperature = getattr(settings, "llm_temperature", llm_config.llm_temperature)
+    timeout_seconds = getattr(
+        settings, "llm_timeout_seconds", llm_config.llm_timeout_seconds
+    )
 
     messages = [
         {"role": "system", "content": build_system_prompt()},
@@ -56,20 +60,15 @@ def generate(
         "stream": False,
     }
 
-    headers: dict[str, str] = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
     try:
         resp = httpx.post(
             f"{base_url}/chat/completions",
             json=payload,
-            headers=headers,
-            timeout=30.0,
+            headers=_auth_headers(api_key),
+            timeout=timeout_seconds,
         )
         resp.raise_for_status()
-        data = resp.json()
-        answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        answer = _extract_chat_completion_text(resp.json())
     except GenerationError:
         raise
     except Exception as e:  # pragma: no cover - defensive

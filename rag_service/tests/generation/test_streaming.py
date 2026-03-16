@@ -218,3 +218,54 @@ class TestStreamGenerate:
             tokens.append(token)
 
         assert tokens == ["ok"]
+
+    @pytest.mark.anyio
+    async def test_uses_configured_timeout(self, monkeypatch):
+        captured_timeout = None
+
+        class FakeStreamResponse:
+            async def aiter_lines(self):
+                yield json.dumps({"response": "", "done": True})
+
+            def raise_for_status(self):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        class FakeClient:
+            def __init__(self, *, timeout):
+                nonlocal captured_timeout
+                captured_timeout = timeout
+
+            def stream(self, method, url, json=None):
+                return FakeStreamResponse()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+        monkeypatch.setattr(
+            "src.generation.streaming.generation_config",
+            type(
+                "Cfg",
+                (),
+                {
+                    "ollama_timeout_seconds": 17.5,
+                    "ollama_model": "m",
+                    "ollama_base_url": "http://x",
+                    "ollama_max_tokens": 10,
+                },
+            )(),
+        )
+
+        async for _ in stream_generate("q"):
+            pass
+
+        assert captured_timeout == 17.5
