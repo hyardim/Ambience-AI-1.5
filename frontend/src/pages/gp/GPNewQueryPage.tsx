@@ -87,7 +87,7 @@ export function GPNewQueryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
@@ -125,7 +125,7 @@ export function GPNewQueryPage() {
                   name="title"
                   value={formData.title}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Brief description of your clinical question"
                   required
                 />
@@ -144,7 +144,7 @@ export function GPNewQueryPage() {
                     onChange={handleChange}
                     min="0"
                     max="150"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="e.g. 42"
                     required
                   />
@@ -158,7 +158,7 @@ export function GPNewQueryPage() {
                     name="sex"
                     value={formData.sex}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="">Select sex...</option>
@@ -175,7 +175,7 @@ export function GPNewQueryPage() {
                     name="specialty"
                     value={formData.specialty}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="">Select specialty...</option>
@@ -192,7 +192,7 @@ export function GPNewQueryPage() {
                     name="severity"
                     value={formData.severity}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="low">Low</option>
@@ -213,7 +213,7 @@ export function GPNewQueryPage() {
                   value={formData.patientNotes}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none"
                   placeholder="Relevant comorbidities, current medications, allergies, recent investigations..."
                 />
               </div>
@@ -228,7 +228,7 @@ export function GPNewQueryPage() {
                   value={formData.message}
                   onChange={handleChange}
                   rows={6}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none"
                   placeholder="Describe your clinical question, including relevant patient history, symptoms, current medications, and what advice you're seeking..."
                   required
                 />
@@ -284,7 +284,7 @@ export function GPNewQueryPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>

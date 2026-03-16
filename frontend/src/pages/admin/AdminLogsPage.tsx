@@ -109,13 +109,13 @@ export function AdminLogsPage() {
                 placeholder="Search action or details…"
                 value={searchFilter}
                 onChange={e => setSearchFilter(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               />
             </div>
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm"
             >
               <option value="">All categories</option>
               <option value="AUTH">AUTH</option>
@@ -128,7 +128,7 @@ export function AdminLogsPage() {
               placeholder="Exact action (e.g. LOGIN)"
               value={actionFilter}
               onChange={e => setActionFilter(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
             />
           </div>
           {/* Row 2: User ID + Dates + Limit + Apply */}
@@ -138,26 +138,26 @@ export function AdminLogsPage() {
               placeholder="User ID"
               value={userIdFilter}
               onChange={e => setUserIdFilter(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
             />
             <input
               type="datetime-local"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               title="From date"
             />
             <input
               type="datetime-local"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               title="To date"
             />
             <select
               value={limitFilter}
               onChange={e => setLimitFilter(Number(e.target.value))}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm"
             >
               <option value={50}>50 rows</option>
               <option value={100}>100 rows</option>
@@ -166,7 +166,7 @@ export function AdminLogsPage() {
             </select>
             <button
               type="submit"
-              className="px-4 py-2.5 bg-[#005eb8] text-white rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors"
+              className="px-4 py-2.5 bg-[var(--nhs-blue)] text-white rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
             >
               Apply
             </button>
@@ -184,7 +184,7 @@ export function AdminLogsPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 

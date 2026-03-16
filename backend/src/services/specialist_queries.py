@@ -16,12 +16,12 @@ from src.repositories import (
 )
 from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
-from src.services.notification_service import invalidate_notification_caches
-from src.services.specialist_shared import (
-    _invalidate_admin_chat_caches,
-    _invalidate_admin_stats_cache,
-    _invalidate_specialist_lists,
+from src.services.cache_invalidation import (
+    invalidate_admin_chat_caches_sync,
+    invalidate_admin_stats_sync,
+    invalidate_specialist_lists_sync,
 )
+from src.services.notification_service import invalidate_notification_caches
 from src.utils.cache import cache, cache_keys
 
 
@@ -163,10 +163,10 @@ def assign(
         user_id=chat.user_id,
         resource="chat_list",
     )
-    _invalidate_specialist_lists(
+    invalidate_specialist_lists_sync(
         specialty=chat.specialty,
         specialist_id=specialist.id,
     )
-    _invalidate_admin_chat_caches(chat.id)
-    _invalidate_admin_stats_cache()
+    invalidate_admin_chat_caches_sync(chat.id)
+    invalidate_admin_stats_sync()
     return chat_to_response(chat)

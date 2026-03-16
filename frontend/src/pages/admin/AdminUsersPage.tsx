@@ -97,13 +97,13 @@ export function AdminUsersPage() {
                 placeholder="Search by identifier or specialty..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <select
               value={roleFilter}
               onChange={e => setRoleFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white cursor-pointer"
+              className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white cursor-pointer"
             >
               <option value="">All Roles</option>
               <option value="gp">GP</option>
@@ -124,7 +124,7 @@ export function AdminUsersPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 
@@ -166,7 +166,7 @@ export function AdminUsersPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(user)}
-                          className="px-3 py-1.5 text-xs font-medium text-[#005eb8] border border-[#005eb8] rounded-lg hover:bg-[#005eb8] hover:text-white transition-colors"
+                          className="px-3 py-1.5 text-xs font-medium text-[var(--nhs-blue)] border border-[var(--nhs-blue)] rounded-lg hover:bg-[var(--nhs-blue)] hover:text-white transition-colors"
                         >
                           Edit
                         </button>
@@ -214,7 +214,7 @@ export function AdminUsersPage() {
                   type="text"
                   value={editForm.full_name || ''}
                   onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                 />
               </div>
               <div>
@@ -222,7 +222,7 @@ export function AdminUsersPage() {
                 <select
                   value={coalesce(editForm.role, '')}
                   onChange={e => setEditForm({ ...editForm, role: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="gp">GP</option>
                   <option value="specialist">Specialist</option>
@@ -235,7 +235,7 @@ export function AdminUsersPage() {
                   type="text"
                   value={editForm.specialty || ''}
                   onChange={e => setEditForm({ ...editForm, specialty: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="e.g. neurology, rheumatology"
                 />
               </div>
@@ -245,7 +245,7 @@ export function AdminUsersPage() {
                   id="is_active"
                   checked={coalesce(editForm.is_active, true)}
                   onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })}
-                  className="w-4 h-4 text-[#005eb8] rounded border-gray-300"
+                  className="w-4 h-4 text-[var(--nhs-blue)] rounded border-gray-300"
                 />
                 <label htmlFor="is_active" className="text-sm text-gray-700">Active</label>
               </div>
@@ -261,7 +261,7 @@ export function AdminUsersPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#005eb8] text-white rounded-lg font-medium hover:bg-[#003087] disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
                 {saving ? 'Saving…' : 'Save Changes'}

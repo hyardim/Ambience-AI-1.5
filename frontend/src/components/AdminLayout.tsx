@@ -19,7 +19,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const { username, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="admin" userName={username || 'Admin'} onLogout={logout} />
 
       <div className="flex-1 flex">
@@ -33,7 +33,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-[#005eb8] text-white'
+                      ? 'bg-[var(--nhs-blue)] text-white'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`
                 }

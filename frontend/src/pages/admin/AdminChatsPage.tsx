@@ -125,13 +125,13 @@ export function AdminChatsPage() {
                 placeholder="Search by title or owner..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white cursor-pointer"
+              className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white cursor-pointer"
             >
               <option value="">All Status</option>
               <option value="open">Open</option>
@@ -156,7 +156,7 @@ export function AdminChatsPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 
@@ -200,14 +200,14 @@ export function AdminChatsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openDetail(chat.id)}
-                          className="p-1.5 text-gray-400 hover:text-[#005eb8] transition-colors"
+                          className="p-1.5 text-gray-400 hover:text-[var(--nhs-blue)] transition-colors"
                           title="View messages"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => openEdit(chat)}
-                          className="px-3 py-1.5 text-xs font-medium text-[#005eb8] border border-[#005eb8] rounded-lg hover:bg-[#005eb8] hover:text-white transition-colors"
+                          className="px-3 py-1.5 text-xs font-medium text-[var(--nhs-blue)] border border-[var(--nhs-blue)] rounded-lg hover:bg-[var(--nhs-blue)] hover:text-white transition-colors"
                         >
                           Edit
                         </button>
@@ -253,7 +253,7 @@ export function AdminChatsPage() {
                   type="text"
                   value={editForm.title || ''}
                   onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                 />
               </div>
               <div>
@@ -261,7 +261,7 @@ export function AdminChatsPage() {
                 <select
                   value={coalesce(editForm.status, '')}
                   onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="open">Open</option>
                   <option value="submitted">Submitted</option>
@@ -279,7 +279,7 @@ export function AdminChatsPage() {
                   type="text"
                   value={editForm.specialty || ''}
                   onChange={e => setEditForm({ ...editForm, specialty: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="e.g. neurology"
                 />
               </div>
@@ -288,7 +288,7 @@ export function AdminChatsPage() {
                 <select
                   value={editForm.severity || ''}
                   onChange={e => setEditForm({ ...editForm, severity: e.target.value || null })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="">None</option>
                   <option value="routine">Routine</option>
@@ -308,7 +308,7 @@ export function AdminChatsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#005eb8] text-white rounded-lg font-medium hover:bg-[#003087] disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
                 {saving ? 'Saving…' : 'Save Changes'}
@@ -336,7 +336,7 @@ export function AdminChatsPage() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {detailLoading && (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-[#005eb8] animate-spin" />
+                  <Loader2 className="w-6 h-6 text-[var(--nhs-blue)] animate-spin" />
                 </div>
               )}
               {detailChat && detailChat.messages.length === 0 && (
@@ -347,7 +347,7 @@ export function AdminChatsPage() {
                   key={msg.id}
                   className={`rounded-lg px-4 py-3 ${
                     msg.sender === 'ai'
-                      ? 'bg-blue-50 border-l-4 border-[#005eb8]'
+                      ? 'bg-blue-50 border-l-4 border-[var(--nhs-blue)]'
                       : /* v8 ignore next */ msg.sender === 'specialist'
                         ? 'bg-green-50 border-l-4 border-[#007f3b]'
                         : 'bg-gray-50'

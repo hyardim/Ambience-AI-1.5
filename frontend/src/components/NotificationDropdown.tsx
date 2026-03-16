@@ -103,7 +103,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-white hover:bg-[#003087] rounded-lg transition-colors"
+        className="relative p-2 text-white hover:bg-[var(--nhs-dark-blue)] rounded-lg transition-colors"
       >
         <Bell className="w-6 h-6" />
         {unreadCount > 0 && (
@@ -120,7 +120,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="inline-flex items-center gap-1 text-xs text-[#005eb8] hover:text-[#003087] font-medium"
+                className="inline-flex items-center gap-1 text-xs text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -143,7 +143,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
                 >
                   <div className="flex items-start gap-3">
                     <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                      !notification.is_read ? 'bg-[#005eb8]' : 'bg-gray-300'
+                      !notification.is_read ? 'bg-[var(--nhs-blue)]' : 'bg-gray-300'
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 text-sm truncate">

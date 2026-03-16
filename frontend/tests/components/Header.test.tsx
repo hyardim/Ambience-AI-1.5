@@ -59,7 +59,7 @@ describe('Header', () => {
 
   it('does not mark the admin link active outside admin routes', () => {
     renderHeader({ userRole: 'admin' }, '/settings');
-    expect(screen.getByText('Admin Panel').closest('a')?.className).not.toContain('bg-[#003087]');
+    expect(screen.getByText('Admin Panel').closest('a')?.className).not.toContain('bg-[var(--nhs-dark-blue)]');
   });
 
   it('shows logout button when onLogout is provided', () => {

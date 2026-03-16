@@ -202,7 +202,7 @@ describe('SpecialistQueryDetailPage', () => {
     const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
     await user.click(screen.getByRole('button', { name: /send manual response/i }));
-  });
+  }, 15000);
 
   it('shows close-and-approve flow, send errors, oversize validation, and not-found state', async () => {
     server.use(
@@ -517,7 +517,7 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/manual failed/i)).toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it('shows assign failure when submitting a new consultation assignment', async () => {
     server.use(

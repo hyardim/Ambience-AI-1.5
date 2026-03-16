@@ -4,6 +4,7 @@
 :root {
   --nhs-blue: #005eb8;
   --nhs-dark-blue: #003087;
+  --nhs-hover-blue: #004f9e;
   --nhs-bright-blue: #0072ce;
   --nhs-light-blue: #41b6e6;
   --nhs-aqua-blue: #00a9ce;
@@ -18,6 +19,7 @@
   --nhs-orange: #ed8b00;
   --nhs-pink: #ae2573;
   --nhs-purple: #330072;
+  --nhs-page-bg: #f0f4f5;
 }
 
 /* Keep just box-sizing which is always useful */
@@ -29,7 +31,7 @@
 
 body {
   font-family: 'Arial', 'Helvetica Neue', sans-serif;
-  background-color: #f0f4f5;
+  background-color: var(--nhs-page-bg);
   color: var(--nhs-black);
   min-height: 100vh;
 }

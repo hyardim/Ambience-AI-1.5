@@ -354,10 +354,10 @@ export function SpecialistQueryDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
         <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
         </main>
       </div>
     );
@@ -365,7 +365,7 @@ export function SpecialistQueryDetailPage() {
 
   if (!chat) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
         <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -373,7 +373,7 @@ export function SpecialistQueryDetailPage() {
             {error && <p className="text-red-600 mb-4">{error}</p>}
             <button
               onClick={() => navigate('/specialist/queries')}
-              className="text-[#005eb8] hover:text-[#003087] font-medium"
+              className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
             >
               Back to Queries
             </button>
@@ -386,7 +386,7 @@ export function SpecialistQueryDetailPage() {
   // ── Render ───────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
@@ -437,7 +437,7 @@ export function SpecialistQueryDetailPage() {
                 <button
                   onClick={handleAssign}
                   disabled={actionLoading}
-                  className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-4 py-2 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
                 >
                   <UserPlus className="w-5 h-5" />
                   {actionLoading ? 'Assigning…' : 'Assign to Me'}
@@ -513,16 +513,16 @@ export function SpecialistQueryDetailPage() {
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />
+                    <Loader2 className="w-5 h-5 text-[var(--nhs-blue)] animate-spin" />
                   </div>
                 </div>
                 <div className="flex-1 max-w-3xl">
                   <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
-                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
+                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[var(--nhs-blue)] shadow-sm">
                     <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce"></span>
                     </div>
                   </div>
                 </div>
@@ -596,7 +596,7 @@ export function SpecialistQueryDetailPage() {
       {showApproveWithCommentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[#005eb8] mb-4">
+            <div className="flex items-center gap-3 text-[var(--nhs-blue)] mb-4">
               <MessageSquare className="w-8 h-8" />
               <h2 className="text-xl font-bold">Approve with Comment</h2>
             </div>
@@ -608,7 +608,7 @@ export function SpecialistQueryDetailPage() {
               onChange={(e) => setApproveComment(e.target.value)}
               rows={4}
               autoFocus
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none mb-6"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none mb-6"
               placeholder="Add your comment for the GP..."
             />
             <div className="flex gap-3 justify-end">
@@ -624,7 +624,7 @@ export function SpecialistQueryDetailPage() {
               <button
                 onClick={handleApproveWithComment}
                 disabled={!approveComment.trim() || actionLoading}
-                className="px-4 py-2 bg-[#005eb8] text-white rounded-lg font-medium hover:bg-[#003087] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionLoading ? 'Approving…' : 'Send & Approve'}
               </button>
@@ -648,7 +648,7 @@ export function SpecialistQueryDetailPage() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={4}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none mb-6"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none mb-6"
               placeholder="Describe the required changes..."
             />
             <div className="flex gap-3 justify-end">

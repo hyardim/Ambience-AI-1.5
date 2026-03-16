@@ -270,10 +270,10 @@ export function GPQueryDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
         <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
         </main>
       </div>
     );
@@ -281,14 +281,14 @@ export function GPQueryDetailPage() {
 
   if (!chat) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
         <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Consultation not found</h1>
             <button
               onClick={() => navigate('/gp/queries')}
-              className="text-[#005eb8] hover:text-[#003087] font-medium"
+              className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
             >
               Back to Consultations
             </button>
@@ -299,7 +299,7 @@ export function GPQueryDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
@@ -336,7 +336,7 @@ export function GPQueryDetailPage() {
                 {!editingMeta && (chat.status === 'open' || chat.status === 'submitted') && (
                   <button
                     onClick={openMetaEditor}
-                    className="px-3 py-1.5 text-xs font-medium text-[#005eb8] border border-[#005eb8] rounded-lg hover:bg-[#005eb8] hover:text-white transition-colors"
+                    className="px-3 py-1.5 text-xs font-medium text-[var(--nhs-blue)] border border-[var(--nhs-blue)] rounded-lg hover:bg-[var(--nhs-blue)] hover:text-white transition-colors"
                   >
                     Edit details
                   </button>
@@ -351,20 +351,20 @@ export function GPQueryDetailPage() {
                     type="text"
                     value={editMeta.title || ''}
                     onChange={(e) => setEditMeta(prev => ({ ...prev, title: e.target.value }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Consultation title"
                   />
                   <input
                     type="text"
                     value={editMeta.specialty || ''}
                     onChange={(e) => setEditMeta(prev => ({ ...prev, specialty: e.target.value || null }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Specialty"
                   />
                   <select
                     value={editMeta.severity || ''}
                     onChange={(e) => setEditMeta(prev => ({ ...prev, severity: e.target.value || null }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                   >
                     <option value="">No severity</option>
                     <option value="low">Low</option>
@@ -383,7 +383,7 @@ export function GPQueryDetailPage() {
                   <button
                     onClick={saveMeta}
                     disabled={savingMeta}
-                    className="px-3 py-1.5 bg-[#005eb8] text-white rounded-lg hover:bg-[#003087] disabled:opacity-50 text-sm"
+                    className="px-3 py-1.5 bg-[var(--nhs-blue)] text-white rounded-lg hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50 text-sm"
                   >
                     {savingMeta ? 'Saving…' : 'Save'}
                   </button>
@@ -442,16 +442,16 @@ export function GPQueryDetailPage() {
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />
+                    <Loader2 className="w-5 h-5 text-[var(--nhs-blue)] animate-spin" />
                   </div>
                 </div>
                 <div className="flex-1 max-w-3xl">
                   <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
-                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
+                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[var(--nhs-blue)] shadow-sm">
                     <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce"></span>
                     </div>
                   </div>
                 </div>

@@ -11,7 +11,6 @@ from src.services import (
     cache_invalidation,
     specialist_review,
     specialist_service,
-    specialist_shared,
 )
 
 
@@ -63,6 +62,16 @@ def _ai_message(db_session, chat: Chat) -> Message:
 def test_build_manual_citations_handles_empty_sources():
     assert specialist_service._build_manual_citations(None) is None
     assert specialist_service._build_manual_citations(["", "  "]) is None
+
+
+def test_specialist_service_reexports_expected_helpers():
+    assert specialist_service.assign is not None
+    assert specialist_service.review is not None
+    assert specialist_service.send_message is not None
+    assert specialist_service._invalidate_admin_chat_caches is not None
+    assert specialist_service._invalidate_admin_stats_cache is not None
+    assert specialist_service._invalidate_specialist_lists is not None
+    assert specialist_service.cache is not None
 
 
 def test_get_queue_uses_cache(monkeypatch, db_session):
@@ -162,7 +171,10 @@ def test_invalidate_specialist_lists_without_specialist_id(monkeypatch):
         "delete_pattern_sync",
         lambda *args, **kwargs: patterns.append(args),
     )
-    specialist_shared._invalidate_specialist_lists(specialty=None, specialist_id=None)
+    cache_invalidation.invalidate_specialist_lists_sync(
+        specialty=None,
+        specialist_id=None,
+    )
     assert deleted == []
     assert patterns
 

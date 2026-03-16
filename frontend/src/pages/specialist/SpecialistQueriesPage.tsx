@@ -65,7 +65,7 @@ export function SpecialistQueriesPage() {
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
@@ -98,7 +98,7 @@ export function SpecialistQueriesPage() {
             onClick={() => setTab('queue')}
             className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
               tab === 'queue'
-                ? 'bg-[#005eb8] text-white'
+                ? 'bg-[var(--nhs-blue)] text-white'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
@@ -108,7 +108,7 @@ export function SpecialistQueriesPage() {
             onClick={() => setTab('assigned')}
             className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
               tab === 'assigned'
-                ? 'bg-[#005eb8] text-white'
+                ? 'bg-[var(--nhs-blue)] text-white'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
@@ -126,7 +126,7 @@ export function SpecialistQueriesPage() {
                 placeholder="Search by title or specialty..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <div className="flex gap-4">
@@ -135,7 +135,7 @@ export function SpecialistQueriesPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent appearance-none bg-white cursor-pointer"
+                  className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
                 >
                   <option value="all">All Status</option>
                   <option value="submitted">Submitted</option>
@@ -148,7 +148,7 @@ export function SpecialistQueriesPage() {
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent appearance-none bg-white cursor-pointer"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
               >
                 <option value="all">All Severity</option>
                 <option value="low">Low</option>
@@ -171,7 +171,7 @@ export function SpecialistQueriesPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 
@@ -183,7 +183,7 @@ export function SpecialistQueriesPage() {
                 <div
                   key={chat.id}
                   onClick={() => navigate(`/specialist/query/${chat.id}`)}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#005eb8] cursor-pointer transition-all"
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[var(--nhs-blue)] cursor-pointer transition-all"
                 >
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">

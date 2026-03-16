@@ -67,7 +67,7 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <AuthHeader />
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -95,7 +95,7 @@ export function RegisterPage() {
                     name="firstName"
                     value={formData.firstName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="John"
                     required
                   />
@@ -110,7 +110,7 @@ export function RegisterPage() {
                     name="lastName"
                     value={formData.lastName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Smith"
                     required
                   />
@@ -127,7 +127,7 @@ export function RegisterPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="john.smith@nhs.uk"
                   required
                 />
@@ -142,7 +142,7 @@ export function RegisterPage() {
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   required
                 >
                   <option value="gp">General Practitioner</option>
@@ -161,7 +161,7 @@ export function RegisterPage() {
                     name="specialty"
                     value={formData.specialty}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="">Select specialty...</option>
@@ -182,7 +182,7 @@ export function RegisterPage() {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent pr-12"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent pr-12"
                     placeholder="Create a password"
                     required
                   />
@@ -207,7 +207,7 @@ export function RegisterPage() {
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Confirm your password"
                   required
                 />
@@ -216,7 +216,7 @@ export function RegisterPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-[#005eb8] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#003087] transition-colors focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:ring-offset-2"
+                className="w-full bg-[var(--nhs-blue)] text-white py-3 px-4 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:ring-offset-2"
               >
                 {isSubmitting ? 'Creating Account...' : 'Create Account'}
               </button>
@@ -224,7 +224,7 @@ export function RegisterPage() {
 
             <p className="mt-6 text-center text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-[#005eb8] hover:text-[#003087] font-medium">
+              <Link to="/login" className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium">
                 Login here
               </Link>
             </p>

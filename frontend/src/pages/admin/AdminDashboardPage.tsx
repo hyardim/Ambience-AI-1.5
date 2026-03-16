@@ -21,7 +21,14 @@ const STATUS_COLOURS: Record<string, string> = {
   flagged:    '#f97316',
 };
 
-const SPECIALTY_COLOURS = ['#005eb8', '#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#e0f2fe'];
+const SPECIALTY_COLOURS = [
+  'var(--nhs-blue)',
+  'var(--nhs-dark-blue)',
+  'var(--nhs-bright-blue)',
+  'var(--nhs-light-blue)',
+  'var(--nhs-aqua-blue)',
+  'var(--nhs-pale-grey)',
+];
 
 function StatCard({ label, value, sub, icon: Icon, colour }: {
   label: string; value: string | number; sub?: string;
@@ -119,7 +126,7 @@ export default function AdminDashboardPage() {
 
         {loading && !stats ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         ) : stats && (
           <>
@@ -129,7 +136,7 @@ export default function AdminDashboardPage() {
                 label="Total AI Responses"
                 value={stats.total_ai_responses}
                 icon={MessageSquare}
-                colour="bg-[#005eb8]"
+                colour="bg-[var(--nhs-blue)]"
               />
               <StatCard
                 label="RAG-Grounded"
@@ -214,8 +221,8 @@ export default function AdminDashboardPage() {
                     <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="aiGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#005eb8" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="#005eb8" stopOpacity={0} />
+                          <stop offset="5%" stopColor="var(--nhs-blue)" stopOpacity={0.15} />
+                          <stop offset="95%" stopColor="var(--nhs-blue)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -225,7 +232,7 @@ export default function AdminDashboardPage() {
                       <Area
                         type="monotone"
                         dataKey="count"
-                        stroke="#005eb8"
+                        stroke="var(--nhs-blue)"
                         strokeWidth={2}
                         fill="url(#aiGradient)"
                         name="AI Queries"

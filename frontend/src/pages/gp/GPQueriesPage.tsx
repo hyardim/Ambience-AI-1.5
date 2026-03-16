@@ -132,7 +132,7 @@ export function GPQueriesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
@@ -144,7 +144,7 @@ export function GPQueriesPage() {
           </div>
           <button
             onClick={() => navigate('/gp/queries/new')}
-            className="inline-flex items-center justify-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
           >
             <Plus className="w-5 h-5" />
             New Consultation
@@ -165,7 +165,7 @@ export function GPQueriesPage() {
               onClick={() => setTab(key)}
               className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                 tab === key
-                  ? 'bg-[#005eb8] text-white'
+                  ? 'bg-[var(--nhs-blue)] text-white'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -184,14 +184,14 @@ export function GPQueriesPage() {
                 placeholder="Search consultations..."
                 value={searchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
                 showFilters || hasActiveFilters
-                  ? 'bg-[#005eb8] text-white border-[#005eb8]'
+                  ? 'bg-[var(--nhs-blue)] text-white border-[var(--nhs-blue)]'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
               aria-label="Toggle filters"
@@ -199,7 +199,7 @@ export function GPQueriesPage() {
               <Filter className="w-4 h-4" />
               Filters
               {hasActiveFilters && (
-                <span className="bg-white text-[#005eb8] text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="bg-white text-[var(--nhs-blue)] text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {[specialty, dateFrom, dateTo].filter(Boolean).length}
                 </span>
               )}
@@ -218,7 +218,7 @@ export function GPQueriesPage() {
                     id="filter-specialty"
                     value={specialty}
                     onChange={(e) => setSpecialty(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   >
                     <option value="">All specialties</option>
                     {SPECIALTY_OPTIONS.map(s => (
@@ -235,7 +235,7 @@ export function GPQueriesPage() {
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   />
                 </div>
                 <div>
@@ -247,7 +247,7 @@ export function GPQueriesPage() {
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   />
                 </div>
               </div>
@@ -277,7 +277,7 @@ export function GPQueriesPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 
@@ -289,7 +289,7 @@ export function GPQueriesPage() {
                 <div
                   key={chat.id}
                   onClick={() => navigate(`/gp/query/${chat.id}`)}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#005eb8] cursor-pointer transition-all"
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[var(--nhs-blue)] cursor-pointer transition-all"
                 >
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">
@@ -334,7 +334,7 @@ export function GPQueriesPage() {
                 {!searchTerm && !hasActiveFilters && tab === 'submitted' && (
                   <button
                     onClick={() => navigate('/gp/queries/new')}
-                    className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors"
+                    className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
                   >
                     <Plus className="w-5 h-5" />
                     New Consultation

@@ -40,7 +40,7 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <AuthHeader />
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -58,7 +58,7 @@ export function ResetPasswordPage() {
                 </p>
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-2 text-[#005eb8] hover:text-[#003087] font-medium"
+                  className="inline-flex items-center gap-2 text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   Back to Login
@@ -86,7 +86,7 @@ export function ResetPasswordPage() {
                       type="text"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                       placeholder="you@example.com"
                       autoComplete="email"
                       required
@@ -103,7 +103,7 @@ export function ResetPasswordPage() {
                         type={showPassword ? 'text' : 'password'}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                         placeholder="At least 6 characters"
                         autoComplete="new-password"
                         required
@@ -128,7 +128,7 @@ export function ResetPasswordPage() {
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                       placeholder="Re-enter new password"
                       autoComplete="new-password"
                       required
@@ -138,7 +138,7 @@ export function ResetPasswordPage() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full bg-[#005eb8] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#003087] transition-colors focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full bg-[var(--nhs-blue)] text-white py-3 px-4 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {submitting ? 'Resetting…' : 'Reset Password'}
                   </button>
@@ -146,7 +146,7 @@ export function ResetPasswordPage() {
 
                 <Link
                   to="/login"
-                  className="flex items-center justify-center gap-2 text-[#005eb8] hover:text-[#003087] font-medium mt-6"
+                  className="flex items-center justify-center gap-2 text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium mt-6"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   Back to Login

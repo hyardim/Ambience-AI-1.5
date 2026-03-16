@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -13,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.db.models import ChatStatus, FileAttachment, Message, User
+from src.db.models import Chat, ChatStatus, FileAttachment, Message, User
 from src.db.session import AsyncSessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
@@ -31,6 +33,13 @@ from src.services.cache_invalidation import (
     invalidate_chat_related_sync,
     invalidate_specialist_lists_sync,
 )
+from src.services.rag_context import (
+    build_conversation_history_from_messages,
+    build_file_context,
+    build_patient_context,
+    extract_text,
+    select_rag_citations,
+)
 from src.utils.cache import cache, cache_keys
 from src.utils.sse import SSEEvent, chat_event_bus
 
@@ -38,11 +47,9 @@ RAG_SERVICE_URL = settings.RAG_SERVICE_URL
 UPLOAD_DIR = Path(settings.UPLOAD_DIR)
 MAX_FILE_SIZE_BYTES = settings.MAX_FILE_SIZE_BYTES
 MAX_FILES_PER_CHAT = settings.MAX_FILES_PER_CHAT
-FILE_CONTEXT_CHAR_LIMIT = settings.FILE_CONTEXT_CHAR_LIMIT
 ALLOWED_UPLOAD_EXTENSIONS = {ext.lower() for ext in settings.ALLOWED_UPLOAD_EXTENSIONS}
 RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
 CHAT_RAG_TOP_K = settings.CHAT_RAG_TOP_K
-CHAT_HISTORY_MESSAGE_LIMIT = settings.CHAT_HISTORY_MESSAGE_LIMIT
 
 # Regex for sanitising filenames: keep alphanumerics, hyphens, underscores, dots
 _SAFE_FILENAME_RE = re.compile(r"[^\w\-.]", re.ASCII)
@@ -312,48 +319,17 @@ def _validate_upload_extension(filename: str) -> None:
         )
 
 
-def _extract_text(file_path: str, file_type: Optional[str]) -> str:
-    """Extract plain text from an uploaded file (PDF or plain text)."""
-    try:
-        if file_type and "pdf" in file_type.lower():
-            from pypdf import PdfReader  # lazy import — only used when PDF is uploaded
-
-            reader = PdfReader(file_path)
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        else:
-            return Path(file_path).read_text(errors="replace")
-    except Exception:
-        return ""
+_extract_text = extract_text
+_build_conversation_history_from_messages = build_conversation_history_from_messages
+_select_rag_citations = select_rag_citations
 
 
-def _build_conversation_history_from_messages(
-    messages: list[Message],
-    *,
-    limit: int = CHAT_HISTORY_MESSAGE_LIMIT,
-) -> str | None:
-    if not messages:
-        return None
-
-    history_lines: list[str] = []
-    for message in messages[-limit:]:
-        if not message.content:
-            continue
-        speaker = {
-            "user": "GP",
-            "specialist": "Specialist",
-            "ai": "AI",
-        }.get(message.sender, message.sender.title())
-        history_lines.append(f"{speaker}: {message.content.strip()}")
-
-    return "\n".join(history_lines) if history_lines else None
+def _build_patient_context(chat: Chat, messages: list[Message]) -> dict | None:
+    return build_patient_context(chat, messages)
 
 
-def _select_rag_citations(payload: dict) -> list | None:
-    for key in ("citations_used", "citations"):
-        value = payload.get(key)
-        if isinstance(value, list):
-            return value
-    return None
+def _build_file_context(chat: Chat) -> str | None:
+    return build_file_context(chat, extract_text_fn=_extract_text)
 
 
 async def upload_file(
@@ -491,39 +467,14 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                 ),
             )
 
-            ctx = chat.patient_context or {}
-            patient_context = {
-                **ctx,
-                **({"specialty": chat.specialty} if chat.specialty else {}),
-                **({"severity": chat.severity} if chat.severity else {}),
-            } or None
             message_rows = await db.execute(
                 select(Message)
                 .where(Message.chat_id == chat.id)
                 .order_by(Message.created_at.asc())
             )
-            conversation_history = _build_conversation_history_from_messages(
-                list(message_rows.scalars())
-            )
-            if patient_context is None:
-                patient_context = {}
-            if conversation_history:
-                patient_context["conversation_history"] = conversation_history
-            if not patient_context:
-                patient_context = None
-
-            file_texts = []
-            for attachment in chat.files or []:
-                text = _extract_text(attachment.file_path, attachment.file_type)
-                if text.strip():
-                    file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
-
-            file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
-            if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
-                file_context = (
-                    file_context[:FILE_CONTEXT_CHAR_LIMIT]
-                    + "\n\n[Document truncated to fit context window]"
-                )
+            messages = list(message_rows.scalars())
+            patient_context = _build_patient_context(chat, messages)
+            file_context = _build_file_context(chat)
 
             rag_payload: dict = {
                 "query": content,

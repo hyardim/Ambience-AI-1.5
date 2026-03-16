@@ -44,12 +44,12 @@ export function ChatMessage({
 
   const getAvatarContent = () => {
     if (isGenerating) {
-      return <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />;
+      return <Loader2 className="w-5 h-5 text-[var(--nhs-blue)] animate-spin" />;
     }
     if (message.senderType === 'ai') {
-      return <Bot className="w-5 h-5 text-[#005eb8]" />;
+      return <Bot className="w-5 h-5 text-[var(--nhs-blue)]" />;
     }
-    return <User className="w-5 h-5 text-[#005eb8]" />;
+    return <User className="w-5 h-5 text-[var(--nhs-blue)]" />;
   };
 
   const getSenderLabel = () => {
@@ -106,7 +106,7 @@ export function ChatMessage({
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#005eb8] hover:underline"
+                      className="text-[var(--nhs-blue)] hover:underline"
                     >
                       {c.title || 'Source'}
                     </a>
@@ -133,7 +133,7 @@ export function ChatMessage({
     if (reviewStatus === 'approved') return 'border-l-4 border-[#007f3b]';
     if (reviewStatus === 'rejected' || reviewStatus === 'replaced') return 'border-l-4 border-[#da291c]';
     if (showReviewStatus && !reviewStatus) return 'border-l-4 border-amber-400';
-    return 'border-l-4 border-[#005eb8]';
+    return 'border-l-4 border-[var(--nhs-blue)]';
   };
 
   // Review status badge for AI messages
@@ -221,9 +221,9 @@ export function ChatMessage({
           <div className="whitespace-pre-wrap text-gray-800 leading-relaxed text-sm sm:text-base">
               {isGenerating && !message.content ? (
               <div className="flex items-center gap-1.5 py-1">
-                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce"></span>
               </div>
             ) : (
               message.content
@@ -238,7 +238,7 @@ export function ChatMessage({
                   key={file.id}
                   className="flex items-center gap-3 bg-gray-100 rounded-lg px-4 py-3 hover:bg-gray-200 cursor-pointer transition-colors"
                 >
-                  <FileText className="w-5 h-5 text-[#005eb8]" />
+                  <FileText className="w-5 h-5 text-[var(--nhs-blue)]" />
                   <div>
                     <p className="font-medium text-gray-900 text-sm">{file.name}</p>
                     <p className="text-gray-500 text-xs">{file.size}</p>
@@ -250,8 +250,8 @@ export function ChatMessage({
 
           {/* Guideline reference */}
           {message.guidelineReference && (
-            <div className="mt-4 bg-blue-50 rounded-lg px-4 py-3 border-l-4 border-[#005eb8]">
-              <p className="font-semibold text-[#005eb8] text-sm">{message.guidelineReference.title}</p>
+            <div className="mt-4 bg-blue-50 rounded-lg px-4 py-3 border-l-4 border-[var(--nhs-blue)]">
+              <p className="font-semibold text-[var(--nhs-blue)] text-sm">{message.guidelineReference.title}</p>
               <p className="text-gray-600 text-sm">Reference No: {message.guidelineReference.referenceNo}</p>
               <p className="text-gray-500 text-xs italic mt-1">Last Updated: {message.guidelineReference.lastUpdated}</p>
             </div>
@@ -283,7 +283,7 @@ export function ChatMessage({
                 <button
                   onClick={onApproveWithComment}
                   disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[#005eb8] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 bg-[var(--nhs-blue)] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
                 >
                   <MessageSquare className="w-4 h-4" />
                   Approve with Comment

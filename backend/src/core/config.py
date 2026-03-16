@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     ACCESS_COOKIE_NAME: str = "ambience_access_token"
     REFRESH_COOKIE_NAME: str = "ambience_refresh_token"
     COOKIE_SAMESITE: str = "lax"
-    COOKIE_SECURE: bool = False
+    COOKIE_SECURE: bool = True
     COOKIE_DOMAIN: str | None = None
 
     # File upload limits

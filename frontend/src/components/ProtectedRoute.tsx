@@ -13,7 +13,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex items-center justify-center">
         <div className="text-gray-600 text-lg">Loading...</div>
       </div>
     );

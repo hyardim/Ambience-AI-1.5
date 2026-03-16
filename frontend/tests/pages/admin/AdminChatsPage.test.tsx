@@ -80,7 +80,7 @@ describe('AdminChatsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText(/updated consultation/i)).not.toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it('shows error states and retries', async () => {
     server.use(

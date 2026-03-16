@@ -20,9 +20,9 @@ export function LandingPage() {
   const { isAuthenticated, username, role, logout, isLoading } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5]">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)]">
       {/* Header */}
-      <header className="bg-[#005eb8] shadow-lg">
+      <header className="bg-[var(--nhs-blue)] shadow-lg">
         <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12">
           <div className="flex items-center justify-between h-16">
             <NHSLogo />
@@ -84,9 +84,9 @@ export function LandingPage() {
           {/* GP Portal */}
           <Link
             to="/gp/queries"
-            className="bg-white rounded-2xl shadow-lg p-8 lg:p-10 hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-[#005eb8] hover:scale-[1.02] group"
+            className="bg-white rounded-2xl shadow-lg p-8 lg:p-10 hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-[var(--nhs-blue)] hover:scale-[1.02] group"
           >
-            <div className="flex items-center justify-center w-16 h-16 bg-[#005eb8] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
+            <div className="flex items-center justify-center w-16 h-16 bg-[var(--nhs-blue)] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
               <Stethoscope className="w-8 h-8 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">
@@ -98,7 +98,7 @@ export function LandingPage() {
             <p className="text-sm text-gray-500 mb-3">
               Access: GP or Admin accounts
             </p>
-            <span className="text-[#005eb8] font-medium group-hover:underline">
+            <span className="text-[var(--nhs-blue)] font-medium group-hover:underline">
               Enter as GP →
             </span>
           </Link>
@@ -106,7 +106,7 @@ export function LandingPage() {
           {/* Specialist Portal */}
           <Link
             to="/specialist/queries"
-            className="bg-white rounded-2xl shadow-lg p-8 lg:p-10 hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-[#005eb8] hover:scale-[1.02] group"
+            className="bg-white rounded-2xl shadow-lg p-8 lg:p-10 hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-[var(--nhs-blue)] hover:scale-[1.02] group"
           >
             <div className="flex items-center justify-center w-16 h-16 bg-[#007f3b] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
               <Users className="w-8 h-8 text-white" />
@@ -120,7 +120,7 @@ export function LandingPage() {
             <p className="text-sm text-gray-500 mb-3">
               Access: Specialist or Admin accounts
             </p>
-            <span className="text-[#005eb8] font-medium group-hover:underline">
+            <span className="text-[var(--nhs-blue)] font-medium group-hover:underline">
               Enter as Specialist →
             </span>
           </Link>
@@ -157,7 +157,7 @@ export function LandingPage() {
           </h3>
           <div className="grid md:grid-cols-3 gap-8 lg:gap-10">
             <div className="text-center">
-              <div className="w-12 h-12 bg-[#005eb8] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
+              <div className="w-12 h-12 bg-[var(--nhs-blue)] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
                 1
               </div>
               <h4 className="font-semibold text-gray-900 mb-2 text-lg">GP Submits Query</h4>
@@ -166,7 +166,7 @@ export function LandingPage() {
               </p>
             </div>
             <div className="text-center">
-              <div className="w-12 h-12 bg-[#005eb8] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
+              <div className="w-12 h-12 bg-[var(--nhs-blue)] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
                 2
               </div>
               <h4 className="font-semibold text-gray-900 mb-2 text-lg">AI Provides Guidance</h4>
@@ -175,7 +175,7 @@ export function LandingPage() {
               </p>
             </div>
             <div className="text-center">
-              <div className="w-12 h-12 bg-[#005eb8] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
+              <div className="w-12 h-12 bg-[var(--nhs-blue)] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
                 3
               </div>
               <h4 className="font-semibold text-gray-900 mb-2 text-lg">Specialist Review</h4>
@@ -188,7 +188,7 @@ export function LandingPage() {
 
         {/* Footer links */}
         <div className="mt-12 text-center">
-          <div className="flex items-center justify-center gap-6 text-[#005eb8]">
+          <div className="flex items-center justify-center gap-6 text-[var(--nhs-blue)]">
             <a href="https://www.nice.org.uk/guidance/published?sp=on" className="hover:underline font-medium">NICE Guidelines</a>
             <span className="text-gray-300">|</span>
             <a href="https://www.rheumatology.org.uk/guidelines" className="hover:underline font-medium">BSR Guidelines</a>
