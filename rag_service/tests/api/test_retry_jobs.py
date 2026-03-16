@@ -225,7 +225,7 @@ def test_jobs_status_returns_404_when_missing(client, main_module):
 
 
 def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_module):
-    main_module.search_similar_chunks = MagicMock(
+    main_module.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -246,7 +246,7 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
 
 
 def test_answer_returns_done_stream_when_no_results(client, main_module):
-    main_module.search_similar_chunks = MagicMock(return_value=[])
+    main_module.retrieve_chunks = MagicMock(return_value=[])
 
     resp = client.post(
         "/answer",
@@ -258,7 +258,7 @@ def test_answer_returns_done_stream_when_no_results(client, main_module):
 
 
 def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_module):
-    main_module.search_similar_chunks = MagicMock(
+    main_module.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -288,7 +288,7 @@ def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_modul
 
 
 def test_answer_returns_non_stream_empty_response(client, main_module):
-    main_module.search_similar_chunks = MagicMock(return_value=[])
+    main_module.retrieve_chunks = MagicMock(return_value=[])
 
     resp = client.post(
         "/answer",
@@ -300,7 +300,7 @@ def test_answer_returns_non_stream_empty_response(client, main_module):
 
 
 def test_answer_streams_with_results(client, main_module):
-    main_module.search_similar_chunks = MagicMock(
+    main_module.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -324,7 +324,7 @@ def test_answer_non_retryable_generation_error_returns_500(
     client,
     main_module,
 ):
-    main_module.search_similar_chunks = MagicMock(
+    main_module.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -354,7 +354,7 @@ def test_answer_passes_specialty_to_similarity_search(client, main_module):
             },
         ]
     )
-    main_module.search_similar_chunks = search_mock
+    main_module.retrieve_chunks = search_mock
 
     async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
         return "ok"
@@ -368,8 +368,8 @@ def test_answer_passes_specialty_to_similarity_search(client, main_module):
 
     assert resp.status_code != 500
     search_mock.assert_called_once_with(
-        [0.1],
-        limit=1,
+        "headache",
+        top_k=1,
         specialty="neurology",
     )
 
@@ -384,7 +384,7 @@ def test_revise_passes_specialty_to_similarity_search(client, main_module):
             },
         ]
     )
-    main_module.search_similar_chunks = search_mock
+    main_module.retrieve_chunks = search_mock
 
     async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
         return "ok"
@@ -404,14 +404,14 @@ def test_revise_passes_specialty_to_similarity_search(client, main_module):
 
     assert resp.status_code != 500
     search_mock.assert_called_once_with(
-        [0.1],
-        limit=1,
+        "headache",
+        top_k=1,
         specialty="neurology",
     )
 
 
 def test_revise_streams_with_results(client, main_module):
-    main_module.search_similar_chunks = MagicMock(
+    main_module.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
@@ -441,7 +441,7 @@ def test_revise_non_retryable_generation_error_returns_500(
     client,
     main_module,
 ):
-    main_module.search_similar_chunks = MagicMock(
+    main_module.retrieve_chunks = MagicMock(
         return_value=[
             {
                 "text": "headache guidance",
