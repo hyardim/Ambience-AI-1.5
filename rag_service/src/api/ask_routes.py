@@ -61,5 +61,5 @@ async def ask_route(
         raise HTTPException(status_code=502, detail=f"Retrieval failed: {e}") from e
     except GenerationError as e:
         raise HTTPException(status_code=502, detail=f"Generation failed: {e}") from e
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail="Internal server error") from e

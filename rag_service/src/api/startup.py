@@ -43,7 +43,7 @@ def ensure_schema() -> None:
     try:
         init_db(vector_dim=get_embedding_dimension())
         logger.info("Database schema ready (chunks/documents).")
-    except Exception as exc:  # pragma: no cover - defensive log only
+    except Exception as exc:  # pragma: no cover
         logger.warning("Failed to initialize database: %s", exc)
 
 

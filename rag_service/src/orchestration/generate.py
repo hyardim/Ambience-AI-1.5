@@ -71,7 +71,7 @@ def generate(
         answer = _extract_chat_completion_text(resp.json())
     except GenerationError:
         raise
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:  # pragma: no cover
         raise GenerationError(query=query, message=str(e)) from e
 
     return RAGResponse(answer=answer or "", sources=context, query=query, model=model)

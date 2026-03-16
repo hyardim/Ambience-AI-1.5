@@ -1,9 +1,4 @@
-"""Reusable async streaming generation helper for Ollama.
-
-Yields token strings as they arrive from Ollama's /api/generate endpoint.
-Both the legacy endpoints (/answer, /revise) and any future callers can
-use this to stream LLM output without duplicating chunk-parsing logic.
-"""
+"""Async streaming helper for Ollama."""
 
 from __future__ import annotations
 

@@ -30,7 +30,7 @@ def ask(
         expand_query=expand_query,
     )
     if not context:
-        # Graceful fallback when no supporting evidence is available.
+        # Return a fixed response when retrieval returns no supporting context.
         return RAGResponse(
             answer=(
                 "Sorry, I do not have sufficient supporting sources to answer this "
