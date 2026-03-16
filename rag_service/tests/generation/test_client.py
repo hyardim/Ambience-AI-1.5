@@ -360,6 +360,7 @@ def test_request_chat_completion_sync_wraps_http_errors(monkeypatch) -> None:
     assert exc_info.value.provider == "cloud"
     assert exc_info.value.status_code == 502
 
+
 @pytest.mark.anyio
 async def test_generate_local_answer_maps_request_error(monkeypatch):
     request = client.httpx.Request("POST", "http://local")

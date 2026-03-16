@@ -124,7 +124,12 @@ class TestConfigureLogLevel:
             raising=False,
         )
         _configure_log_level("INFO")
-        monkeypatch.setattr(logging.Logger.manager, "loggerDict", original, raising=False)
+        monkeypatch.setattr(
+            logging.Logger.manager,
+            "loggerDict",
+            original,
+            raising=False,
+        )
 
 
 def test_module_entrypoint_invokes_main() -> None:

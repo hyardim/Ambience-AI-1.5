@@ -129,16 +129,16 @@ def main_app():
         "src.config",
         "src.ingestion.embed",
         "src.ingestion.pipeline",
-            "src.retrieval.vector_store",
-            "src.generation.client",
-            "src.generation.streaming",
-            "src.generation.prompts",
+        "src.retrieval.vector_store",
+        "src.generation.client",
+        "src.generation.streaming",
+        "src.generation.prompts",
         "src.jobs.retry",
-            "src.orchestration.generate",
-            "src.orchestration.pipeline",
-            "src.retrieval.query",
-            "src.api.services",
-            "src.api.app",
+        "src.orchestration.generate",
+        "src.orchestration.pipeline",
+        "src.retrieval.query",
+        "src.api.services",
+        "src.api.app",
         "src.api.routes",
         "src.api.ask_routes",
         "src.main",
@@ -252,17 +252,17 @@ def main_app():
     for _mod_name in (
         "src.ingestion.embed",
         "src.ingestion.pipeline",
-            "src.retrieval.vector_store",
-            "src.generation.client",
-            "src.generation.streaming",
-            "src.generation.prompts",
+        "src.retrieval.vector_store",
+        "src.generation.client",
+        "src.generation.streaming",
+        "src.generation.prompts",
         "src.jobs.retry",
-            "src.orchestration.generate",
-            "src.orchestration.pipeline",
-            "src.retrieval.query",
-            "src.api.services",
-        ):
-            _make_stub(_mod_name)
+        "src.orchestration.generate",
+        "src.orchestration.pipeline",
+        "src.retrieval.query",
+        "src.api.services",
+    ):
+        _make_stub(_mod_name)
 
     sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
         return_value=MagicMock()
@@ -315,9 +315,7 @@ def main_app():
 
     sys.modules["src.retrieval.query"].RetrievalError = _RetrievalError  # type: ignore[attr-defined]
 
-    sys.modules["src.api.services"].retrieve_chunks = MagicMock(
-        return_value=[]
-    )  # type: ignore[attr-defined]
+    sys.modules["src.api.services"].retrieve_chunks = MagicMock(return_value=[])  # type: ignore[attr-defined]
     sys.modules["src.api.services"].filter_chunks = MagicMock(
         side_effect=lambda _query, retrieved: retrieved
     )  # type: ignore[attr-defined]

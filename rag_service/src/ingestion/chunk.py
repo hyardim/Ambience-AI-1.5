@@ -368,9 +368,7 @@ def chunk_section_group(
                 overlap_tokens=overlap_tokens,
             )
             overlap_count = len(overlap_sentences)
-            current_pairs = (
-                current_pairs[-overlap_count:] if overlap_count > 0 else []
-            )
+            current_pairs = current_pairs[-overlap_count:] if overlap_count > 0 else []
         else:
             current_pairs.append((sentence, block))
             i += 1

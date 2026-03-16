@@ -162,8 +162,7 @@ def _validate_token_length(query: str) -> None:
     token_count = len(_ENCODER.encode(query))
     if token_count > max_tokens:
         raise ValueError(
-            f"Query exceeds {max_tokens} token limit "
-            f"({token_count} tokens)"
+            f"Query exceeds {max_tokens} token limit ({token_count} tokens)"
         )
 
 

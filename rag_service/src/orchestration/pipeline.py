@@ -39,9 +39,7 @@ def ask(
             model=getattr(settings, "llm_model", llm_config.llm_model),
         )
 
-    evidence = evidence_level(
-        [{"score": source.rerank_score} for source in context]
-    )
+    evidence = evidence_level([{"score": source.rerank_score} for source in context])
     return generate(
         query=query,
         context=context,

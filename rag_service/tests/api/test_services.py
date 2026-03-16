@@ -107,8 +107,9 @@ def test_retrieve_chunks_uses_shared_retrieval_pipeline(
     assert calls == [("headache", "postgresql://x", 3, "neurology")]
 
 
-def test_filter_chunks_keeps_high_confidence_semantic_hit_without_token_overlap(
-) -> None:
+def test_filter_chunks_keeps_high_confidence_semantic_hit_without_token_overlap() -> (
+    None
+):
     retrieved = [
         {
             "text": "Acetylsalicylic acid may be recommended in select scenarios.",
