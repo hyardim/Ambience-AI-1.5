@@ -2,7 +2,8 @@ from src.utils.cache import CacheKeys, cache_keys
 
 
 def test_chat_list_key_includes_filters():
-    key = cache_keys.chat_list(user_id=3, page=1, page_size=20, status="open", specialty="neuro")
+    key = cache_keys.chat_list(
+        user_id=3, page=1, page_size=20, status="open", specialty="neuro")
     assert key == "cache:user:3:chats:open:neuro:1:20"
 
 

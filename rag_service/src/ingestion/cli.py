@@ -10,6 +10,7 @@ import click
 
 from ..utils.logger import setup_logger
 from .pipeline import run_ingestion
+from .nice_updates import update_nice_guidelines
 
 logger = setup_logger(__name__)
 
@@ -143,6 +144,77 @@ def ingest(
 
     if summary["files_failed"] > 0:
         sys.exit(1)
+
+
+@cli.command("update-nice")
+@click.option(
+    "--raw-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Override data/raw root directory.",
+)
+@click.option(
+    "--db-url",
+    default=None,
+    type=str,
+    help="Postgres connection string. Falls back to DATABASE_URL env var.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Check for updates without downloading or ingesting.",
+)
+@click.option(
+    "--max-files",
+    default=None,
+    type=int,
+    help="Stop after processing N files.",
+)
+@click.option(
+    "--skip-ingest",
+    is_flag=True,
+    default=False,
+    help="Download updates but skip ingestion.",
+)
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Logging level (default: INFO).",
+)
+def update_nice(
+    raw_dir: str | None,
+    db_url: str | None,
+    dry_run: bool,
+    max_files: int | None,
+    skip_ingest: bool,
+    log_level: str,
+) -> None:
+    """Check NICE Syndication API for updated guidelines."""
+    _configure_log_level(log_level)
+
+    resolved_db_url = None
+    if not skip_ingest:
+        resolved_db_url = _resolve_db_url(db_url, dry_run)
+
+    summary = update_nice_guidelines(
+        data_root=Path(raw_dir) if raw_dir else None,
+        db_url=resolved_db_url,
+        dry_run=dry_run,
+        max_files=max_files,
+        ingest=not skip_ingest,
+    )
+
+    click.echo(
+        f"\nNICE update summary:\n"
+        f"  Scanned:   {summary['scanned']}\n"
+        f"  Matched:   {summary['matched']}\n"
+        f"  Updated:   {summary['updated']}\n"
+        f"  Ingested:  {summary.get('ingested', 0)}\n"
+        f"  Skipped:   {summary['skipped']}\n"
+        f"  Failed:    {summary.get('failed', 0)}"
+    )
 
 
 def main() -> None:

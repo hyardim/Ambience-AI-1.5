@@ -22,6 +22,8 @@ help:
 	@echo "  make run-ingest         - Run ingestion pipeline"
 	@echo "                           Required: INPUT=... SOURCE=..."
 	@echo "                           Optional: DRY_RUN=1 DB_URL=... SINCE=YYYY-MM-DD MAX_FILES=N WRITE_DEBUG=1 LOG_LEVEL=..."
+	@echo "  make run-nice-update    - Check NICE API for guideline updates"
+	@echo "                           Optional: DRY_RUN=1 DB_URL=... MAX_FILES=N SKIP_INGEST=1 LOG_LEVEL=... RAW_DIR=..."
 	@echo "  make run-retry-worker   - Start Redis retry worker for /answer and /revise"
 # 	@echo "  make run-query          - Run RAG query"
 
@@ -105,6 +107,15 @@ run-ingest:
 	  $(if $(SINCE),--since $(SINCE)) \
 	  $(if $(MAX_FILES),--max-files $(MAX_FILES)) \
 	  $(if $(WRITE_DEBUG),--write-debug-artifacts)
+
+run-nice-update:
+	python -m src.ingestion.cli update-nice \
+	  $(if $(RAW_DIR),--raw-dir $(RAW_DIR)) \
+	  $(if $(DB_URL),--db-url $(DB_URL)) \
+	  $(if $(DRY_RUN),--dry-run) \
+	  $(if $(MAX_FILES),--max-files $(MAX_FILES)) \
+	  $(if $(SKIP_INGEST),--skip-ingest) \
+	  --log-level $(or $(LOG_LEVEL),INFO)
 
 run-retry-worker:
 	python scripts/run_retry_worker.py
