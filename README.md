@@ -19,6 +19,12 @@ For the service-specific setup and file structure, see
 
 The repo-root compose file is the full product stack.
 
+Before first run, create a root `.env` from the example and set real secrets:
+
+```bash
+cp .env.example .env
+```
+
 ```bash
 docker compose up --build
 ```

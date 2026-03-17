@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     DATABASE_URL: str = (
-        "postgresql://admin:team20_password@db_vector:5432/ambience_knowledge"
+        "postgresql://admin:CHANGE_ME_DB_PASSWORD@db_vector:5432/ambience_knowledge"
     )
     RAG_SERVICE_URL: str = "http://rag_service:8001"
     RAG_REQUEST_TIMEOUT_SECONDS: float = 120.0

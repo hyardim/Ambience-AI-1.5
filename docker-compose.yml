@@ -15,9 +15,9 @@ services:
     container_name: ambience_db
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: team20_password
-      POSTGRES_DB: ambience_knowledge
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-ambience_knowledge}
     ports:
       - "5432:5432"
     volumes:
@@ -41,7 +41,7 @@ services:
       - ./backend/src:/app/src
     environment:
       - PYTHONPATH=/app
-      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - RAG_SERVICE_URL=http://rag_service:8001
       - RAG_REQUEST_TIMEOUT_SECONDS=120
       - REDIS_URL=redis://redis:6379/0
@@ -73,16 +73,16 @@ services:
       - ./rag_service/data:/app/data
       - ./rag_service/configs:/app/configs
     environment:
-      - DATABASE_URL=postgresql://admin:team20_password@db_vector:5432/ambience_knowledge
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - REDIS_URL=redis://redis:6379/0
       # Allow connection to host Ollama (Mac)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=thewindmom/llama3-med42-8b
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
       - LOCAL_LLM_MODEL=thewindmom/llama3-med42-8b
-      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL:-https://aaw0zkgatyq013-8000.proxy.runpod.net/v1}
+      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
-      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY:-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}
+      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY}
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
     
     extra_hosts:
