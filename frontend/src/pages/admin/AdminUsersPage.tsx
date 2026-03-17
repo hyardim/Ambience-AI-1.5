@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, UserX, Save, X } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { StatusBadge } from '../../components/Badges';
 import { adminGetUsers, adminUpdateUser, adminDeactivateUser } from '../../services/api';
 import type { UserProfile } from '../../types/api';
 import type { UserUpdateAdmin } from '../../types/api';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isAbortError } from '../../utils/errors';
 import { coalesce } from '../../utils/value';
 
 export function AdminUsersPage() {
@@ -19,14 +19,22 @@ export function AdminUsersPage() {
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
   const [editForm, setEditForm] = useState<UserUpdateAdmin>({});
   const [saving, setSaving] = useState(false);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   const fetchUsers = useCallback(async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      const data = await adminGetUsers(roleFilter || undefined);
+      const data = await adminGetUsers(roleFilter || undefined, { signal: controller.signal });
       setUsers(data);
     } catch (err) {
+      /* v8 ignore next */
+      if (isAbortError(err)) {
+        return;
+      }
       setError(getErrorMessage(err, 'Failed to load users'));
     } finally {
       setLoading(false);
@@ -35,6 +43,9 @@ export function AdminUsersPage() {
 
   useEffect(() => {
     void fetchUsers();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, [fetchUsers]);
 
   const handleDeactivate = async (userId: number) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, Trash2, Save, X, Eye } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
@@ -9,7 +9,7 @@ import {
   adminGetChat,
 } from '../../services/api';
 import type { AdminChatResponse, BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isAbortError } from '../../utils/errors';
 import { coalesce, orFallback } from '../../utils/value';
 
 export function AdminChatsPage() {
@@ -27,16 +27,25 @@ export function AdminChatsPage() {
   // Detail modal state
   const [detailChat, setDetailChat] = useState<BackendChatWithMessages | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const listRequestControllerRef = useRef<AbortController | null>(null);
+  const detailRequestControllerRef = useRef<AbortController | null>(null);
 
   const fetchChats = useCallback(async () => {
+    listRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    listRequestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
       const data = await adminGetChats({
         status: statusFilter || undefined,
-      });
+      }, { signal: controller.signal });
       setChats(data);
     } catch (err) {
+      /* v8 ignore next */
+      if (isAbortError(err)) {
+        return;
+      }
       setError(getErrorMessage(err, 'Failed to load chats'));
     } finally {
       setLoading(false);
@@ -45,6 +54,10 @@ export function AdminChatsPage() {
 
   useEffect(() => {
     void fetchChats();
+    return () => {
+      listRequestControllerRef.current?.abort();
+      detailRequestControllerRef.current?.abort();
+    };
   }, [fetchChats]);
 
   const handleDelete = async (chatId: number) => {
@@ -84,11 +97,18 @@ export function AdminChatsPage() {
   };
 
   const openDetail = async (chatId: number) => {
+    detailRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    detailRequestControllerRef.current = controller;
     setDetailLoading(true);
     try {
-      const data = await adminGetChat(chatId);
+      const data = await adminGetChat(chatId, { signal: controller.signal });
       setDetailChat(data);
     } catch (err) {
+      /* v8 ignore next */
+      if (isAbortError(err)) {
+        return;
+      }
       setError(getErrorMessage(err, 'Failed to load chat detail'));
     } finally {
       setDetailLoading(false);

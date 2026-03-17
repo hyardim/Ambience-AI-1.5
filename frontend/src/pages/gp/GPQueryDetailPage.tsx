@@ -16,7 +16,7 @@ import {
 } from '../../services/api';
 import type { BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
 import type { Message } from '../../types';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isAbortError } from '../../utils/errors';
 import { orFallback } from '../../utils/value';
 
 export function GPQueryDetailPage() {
@@ -33,6 +33,7 @@ export function GPQueryDetailPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [editMeta, setEditMeta] = useState<ChatUpdateRequest>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
   // Guard: auto-send the draft message from GPNewQueryPage only once
   const draftSentRef = useRef(false);
 
@@ -89,10 +90,13 @@ export function GPQueryDetailPage() {
   const fetchChat = useCallback(async () => {
     /* v8 ignore next */
     if (!queryId) return;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      const found = await getChat(Number(queryId));
+      const found = await getChat(Number(queryId), { signal: controller.signal });
       setChat(found);
       const mapped = found.messages.map(m => toFrontendMessage(m, orFallback(username, 'GP User')));
       // When a draft message is about to be sent, pre-populate the optimistic
@@ -110,7 +114,11 @@ export function GPQueryDetailPage() {
       } else {
         setMessages(mapped);
       }
-    } catch {
+    } catch (error) {
+      /* v8 ignore next */
+      if (isAbortError(error)) {
+        return;
+      }
       setChat(null);
       setError('Failed to load consultation');
     } finally {
@@ -120,6 +128,9 @@ export function GPQueryDetailPage() {
 
   useEffect(() => {
     void fetchChat();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, [fetchChat]);
 
   useEffect(() => {

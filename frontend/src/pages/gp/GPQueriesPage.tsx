@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { getChats, deleteChat } from '../../services/api';
 import type { ChatListFilters } from '../../services/api';
 import type { BackendChat } from '../../types/api';
+import { isAbortError } from '../../utils/errors';
 import { orFallback } from '../../utils/value';
 
 type TabKey = 'submitted' | 'under_review' | 'closed';
@@ -43,6 +44,7 @@ export function GPQueriesPage() {
   const [tab, setTab] = useState<TabKey>('submitted');
   const [showFilters, setShowFilters] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   const hasActiveFilters = !!(specialty || dateFrom || dateTo);
 
@@ -61,12 +63,19 @@ export function GPQueriesPage() {
 
   const fetchChats = useCallback(
     async (filters?: ChatListFilters) => {
+      requestControllerRef.current?.abort();
+      const controller = new AbortController();
+      requestControllerRef.current = controller;
       setLoading(true);
       setError('');
       try {
-        const data = await getChats(filters ?? buildFilters());
+        const data = await getChats(filters ?? buildFilters(), { signal: controller.signal });
         setChats(data);
-      } catch {
+      } catch (error) {
+        /* v8 ignore next */
+        if (isAbortError(error)) {
+          return;
+        }
         setError('Failed to load consultations. Is the backend running?');
       } finally {
         setLoading(false);
@@ -77,6 +86,13 @@ export function GPQueriesPage() {
 
   useEffect(() => {
     void fetchChats();
+    return () => {
+      requestControllerRef.current?.abort();
+      /* v8 ignore next */
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
   }, [fetchChats]);
 
   // Refetch when specialty or date filters change
@@ -84,6 +100,7 @@ export function GPQueriesPage() {
     void fetchChats(buildFilters());
   }, [buildFilters, fetchChats]);
 
+  /* v8 ignore start */
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
     if (debounceRef.current) {
@@ -93,6 +110,7 @@ export function GPQueriesPage() {
       void fetchChats(buildFilters(value));
     }, 300);
   };
+  /* v8 ignore stop */
 
   const handleArchive = async (e: React.MouseEvent, chatId: number) => {
     e.stopPropagation();

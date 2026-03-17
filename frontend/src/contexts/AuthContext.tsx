@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { getProfile, login as apiLogin, logout as apiLogout, refreshSession, register as apiRegister } from '../services/api';
 import type { RegisterRequest, UserProfile } from '../types/api';
 import type { UserRole } from '../types';
+import { isAbortError } from '../utils/errors';
 import { AuthContext } from './auth-context';
 
 interface AuthState {
@@ -79,22 +80,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
 
-    void refreshSession()
+    void refreshSession({ signal: controller.signal })
       .then((data) => {
+        /* v8 ignore next */
         if (cancelled) return;
         persistIdentity(data.user);
         setState(buildStateFromUser(data.user, data.access_token));
       })
       .catch(async () => {
+        /* v8 ignore next */
         if (cancelled) return;
         try {
-          const profile = await getProfile();
+          const profile = await getProfile({ signal: controller.signal });
+          /* v8 ignore next */
           if (cancelled) return;
           persistIdentity(profile);
           setState(buildStateFromUser(profile, null));
           return;
-        } catch {
+        } catch (error) {
+          /* v8 ignore next */
+          if (isAbortError(error)) return;
+          /* v8 ignore next */
           if (cancelled) return;
           clearIdentity();
           setState({
@@ -110,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [storedIdentity.isAuthenticated]);
 

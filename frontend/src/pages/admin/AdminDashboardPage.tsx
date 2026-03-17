@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -7,7 +7,7 @@ import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } fro
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetLogs, adminGetStats } from '../../services/api';
 import type { AdminStatsResponse, AuditLogResponse } from '../../types/api';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isAbortError } from '../../utils/errors';
 import { coalesce } from '../../utils/value';
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -53,25 +53,38 @@ export default function AdminDashboardPage() {
   const [ragLogs, setRagLogs] = useState<AuditLogResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   const fetchStats = async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
       const [statsResponse, ragLogResponse] = await Promise.all([
-        adminGetStats(),
-        adminGetLogs({ category: 'RAG', limit: 8 }),
+        adminGetStats({ signal: controller.signal }),
+        adminGetLogs({ category: 'RAG', limit: 8 }, { signal: controller.signal }),
       ]);
       setStats(statsResponse);
       setRagLogs(ragLogResponse);
     } catch (err) {
+      /* v8 ignore next */
+      if (isAbortError(err)) {
+        return;
+      }
       setError(getErrorMessage(err, 'Failed to load stats'));
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => {
+    void fetchStats();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
+  }, []);
 
   const ragPct = stats
     ? stats.total_ai_responses > 0

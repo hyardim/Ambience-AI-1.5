@@ -88,9 +88,11 @@ describe('GPNewQueryPage', () => {
 
     // The draft message should be passed via router state so the detail page
     // can open SSE before sending.
-    expect(captureLocationState).toHaveBeenLastCalledWith(
-      expect.objectContaining({ draftMessage: 'Patient has persistent headaches' }),
-    );
+    await waitFor(() => {
+      expect(captureLocationState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ draftMessage: 'Patient has persistent headaches' }),
+      );
+    });
   });
 
   it('keeps the draft message focused on the clinical question when patient age is provided', async () => {
@@ -113,9 +115,11 @@ describe('GPNewQueryPage', () => {
       expect(screen.getByText('Query Detail')).toBeInTheDocument();
     });
 
-    expect(captureLocationState).toHaveBeenLastCalledWith(
-      expect.objectContaining({ draftMessage: 'Headache' }),
-    );
+    await waitFor(() => {
+      expect(captureLocationState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ draftMessage: 'Headache' }),
+      );
+    });
   });
 
   it('shows error on API failure', async () => {

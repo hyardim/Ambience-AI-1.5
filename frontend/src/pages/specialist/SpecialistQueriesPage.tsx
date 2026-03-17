@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { Header } from '../../components/Header';
@@ -6,6 +6,7 @@ import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/useAuth';
 import { getSpecialistQueue, getAssignedChats } from '../../services/api';
 import type { BackendChat } from '../../types/api';
+import { isAbortError } from '../../utils/errors';
 import { orFallback } from '../../utils/value';
 
 type TabKey = 'queue' | 'assigned';
@@ -22,22 +23,33 @@ export function SpecialistQueriesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    fetchAll();
+    void fetchAll();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, []);
 
   const fetchAll = async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
       const [queue, assigned] = await Promise.all([
-        getSpecialistQueue(),
-        getAssignedChats(),
+        getSpecialistQueue({ signal: controller.signal }),
+        getAssignedChats({ signal: controller.signal }),
       ]);
       setQueueChats(queue);
       setAssignedChatsState(assigned);
-    } catch {
+    } catch (error) {
+      /* v8 ignore next */
+      if (isAbortError(error)) {
+        return;
+      }
       setError('Failed to load chats. Is the backend running?');
     } finally {
       setLoading(false);

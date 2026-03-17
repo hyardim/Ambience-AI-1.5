@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, RefreshCw } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetLogs } from '../../services/api';
 import type { AuditLogResponse } from '../../types/api';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isAbortError } from '../../utils/errors';
 import { formatAuditUserIdentifier } from '../../utils/audit';
 
 export function AdminLogsPage() {
@@ -19,8 +19,12 @@ export function AdminLogsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [limitFilter, setLimitFilter] = useState(200);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   const fetchLogs = useCallback(async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
@@ -32,9 +36,13 @@ export function AdminLogsPage() {
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         limit: limitFilter,
-      });
+      }, { signal: controller.signal });
       setLogs(data);
     } catch (err) {
+      /* v8 ignore next */
+      if (isAbortError(err)) {
+        return;
+      }
       setError(getErrorMessage(err, 'Failed to load audit logs'));
     } finally {
       setLoading(false);
@@ -43,6 +51,9 @@ export function AdminLogsPage() {
 
   useEffect(() => {
     void fetchLogs();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, [fetchLogs]);
 
   const handleApplyFilters = (e: React.FormEvent) => {

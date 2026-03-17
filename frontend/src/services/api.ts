@@ -23,6 +23,9 @@ import { setOptionalSearchParam } from '../utils/url';
 /* v8 ignore next */
 const API_BASE = import.meta.env.MODE === 'test' ? '' : import.meta.env.VITE_API_URL || '';
 type ApiRequestInit = RequestInit & { skipAuthRefresh?: boolean };
+export interface RequestOptions {
+  signal?: AbortSignal;
+}
 let refreshInFlight: Promise<boolean> | null = null;
 
 function redirectToLogin(): void {
@@ -156,18 +159,20 @@ export async function logout(): Promise<{ message?: string; success?: boolean }>
   return handleResponse<{ message?: string; success?: boolean }>(res);
 }
 
-export async function refreshSession(): Promise<LoginResponse> {
+export async function refreshSession(options: RequestOptions = {}): Promise<LoginResponse> {
   const res = await apiFetch(`${API_BASE}/auth/refresh`, {
     method: 'POST',
     skipAuthRefresh: true,
+    signal: options.signal,
   });
   return handleResponse<LoginResponse>(res);
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────
 
-export async function getProfile(): Promise<UserProfile> {
+export async function getProfile(options: RequestOptions = {}): Promise<UserProfile> {
   const res = await apiFetch(`${API_BASE}/auth/me`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<UserProfile>(res);
@@ -194,7 +199,10 @@ export interface ChatListFilters {
   date_to?: string;
 }
 
-export async function getChats(filters: ChatListFilters = {}): Promise<BackendChat[]> {
+export async function getChats(
+  filters: ChatListFilters = {},
+  options: RequestOptions = {},
+): Promise<BackendChat[]> {
   const params = new URLSearchParams();
   params.set('skip', String(filters.skip ?? 0));
   params.set('limit', String(filters.limit ?? 100));
@@ -204,13 +212,18 @@ export async function getChats(filters: ChatListFilters = {}): Promise<BackendCh
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
   const res = await apiFetch(`${API_BASE}/chats/?${params}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getChat(chatId: number): Promise<BackendChatWithMessages> {
+export async function getChat(
+  chatId: number,
+  options: RequestOptions = {},
+): Promise<BackendChatWithMessages> {
   const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -279,22 +292,32 @@ export async function sendMessage(
 
 // ── Specialist ───────────────────────────────────────────────────────────
 
-export async function getSpecialistQueue(): Promise<BackendChat[]> {
+export async function getSpecialistQueue(
+  options: RequestOptions = {},
+): Promise<BackendChat[]> {
   const res = await apiFetch(`${API_BASE}/specialist/queue`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getAssignedChats(): Promise<BackendChat[]> {
+export async function getAssignedChats(
+  options: RequestOptions = {},
+): Promise<BackendChat[]> {
   const res = await apiFetch(`${API_BASE}/specialist/assigned`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getSpecialistChatDetail(chatId: number): Promise<BackendChatWithMessages> {
+export async function getSpecialistChatDetail(
+  chatId: number,
+  options: RequestOptions = {},
+): Promise<BackendChatWithMessages> {
   const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -400,10 +423,14 @@ export async function markAllNotificationsRead(): Promise<{ marked_read: number 
 
 // ── Admin: Users ─────────────────────────────────────────────────────────
 
-export async function adminGetUsers(role?: string): Promise<UserProfile[]> {
+export async function adminGetUsers(
+  role?: string,
+  options: RequestOptions = {},
+): Promise<UserProfile[]> {
   const params = new URLSearchParams();
   if (role) params.set('role', role);
   const res = await apiFetch(`${API_BASE}/admin/users?${params}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<UserProfile[]>(res);
@@ -445,7 +472,7 @@ export async function adminGetChats(filters?: {
   specialist_id?: number;
   skip?: number;
   limit?: number;
-}): Promise<AdminChatResponse[]> {
+}, options: RequestOptions = {}): Promise<AdminChatResponse[]> {
   const params = new URLSearchParams();
   if (filters?.status) params.set('status', filters.status);
   if (filters?.specialty) params.set('specialty', filters.specialty);
@@ -455,13 +482,18 @@ export async function adminGetChats(filters?: {
   /* v8 ignore next */
   if (filters?.limit) params.set('limit', String(filters.limit));
   const res = await apiFetch(`${API_BASE}/admin/chats?${params}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<AdminChatResponse[]>(res);
 }
 
-export async function adminGetChat(chatId: number): Promise<BackendChatWithMessages> {
+export async function adminGetChat(
+  chatId: number,
+  options: RequestOptions = {},
+): Promise<BackendChatWithMessages> {
   const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -489,8 +521,13 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
 
 // ── Admin: Dashboard Stats ───────────────────────────────────────────────
 
-export async function adminGetStats(): Promise<AdminStatsResponse> {
-  const res = await apiFetch(`${API_BASE}/admin/stats`, { headers: authHeaders() });
+export async function adminGetStats(
+  options: RequestOptions = {},
+): Promise<AdminStatsResponse> {
+  const res = await apiFetch(`${API_BASE}/admin/stats`, {
+    signal: options.signal,
+    headers: authHeaders(),
+  });
   return handleResponse<AdminStatsResponse>(res);
 }
 
@@ -504,7 +541,7 @@ export async function adminGetLogs(filters?: {
   date_from?: string;
   date_to?: string;
   limit?: number;
-}): Promise<AuditLogResponse[]> {
+}, options: RequestOptions = {}): Promise<AuditLogResponse[]> {
   const params = new URLSearchParams();
   setOptionalSearchParam(params, 'action', filters?.action);
   setOptionalSearchParam(params, 'category', filters?.category);
@@ -514,6 +551,7 @@ export async function adminGetLogs(filters?: {
   setOptionalSearchParam(params, 'date_to', filters?.date_to);
   setOptionalSearchParam(params, 'limit', filters?.limit);
   const res = await apiFetch(`${API_BASE}/admin/logs?${params}`, {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<AuditLogResponse[]>(res);

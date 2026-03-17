@@ -3,9 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from datetime import datetime
-from pathlib import Path, PurePosixPath
 from typing import Optional
 
 import httpx
@@ -15,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.db.models import Chat, ChatStatus, FileAttachment, Message, User
+from src.db.models import Chat, ChatStatus, Message, User
 from src.db.session import AsyncSessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
@@ -25,6 +23,7 @@ from src.schemas.chat import (
     ChatWithMessages,
     FileAttachmentResponse,
 )
+from src.services import chat_uploads
 from src.services._mappers import chat_to_response, msg_to_response
 from src.services.cache_invalidation import (
     invalidate_admin_chat_caches_sync,
@@ -32,6 +31,11 @@ from src.services.cache_invalidation import (
     invalidate_chat_related_async,
     invalidate_chat_related_sync,
     invalidate_specialist_lists_sync,
+)
+from src.services.chat_uploads import (
+    sanitise_filename,
+    upload_chat_file,
+    validate_upload_extension,
 )
 from src.services.rag_context import (
     build_conversation_history_from_messages,
@@ -44,15 +48,9 @@ from src.utils.cache import cache, cache_keys
 from src.utils.sse import SSEEvent, chat_event_bus
 
 RAG_SERVICE_URL = settings.RAG_SERVICE_URL
-UPLOAD_DIR = Path(settings.UPLOAD_DIR)
-MAX_FILE_SIZE_BYTES = settings.MAX_FILE_SIZE_BYTES
-MAX_FILES_PER_CHAT = settings.MAX_FILES_PER_CHAT
-ALLOWED_UPLOAD_EXTENSIONS = {ext.lower() for ext in settings.ALLOWED_UPLOAD_EXTENSIONS}
 RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
 CHAT_RAG_TOP_K = settings.CHAT_RAG_TOP_K
-
-# Regex for sanitising filenames: keep alphanumerics, hyphens, underscores, dots
-_SAFE_FILENAME_RE = re.compile(r"[^\w\-.]", re.ASCII)
+UPLOAD_DIR = chat_uploads.UPLOAD_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -293,35 +291,11 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _sanitise_filename(raw: str) -> str:
-    """Strip path components and unsafe characters from a user-supplied filename."""
-    # Remove any directory traversal components
-    name = PurePosixPath(raw).name
-    if not name:
-        name = "upload"
-    # Replace unsafe characters
-    name = _SAFE_FILENAME_RE.sub("_", name)
-    # Collapse repeated underscores and limit length
-    name = re.sub(r"_+", "_", name).strip("_")
-    return name[:255] if name else "upload"
-
-
-def _validate_upload_extension(filename: str) -> None:
-    """Raise 415 if the file extension is not in the allow-list."""
-    ext = PurePosixPath(filename).suffix.lower()
-    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
-        raise HTTPException(
-            status_code=415,
-            detail=(
-                f"File type '{ext or '(none)'}' is not allowed. "
-                f"Accepted types: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}"
-            ),
-        )
-
-
 _extract_text = extract_text
 _build_conversation_history_from_messages = build_conversation_history_from_messages
 _select_rag_citations = select_rag_citations
+_sanitise_filename = sanitise_filename
+_validate_upload_extension = validate_upload_extension
 
 
 def _build_patient_context(chat: Chat, messages: list[Message]) -> dict | None:
@@ -338,80 +312,8 @@ async def upload_file(
     chat_id: int,
     file: UploadFile,
 ) -> FileAttachmentResponse:
-    from src.core.chat_policy import can_upload_to_chat
-
-    chat = chat_repository.get(db, chat_id)
-    if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
-
-    if not can_upload_to_chat(user, chat):
-        raise HTTPException(
-            status_code=403, detail="Not authorised to upload to this chat"
-        )
-
-    safe_name = _sanitise_filename(file.filename or "upload")
-    _validate_upload_extension(safe_name)
-
-    dest_dir = UPLOAD_DIR / str(chat_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / safe_name
-
-    contents = await file.read()
-
-    if len(contents) > MAX_FILE_SIZE_BYTES:
-        limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
-        raise HTTPException(
-            status_code=413,
-            detail=f"File exceeds the {limit_mb} MB limit ({len(contents) // 1024} KB uploaded).",
-        )
-
-    existing_count = (
-        db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
-    )
-    if existing_count >= MAX_FILES_PER_CHAT:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Chat already has {existing_count} files. Maximum is {MAX_FILES_PER_CHAT}.",
-        )
-
-    dest_path.write_bytes(contents)
-
-    attachment = FileAttachment(
-        filename=safe_name,
-        file_path=str(dest_path),
-        file_type=file.content_type,
-        file_size=len(contents),
-        chat_id=chat_id,
-        uploader_id=user.id,
-    )
-    db.add(attachment)
-    db.commit()
-    db.refresh(attachment)
-
-    audit_repository.log(
-        db,
-        user_id=user.id,
-        action="UPLOAD_FILE",
-        details=f"Uploaded {file.filename} to chat {chat_id}",
-        invalidate_admin_cache=False,
-    )
-    await cache.delete_pattern(
-        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
-    )
-    await cache.delete_pattern(
-        cache_keys.chat_list_pattern(chat.user_id),
-        user_id=chat.user_id,
-        resource="chat_list",
-    )
-    await cache.delete_pattern(
-        cache_keys.admin_audit_logs_pattern(), resource="admin_audit_logs"
-    )
-    await invalidate_chat_related_async(
-        chat_id=chat_id,
-        user_id=chat.user_id,
-        specialty=chat.specialty,
-        specialist_id=chat.specialist_id,
-    )
+    chat_uploads.UPLOAD_DIR = UPLOAD_DIR
+    attachment = await upload_chat_file(db, user, chat_id, file)
 
     return FileAttachmentResponse(
         id=attachment.id,

@@ -74,8 +74,16 @@ exclude = ["tests"]
 [[tool.mypy.overrides]]
 module = [
   "src.db.*",
-  "src.repositories.*",
-  "src.services.*",
+  "src.repositories.chat_repository",
+  "src.repositories.notification_repository",
+  "src.services._mappers",
+  "src.services.admin_service",
+  "src.services.auth_service",
+  "src.services.chat_service",
+  "src.services.notification_service",
+  "src.services.rag_context",
+  "src.services.specialist_queries",
+  "src.services.specialist_review",
   "src.utils.cache",
 ]
 ignore_errors = true

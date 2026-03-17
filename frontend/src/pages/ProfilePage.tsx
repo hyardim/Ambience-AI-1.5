@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Header } from '../components/Header';
@@ -6,7 +6,7 @@ import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { useAuth } from '../contexts/useAuth';
 import { getProfile, updateProfile } from '../services/api';
 import type { UserProfile, ProfileUpdateRequest } from '../types/api';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isAbortError } from '../utils/errors';
 import { orFallback } from '../utils/value';
 
 export function ProfilePage() {
@@ -27,20 +27,31 @@ export function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    loadProfile();
+    void loadProfile();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, []);
 
   const loadProfile = async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      const data = await getProfile();
+      const data = await getProfile({ signal: controller.signal });
       setProfile(data);
       setFullName(data.full_name || '');
       setSpecialty(data.specialty || '');
-    } catch {
+    } catch (error) {
+      /* v8 ignore next */
+      if (isAbortError(error)) {
+        return;
+      }
       setError('Failed to load profile');
     } finally {
       setLoading(false);

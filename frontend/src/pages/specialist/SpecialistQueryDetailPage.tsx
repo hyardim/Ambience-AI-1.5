@@ -1,13 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, CheckCircle, AlertTriangle,
-  Loader2, UserPlus, MessageSquare, PenLine, Lock,
-} from 'lucide-react';
-import { Header } from '../../components/Header';
-import { ChatMessage } from '../../components/ChatMessage';
-import { ChatInput } from '../../components/ChatInput';
-import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/useAuth';
 import { useChatStream } from '../../hooks/useChatStream';
 import { toFrontendMessage } from '../../utils/messageMapping';
@@ -22,10 +14,11 @@ import {
 } from '../../services/api';
 import type { BackendChatWithMessages } from '../../types/api';
 import type { Message } from '../../types';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isAbortError } from '../../utils/errors';
 import { orFallback } from '../../utils/value';
-import { filesFromInput, runUnlessSilent } from '../../utils/control';
+import { runUnlessSilent } from '../../utils/control';
 import { getCloseReviewTitle, getTerminalConsultationState } from '../../utils/specialist';
+import { SpecialistQueryDetailView } from './SpecialistQueryDetailView';
 
 export function SpecialistQueryDetailPage() {
   const { username, logout } = useAuth();
@@ -55,10 +48,10 @@ export function SpecialistQueryDetailPage() {
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   // ── Streaming state machine ────────────────────────────────────────────
   const refreshData = useCallback(async () => {
-    /* v8 ignore next */
     /* v8 ignore next */
     if (!queryId) return;
     try {
@@ -69,7 +62,6 @@ export function SpecialistQueryDetailPage() {
       setMyUserId(profile.id);
       setChat(chatData);
       setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
-    /* v8 ignore next */
     } catch { /* silent refresh */ }
   }, [queryId, username]);
 
@@ -80,22 +72,28 @@ export function SpecialistQueryDetailPage() {
 
   const loadData = useCallback(async (options?: { silent?: boolean }) => {
     /* v8 ignore next */
-    /* v8 ignore next */
     if (!queryId) return;
     const isSilent = options?.silent;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     runUnlessSilent(isSilent, () => {
       setLoading(true);
       setError('');
     });
     try {
       const [profile, chatData] = await Promise.all([
-        getProfile(),
-        getSpecialistChatDetail(Number(queryId)),
+        getProfile({ signal: controller.signal }),
+        getSpecialistChatDetail(Number(queryId), { signal: controller.signal }),
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
       setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
     } catch (err) {
+      /* v8 ignore next */
+      if (isAbortError(err)) {
+        return;
+      }
       runUnlessSilent(isSilent, () => {
         setError(getErrorMessage(err, 'Failed to load consultation'));
       });
@@ -109,6 +107,9 @@ export function SpecialistQueryDetailPage() {
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
     void loadData();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, [loadData]);
 
   useEffect(() => {
@@ -343,440 +344,82 @@ export function SpecialistQueryDetailPage() {
   const aiMessages = messages.filter(m => m.senderType === 'ai');
   const anyGenerating = aiMessages.some(m => m.isGenerating);
   const allAIReviewed = aiMessages.length > 0 && unreviewedAIIds.size === 0 && !anyGenerating;
-  const closeReviewTitle = getCloseReviewTitle(anyGenerating, allAIReviewed);
+  const closeReviewTitle = getCloseReviewTitle(anyGenerating, allAIReviewed) ?? '';
   const terminalState = getTerminalConsultationState(chatStatus);
-  const TerminalStatusIcon = terminalState.icon;
-
-  const formatSpecialty = (s: string | null) =>
-    s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
-
-  // ── Loading / not-found states ───────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-        <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
-        </main>
-      </div>
-    );
-  }
-
-  if (!chat) {
-    return (
-      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-        <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Query not found</h1>
-            {error && <p className="text-red-600 mb-4">{error}</p>}
-            <button
-              onClick={() => navigate('/specialist/queries')}
-              className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
-            >
-              Back to Queries
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // ── Render ───────────────────────────────────────────────────
-
   return (
-    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-      <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
-
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/specialist/queries')}
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          Back to Queries
-        </button>
-
-        <div className="bg-white rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
-          {/* Query Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div className="flex-1">
-                <h1 className="text-xl font-bold text-gray-900 mb-2">
-                  {chat.title || 'Untitled Consultation'}
-                </h1>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                  <span className="capitalize">{formatSpecialty(chat.specialty)}</span>
-                  <span>·</span>
-                  <span>
-                    {new Date(chat.created_at).toLocaleDateString('en-GB', {
-                      day: 'numeric', month: 'short', year: 'numeric',
-                    })}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {chat.severity && <SeverityBadge severity={chat.severity} />}
-                <StatusBadge status={chat.status} />
-              </div>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
-            )}
-
-            {/* Action area */}
-            <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200">
-              {/* Assign button */}
-              {canAssign && (
-                <button
-                  onClick={handleAssign}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-4 py-2 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
-                >
-                  <UserPlus className="w-5 h-5" />
-                  {actionLoading ? 'Assigning…' : 'Assign to Me'}
-                </button>
-              )}
-
-              {/* Hint when reviewing — actions are on messages */}
-              {canReview && (
-                <>
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 bg-gray-50 border border-gray-200">
-                    Review actions are available on each AI response below.
-                  </div>
-                  {/* v8 ignore next */}
-                  <button
-                    onClick={() => setShowCloseConfirm(true)}
-                    disabled={actionLoading || !allAIReviewed}
-                    title={closeReviewTitle}
-                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Lock className="w-5 h-5" />
-                    Close &amp; Approve Consultation
-                  </button>
-                </>
-              )}
-
-              {/* Terminal status banner */}
-              {isTerminal && (
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${terminalState.className}`}>
-                  <TerminalStatusIcon className="w-5 h-5" />
-                  {terminalState.label}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {messages.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No messages yet.</p>
-            ) : (
-              messages.map(message => {
-                const isUnreviewedAI = canReview && unreviewedAIIds.has(message.id);
-
-                return (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    isOwnMessage={message.senderType === 'specialist'}
-                    showReviewStatus={canReview || isTerminal}
-                    showReviewActions={isUnreviewedAI}
-                    onApprove={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowApproveConfirm(true);
-                    }}
-                    onApproveWithComment={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowApproveWithCommentModal(true);
-                    }}
-                    onRequestChanges={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowRejectModal(true);
-                    }}
-                    onManualResponse={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowManualResponseModal(true);
-                    }}
-                    actionLoading={actionLoading}
-                  />
-                );
-              })
-            )}
-            {hasPendingAIResponse && (
-              <div className="flex gap-4">
-                <div className="shrink-0">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[var(--nhs-blue)] animate-spin" />
-                  </div>
-                </div>
-                <div className="flex-1 max-w-3xl">
-                  <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
-                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[var(--nhs-blue)] shadow-sm">
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* All reviewed — bottom close banner */}
-          {canReview && allAIReviewed && (
-            <div className="border-t border-gray-200 bg-green-50 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
-                <CheckCircle className="w-5 h-5" />
-                All AI responses have been reviewed.
-              </div>
-              <button
-                onClick={() => setShowCloseConfirm(true)}
-                disabled={actionLoading}
-                className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
-              >
-                <Lock className="w-5 h-5" />
-                Close &amp; Approve Consultation
-              </button>
-            </div>
-          )}
-
-          {/* Chat Input (disabled for terminal states) */}
-          {!isTerminal && (
-            <div className="border-t border-gray-200 p-4">
-              <ChatInput
-                onSendMessage={handleSendMessage}
-                placeholder="Add a comment or ask for clarification..."
-              />
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Approve Confirmation Modal */}
-      {showApproveConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[#007f3b] mb-4">
-              <CheckCircle className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Approve Response</h2>
-            </div>
-            <p className="text-gray-600 mb-6">
-              By approving, you confirm that the AI-generated response is clinically accurate
-              and appropriate to send to the GP.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowApproveConfirm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApprove}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
-              >
-                {actionLoading ? 'Approving…' : 'Confirm Approval'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Approve with Comment Modal */}
-      {showApproveWithCommentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[var(--nhs-blue)] mb-4">
-              <MessageSquare className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Approve with Comment</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Your comment will be sent as a message to the GP before the consultation is approved.
-            </p>
-            <textarea
-              value={approveComment}
-              onChange={(e) => setApproveComment(e.target.value)}
-              rows={4}
-              autoFocus
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none mb-6"
-              placeholder="Add your comment for the GP..."
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowApproveWithCommentModal(false);
-                  setApproveComment('');
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApproveWithComment}
-                disabled={!approveComment.trim() || actionLoading}
-                className="px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Approving…' : 'Send & Approve'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reject Modal */}
-      {showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-amber-600 mb-4">
-              <AlertTriangle className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Request Changes</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Please describe what changes are needed to the AI response:
-            </p>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none mb-6"
-              placeholder="Describe the required changes..."
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowRejectModal(false);
-                  setRejectReason('');
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRequestChanges}
-                disabled={!rejectReason.trim() || actionLoading}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Submitting…' : 'Submit Feedback'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Response Modal */}
-      {showManualResponseModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-purple-600 mb-4">
-              <PenLine className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Manual Response</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              The AI response will be rejected. Type your replacement response below —
-              it will be sent to the GP as a specialist message.
-            </p>
-            <textarea
-              value={manualResponseContent}
-              onChange={(e) => setManualResponseContent(e.target.value)}
-              rows={6}
-              autoFocus
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-              placeholder="Type your replacement response..."
-            />
-            <div className="mt-4 mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sources
-              </label>
-              <textarea
-                value={manualResponseSources}
-                onChange={(e) => setManualResponseSources(e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                placeholder="Optional. Add one source per line."
-              />
-            </div>
-            <div className="mt-4 mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Attach files
-              </label>
-              {/* v8 ignore next */}
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.txt,.md,.rtf"
-                onChange={(e) => setManualResponseFiles(filesFromInput(e.target.files))}
-                className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:font-medium file:text-purple-700 hover:file:bg-purple-100"
-              />
-              {manualResponseFiles.length > 0 && (
-                <p className="mt-2 text-sm text-gray-500">
-                  {manualResponseFiles.length} file(s) will be uploaded to this chat before the manual response is sent.
-                </p>
-              )}
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowManualResponseModal(false);
-                  setManualResponseContent('');
-                  setManualResponseSources('');
-                  setManualResponseFiles([]);
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleManualResponse}
-                disabled={!manualResponseContent.trim() || actionLoading}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Sending…' : 'Send Manual Response'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Close & Approve Confirmation Modal */}
-      {showCloseConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[#007f3b] mb-4">
-              <Lock className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Close & Approve Consultation</h2>
-            </div>
-            <p className="text-gray-600 mb-6">
-              This will close the consultation and mark it as approved. The GP will be
-              notified that the review is complete. This action cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowCloseConfirm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCloseAndApprove}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
-              >
-                {actionLoading ? 'Closing…' : 'Confirm Close & Approve'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    <SpecialistQueryDetailView
+      username={username}
+      logout={logout}
+      chat={chat}
+      messages={messages}
+      loading={loading}
+      error={error}
+      actionLoading={actionLoading}
+      canAssign={canAssign}
+      canReview={canReview}
+      isTerminal={isTerminal}
+      hasPendingAIResponse={hasPendingAIResponse}
+      allAIReviewed={allAIReviewed}
+      closeReviewTitle={closeReviewTitle}
+      terminalState={terminalState}
+      unreviewedAIIds={unreviewedAIIds}
+      approveComment={approveComment}
+      rejectReason={rejectReason}
+      manualResponseContent={manualResponseContent}
+      manualResponseSources={manualResponseSources}
+      manualResponseFiles={manualResponseFiles}
+      showApproveConfirm={showApproveConfirm}
+      showApproveWithCommentModal={showApproveWithCommentModal}
+      showRejectModal={showRejectModal}
+      showManualResponseModal={showManualResponseModal}
+      showCloseConfirm={showCloseConfirm}
+      messagesEndRef={messagesEndRef}
+      onBack={() => navigate('/specialist/queries')}
+      onAssign={handleAssign}
+      onApprove={handleApprove}
+      onApproveCommentChange={setApproveComment}
+      onApproveWithComment={handleApproveWithComment}
+      onRejectReasonChange={setRejectReason}
+      onRequestChanges={handleRequestChanges}
+      onManualResponseContentChange={setManualResponseContent}
+      onManualResponseSourcesChange={setManualResponseSources}
+      onManualResponseFilesChange={setManualResponseFiles}
+      onManualResponse={handleManualResponse}
+      onSendMessage={handleSendMessage}
+      onOpenApproveConfirm={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowApproveConfirm(true);
+      }}
+      onOpenApproveWithComment={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowApproveWithCommentModal(true);
+      }}
+      onOpenRequestChanges={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowRejectModal(true);
+      }}
+      onOpenManualResponse={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowManualResponseModal(true);
+      }}
+      onCloseAndApprove={handleCloseAndApprove}
+      onCloseApproveConfirm={() => setShowApproveConfirm(false)}
+      onCloseApproveWithComment={() => {
+        setShowApproveWithCommentModal(false);
+        setApproveComment('');
+      }}
+      onCloseRejectModal={() => {
+        setShowRejectModal(false);
+        setRejectReason('');
+      }}
+      onCloseManualResponseModal={() => {
+        setShowManualResponseModal(false);
+        setManualResponseContent('');
+        setManualResponseSources('');
+        setManualResponseFiles([]);
+      }}
+      onOpenCloseConfirm={() => setShowCloseConfirm(true)}
+      onCloseCloseConfirm={() => setShowCloseConfirm(false)}
+    />
   );
 }
