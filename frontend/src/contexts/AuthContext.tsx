@@ -84,25 +84,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void refreshSession({ signal: controller.signal })
       .then((data) => {
-        /* v8 ignore next */
         if (cancelled) return;
         persistIdentity(data.user);
         setState(buildStateFromUser(data.user, data.access_token));
       })
       .catch(async () => {
-        /* v8 ignore next */
         if (cancelled) return;
         try {
           const profile = await getProfile({ signal: controller.signal });
-          /* v8 ignore next */
           if (cancelled) return;
           persistIdentity(profile);
           setState(buildStateFromUser(profile, null));
           return;
         } catch (error) {
-          /* v8 ignore next */
           if (isAbortError(error)) return;
-          /* v8 ignore next */
           if (cancelled) return;
           clearIdentity();
           setState({

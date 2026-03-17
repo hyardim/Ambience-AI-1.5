@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '@test/mocks/server';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { useAuth } from '@/contexts/useAuth';
 import type { RegisterRequest } from '@/types/api';
+import * as api from '@/services/api';
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -21,6 +22,10 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('AuthContext', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('resolves to unauthenticated when no token stored', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -140,6 +145,40 @@ describe('AuthContext', () => {
     expect(profileCalls).toBe(0);
   });
 
+  it('does not update state after unmount when refresh succeeds late', async () => {
+    const refreshGate = deferred<void>();
+    const refreshSpy = vi.spyOn(api, 'refreshSession').mockImplementationOnce(async () => {
+      await refreshGate.promise;
+      return {
+        access_token: 'late-token',
+        token_type: 'bearer',
+        user: {
+          id: 1,
+          email: 'stored@example.com',
+          full_name: 'Late User',
+          role: 'gp',
+          specialty: null,
+          is_active: true,
+        },
+      };
+    });
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+
+    const { result, unmount } = renderHook(() => useAuth(), { wrapper });
+    unmount();
+    refreshGate.resolve();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.username).toBe('Stored User');
+    expect(localStorage.getItem('username')).toBe('Stored User');
+    expect(refreshSpy).toHaveBeenCalled();
+  });
+
   it('does not update state after unmount during profile fallback', async () => {
     const profileGate = deferred<void>();
     localStorage.setItem('username', 'Stored User');
@@ -174,6 +213,68 @@ describe('AuthContext', () => {
     });
 
     expect(localStorage.getItem('username')).not.toBe('Recovered User');
+  });
+
+  it('silently ignores aborted profile fallback requests', async () => {
+    const profileGate = deferred<void>();
+    const refreshSpy = vi.spyOn(api, 'refreshSession').mockRejectedValueOnce(new Error('refresh failed'));
+    const profileSpy = vi.spyOn(api, 'getProfile').mockImplementationOnce(async () => {
+      await profileGate.promise;
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+
+    const { result, unmount } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    unmount();
+    profileGate.resolve();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.username).toBe('Stored User');
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(profileSpy).toHaveBeenCalled();
+  });
+
+  it('does not update state when profile fallback succeeds after logical cancellation', async () => {
+    const profileGate = deferred<void>();
+    const refreshSpy = vi.spyOn(api, 'refreshSession').mockRejectedValueOnce(new Error('refresh failed'));
+    const profileSpy = vi.spyOn(api, 'getProfile').mockImplementationOnce(async () => {
+      await profileGate.promise;
+      return {
+        id: 1,
+        email: 'stored@example.com',
+        full_name: 'Recovered User',
+        role: 'gp',
+        specialty: null,
+        is_active: true,
+      };
+    });
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+
+    const { result, unmount } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    unmount();
+    profileGate.resolve();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.username).toBe('Stored User');
+    expect(localStorage.getItem('username')).toBe('Stored User');
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(profileSpy).toHaveBeenCalled();
   });
 
   it('does not clear state twice after unmount when profile fallback also fails', async () => {

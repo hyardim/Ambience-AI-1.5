@@ -61,12 +61,9 @@ export function GPNewQueryPage() {
       const chat = await createChat({
         title: formData.title || 'New Consultation',
         specialty: formData.specialty,
-        /* v8 ignore next */
-        severity: formData.severity || undefined,
-        /* v8 ignore next */
-        patient_age: formData.patientAge ? parseInt(formData.patientAge, 10) : undefined,
-        /* v8 ignore next */
-        patient_gender: formData.sex || undefined,
+        severity: formData.severity,
+        patient_age: parseInt(formData.patientAge, 10),
+        patient_gender: formData.sex,
         patient_notes: formData.patientNotes || undefined,
       });
 

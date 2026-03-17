@@ -9,33 +9,37 @@ from src.schemas.chat import ChatResponse, MessageResponse
 
 
 def chat_to_response(chat: Chat) -> ChatResponse:
-    return ChatResponse(
-        id=chat.id,
-        title=chat.title,
-        status=chat.status.value,
-        specialty=chat.specialty,
-        severity=chat.severity,
-        patient_age=chat.patient_age,
-        patient_gender=chat.patient_gender,
-        patient_notes=chat.patient_notes,
-        specialist_id=chat.specialist_id,
-        assigned_at=chat.assigned_at,
-        reviewed_at=chat.reviewed_at,
-        review_feedback=chat.review_feedback,
-        created_at=chat.created_at.isoformat() if chat.created_at else "",
-        user_id=chat.user_id,
+    return ChatResponse.model_validate(
+        {
+            "id": chat.id,
+            "title": chat.title,
+            "status": chat.status.value,
+            "specialty": chat.specialty,
+            "severity": chat.severity,
+            "patient_age": chat.patient_age,
+            "patient_gender": chat.patient_gender,
+            "patient_notes": chat.patient_notes,
+            "specialist_id": chat.specialist_id,
+            "assigned_at": chat.assigned_at,
+            "reviewed_at": chat.reviewed_at,
+            "review_feedback": chat.review_feedback,
+            "created_at": chat.created_at.isoformat() if chat.created_at else "",
+            "user_id": chat.user_id,
+        }
     )
 
 
 def msg_to_response(m: Message) -> MessageResponse:
-    return MessageResponse(
-        id=m.id,
-        content=m.content,
-        sender=m.sender,
-        created_at=m.created_at.isoformat() if m.created_at else "",
-        citations=m.citations,
-        is_generating=bool(m.is_generating),
-        review_status=m.review_status,
-        review_feedback=m.review_feedback,
-        reviewed_at=m.reviewed_at.isoformat() if m.reviewed_at else None,
+    return MessageResponse.model_validate(
+        {
+            "id": m.id,
+            "content": m.content or "",
+            "sender": m.sender,
+            "created_at": m.created_at.isoformat() if m.created_at else "",
+            "citations": m.citations,
+            "is_generating": bool(m.is_generating),
+            "review_status": m.review_status,
+            "review_feedback": m.review_feedback,
+            "reviewed_at": m.reviewed_at.isoformat() if m.reviewed_at else None,
+        }
     )

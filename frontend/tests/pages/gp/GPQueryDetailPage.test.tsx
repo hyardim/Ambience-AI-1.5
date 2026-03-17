@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
 import { GPQueryDetailPage } from '@/pages/gp/GPQueryDetailPage';
+import { shouldAutoConnectGpStream } from '@/utils/gpDetail';
 import { renderWithProviders, seedAuth } from '@test/utils';
 import { server } from '@test/mocks/server';
 import { mockChatWithMessages } from '@test/mocks/handlers';
@@ -387,6 +388,28 @@ describe('GPQueryDetailPage', () => {
     await waitFor(() => {
       expect(mockConnectStream).toHaveBeenCalled();
     });
+  });
+
+  it('does not auto-connect when the stream is already in fallback polling', () => {
+    expect(shouldAutoConnectGpStream({
+      hasChat: true,
+      streamConnected: false,
+      sending: false,
+      streamPhase: 'fallback_polling',
+      hasPendingAIResponse: true,
+      hasRevisionInProgress: false,
+    })).toBe(false);
+  });
+
+  it('does not auto-connect while a send is already in progress', () => {
+    expect(shouldAutoConnectGpStream({
+      hasChat: true,
+      streamConnected: false,
+      sending: true,
+      streamPhase: 'idle',
+      hasPendingAIResponse: true,
+      hasRevisionInProgress: false,
+    })).toBe(false);
   });
 
   it('shows draft send failure when the backend rejects the initial draft message', async () => {

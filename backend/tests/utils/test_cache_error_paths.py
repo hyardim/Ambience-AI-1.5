@@ -22,7 +22,17 @@ class DeleteErrorRedis:
 
 class ScanErrorRedis:
     async def scan_iter(self, match=None):
+        if False:
+            yield match
         raise RuntimeError("scan-failed")
+
+
+class SyncScanRedis:
+    def scan_iter(self, match=None):
+        return [f"{match}:1"]
+
+    async def delete(self, *_keys):
+        return 1
 
 
 @pytest.mark.asyncio
@@ -63,3 +73,13 @@ async def test_cache_delete_pattern_error_returns_zero(monkeypatch):
     monkeypatch.setattr(cache, "_get_client", fake_get_client)
 
     assert await cache.delete_pattern("cache:*") == 0
+
+
+@pytest.mark.asyncio
+async def test_cache_delete_pattern_handles_sync_iterable(monkeypatch):
+    async def fake_get_client():
+        return SyncScanRedis()
+
+    monkeypatch.setattr(cache, "_get_client", fake_get_client)
+
+    assert await cache.delete_pattern("cache:*") == 1

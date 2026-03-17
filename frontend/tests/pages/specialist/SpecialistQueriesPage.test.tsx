@@ -6,6 +6,7 @@ import { Routes, Route } from 'react-router-dom';
 import { server } from '@test/mocks/server';
 import { renderWithProviders, seedAuth } from '@test/utils';
 import { SpecialistQueriesPage } from '@/pages/specialist/SpecialistQueriesPage';
+import { filterSpecialistChats, formatSpecialtyLabel } from '@/utils/specialistQueries';
 
 function QueryDetailStub() {
   return <div>Specialist Query Detail</div>;
@@ -210,5 +211,39 @@ describe('SpecialistQueriesPage', () => {
     });
     expect(screen.queryByText('—')).not.toBeInTheDocument();
     expect(screen.getByText(/assigned 16 jan 2025/i)).toBeInTheDocument();
+  });
+
+  it('formats specialty labels safely', () => {
+    expect(formatSpecialtyLabel('neurology')).toBe('Neurology');
+    expect(formatSpecialtyLabel(null)).toBe('—');
+  });
+
+  it('filters specialist chats by search, status, and severity', () => {
+    expect(filterSpecialistChats([
+      { title: 'Headache', specialty: 'neurology', status: 'submitted', severity: 'urgent' },
+      { title: 'Joint pain', specialty: 'rheumatology', status: 'assigned', severity: 'low' },
+    ] as never, 'head', 'submitted', 'urgent')).toHaveLength(1);
+    expect(filterSpecialistChats([
+      { title: 'Headache', specialty: 'neurology', status: 'submitted', severity: 'urgent' },
+    ] as never, 'head', 'assigned', 'low')).toHaveLength(0);
+    expect(filterSpecialistChats([
+      { title: '', specialty: 'neurology', status: 'submitted', severity: 'urgent' },
+    ] as never, 'neuro', 'all', 'all')).toHaveLength(1);
+    expect(filterSpecialistChats([
+      { title: '', specialty: null, status: 'submitted', severity: 'urgent' },
+    ] as never, 'neuro', 'all', 'all')).toHaveLength(0);
+  });
+
+  it('filters specialist chats by search, status, and severity', () => {
+    expect(filterSpecialistChats([
+      { title: 'Headache', specialty: 'neurology', status: 'submitted', severity: 'urgent' },
+      { title: 'Joint pain', specialty: 'rheumatology', status: 'assigned', severity: 'low' },
+    ], 'head', 'submitted', 'urgent')).toHaveLength(1);
+    expect(filterSpecialistChats([
+      { title: 'Headache', specialty: 'neurology', status: 'submitted', severity: 'urgent' },
+    ], 'head', 'assigned', 'low')).toHaveLength(0);
+    expect(filterSpecialistChats([
+      { title: '', specialty: 'neurology', status: 'submitted', severity: 'urgent' },
+    ] as never, 'neuro', 'all', 'all')).toHaveLength(1);
   });
 });

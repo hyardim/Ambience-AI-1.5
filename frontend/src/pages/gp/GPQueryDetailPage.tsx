@@ -16,11 +16,13 @@ import {
 } from '../../services/api';
 import type { BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
 import type { Message } from '../../types';
-import { getErrorMessage, isAbortError } from '../../utils/errors';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { shouldAutoConnectGpStream } from '../../utils/gpDetail';
 import { orFallback } from '../../utils/value';
 
 export function GPQueryDetailPage() {
   const { queryId } = useParams<{ queryId: string }>();
+  const chatId = Number(queryId);
   const navigate = useNavigate();
   const location = useLocation();
   const { username, logout } = useAuth();
@@ -39,16 +41,12 @@ export function GPQueryDetailPage() {
 
   // ── Streaming state machine ────────────────────────────────────────────
   const refreshChat = useCallback(async () => {
-    /* v8 ignore next */
-    /* v8 ignore next */
-    if (!queryId) return;
     try {
-      const found = await getChat(Number(queryId));
+      const found = await getChat(chatId);
       setChat(found);
       setMessages(found.messages.map(m => toFrontendMessage(m, orFallback(username, 'GP User'))));
-    /* v8 ignore next */
     } catch { /* silent refresh */ }
-  }, [queryId, username]);
+  }, [chatId, username]);
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
     setMessages,
@@ -78,25 +76,21 @@ export function GPQueryDetailPage() {
 
   // Delegate polling to the hook — start/stop based on derived shouldPoll flag
   useEffect(() => {
-    /* v8 ignore next */
-    if (!queryId) return;
     if (shouldPoll) {
       startPolling();
     } else {
       stopPolling();
     }
-  }, [queryId, shouldPoll, startPolling, stopPolling]);
+  }, [shouldPoll, startPolling, stopPolling]);
 
   const fetchChat = useCallback(async () => {
-    /* v8 ignore next */
-    if (!queryId) return;
     requestControllerRef.current?.abort();
     const controller = new AbortController();
     requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      const found = await getChat(Number(queryId), { signal: controller.signal });
+      const found = await getChat(chatId, { signal: controller.signal });
       setChat(found);
       const mapped = found.messages.map(m => toFrontendMessage(m, orFallback(username, 'GP User')));
       // When a draft message is about to be sent, pre-populate the optimistic
@@ -115,16 +109,14 @@ export function GPQueryDetailPage() {
         setMessages(mapped);
       }
     } catch (error) {
-      /* v8 ignore next */
-      if (isAbortError(error)) {
-        return;
-      }
-      setChat(null);
-      setError('Failed to load consultation');
+      ifNotAbortError(error, () => {
+        setChat(null);
+        setError('Failed to load consultation');
+      });
     } finally {
       setLoading(false);
     }
-  }, [draftMessage, queryId, username]);
+  }, [chatId, draftMessage, username]);
 
   useEffect(() => {
     void fetchChat();
@@ -170,14 +162,15 @@ export function GPQueryDetailPage() {
 
   // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
-    /* v8 ignore next */
     if (!chat) return;
-    if (streamConnected || sending) return;
-    // Only auto-connect from idle. When fallback polling is active, avoid
-    // tight reconnect loops against /stream under poor network conditions.
-    /* v8 ignore next */
-    if (streamPhase !== 'idle') return;
-    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+    if (!shouldAutoConnectGpStream({
+      hasChat: true,
+      streamConnected,
+      sending,
+      streamPhase,
+      hasPendingAIResponse,
+      hasRevisionInProgress,
+    })) return;
 
     void connectStream(chat.id);
   }, [
@@ -191,8 +184,7 @@ export function GPQueryDetailPage() {
   ]);
 
   const handleSendMessage = async (content: string, files?: File[]) => {
-    /* v8 ignore next */
-    if (!chat || sending) return;
+    const currentChat = chat!;
     setSending(true);
 
     // Optimistically add user message
@@ -216,15 +208,15 @@ export function GPQueryDetailPage() {
           setSending(false);
           return;
         }
-        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+        await Promise.all(files.map(f => uploadChatFile(currentChat.id, f)));
       }
 
       // Open SSE stream *once* before sending so we catch the AI generation events
-      await connectStream(chat.id);
+      await connectStream(currentChat.id);
 
-      await apiSendMessage(chat.id, content);
+      await apiSendMessage(currentChat.id, content);
       // Also do one fetch to reconcile the user message id
-      const refreshed = await getChat(chat.id);
+      const refreshed = await getChat(currentChat.id);
       setChat(refreshed);
 
       // Merge: keep streaming placeholder if present, else use fetched messages
@@ -249,28 +241,26 @@ export function GPQueryDetailPage() {
   };
 
   const openMetaEditor = () => {
-    /* v8 ignore next */
-    if (!chat) return;
+    const currentChat = chat!;
     setEditMeta({
-      title: chat.title,
-      specialty: chat.specialty,
-      severity: chat.severity,
+      title: currentChat.title,
+      specialty: currentChat.specialty,
+      severity: currentChat.severity,
     });
     setEditingMeta(true);
   };
 
   const saveMeta = async () => {
-    /* v8 ignore next */
-    if (!chat) return;
+    const currentChat = chat!;
     setSavingMeta(true);
     setError('');
     try {
-      const updated = await apiUpdateChat(chat.id, {
+      const updated = await apiUpdateChat(currentChat.id, {
         title: editMeta.title,
         specialty: editMeta.specialty || undefined,
         severity: editMeta.severity || undefined,
       });
-      setChat({ ...chat, ...updated });
+      setChat({ ...currentChat, ...updated });
       setEditingMeta(false);
     } catch {
       setError('Failed to update consultation details');

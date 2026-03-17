@@ -7,7 +7,10 @@ import { useAuth } from '../../contexts/useAuth';
 import { getChats, deleteChat } from '../../services/api';
 import type { ChatListFilters } from '../../services/api';
 import type { BackendChat } from '../../types/api';
-import { isAbortError } from '../../utils/errors';
+import { ifNotAbortError } from '../../utils/errors';
+import { createGpQueriesSearchFetcher } from '../../utils/gpQueries';
+import { formatSpecialtyLabel } from '../../utils/specialistQueries';
+import { resetTimeoutWithValue } from '../../utils/timers';
 import { orFallback } from '../../utils/value';
 
 type TabKey = 'submitted' | 'under_review' | 'closed';
@@ -72,11 +75,9 @@ export function GPQueriesPage() {
         const data = await getChats(filters ?? buildFilters(), { signal: controller.signal });
         setChats(data);
       } catch (error) {
-        /* v8 ignore next */
-        if (isAbortError(error)) {
-          return;
-        }
-        setError('Failed to load consultations. Is the backend running?');
+        ifNotAbortError(error, () => {
+          setError('Failed to load consultations. Is the backend running?');
+        });
       } finally {
         setLoading(false);
       }
@@ -85,12 +86,12 @@ export function GPQueriesPage() {
   );
 
   useEffect(() => {
+    const debounceTimer = debounceRef.current;
     void fetchChats();
     return () => {
       requestControllerRef.current?.abort();
-      /* v8 ignore next */
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
       }
     };
   }, [fetchChats]);
@@ -100,17 +101,16 @@ export function GPQueriesPage() {
     void fetchChats(buildFilters());
   }, [buildFilters, fetchChats]);
 
-  /* v8 ignore start */
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
-      void fetchChats(buildFilters(value));
-    }, 300);
+    const searchFetcher = createGpQueriesSearchFetcher(fetchChats, buildFilters);
+    resetTimeoutWithValue(
+      debounceRef,
+      searchFetcher,
+      value,
+      300,
+    );
   };
-  /* v8 ignore stop */
 
   const handleArchive = async (e: React.MouseEvent, chatId: number) => {
     e.stopPropagation();
@@ -135,10 +135,6 @@ export function GPQueriesPage() {
     chats.filter(c => TAB_STATUSES[key].includes(c.status));
 
   const filteredChats = tabChats(tab);
-
-  const formatSpecialty = (s: string | null) =>
-    /* v8 ignore next */
-    (s ? s.charAt(0).toUpperCase() + s.slice(1) : null);
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -322,7 +318,7 @@ export function GPQueriesPage() {
                     <div className="flex items-center gap-3 shrink-0">
                       {chat.specialty && (
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium">
-                          {formatSpecialty(chat.specialty)}
+                          {formatSpecialtyLabel(chat.specialty)}
                         </span>
                       )}
                       {chat.severity && <SeverityBadge severity={chat.severity} />}

@@ -5,10 +5,10 @@ import re
 from typing import Any
 
 import nltk
-import tiktoken
 from nltk.tokenize import sent_tokenize  # noqa: E402
 
 from ..utils.logger import setup_logger
+from ..utils.tokenizer import count_tokens as shared_count_tokens
 
 logger = setup_logger(__name__)
 
@@ -24,8 +24,6 @@ SHORT_SECTION_TOKENS = 150
 MAX_MERGE_SECTIONS = 2
 
 _NLTK_INITIALISED = False
-
-_ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
 def _ensure_nltk_data() -> None:
@@ -178,7 +176,7 @@ def _resolve_chunk_settings(config: dict[str, Any] | None) -> dict[str, int]:
 
 def count_tokens(text: str) -> int:
     """Count tokens using cl100k_base encoding."""
-    return len(_ENCODER.encode(text))
+    return shared_count_tokens(text)
 
 
 def split_into_sentences(text: str) -> list[str]:

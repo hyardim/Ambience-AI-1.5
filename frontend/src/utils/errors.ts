@@ -3,6 +3,11 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function isAbortError(error: unknown): boolean {
-  /* v8 ignore next */
   return error instanceof DOMException && error.name === 'AbortError';
+}
+
+export function ifNotAbortError(error: unknown, callback: () => void): void {
+  if (!isAbortError(error)) {
+    callback();
+  }
 }

@@ -31,4 +31,77 @@ describe('App', () => {
       expect(screen.getByText(/AI-powered clinical decision support/i)).toBeInTheDocument();
     });
   });
+
+  it('renders the auth routes', async () => {
+    const cases = [
+      ['/login', /login to your account/i],
+      ['/register', /create your account/i],
+      ['/reset-password', /reset your password/i],
+      ['/access-denied', /access restricted/i],
+    ] as const;
+
+    for (const [route, text] of cases) {
+      window.history.pushState({}, '', route);
+      const { unmount } = render(<App />);
+      await waitFor(() => {
+        expect(screen.getByText(text)).toBeInTheDocument();
+      });
+      unmount();
+    }
+  });
+
+  it('renders gp routes for authenticated users', async () => {
+    const cases = [
+      ['/gp/queries', /my consultations/i],
+      ['/gp/queries/new', /new consultation/i],
+      ['/gp/query/1', /headache consultation/i],
+    ] as const;
+
+    for (const [route, text] of cases) {
+      seedAuth({ role: 'gp', username: 'GP User' });
+      window.history.pushState({}, '', route);
+      const { unmount } = render(<App />);
+      await waitFor(() => {
+        expect(screen.getByText(text)).toBeInTheDocument();
+      });
+      unmount();
+    }
+  });
+
+  it('renders specialist routes for authenticated users', async () => {
+    const cases = [
+      ['/specialist/queries', /queries for review/i],
+      ['/specialist/query/1', /headache consultation/i],
+    ] as const;
+
+    for (const [route, text] of cases) {
+      seedAuth({ role: 'specialist', username: 'Specialist User' });
+      window.history.pushState({}, '', route);
+      const { unmount } = render(<App />);
+      await waitFor(() => {
+        expect(screen.getByText(text)).toBeInTheDocument();
+      });
+      unmount();
+    }
+  });
+
+  it('renders the remaining admin and shared routes', async () => {
+    const cases = [
+      ['/admin/users', () => screen.getByRole('heading', { name: /user management/i })],
+      ['/admin/chats', () => screen.getByRole('heading', { name: /chat management/i })],
+      ['/admin/logs', () => screen.getByRole('heading', { name: /audit logs/i })],
+      ['/admin/guidelines', () => screen.getByRole('heading', { name: /guidelines/i })],
+      ['/profile', () => screen.getByRole('heading', { name: /my profile/i })],
+    ] as const;
+
+    for (const [route, query] of cases) {
+      seedAuth({ role: 'admin', username: 'Admin User' });
+      window.history.pushState({}, '', route);
+      const { unmount } = render(<App />);
+      await waitFor(() => {
+        expect(query()).toBeInTheDocument();
+      });
+      unmount();
+    }
+  });
 });

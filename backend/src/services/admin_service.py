@@ -400,7 +400,7 @@ def list_audit_logs(
             if log.user
             else None,
             "action": log.action,
-            "category": _action_category(log.action),
+            "category": _action_category(log.action or ""),
             "details": log.details,
             "timestamp": log.timestamp,
         }

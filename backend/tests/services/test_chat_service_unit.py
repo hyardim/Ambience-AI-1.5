@@ -637,7 +637,7 @@ def test_on_generation_task_done_logs_cancelled_task(monkeypatch):
         lambda message, *args: calls.append((message, args)),
     )
 
-    chat_service._on_generation_task_done(FakeTask())  # type: ignore[arg-type]
+    chat_service._on_generation_task_done(FakeTask())
 
     assert calls == [("AI generation task %s was cancelled", ("ai-gen-chat-1",))]
 
@@ -662,7 +662,7 @@ def test_on_generation_task_done_logs_task_exception(monkeypatch):
         lambda message, *args, **kwargs: calls.append((message, args, kwargs)),
     )
 
-    chat_service._on_generation_task_done(FakeTask())  # type: ignore[arg-type]
+    chat_service._on_generation_task_done(FakeTask())
 
     assert calls == [
         (

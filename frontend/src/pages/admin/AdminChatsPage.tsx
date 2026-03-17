@@ -9,7 +9,9 @@ import {
   adminGetChat,
 } from '../../services/api';
 import type { AdminChatResponse, BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
-import { getErrorMessage, isAbortError } from '../../utils/errors';
+import { filterAdminChats, replaceAdminChat } from '../../utils/adminChatsFilters';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { getAdminChatDetailMessageClass } from '../../utils/adminChats';
 import { coalesce, orFallback } from '../../utils/value';
 
 export function AdminChatsPage() {
@@ -42,11 +44,9 @@ export function AdminChatsPage() {
       }, { signal: controller.signal });
       setChats(data);
     } catch (err) {
-      /* v8 ignore next */
-      if (isAbortError(err)) {
-        return;
-      }
-      setError(getErrorMessage(err, 'Failed to load chats'));
+      ifNotAbortError(err, () => {
+        setError(getErrorMessage(err, 'Failed to load chats'));
+      });
     } finally {
       setLoading(false);
     }
@@ -80,14 +80,11 @@ export function AdminChatsPage() {
     });
   };
 
-  const handleSave = async () => {
-    /* v8 ignore next */
-    if (!editChat) return;
+  const handleSave = async (chatId: number) => {
     setSaving(true);
     try {
-      const updated = await adminUpdateChat(editChat.id, editForm);
-      /* v8 ignore next */
-      setChats(prev => prev.map(c => (c.id === editChat.id ? updated : c)));
+      const updated = await adminUpdateChat(chatId, editForm);
+      setChats((prev) => replaceAdminChat(prev, chatId, updated));
       setEditChat(null);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to update chat'));
@@ -105,22 +102,15 @@ export function AdminChatsPage() {
       const data = await adminGetChat(chatId, { signal: controller.signal });
       setDetailChat(data);
     } catch (err) {
-      /* v8 ignore next */
-      if (isAbortError(err)) {
-        return;
-      }
-      setError(getErrorMessage(err, 'Failed to load chat detail'));
+      ifNotAbortError(err, () => {
+        setError(getErrorMessage(err, 'Failed to load chat detail'));
+      });
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const filteredChats = chats.filter(c =>
-    /* v8 ignore next */
-    (c.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    /* v8 ignore next */
-    (c.owner_identifier || '').toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  const filteredChats = filterAdminChats(chats, searchTerm);
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -326,7 +316,7 @@ export function AdminChatsPage() {
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave(editChat.id)}
                 disabled={saving}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50"
               >
@@ -365,13 +355,7 @@ export function AdminChatsPage() {
               {detailChat?.messages.map(msg => (
                 <div
                   key={msg.id}
-                  className={`rounded-lg px-4 py-3 ${
-                    msg.sender === 'ai'
-                      ? 'bg-blue-50 border-l-4 border-[var(--nhs-blue)]'
-                      : /* v8 ignore next */ msg.sender === 'specialist'
-                        ? 'bg-green-50 border-l-4 border-[#007f3b]'
-                        : 'bg-gray-50'
-                  }`}
+                  className={`rounded-lg px-4 py-3 ${getAdminChatDetailMessageClass(msg.sender)}`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold text-gray-500 uppercase">

@@ -14,15 +14,20 @@ import {
 } from '../../services/api';
 import type { BackendChatWithMessages } from '../../types/api';
 import type { Message } from '../../types';
-import { getErrorMessage, isAbortError } from '../../utils/errors';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { orFallback } from '../../utils/value';
 import { runUnlessSilent } from '../../utils/control';
 import { getCloseReviewTitle, getTerminalConsultationState } from '../../utils/specialist';
+import {
+  canAssignSpecialist,
+  shouldAutoConnectSpecialistStream,
+} from '../../utils/specialistQueryDetail';
 import { SpecialistQueryDetailView } from './SpecialistQueryDetailView';
 
 export function SpecialistQueryDetailPage() {
   const { username, logout } = useAuth();
   const { queryId } = useParams<{ queryId: string }>();
+  const chatId = Number(queryId);
   const navigate = useNavigate();
 
   const [chat, setChat] = useState<BackendChatWithMessages | null>(null);
@@ -52,18 +57,16 @@ export function SpecialistQueryDetailPage() {
 
   // ── Streaming state machine ────────────────────────────────────────────
   const refreshData = useCallback(async () => {
-    /* v8 ignore next */
-    if (!queryId) return;
     try {
       const [profile, chatData] = await Promise.all([
         getProfile(),
-        getSpecialistChatDetail(Number(queryId)),
+        getSpecialistChatDetail(chatId),
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
       setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
     } catch { /* silent refresh */ }
-  }, [queryId, username]);
+  }, [chatId, username]);
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
     setMessages,
@@ -71,8 +74,6 @@ export function SpecialistQueryDetailPage() {
   );
 
   const loadData = useCallback(async (options?: { silent?: boolean }) => {
-    /* v8 ignore next */
-    if (!queryId) return;
     const isSilent = options?.silent;
     requestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -84,25 +85,23 @@ export function SpecialistQueryDetailPage() {
     try {
       const [profile, chatData] = await Promise.all([
         getProfile({ signal: controller.signal }),
-        getSpecialistChatDetail(Number(queryId), { signal: controller.signal }),
+        getSpecialistChatDetail(chatId, { signal: controller.signal }),
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
       setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
     } catch (err) {
-      /* v8 ignore next */
-      if (isAbortError(err)) {
-        return;
-      }
-      runUnlessSilent(isSilent, () => {
-        setError(getErrorMessage(err, 'Failed to load consultation'));
+      ifNotAbortError(err, () => {
+        runUnlessSilent(isSilent, () => {
+          setError(getErrorMessage(err, 'Failed to load consultation'));
+        });
       });
     } finally {
       runUnlessSilent(isSilent, () => {
         setLoading(false);
       });
     }
-  }, [queryId, username]);
+  }, [chatId, username]);
 
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
@@ -130,25 +129,23 @@ export function SpecialistQueryDetailPage() {
 
   // Delegate polling to the hook
   useEffect(() => {
-    /* v8 ignore next */
-    /* v8 ignore next */
-    if (!queryId) return;
     if (shouldPoll) {
       startPolling();
     } else {
       stopPolling();
     }
-  }, [queryId, shouldPoll, startPolling, stopPolling]);
+  }, [shouldPoll, startPolling, stopPolling]);
 
   // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
-    /* v8 ignore next */
     if (!chat) return;
-    /* v8 ignore next */
-    if (streamConnected) return;
-    /* v8 ignore next */
-    if (streamPhase !== 'idle' && streamPhase !== 'fallback_polling') return;
-    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+    if (!shouldAutoConnectSpecialistStream({
+      hasChat: true,
+      streamConnected,
+      streamPhase,
+      hasPendingAIResponse,
+      hasRevisionInProgress,
+    })) return;
 
     void connectStream(chat.id);
   }, [
@@ -163,13 +160,12 @@ export function SpecialistQueryDetailPage() {
   // ── Actions ──────────────────────────────────────────────────
 
   const handleAssign = async () => {
-    /* v8 ignore next */
-    if (!chat || myUserId === null) return;
+    const currentChat = chat!;
     setActionLoading(true);
     setError('');
     try {
-      const updated = await assignChat(chat.id, myUserId);
-      setChat({ ...chat, ...updated });
+      const updated = await assignChat(currentChat.id, myUserId!);
+      setChat({ ...currentChat, ...updated });
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to assign chat'));
     } finally {
@@ -178,12 +174,11 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleApprove = async () => {
-    /* v8 ignore next */
-    if (!chat || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
     setActionLoading(true);
     setError('');
     try {
-      await reviewMessage(chat.id, reviewTargetMessageId, 'approve');
+      await reviewMessage(currentChat.id, reviewTargetMessageId!, 'approve');
       setShowApproveConfirm(false);
       setReviewTargetMessageId(null);
       await loadData();
@@ -195,13 +190,13 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleApproveWithComment = async () => {
-    /* v8 ignore next */
-    if (!chat || !approveComment.trim() || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
     setActionLoading(true);
     setError('');
     try {
-      await sendSpecialistMessage(chat.id, approveComment.trim());
-      await reviewMessage(chat.id, reviewTargetMessageId, 'approve', approveComment.trim());
+      await sendSpecialistMessage(currentChat.id, approveComment.trim());
+      await reviewMessage(currentChat.id, targetMessageId, 'approve', approveComment.trim());
       setShowApproveWithCommentModal(false);
       setApproveComment('');
       setReviewTargetMessageId(null);
@@ -214,14 +209,14 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleRequestChanges = async () => {
-    /* v8 ignore next */
-    if (!chat || !rejectReason.trim() || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
     setActionLoading(true);
     setError('');
     try {
       // Open SSE *before* the API call so we catch the revision stream events
-      await connectStream(chat.id);
-      await reviewMessage(chat.id, reviewTargetMessageId, 'request_changes', rejectReason.trim());
+      await connectStream(currentChat.id);
+      await reviewMessage(currentChat.id, targetMessageId, 'request_changes', rejectReason.trim());
       setShowRejectModal(false);
       setRejectReason('');
       setReviewTargetMessageId(null);
@@ -235,8 +230,8 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleManualResponse = async () => {
-    /* v8 ignore next */
-    if (!chat || !manualResponseContent.trim() || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
     setActionLoading(true);
     setError('');
     try {
@@ -247,15 +242,15 @@ export function SpecialistQueryDetailPage() {
         return;
       }
       if (manualResponseFiles.length > 0) {
-        await Promise.all(manualResponseFiles.map((file) => uploadChatFile(chat.id, file)));
+        await Promise.all(manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)));
       }
       const sources = manualResponseSources
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean);
       await reviewMessage(
-        chat.id,
-        reviewTargetMessageId,
+        currentChat.id,
+        targetMessageId,
         'manual_response',
         undefined,
         manualResponseContent.trim(),
@@ -275,12 +270,11 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleCloseAndApprove = async () => {
-    /* v8 ignore next */
-    if (!chat) return;
+    const currentChat = chat!;
     setActionLoading(true);
     setError('');
     try {
-      await reviewChat(chat.id, 'approve');
+      await reviewChat(currentChat.id, 'approve');
       setShowCloseConfirm(false);
       await loadData();
     } catch (err) {
@@ -291,8 +285,7 @@ export function SpecialistQueryDetailPage() {
   };
 
   const handleSendMessage = async (content: string, files?: File[]) => {
-    /* v8 ignore next */
-    if (!chat) return;
+    const currentChat = chat!;
     // Optimistically add the specialist message
     const tempId = `temp-${Date.now()}`;
     const optimistic: Message = {
@@ -314,9 +307,9 @@ export function SpecialistQueryDetailPage() {
           setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
           return;
         }
-        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+        await Promise.all(files.map(f => uploadChatFile(currentChat.id, f)));
       }
-      await sendSpecialistMessage(chat.id, content);
+      await sendSpecialistMessage(currentChat.id, content);
     } catch (err) {
       // Remove the optimistic message on failure
       setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -330,7 +323,7 @@ export function SpecialistQueryDetailPage() {
   const isSubmitted = chatStatus === 'submitted';
   const isAssignedOrReviewing = chatStatus === 'assigned' || chatStatus === 'reviewing';
   const isTerminal = ['approved', 'rejected', 'closed'].includes(chatStatus);
-  const canAssign = isSubmitted;
+  const canAssign = isSubmitted && canAssignSpecialist(myUserId);
   const canReview = isAssignedOrReviewing;
 
   // IDs of all unreviewed AI messages (specialist can act on any of them)

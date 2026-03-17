@@ -1,6 +1,9 @@
+from collections.abc import AsyncIterator, Iterator
+
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
 from src.core.config import settings
 
 DATABASE_URL = settings.DATABASE_URL
@@ -8,11 +11,11 @@ DATABASE_URL = settings.DATABASE_URL
 # ---------------------------------------------------------------------------
 # Synchronous engine & session (used by all non-chat routes)
 # ---------------------------------------------------------------------------
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine: Engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
-def get_db():
+def get_db() -> Iterator[Session]:
     db = SessionLocal()
     try:
         yield db
@@ -38,12 +41,12 @@ def _make_async_url(url: str) -> str:
 ASYNC_DATABASE_URL = _make_async_url(DATABASE_URL)
 
 async_engine = create_async_engine(ASYNC_DATABASE_URL, pool_pre_ping=True)
-AsyncSessionLocal = sessionmaker(
-    bind=async_engine, class_=AsyncSession, expire_on_commit=False
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine, expire_on_commit=False
 )
 
 
-async def get_async_db():
+async def get_async_db() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency that yields an AsyncSession."""
     async with AsyncSessionLocal() as session:
         try:

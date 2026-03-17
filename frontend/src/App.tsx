@@ -5,7 +5,6 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoadingScreen } from './components/LoadingScreen';
 
-/* v8 ignore start */
 const LoginPage = lazy(async () => ({ default: (await import('./pages/auth/LoginPage')).LoginPage }));
 const RegisterPage = lazy(async () => ({ default: (await import('./pages/auth/RegisterPage')).RegisterPage }));
 const ResetPasswordPage = lazy(async () => ({ default: (await import('./pages/auth/ResetPasswordPage')).ResetPasswordPage }));
@@ -22,7 +21,6 @@ const AdminChatsPage = lazy(async () => ({ default: (await import('./pages/admin
 const AdminLogsPage = lazy(async () => ({ default: (await import('./pages/admin/AdminLogsPage')).AdminLogsPage }));
 const AdminGuidelinesPage = lazy(async () => ({ default: (await import('./pages/admin/AdminGuidelinesPage')).AdminGuidelinesPage }));
 const ProfilePage = lazy(async () => ({ default: (await import('./pages/ProfilePage')).ProfilePage }));
-/* v8 ignore stop */
 
 function App() {
   return (

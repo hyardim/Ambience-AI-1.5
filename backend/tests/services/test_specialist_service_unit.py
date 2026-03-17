@@ -269,6 +269,71 @@ def test_review_message_rejects_missing_manual_response_content(db_session):
     assert exc.value.status_code == 400
 
 
+def test_review_message_rejects_none_manual_response_content(db_session):
+    owner = _user(db_session, email="gp2@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec2@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    ai_message = _ai_message(db_session, chat)
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review_message(
+            db_session,
+            specialist,
+            chat.id,
+            ai_message.id,
+            ReviewRequest(action="manual_response"),
+        )
+    assert exc.value.status_code == 400
+
+
+def test_review_message_accepts_trimmed_manual_response_content(db_session):
+    owner = _user(db_session, email="gp-trim@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-trim@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    ai_message = _ai_message(db_session, chat)
+
+    response = specialist_service.review_message(
+        db_session,
+        specialist,
+        chat.id,
+        ai_message.id,
+        ReviewRequest(
+            action="manual_response",
+            replacement_content="  Use this instead  ",
+            replacement_sources=["NICE"],
+        ),
+    )
+
+    specialist_msg = (
+        db_session.query(Message)
+        .filter(Message.chat_id == chat.id, Message.sender == "specialist")
+        .order_by(Message.id.desc())
+        .first()
+    )
+    assert specialist_msg is not None
+    assert specialist_msg.content == "Use this instead"
+    assert response.status == ChatStatus.REVIEWING.value
+
+    with pytest.raises(HTTPException) as direct_exc:
+        specialist_review.review_message(
+            db_session,
+            specialist,
+            chat.id,
+            ai_message.id,
+            ReviewRequest(action="manual_response"),
+        )
+    assert direct_exc.value.status_code == 400
+
+
 def test_review_message_manual_response_creates_specialist_message(db_session):
     owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
     specialist = _user(

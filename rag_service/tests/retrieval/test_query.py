@@ -143,6 +143,14 @@ class TestProcessQuery:
                 process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
+    def test_token_length_uses_shared_counter(self):
+        mock_model = _make_mock_model()
+        with patch("src.retrieval.query.count_tokens", return_value=99):
+            with patch("src.retrieval.query.embed_config.query_max_tokens", 32):
+                with patch("src.retrieval.query._load_model", return_value=mock_model):
+                    with pytest.raises(ValueError, match="exceeds 32 token limit"):
+                        process_query("gout treatment")
+
 
 # -----------------------------------------------------------------------
 # Tests — _load_model()

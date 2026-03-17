@@ -35,6 +35,15 @@ describe('AdminGuidelinesPage', () => {
     expect(screen.getByText(/only pdf files are supported/i)).toBeInTheDocument();
   });
 
+  it('clears the selected file when the file picker is reset to empty', async () => {
+    const { container } = renderPage();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { files: [] } });
+
+    expect(screen.queryByText(/selected:/i)).not.toBeInTheDocument();
+  });
+
   it('uploads a guideline and shows the result summary', async () => {
     const { container } = renderPage();
     const user = userEvent.setup({ applyAccept: false });

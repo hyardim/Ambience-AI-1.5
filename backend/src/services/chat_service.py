@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Protocol
 
 import httpx
 from fastapi import HTTPException, UploadFile
@@ -544,7 +544,15 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             await chat_event_bus.close_chat(chat_id)
 
 
-def _on_generation_task_done(task: asyncio.Task) -> None:  # type: ignore[type-arg]
+class _GenerationTaskLike(Protocol):
+    def cancelled(self) -> bool: ...
+
+    def exception(self) -> BaseException | None: ...
+
+    def get_name(self) -> str: ...
+
+
+def _on_generation_task_done(task: _GenerationTaskLike) -> None:
     """Log unhandled exceptions from background AI generation tasks."""
     if task.cancelled():
         logger.info("AI generation task %s was cancelled", task.get_name())

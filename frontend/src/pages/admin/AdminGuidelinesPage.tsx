@@ -38,7 +38,6 @@ export function AdminGuidelinesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    /* v8 ignore next */
     const selected = e.target.files?.[0] ?? null;
     setFile(selected);
     setError('');
@@ -62,8 +61,7 @@ export function AdminGuidelinesPage() {
       const report = await adminUploadGuideline(file, selectedSource);
       setResult(report);
       setFile(null);
-      /* v8 ignore next */
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      fileInputRef.current!.value = '';
     } catch (err) {
       setError(getErrorMessage(err, 'Upload failed.'));
     } finally {

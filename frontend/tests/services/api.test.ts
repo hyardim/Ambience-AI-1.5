@@ -166,6 +166,14 @@ describe('API service', () => {
       expect(window.location.pathname).toBe('/login');
     });
 
+    it('falls back to a status-based error message when the body is empty', async () => {
+      server.use(
+        http.get('/auth/me', () => new HttpResponse(null, { status: 500 })),
+      );
+
+      await expect(getProfile()).rejects.toThrow('Request failed (500)');
+    });
+
     it('retries the original request after a successful refresh', async () => {
       let meCalls = 0;
       server.use(

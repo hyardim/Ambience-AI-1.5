@@ -3,7 +3,15 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
-import { SpecialistQueryDetailPage } from '@/pages/specialist/SpecialistQueryDetailPage';
+import {
+  SpecialistQueryDetailPage,
+} from '@/pages/specialist/SpecialistQueryDetailPage';
+import {
+  canAssignSpecialist,
+  canSubmitManualResponse,
+  canSubmitReviewAction,
+  shouldAutoConnectSpecialistStream,
+} from '@/utils/specialistQueryDetail';
 import { renderWithProviders, seedAuth } from '@test/utils';
 import { server } from '@test/mocks/server';
 import { mockChatWithMessages, mockSpecialistUser } from '@test/mocks/handlers';
@@ -367,6 +375,48 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(mockConnectStream).toHaveBeenCalled();
     });
+  });
+
+  it('exposes specialist action guard helpers', () => {
+    expect(canAssignSpecialist(1)).toBe(true);
+    expect(canAssignSpecialist(null)).toBe(false);
+    expect(canSubmitReviewAction('Looks good', 2)).toBe(true);
+    expect(canSubmitReviewAction('   ', 2)).toBe(false);
+    expect(canSubmitReviewAction('Looks good', null)).toBe(false);
+    expect(canSubmitManualResponse('Answer', 2)).toBe(true);
+    expect(canSubmitManualResponse('   ', 2)).toBe(false);
+    expect(canSubmitManualResponse('Answer', null)).toBe(false);
+  });
+
+  it('only auto-connects for eligible specialist stream states', () => {
+    expect(shouldAutoConnectSpecialistStream({
+      hasChat: true,
+      streamConnected: false,
+      streamPhase: 'idle',
+      hasPendingAIResponse: true,
+      hasRevisionInProgress: false,
+    })).toBe(true);
+    expect(shouldAutoConnectSpecialistStream({
+      hasChat: true,
+      streamConnected: false,
+      streamPhase: 'fallback_polling',
+      hasPendingAIResponse: false,
+      hasRevisionInProgress: true,
+    })).toBe(true);
+    expect(shouldAutoConnectSpecialistStream({
+      hasChat: true,
+      streamConnected: false,
+      streamPhase: 'streaming',
+      hasPendingAIResponse: true,
+      hasRevisionInProgress: false,
+    })).toBe(false);
+    expect(shouldAutoConnectSpecialistStream({
+      hasChat: false,
+      streamConnected: false,
+      streamPhase: 'idle',
+      hasPendingAIResponse: true,
+      hasRevisionInProgress: false,
+    })).toBe(false);
   });
 
   it('refreshes through the stream hook callback and uploads a small specialist file successfully', async () => {

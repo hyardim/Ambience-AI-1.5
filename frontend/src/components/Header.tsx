@@ -18,8 +18,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
   const isAdminActive = location.pathname.startsWith('/admin');
 
   const handleLogout = () => {
-    /* v8 ignore next */
-    if (onLogout) onLogout();
+    onLogout?.();
     navigate('/login');
   };
 

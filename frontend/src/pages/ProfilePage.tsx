@@ -6,7 +6,8 @@ import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { useAuth } from '../contexts/useAuth';
 import { getProfile, updateProfile } from '../services/api';
 import type { UserProfile, ProfileUpdateRequest } from '../types/api';
-import { getErrorMessage, isAbortError } from '../utils/errors';
+import { getErrorMessage, ifNotAbortError } from '../utils/errors';
+import { buildProfileUpdatePayload } from '../utils/profile';
 import { orFallback } from '../utils/value';
 
 export function ProfilePage() {
@@ -48,11 +49,9 @@ export function ProfilePage() {
       setFullName(data.full_name || '');
       setSpecialty(data.specialty || '');
     } catch (error) {
-      /* v8 ignore next */
-      if (isAbortError(error)) {
-        return;
-      }
-      setError('Failed to load profile');
+      ifNotAbortError(error, () => {
+        setError('Failed to load profile');
+      });
     } finally {
       setLoading(false);
     }
@@ -73,20 +72,13 @@ export function ProfilePage() {
       return;
     }
 
-    const payload: ProfileUpdateRequest = {};
-
-    // Only include changed fields
-    /* v8 ignore next */
-    if (fullName !== (profile?.full_name || '')) {
-      payload.full_name = fullName;
-    }
-    if (specialty !== (profile?.specialty || '')) {
-      payload.specialty = specialty || null;
-    }
-    if (newPassword) {
-      payload.current_password = currentPassword;
-      payload.new_password = newPassword;
-    }
+    const payload: ProfileUpdateRequest = buildProfileUpdatePayload({
+      profile,
+      fullName,
+      specialty,
+      currentPassword,
+      newPassword,
+    });
 
     // Nothing to update
     if (Object.keys(payload).length === 0) {

@@ -7,7 +7,7 @@ import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } fro
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetLogs, adminGetStats } from '../../services/api';
 import type { AdminStatsResponse, AuditLogResponse } from '../../types/api';
-import { getErrorMessage, isAbortError } from '../../utils/errors';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { coalesce } from '../../utils/value';
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -69,11 +69,9 @@ export default function AdminDashboardPage() {
       setStats(statsResponse);
       setRagLogs(ragLogResponse);
     } catch (err) {
-      /* v8 ignore next */
-      if (isAbortError(err)) {
-        return;
-      }
-      setError(getErrorMessage(err, 'Failed to load stats'));
+      ifNotAbortError(err, () => {
+        setError(getErrorMessage(err, 'Failed to load stats'));
+      });
     } finally {
       setLoading(false);
     }

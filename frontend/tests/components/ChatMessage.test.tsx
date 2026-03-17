@@ -24,6 +24,11 @@ describe('ChatMessage', () => {
     expect(screen.getByText('Dr Smith')).toBeInTheDocument();
   });
 
+  it('does not apply AI review styling to human messages', () => {
+    const { container } = render(<ChatMessage message={baseMessage} />);
+    expect(container.querySelector('.border-l-4')).toBeNull();
+  });
+
   it('renders "NHS AI Assistant" for AI messages', () => {
     const aiMessage: Message = {
       ...baseMessage,

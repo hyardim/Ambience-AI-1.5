@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
 import { AdminChatsPage } from '@/pages/admin/AdminChatsPage';
+import { getAdminChatDetailMessageClass } from '@/utils/adminChats';
 import { renderWithProviders, seedAuth } from '@test/utils';
 import { server } from '@test/mocks/server';
 import { mockAdminChats, mockChatWithMessages } from '@test/mocks/handlers';
@@ -200,5 +201,11 @@ describe('AdminChatsPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/no messages in this chat/i)).toBeInTheDocument();
     });
+  });
+
+  it('returns the correct detail message class for each sender type', () => {
+    expect(getAdminChatDetailMessageClass('ai')).toContain('bg-blue-50');
+    expect(getAdminChatDetailMessageClass('specialist')).toContain('bg-green-50');
+    expect(getAdminChatDetailMessageClass('gp')).toBe('bg-gray-50');
   });
 });

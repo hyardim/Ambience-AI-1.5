@@ -6,7 +6,8 @@ import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/useAuth';
 import { getSpecialistQueue, getAssignedChats } from '../../services/api';
 import type { BackendChat } from '../../types/api';
-import { isAbortError } from '../../utils/errors';
+import { ifNotAbortError } from '../../utils/errors';
+import { filterSpecialistChats, formatSpecialtyLabel } from '../../utils/specialistQueries';
 import { orFallback } from '../../utils/value';
 
 type TabKey = 'queue' | 'assigned';
@@ -46,11 +47,9 @@ export function SpecialistQueriesPage() {
       setQueueChats(queue);
       setAssignedChatsState(assigned);
     } catch (error) {
-      /* v8 ignore next */
-      if (isAbortError(error)) {
-        return;
-      }
-      setError('Failed to load chats. Is the backend running?');
+      ifNotAbortError(error, () => {
+        setError('Failed to load chats. Is the backend running?');
+      });
     } finally {
       setLoading(false);
     }
@@ -58,21 +57,10 @@ export function SpecialistQueriesPage() {
 
   const currentList = tab === 'queue' ? queueChats : assignedChats;
 
-  const filteredChats = currentList.filter(chat => {
-    const matchesSearch =
-      (chat.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      /* v8 ignore next */
-      (chat.specialty || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || chat.status === statusFilter;
-    const matchesSeverity = severityFilter === 'all' || chat.severity === severityFilter;
-    return matchesSearch && matchesStatus && matchesSeverity;
-  });
+  const filteredChats = filterSpecialistChats(currentList, searchTerm, statusFilter, severityFilter);
 
   const pendingCount = queueChats.length + assignedChats.filter(c => ['assigned', 'reviewing'].includes(c.status)).length;
 
-  const formatSpecialty = (s: string | null) =>
-    /* v8 ignore next */
-    (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—');
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -201,9 +189,9 @@ export function SpecialistQueriesPage() {
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">
                       {chat.title || 'Untitled Consultation'}
                     </h3>
-                    {chat.specialty && (
+                        {chat.specialty && (
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium shrink-0">
-                        {formatSpecialty(chat.specialty)}
+                        {formatSpecialtyLabel(chat.specialty)}
                       </span>
                     )}
                   </div>

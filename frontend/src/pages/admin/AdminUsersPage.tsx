@@ -5,7 +5,7 @@ import { StatusBadge } from '../../components/Badges';
 import { adminGetUsers, adminUpdateUser, adminDeactivateUser } from '../../services/api';
 import type { UserProfile } from '../../types/api';
 import type { UserUpdateAdmin } from '../../types/api';
-import { getErrorMessage, isAbortError } from '../../utils/errors';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { coalesce } from '../../utils/value';
 
 export function AdminUsersPage() {
@@ -31,11 +31,9 @@ export function AdminUsersPage() {
       const data = await adminGetUsers(roleFilter || undefined, { signal: controller.signal });
       setUsers(data);
     } catch (err) {
-      /* v8 ignore next */
-      if (isAbortError(err)) {
-        return;
-      }
-      setError(getErrorMessage(err, 'Failed to load users'));
+      ifNotAbortError(err, () => {
+        setError(getErrorMessage(err, 'Failed to load users'));
+      });
     } finally {
       setLoading(false);
     }
@@ -68,13 +66,11 @@ export function AdminUsersPage() {
     });
   };
 
-  const handleSave = async () => {
-    /* v8 ignore next */
-    if (!editUser) return;
+  const handleSave = async (userId: number) => {
     setSaving(true);
     try {
-      const updated = await adminUpdateUser(editUser.id, editForm);
-      setUsers(prev => prev.map(u => (u.id === editUser.id ? updated : u)));
+      const updated = await adminUpdateUser(userId, editForm);
+      setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
       setEditUser(null);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to update user'));
@@ -270,7 +266,7 @@ export function AdminUsersPage() {
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave(editUser.id)}
                 disabled={saving}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50"
               >

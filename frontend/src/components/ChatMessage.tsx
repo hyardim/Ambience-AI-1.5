@@ -128,8 +128,6 @@ export function ChatMessage({
 
   // Determine the border colour for AI messages based on review status
   const getAIBorderClass = () => {
-    /* v8 ignore next */
-    if (!isAI) return '';
     if (reviewStatus === 'approved') return 'border-l-4 border-[#007f3b]';
     if (reviewStatus === 'rejected' || reviewStatus === 'replaced') return 'border-l-4 border-[#da291c]';
     if (showReviewStatus && !reviewStatus) return 'border-l-4 border-amber-400';

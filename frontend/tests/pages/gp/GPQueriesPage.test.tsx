@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,6 +6,8 @@ import { Routes, Route } from 'react-router-dom';
 import { server } from '@test/mocks/server';
 import { renderWithProviders, seedAuth } from '@test/utils';
 import { GPQueriesPage } from '@/pages/gp/GPQueriesPage';
+import { createGpQueriesSearchFetcher, fetchGpQueriesForSearch } from '@/utils/gpQueries';
+import * as api from '@/services/api';
 
 function NewQueryStub() {
   return <div>New Query Page</div>;
@@ -28,6 +30,11 @@ function renderGPQueries() {
 }
 
 describe('GPQueriesPage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('shows loading spinner then renders consultations', async () => {
     renderGPQueries();
 
@@ -58,6 +65,27 @@ describe('GPQueriesPage', () => {
       expect(screen.queryByText('Headache consultation')).not.toBeInTheDocument();
     });
     expect(screen.getByText('Joint pain assessment')).toBeInTheDocument();
+  });
+
+  it('runs the debounced search fetch after the delay', async () => {
+    const fetchChats = vi.fn().mockResolvedValue(undefined);
+    const buildFilters = vi.fn().mockReturnValue({ search: 'abc' });
+
+    await fetchGpQueriesForSearch(fetchChats, buildFilters, 'abc');
+
+    expect(buildFilters).toHaveBeenCalledWith('abc');
+    expect(fetchChats).toHaveBeenCalledWith({ search: 'abc' });
+  });
+
+  it('creates a reusable debounced search callback', () => {
+    const fetchChats = vi.fn().mockResolvedValue(undefined);
+    const buildFilters = vi.fn().mockReturnValue({ search: 'abc' });
+    const callback = createGpQueriesSearchFetcher(fetchChats, buildFilters);
+
+    callback('abc');
+
+    expect(buildFilters).toHaveBeenCalledWith('abc');
+    expect(fetchChats).toHaveBeenCalledWith({ search: 'abc' });
   });
 
   it('shows empty state when no chats match search', async () => {
@@ -97,6 +125,35 @@ describe('GPQueriesPage', () => {
     });
 
     expect(screen.getByText('No submitted consultations. Create one to get started.')).toBeInTheDocument();
+  });
+
+  it('renders consultations without a specialty badge when specialty is null', async () => {
+    server.use(
+      http.get('/chats/', () =>
+        HttpResponse.json([
+          {
+            id: 3,
+            title: 'No specialty',
+            status: 'open',
+            specialty: null,
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+        ]),
+      ),
+    );
+
+    renderGPQueries();
+
+    await waitFor(() => {
+      expect(screen.getByText('No specialty')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Neurology')).not.toBeInTheDocument();
   });
 
   it('navigates to new query page when button is clicked', async () => {
@@ -374,4 +431,15 @@ describe('GPQueriesPage', () => {
     await user.click(screen.getAllByRole('button', { name: /new consultation/i }).at(-1)!);
     expect(screen.getByText('New Query Page')).toBeInTheDocument();
   });
+
+  it('ignores aborted fetches without surfacing an error', async () => {
+    vi.spyOn(api, 'getChats').mockRejectedValueOnce(new DOMException('Aborted', 'AbortError'));
+
+    renderGPQueries();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/failed to load consultations/i)).not.toBeInTheDocument();
+    });
+  });
+
 });

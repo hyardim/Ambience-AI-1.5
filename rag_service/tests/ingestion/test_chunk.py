@@ -20,6 +20,7 @@ from src.ingestion.chunk import (
     merge_short_sections,
     split_into_sentences,
 )
+from src.utils import tokenizer as tokenizer_module
 
 # -----------------------------------------------------------------------
 # Helpers
@@ -125,6 +126,24 @@ class TestCountTokens:
     def test_deterministic(self) -> None:
         text = "The patient was prescribed methotrexate."
         assert count_tokens(text) == count_tokens(text)
+
+    def test_falls_back_when_shared_tokenizer_encoder_unavailable(self) -> None:
+        tokenizer_module._load_encoder.cache_clear()
+        with patch(
+            "src.utils.tokenizer.tiktoken.get_encoding",
+            side_effect=RuntimeError,
+        ):
+            assert count_tokens("hello world") == 2
+        tokenizer_module._load_encoder.cache_clear()
+
+    def test_uses_loaded_shared_tokenizer_encoder_when_available(self) -> None:
+        class FakeEncoder:
+            def encode(self, text: str) -> list[int]:
+                assert text == "hello world"
+                return [1, 2, 3]
+
+        with patch("src.utils.tokenizer._load_encoder", return_value=FakeEncoder()):
+            assert count_tokens("hello world") == 3
 
 
 # -----------------------------------------------------------------------

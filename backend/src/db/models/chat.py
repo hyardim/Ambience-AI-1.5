@@ -1,6 +1,10 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
 from sqlalchemy import (
     Boolean,
-    Column,
     DateTime,
     ForeignKey,
     Index,
@@ -10,9 +14,14 @@ from sqlalchemy import (
 )
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.base import Base
 from src.db.models.common import ENUM_VALUE_CONFIG, ChatStatus, utc_now
+
+if TYPE_CHECKING:
+    from src.db.models.file_attachment import FileAttachment
+    from src.db.models.message import Message
+    from src.db.models.user import User
 
 
 class Chat(Base):
@@ -25,40 +34,48 @@ class Chat(Base):
         Index("ix_chats_created_at", "created_at"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, default="New Chat")
-    status = Column(SQLEnum(ChatStatus, **ENUM_VALUE_CONFIG), default=ChatStatus.OPEN)
-    specialty = Column(String, nullable=True)
-    severity = Column(String, nullable=True)
-    patient_context = Column(JSONB, nullable=True)
-    specialist_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    assigned_at = Column(DateTime, nullable=True)
-    reviewed_at = Column(DateTime, nullable=True)
-    review_feedback = Column(Text, nullable=True)
-    is_archived = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String, default="New Chat")
+    status: Mapped[ChatStatus] = mapped_column(
+        SQLEnum(ChatStatus, **ENUM_VALUE_CONFIG), default=ChatStatus.OPEN
+    )
+    specialty: Mapped[str | None] = mapped_column(String, nullable=True)
+    severity: Mapped[str | None] = mapped_column(String, nullable=True)
+    patient_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    specialist_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=utc_now, onupdate=utc_now
+    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 
-    owner = relationship("User", back_populates="chats", foreign_keys=[user_id])
-    specialist = relationship(
+    owner: Mapped[User | None] = relationship(
+        "User", back_populates="chats", foreign_keys=[user_id]
+    )
+    specialist: Mapped[User | None] = relationship(
         "User", back_populates="assigned_chats", foreign_keys=[specialist_id]
     )
-    messages = relationship(
+    messages: Mapped[list[Message]] = relationship(
         "Message", back_populates="chat", cascade="all, delete-orphan"
     )
-    files = relationship(
+    files: Mapped[list[FileAttachment]] = relationship(
         "FileAttachment", back_populates="chat", cascade="all, delete-orphan"
     )
 
     @property
-    def patient_age(self):
+    def patient_age(self) -> Any | None:
         return (self.patient_context or {}).get("age")
 
     @property
-    def patient_gender(self):
+    def patient_gender(self) -> Any | None:
         return (self.patient_context or {}).get("gender")
 
     @property
-    def patient_notes(self):
+    def patient_notes(self) -> Any | None:
         return (self.patient_context or {}).get("notes")

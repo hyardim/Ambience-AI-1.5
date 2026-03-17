@@ -1,7 +1,9 @@
 import asyncio
+import concurrent.futures
 import json
 import logging
 import threading
+from collections.abc import AsyncIterator, Coroutine
 from typing import Any, Optional
 from urllib.parse import quote_plus
 
@@ -31,10 +33,12 @@ def _get_sync_loop() -> asyncio.AbstractEventLoop:
     return _sync_loop
 
 
-def _run_sync(coro) -> Any:  # type: ignore[type-arg]
+def _run_sync(coro: Coroutine[Any, Any, Any]) -> Any:
     """Run an async coroutine from a synchronous context."""
     loop = _get_sync_loop()
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    future: concurrent.futures.Future[Any] = asyncio.run_coroutine_threadsafe(
+        coro, loop
+    )
     return future.result(timeout=5)
 
 
@@ -169,10 +173,10 @@ class RedisCache:
             return 0
         try:
             scan_iter = client.scan_iter(match=pattern)
-            if hasattr(scan_iter, "__aiter__"):
+            if isinstance(scan_iter, AsyncIterator):
                 keys = [key async for key in scan_iter]
             else:
-                keys = await scan_iter
+                keys = list(scan_iter)
             if not keys:
                 return 0
             count = await client.delete(*keys)

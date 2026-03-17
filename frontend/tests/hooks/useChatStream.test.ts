@@ -661,6 +661,47 @@ describe('useChatStream', () => {
     expect(mockRefresh).not.toHaveBeenCalled();
   });
 
+  it('does not start polling after unmount', () => {
+    const { result, unmount } = renderHook(() =>
+      useChatStream(wrapper.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+      }),
+    );
+
+    const startPolling = result.current.startPolling;
+    unmount();
+
+    act(() => {
+      startPolling();
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
+  it('does not reset the phase when stopPolling is called after unmount', () => {
+    const { result, unmount } = renderHook(() =>
+      useChatStream(wrapper.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+      }),
+    );
+
+    act(() => {
+      result.current.startPolling();
+    });
+
+    const stopPolling = result.current.stopPolling;
+    unmount();
+
+    act(() => {
+      stopPolling();
+    });
+
+    expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
   it('keeps the current phase if timeout fires after streaming already started', () => {
     const { result } = renderHook(() =>
       useChatStream(wrapper.setMessages, {
@@ -678,5 +719,27 @@ describe('useChatStream', () => {
     });
 
     expect(result.current.phase).toBe('streaming');
+  });
+
+  it('does not start fallback polling if the timeout fires after unmount', () => {
+    const { result, unmount } = renderHook(() =>
+      useChatStream(wrapper.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+        connectTimeout: 100,
+      }),
+    );
+
+    act(() => {
+      void result.current.connectStream(1);
+    });
+
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+
+    expect(mockRefresh).not.toHaveBeenCalled();
   });
 });

@@ -1,17 +1,16 @@
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-)
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.base import Base
 from src.db.models.common import utc_now
+
+if TYPE_CHECKING:
+    from src.db.models.chat import Chat
 
 
 class Message(Base):
@@ -22,16 +21,20 @@ class Message(Base):
         Index("ix_messages_created_at", "created_at"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    content = Column(Text)
-    role = Column(String, nullable=True)
-    sender = Column(String)
-    created_at = Column(DateTime, default=utc_now)
-    citations = Column(JSONB(none_as_null=True), nullable=True)
-    is_generating = Column(Boolean, default=False, server_default="false")
-    review_status = Column(String, nullable=True)
-    review_feedback = Column(Text, nullable=True)
-    reviewed_at = Column(DateTime, nullable=True)
-    chat_id = Column(Integer, ForeignKey("chats.id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    content: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str | None] = mapped_column(String, nullable=True)
+    sender: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)
+    citations: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
+    is_generating: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    review_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    review_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    chat_id: Mapped[int] = mapped_column(Integer, ForeignKey("chats.id"), nullable=False)
 
-    chat = relationship("Chat", back_populates="messages")
+    chat: Mapped[Chat | None] = relationship("Chat", back_populates="messages")

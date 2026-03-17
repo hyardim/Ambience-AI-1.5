@@ -3,12 +3,12 @@ from __future__ import annotations
 import time
 from typing import Any, Protocol, cast
 
-import tiktoken
 from pydantic import BaseModel, Field
 
 from ..config import embed_config
 from ..ingestion.embed import load_embedder
 from ..utils.logger import setup_logger
+from ..utils.tokenizer import count_tokens
 
 logger = setup_logger(__name__)
 
@@ -18,7 +18,6 @@ logger = setup_logger(__name__)
 
 EMBEDDING_MODEL_NAME = f"sentence-transformers/{embed_config.embedding_model}"
 EMBEDDING_DIMENSIONS = embed_config.embedding_dimension
-_ENCODER = tiktoken.get_encoding("cl100k_base")
 
 # Simple rule-based expansion dictionary for medical terminology
 EXPANSION_DICT: dict[str, list[str]] = {
@@ -159,7 +158,7 @@ def process_query(
 def _validate_token_length(query: str) -> None:
     """Raise ValueError if query exceeds MAX_TOKENS tokens."""
     max_tokens = embed_config.query_max_tokens
-    token_count = len(_ENCODER.encode(query))
+    token_count = count_tokens(query)
     if token_count > max_tokens:
         raise ValueError(
             f"Query exceeds {max_tokens} token limit ({token_count} tokens)"

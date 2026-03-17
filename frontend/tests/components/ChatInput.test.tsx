@@ -38,6 +38,15 @@ describe('ChatInput', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it('ignores a direct form submit when both message and files are empty', () => {
+    const onSend = vi.fn();
+    render(<ChatInput onSendMessage={onSend} />);
+
+    fireEvent.submit(screen.getByRole('textbox').closest('form') as HTMLFormElement);
+
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('clears input after sending', async () => {
     const onSend = vi.fn();
     render(<ChatInput onSendMessage={onSend} />);

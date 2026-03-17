@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from typing import TypedDict
 
 from alembic import command
 from alembic.config import Config
@@ -11,6 +12,14 @@ from src.db.session import SessionLocal
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI_PATH = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_SCRIPT_PATH = PROJECT_ROOT / "alembic"
+
+
+class DefaultUserSpec(TypedDict):
+    email: str
+    password: str
+    full_name: str
+    role: UserRole
+    specialty: str | None
 
 
 def build_alembic_config() -> Config:
@@ -28,7 +37,7 @@ def ensure_default_users() -> None:
     if not settings.AUTH_BOOTSTRAP_DEMO_USERS:
         return
 
-    defaults = [
+    defaults: list[DefaultUserSpec] = [
         {
             "email": "gp@example.com",
             "password": "password123",

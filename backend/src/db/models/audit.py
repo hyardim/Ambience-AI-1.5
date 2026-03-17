@@ -1,7 +1,15 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import relationship
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.base import Base
 from src.db.models.common import utc_now
+
+if TYPE_CHECKING:
+    from src.db.models.user import User
 
 
 class AuditLog(Base):
@@ -12,10 +20,10 @@ class AuditLog(Base):
         Index("ix_audit_logs_timestamp", "timestamp"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    action = Column(String)
-    details = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=utc_now)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    action: Mapped[str | None] = mapped_column(String)
+    details: Mapped[str | None] = mapped_column(String, nullable=True)
+    timestamp: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)
 
-    user = relationship("User", back_populates="audit_logs")
+    user: Mapped[User | None] = relationship("User", back_populates="audit_logs")

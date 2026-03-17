@@ -17,7 +17,6 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    /* v8 ignore next */
     if (message.trim() || filesRef.current.length > 0) {
       onSendMessage(message, filesRef.current);
       setMessage('');

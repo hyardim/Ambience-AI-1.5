@@ -248,10 +248,15 @@ def review_message(
         )
         invalidate_notification_caches(chat.user_id)
     elif body.action == "manual_response":
+        replacement_content = (
+            body.replacement_content.strip()
+            if body.replacement_content is not None
+            else ""
+        )
         message_repository.create(
             db,
             chat_id=chat.id,
-            content=body.replacement_content.strip(),
+            content=replacement_content,
             sender="specialist",
             citations=_build_manual_citations(body.replacement_sources),
         )
@@ -404,8 +409,8 @@ def _regenerate_ai_response(
         _do_revise(
             db,
             placeholder,
-            original_query,
-            previous_answer,
+            original_query or "",
+            previous_answer or "",
             feedback or "",
             chat.specialty,
             chat.severity,
@@ -485,12 +490,13 @@ def _do_revise(
         _invalidate_admin_stats_cache()
 
     try:
-        audit_repository.log(
-            db,
-            user_id=chat.specialist_id if chat else None,
-            action="RAG_REVISE" if revised_content else "RAG_ERROR",
-            details=f"chunks_used={len(citations)}",
-        )
+        if chat and chat.specialist_id is not None:
+            audit_repository.log(
+                db,
+                user_id=chat.specialist_id,
+                action="RAG_REVISE" if revised_content else "RAG_ERROR",
+                details=f"chunks_used={len(citations)}",
+            )
     except Exception:
         pass
 
@@ -629,12 +635,13 @@ def _regenerate_ai_response_task(
         )
 
         try:
-            audit_repository.log(
-                db,
-                user_id=chat.specialist_id if chat else None,
-                action="RAG_REVISE" if accumulated else "RAG_ERROR",
-                details=f"chunks_used={len(citations)}",
-            )
+            if chat and chat.specialist_id is not None:
+                audit_repository.log(
+                    db,
+                    user_id=chat.specialist_id,
+                    action="RAG_REVISE" if accumulated else "RAG_ERROR",
+                    details=f"chunks_used={len(citations)}",
+                )
         except Exception:
             pass
     except Exception:

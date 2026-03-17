@@ -20,13 +20,16 @@ import type {
 } from '../types/api';
 import { setOptionalSearchParam } from '../utils/url';
 
-/* v8 ignore next */
-const API_BASE = import.meta.env.MODE === 'test' ? '' : import.meta.env.VITE_API_URL || '';
 type ApiRequestInit = RequestInit & { skipAuthRefresh?: boolean };
 export interface RequestOptions {
   signal?: AbortSignal;
 }
 let refreshInFlight: Promise<boolean> | null = null;
+
+function apiUrl(path: string): string {
+  const base = import.meta.env.VITE_API_URL || '';
+  return `${base}${path}`;
+}
 
 function redirectToLogin(): void {
   window.history.replaceState(null, '', '/login');
@@ -49,7 +52,7 @@ function authHeaders(): Record<string, string> {
 async function refreshSessionRequest(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      const res = await globalThis.fetch(`${API_BASE}/auth/refresh`, {
+      const res = await globalThis.fetch(apiUrl('/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
       });
@@ -90,7 +93,6 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
   if (!res.ok) {
     const rawBody = await res.text();
-    /* v8 ignore next */
     let errorMessage = rawBody || `Request failed (${res.status})`;
 
     try {
@@ -116,7 +118,7 @@ export async function login(username: string, password: string): Promise<LoginRe
   body.append('username', username);
   body.append('password', password);
 
-  const res = await apiFetch(`${API_BASE}/auth/login`, {
+  const res = await apiFetch(apiUrl('/auth/login'), {
     method: 'POST',
     skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -127,7 +129,7 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 export async function register(payload: RegisterRequest): Promise<LoginResponse> {
-  const res = await apiFetch(`${API_BASE}/auth/register`, {
+  const res = await apiFetch(apiUrl('/auth/register'), {
     method: 'POST',
     skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/json' },
@@ -141,7 +143,7 @@ export async function resetPassword(
   email: string,
   newPassword: string,
 ): Promise<{ message: string }> {
-  const res = await apiFetch(`${API_BASE}/auth/reset-password`, {
+  const res = await apiFetch(apiUrl('/auth/reset-password'), {
     method: 'POST',
     skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/json' },
@@ -151,7 +153,7 @@ export async function resetPassword(
 }
 
 export async function logout(): Promise<{ message?: string; success?: boolean }> {
-  const res = await apiFetch(`${API_BASE}/auth/logout`, {
+  const res = await apiFetch(apiUrl('/auth/logout'), {
     method: 'POST',
     skipAuthRefresh: true,
     headers: authHeaders(),
@@ -160,7 +162,7 @@ export async function logout(): Promise<{ message?: string; success?: boolean }>
 }
 
 export async function refreshSession(options: RequestOptions = {}): Promise<LoginResponse> {
-  const res = await apiFetch(`${API_BASE}/auth/refresh`, {
+  const res = await apiFetch(apiUrl('/auth/refresh'), {
     method: 'POST',
     skipAuthRefresh: true,
     signal: options.signal,
@@ -171,7 +173,7 @@ export async function refreshSession(options: RequestOptions = {}): Promise<Logi
 // ── Profile ──────────────────────────────────────────────────────────────
 
 export async function getProfile(options: RequestOptions = {}): Promise<UserProfile> {
-  const res = await apiFetch(`${API_BASE}/auth/me`, {
+  const res = await apiFetch(apiUrl('/auth/me'), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -179,7 +181,7 @@ export async function getProfile(options: RequestOptions = {}): Promise<UserProf
 }
 
 export async function updateProfile(data: ProfileUpdateRequest): Promise<UserProfile> {
-  const res = await apiFetch(`${API_BASE}/auth/profile`, {
+  const res = await apiFetch(apiUrl('/auth/profile'), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(data),
@@ -211,7 +213,7 @@ export async function getChats(
   if (filters.search) params.set('search', filters.search);
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
-  const res = await apiFetch(`${API_BASE}/chats/?${params}`, {
+  const res = await apiFetch(apiUrl(`/chats/?${params}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -222,7 +224,7 @@ export async function getChat(
   chatId: number,
   options: RequestOptions = {},
 ): Promise<BackendChatWithMessages> {
-  const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/chats/${chatId}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -230,7 +232,7 @@ export async function getChat(
 }
 
 export async function createChat(data: ChatCreateRequest): Promise<BackendChat> {
-  const res = await apiFetch(`${API_BASE}/chats/`, {
+  const res = await apiFetch(apiUrl('/chats/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(data),
@@ -241,7 +243,7 @@ export async function createChat(data: ChatCreateRequest): Promise<BackendChat> 
 export async function uploadChatFile(chatId: number, file: File): Promise<FileAttachment> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await apiFetch(`${API_BASE}/chats/${chatId}/files`, {
+  const res = await apiFetch(apiUrl(`/chats/${chatId}/files`), {
     method: 'POST',
     headers: authHeaders(),  // no Content-Type — browser sets multipart boundary
     body: formData,
@@ -250,7 +252,7 @@ export async function uploadChatFile(chatId: number, file: File): Promise<FileAt
 }
 
 export async function deleteChat(chatId: number): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/chats/${chatId}`), {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -261,7 +263,7 @@ export async function updateChat(
   chatId: number,
   payload: ChatUpdateRequest,
 ): Promise<BackendChat> {
-  const res = await apiFetch(`${API_BASE}/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/chats/${chatId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
@@ -270,7 +272,7 @@ export async function updateChat(
 }
 
 export async function submitForReview(chatId: number): Promise<BackendChat> {
-  const res = await apiFetch(`${API_BASE}/chats/${chatId}/submit`, {
+  const res = await apiFetch(apiUrl(`/chats/${chatId}/submit`), {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -282,7 +284,7 @@ export async function sendMessage(
   content: string,
 ): Promise<GPMessageResponse> {
   const body: MessageCreateRequest = { role: 'user', content };
-  const res = await apiFetch(`${API_BASE}/chats/${chatId}/message`, {
+  const res = await apiFetch(apiUrl(`/chats/${chatId}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -295,7 +297,7 @@ export async function sendMessage(
 export async function getSpecialistQueue(
   options: RequestOptions = {},
 ): Promise<BackendChat[]> {
-  const res = await apiFetch(`${API_BASE}/specialist/queue`, {
+  const res = await apiFetch(apiUrl('/specialist/queue'), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -305,7 +307,7 @@ export async function getSpecialistQueue(
 export async function getAssignedChats(
   options: RequestOptions = {},
 ): Promise<BackendChat[]> {
-  const res = await apiFetch(`${API_BASE}/specialist/assigned`, {
+  const res = await apiFetch(apiUrl('/specialist/assigned'), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -316,7 +318,7 @@ export async function getSpecialistChatDetail(
   chatId: number,
   options: RequestOptions = {},
 ): Promise<BackendChatWithMessages> {
-  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -325,7 +327,7 @@ export async function getSpecialistChatDetail(
 
 export async function assignChat(chatId: number, specialistId: number): Promise<BackendChat> {
   const body: AssignRequest = { specialist_id: specialistId };
-  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/assign`, {
+  const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/assign`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -339,7 +341,7 @@ export async function reviewChat(
   feedback?: string,
 ): Promise<BackendChat> {
   const body: ReviewRequest = { action, feedback };
-  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/review`, {
+  const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -361,7 +363,7 @@ export async function reviewMessage(
     replacement_content: replacementContent,
     replacement_sources: replacementSources,
   };
-  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/messages/${messageId}/review`, {
+  const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/messages/${messageId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -372,7 +374,7 @@ export async function reviewMessage(
 // ── Health ────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string; system: string }> {
-  const res = await apiFetch(`${API_BASE}/health`);
+  const res = await apiFetch(apiUrl('/health'));
   return handleResponse<{ status: string; system: string }>(res);
 }
 
@@ -382,7 +384,7 @@ export async function sendSpecialistMessage(
   chatId: number,
   content: string,
 ): Promise<{ status: string; message_id: number }> {
-  const res = await apiFetch(`${API_BASE}/specialist/chats/${chatId}/message`, {
+  const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ content }),
@@ -397,7 +399,7 @@ export async function getNotifications(
 ): Promise<NotificationResponse[]> {
   const params = new URLSearchParams();
   if (unreadOnly) params.set('unread_only', 'true');
-  const res = await apiFetch(`${API_BASE}/notifications/?${params}`, {
+  const res = await apiFetch(apiUrl(`/notifications/?${params}`), {
     headers: authHeaders(),
   });
   return handleResponse<NotificationResponse[]>(res);
@@ -406,7 +408,7 @@ export async function getNotifications(
 export async function markNotificationRead(
   notificationId: number,
 ): Promise<NotificationResponse> {
-  const res = await apiFetch(`${API_BASE}/notifications/${notificationId}/read`, {
+  const res = await apiFetch(apiUrl(`/notifications/${notificationId}/read`), {
     method: 'PATCH',
     headers: authHeaders(),
   });
@@ -414,7 +416,7 @@ export async function markNotificationRead(
 }
 
 export async function markAllNotificationsRead(): Promise<{ marked_read: number }> {
-  const res = await apiFetch(`${API_BASE}/notifications/read-all`, {
+  const res = await apiFetch(apiUrl('/notifications/read-all'), {
     method: 'PATCH',
     headers: authHeaders(),
   });
@@ -429,7 +431,7 @@ export async function adminGetUsers(
 ): Promise<UserProfile[]> {
   const params = new URLSearchParams();
   if (role) params.set('role', role);
-  const res = await apiFetch(`${API_BASE}/admin/users?${params}`, {
+  const res = await apiFetch(apiUrl(`/admin/users?${params}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -437,7 +439,7 @@ export async function adminGetUsers(
 }
 
 export async function adminGetUser(userId: number): Promise<UserProfile> {
-  const res = await apiFetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     headers: authHeaders(),
   });
   return handleResponse<UserProfile>(res);
@@ -447,7 +449,7 @@ export async function adminUpdateUser(
   userId: number,
   payload: UserUpdateAdmin,
 ): Promise<UserProfile> {
-  const res = await apiFetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
@@ -456,7 +458,7 @@ export async function adminUpdateUser(
 }
 
 export async function adminDeactivateUser(userId: number): Promise<UserProfile> {
-  const res = await apiFetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -479,9 +481,8 @@ export async function adminGetChats(filters?: {
   if (filters?.user_id) params.set('user_id', String(filters.user_id));
   if (filters?.specialist_id) params.set('specialist_id', String(filters.specialist_id));
   if (filters?.skip) params.set('skip', String(filters.skip));
-  /* v8 ignore next */
   if (filters?.limit) params.set('limit', String(filters.limit));
-  const res = await apiFetch(`${API_BASE}/admin/chats?${params}`, {
+  const res = await apiFetch(apiUrl(`/admin/chats?${params}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -492,7 +493,7 @@ export async function adminGetChat(
   chatId: number,
   options: RequestOptions = {},
 ): Promise<BackendChatWithMessages> {
-  const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -503,7 +504,7 @@ export async function adminUpdateChat(
   chatId: number,
   payload: ChatUpdateRequest,
 ): Promise<AdminChatResponse> {
-  const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
@@ -512,7 +513,7 @@ export async function adminUpdateChat(
 }
 
 export async function adminDeleteChat(chatId: number): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/admin/chats/${chatId}`, {
+  const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -524,7 +525,7 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
 export async function adminGetStats(
   options: RequestOptions = {},
 ): Promise<AdminStatsResponse> {
-  const res = await apiFetch(`${API_BASE}/admin/stats`, {
+  const res = await apiFetch(apiUrl('/admin/stats'), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -550,7 +551,7 @@ export async function adminGetLogs(filters?: {
   setOptionalSearchParam(params, 'date_from', filters?.date_from);
   setOptionalSearchParam(params, 'date_to', filters?.date_to);
   setOptionalSearchParam(params, 'limit', filters?.limit);
-  const res = await apiFetch(`${API_BASE}/admin/logs?${params}`, {
+  const res = await apiFetch(apiUrl(`/admin/logs?${params}`), {
     signal: options.signal,
     headers: authHeaders(),
   });
@@ -591,7 +592,7 @@ export function subscribeToChatStream(
   chatId: number,
   callbacks: ChatStreamCallbacks,
 ): () => void {
-  const url = `${API_BASE}/chats/${chatId}/stream`;
+  const url = apiUrl(`/chats/${chatId}/stream`);
   const source = new EventSource(url, { withCredentials: true });
 
   const handleEvent = (eventType: ChatStreamEventType) => (ev: MessageEvent) => {
@@ -671,7 +672,7 @@ export async function adminUploadGuideline(
   formData.append('file', file);
   formData.append('source_name', sourceName);
   // Do NOT set Content-Type — browser sets the multipart boundary automatically
-  const res = await apiFetch(`${API_BASE}/admin/guidelines/upload`, {
+  const res = await apiFetch(apiUrl('/admin/guidelines/upload'), {
     method: 'POST',
     headers: authHeaders(),
     body: formData,
