@@ -317,6 +317,36 @@ Operational notes:
 - Send a chat message: `POST /chats/{id}/message` with Bearer token; backend forwards to rag_service `/answer`.
 - View sources: UI “Sources” links hit `http://localhost:8001/docs/{doc_id}#page={page}` and open inline.
 
+## Auth email verification configuration
+
+The backend now supports single-use email verification links for newly registered users.
+
+- `NEW_USERS_REQUIRE_EMAIL_VERIFICATION`: when `true` (recommended), new registrations must verify email before login.
+- `ALLOW_LEGACY_UNVERIFIED_LOGIN`: emergency compatibility flag for legacy rollouts; keep `false` in normal operation.
+- `EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`: verification token lifetime.
+- `EMAIL_VERIFICATION_TOKEN_PEPPER`: secret pepper used when hashing verification tokens.
+- `RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS`: resend throttle window.
+- `RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS`: max resend attempts per window.
+- `EMAIL_VERIFICATION_EMAIL_LOG_ONLY`: when `true`, verification emails are logged instead of sent.
+
+SMTP settings shared by password reset and verification:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM`
+- `SMTP_USE_TLS`
+
+Frontend verification routes:
+
+- `/verify-email?token=...` to confirm verification.
+- `/resend-verification` to request a fresh verification link.
+
+Rollout note:
+
+- Existing users are defaulted to `email_verified=true` during startup schema migration so current accounts are not locked out.
+
 ## Password reset (secure email-link flow)
 
 The password reset flow now uses a standard, token-based design:
