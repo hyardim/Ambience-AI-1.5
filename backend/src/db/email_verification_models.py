@@ -6,11 +6,11 @@ from sqlalchemy.orm import relationship
 from src.db.base import Base
 
 
-class PasswordResetToken(Base):
-    __tablename__ = "password_reset_tokens"
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verification_tokens"
     __table_args__ = (
-        Index("ix_password_reset_tokens_user_created", "user_id", "created_at"),
-        Index("ix_password_reset_tokens_expiry_used", "expires_at", "used_at"),
+        Index("ix_email_verification_tokens_user_created", "user_id", "created_at"),
+        Index("ix_email_verification_tokens_expiry_used", "expires_at", "used_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -20,4 +20,4 @@ class PasswordResetToken(Base):
     used_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    user = relationship("User", back_populates="password_reset_tokens")
+    user = relationship("User", back_populates="email_verification_tokens")

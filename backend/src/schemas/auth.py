@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     role: str
     specialty: Optional[str]
     is_active: bool
+    email_verified: bool
 
     class Config:
         from_attributes = True
@@ -36,6 +37,22 @@ class ForgotPasswordRequest(BaseModel):
 class PasswordResetConfirmRequest(BaseModel):
     token: str
     new_password: str
+
+
+class EmailVerificationResendRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailVerificationConfirmRequest(BaseModel):
+    token: str
+
+
+class RegisterResponse(BaseModel):
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
+    user: UserOut
+    requires_email_verification: bool = False
+    message: str
 
 
 class AuthResponse(BaseModel):

@@ -25,6 +25,9 @@ function ResetStub() {
 function ForgotStub() {
   return <div>Forgot Password Page</div>;
 }
+function ResendVerificationStub() {
+  return <div>Resend Verification Page</div>;
+}
 
 function renderLogin(route = '/login') {
   return renderWithProviders(
@@ -35,6 +38,7 @@ function renderLogin(route = '/login') {
       <Route path="/admin/users" element={<AdminStub />} />
       <Route path="/register" element={<RegisterStub />} />
       <Route path="/forgot-password" element={<ForgotStub />} />
+      <Route path="/resend-verification" element={<ResendVerificationStub />} />
       <Route path="/reset-password" element={<ResetStub />} />
     </Routes>,
     { routes: [route] },
@@ -111,6 +115,7 @@ describe('LoginPage', () => {
             role: 'specialist',
             specialty: 'neurology',
             is_active: true,
+            email_verified: true,
           },
         });
       }),
@@ -145,6 +150,7 @@ describe('LoginPage', () => {
             role: 'admin',
             specialty: null,
             is_active: true,
+            email_verified: true,
           },
         });
       }),
@@ -234,5 +240,27 @@ describe('LoginPage', () => {
     });
 
     expect(screen.getByText(/forgot your password/i).closest('a')).toHaveAttribute('href', '/forgot-password');
+  });
+
+  it('shows resend verification guidance when login is blocked for unverified email', async () => {
+    server.use(
+      http.post('/auth/login', () => {
+        return HttpResponse.json(
+          { detail: 'Please verify your email before logging in. You can request a new verification email.' },
+          { status: 403 },
+        );
+      }),
+    );
+
+    renderLogin();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/username/i), 'gp@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /login/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/resend verification email/i)).toBeInTheDocument();
+    });
   });
 });

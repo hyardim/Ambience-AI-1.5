@@ -14,7 +14,11 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (username: string, password: string) => Promise<UserRole>;
-  register: (payload: RegisterRequest) => Promise<UserRole>;
+  register: (payload: RegisterRequest) => Promise<{
+    role: UserRole | null;
+    requiresEmailVerification: boolean;
+    message: string;
+  }>;
   logout: () => void;
 }
 
@@ -62,19 +66,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (payload: RegisterRequest) => {
     const data = await apiRegister(payload);
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('username', data.user.full_name || data.user.email);
-    localStorage.setItem('user_email', data.user.email);
-    localStorage.setItem('user_role', data.user.role);
-    setState({
-      token: data.access_token,
-      username: data.user.full_name || data.user.email,
-      email: data.user.email,
-      role: data.user.role,
-      isAuthenticated: true,
-      isLoading: false,
-    });
-    return data.user.role;
+    if (data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('username', data.user.full_name || data.user.email);
+      localStorage.setItem('user_email', data.user.email);
+      localStorage.setItem('user_role', data.user.role);
+      setState({
+        token: data.access_token,
+        username: data.user.full_name || data.user.email,
+        email: data.user.email,
+        role: data.user.role,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+      return {
+        role: data.user.role,
+        requiresEmailVerification: false,
+        message: data.message,
+      };
+    }
+
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_role');
+    setState({ token: null, username: null, email: null, role: null, isAuthenticated: false, isLoading: false });
+    return {
+      role: null,
+      requiresEmailVerification: data.requires_email_verification,
+      message: data.message,
+    };
   }, []);
 
   const logout = useCallback(() => {

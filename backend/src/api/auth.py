@@ -7,9 +7,12 @@ from src.db.models import User
 from src.db.session import get_db
 from src.schemas.auth import (
     AuthResponse,
+    EmailVerificationConfirmRequest,
+    EmailVerificationResendRequest,
     ForgotPasswordRequest,
     PasswordResetConfirmRequest,
     ProfileUpdate,
+    RegisterResponse,
     UserOut,
     UserRegister,
 )
@@ -26,7 +29,7 @@ def login(
     return auth_service.login(db, form_data.username, form_data.password)
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserRegister, db: Session = Depends(get_db)):
     return auth_service.register(db, payload)
 
@@ -52,6 +55,21 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
 @router.post("/reset-password/confirm")
 def reset_password_confirm(payload: PasswordResetConfirmRequest, db: Session = Depends(get_db)):
     return auth_service.reset_password_confirm(db, payload)
+
+
+@router.post("/resend-verification")
+def resend_verification(payload: EmailVerificationResendRequest, db: Session = Depends(get_db)):
+    return auth_service.resend_verification_email(db, payload)
+
+
+@router.post("/verify-email/confirm")
+def verify_email_confirm(payload: EmailVerificationConfirmRequest, db: Session = Depends(get_db)):
+    return auth_service.confirm_email_verification(db, payload)
+
+
+@router.get("/verification-status")
+def verification_status(current_user: User = Depends(get_current_user_obj)):
+    return auth_service.get_verification_status(current_user)
 
 
 @router.patch("/profile", response_model=UserOut)

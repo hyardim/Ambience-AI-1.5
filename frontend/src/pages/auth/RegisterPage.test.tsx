@@ -151,6 +151,40 @@ describe('RegisterPage', () => {
     expect(screen.getByText(/login here/i).closest('a')).toHaveAttribute('href', '/login');
   });
 
+  it('shows verification message when backend requires email verification', async () => {
+    server.use(
+      http.post('/auth/register', () => {
+        return HttpResponse.json({
+          user: {
+            id: 4,
+            email: 'verify@example.com',
+            full_name: 'Verify User',
+            role: 'gp',
+            specialty: null,
+            is_active: true,
+            email_verified: false,
+          },
+          requires_email_verification: true,
+          message: 'Registration successful. Please verify your email to continue.',
+        });
+      }),
+    );
+
+    renderRegister();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/first name/i), 'Verify');
+    await user.type(screen.getByLabelText(/last name/i), 'User');
+    await user.type(screen.getByLabelText(/email address/i), 'verify@example.com');
+    await user.type(screen.getByLabelText(/^password$/i), 'SecurePass1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'SecurePass1!');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/please verify your email to continue/i)).toBeInTheDocument();
+    });
+  });
+
   it('toggles password visibility', async () => {
     renderRegister();
     const user = userEvent.setup();

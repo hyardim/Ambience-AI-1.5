@@ -23,17 +23,36 @@ class Settings:
     CACHE_CHAT_DETAIL_TTL: int = int(os.getenv("CACHE_CHAT_DETAIL_TTL", "60"))
     CACHE_PROFILE_TTL: int = int(os.getenv("CACHE_PROFILE_TTL", "300"))
 
-    FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    FRONTEND_BASE_URL: str = os.getenv(
+        "FRONTEND_BASE_URL", "http://localhost:3000")
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = int(
         os.getenv("PASSWORD_RESET_TOKEN_TTL_MINUTES", "30")
     )
-    PASSWORD_RESET_TOKEN_PEPPER: str = os.getenv("PASSWORD_RESET_TOKEN_PEPPER", SECRET_KEY)
+    PASSWORD_RESET_TOKEN_PEPPER: str = os.getenv(
+        "PASSWORD_RESET_TOKEN_PEPPER", SECRET_KEY)
+    EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: int = int(
+        os.getenv("EMAIL_VERIFICATION_TOKEN_TTL_MINUTES", "60")
+    )
+    EMAIL_VERIFICATION_TOKEN_PEPPER: str = os.getenv(
+        "EMAIL_VERIFICATION_TOKEN_PEPPER", SECRET_KEY)
+    NEW_USERS_REQUIRE_EMAIL_VERIFICATION: bool = _get_bool(
+        "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", True
+    )
+    ALLOW_LEGACY_UNVERIFIED_LOGIN: bool = _get_bool(
+        "ALLOW_LEGACY_UNVERIFIED_LOGIN", False
+    )
 
     FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: int = int(
         os.getenv("FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS", "900")
     )
     FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS: int = int(
         os.getenv("FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS", "5")
+    )
+    RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS: int = int(
+        os.getenv("RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS", "900")
+    )
+    RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS: int = int(
+        os.getenv("RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS", "5")
     )
 
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
@@ -42,7 +61,11 @@ class Settings:
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM: str = os.getenv("SMTP_FROM", "")
     SMTP_USE_TLS: bool = _get_bool("SMTP_USE_TLS", True)
-    PASSWORD_RESET_EMAIL_LOG_ONLY: bool = _get_bool("PASSWORD_RESET_EMAIL_LOG_ONLY", True)
+    PASSWORD_RESET_EMAIL_LOG_ONLY: bool = _get_bool(
+        "PASSWORD_RESET_EMAIL_LOG_ONLY", True)
+    EMAIL_VERIFICATION_EMAIL_LOG_ONLY: bool = _get_bool(
+        "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", True
+    )
 
 
 settings = Settings()

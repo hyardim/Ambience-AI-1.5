@@ -6,6 +6,9 @@ import {
   register,
   forgotPassword,
   resetPasswordConfirm,
+  resendVerificationEmail,
+  confirmEmailVerification,
+  getVerificationStatus,
   logout,
   getProfile,
   updateProfile,
@@ -84,6 +87,28 @@ describe('API service', () => {
     it('submits token + new password', async () => {
       const data = await resetPasswordConfirm('token-123', 'NewSecure1!');
       expect(data.message.toLowerCase()).toContain('password reset');
+    });
+  });
+
+  describe('resendVerificationEmail()', () => {
+    it('returns generic resend success message', async () => {
+      const data = await resendVerificationEmail('gp@example.com');
+      expect(data.message.toLowerCase()).toContain('requires verification');
+    });
+  });
+
+  describe('confirmEmailVerification()', () => {
+    it('confirms a verification token', async () => {
+      const data = await confirmEmailVerification('verify-token');
+      expect(data.message.toLowerCase()).toContain('email verified');
+    });
+  });
+
+  describe('getVerificationStatus()', () => {
+    it('returns verification status for current user', async () => {
+      localStorage.setItem('access_token', 'tok');
+      const data = await getVerificationStatus();
+      expect(data.email_verified).toBe(true);
     });
   });
 

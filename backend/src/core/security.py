@@ -19,13 +19,18 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 # --- 1. Password Functions ---
+
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
+
 
 def get_password_hash(password):
     return pwd_context.hash(password)
 
 # --- 2. Database Authentication (New!) ---
+
+
 def authenticate_user(db: Session, email: str, password: str):
     """
     Looks up a user in the DB and verifies their password.
@@ -39,18 +44,22 @@ def authenticate_user(db: Session, email: str, password: str):
     return user
 
 # --- 3. Token Creation ---
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+        expire = datetime.now(
+            timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
     # We add the expiration claim
     to_encode.update({"exp": expire})
-    
+
     # Encode with PyJWT
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 
@@ -67,7 +76,23 @@ def verify_password_reset_token(token: str, token_hash: str) -> bool:
     calculated = hash_password_reset_token(token)
     return hmac.compare_digest(calculated, token_hash)
 
+
+def generate_email_verification_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_email_verification_token(token: str) -> str:
+    payload = f"{settings.EMAIL_VERIFICATION_TOKEN_PEPPER}:{token}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_email_verification_token(token: str, token_hash: str) -> bool:
+    calculated = hash_email_verification_token(token)
+    return hmac.compare_digest(calculated, token_hash)
+
 # --- 4. Get Current User ---
+
+
 def decode_token(token: str) -> str:
     """Decode a JWT and return the subject (email).
 
@@ -80,7 +105,8 @@ def decode_token(token: str) -> str:
         detail="Could not validate credentials",
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY,
+                             algorithms=[settings.ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -99,7 +125,8 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY,
+                             algorithms=[settings.ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception

@@ -9,6 +9,10 @@ test, and the schema is created fresh and torn down after each test
 function.
 """
 
+from src.services import auth_service
+from src.api import auth, chats, specialist, admin, notifications
+from src.db.session import get_async_db, get_db
+from src.db.base import Base
 import atexit
 import os
 import tempfile
@@ -27,11 +31,8 @@ from sqlalchemy.pool import StaticPool
 # the in-memory test database without modifying production models.
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
-from src.db.base import Base
 import src.db.password_reset_models  # noqa: F401
-from src.db.session import get_async_db, get_db
-from src.api import auth, chats, specialist, admin, notifications
-from src.services import auth_service
+import src.db.email_verification_models  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # File-based temp SQLite shared by the sync and async engines so that data
@@ -59,7 +60,8 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TestingSessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=engine)
 
 async_engine = create_async_engine(
     ASYNC_SQLALCHEMY_DATABASE_URL,
@@ -78,11 +80,16 @@ TestingAsyncSessionLocal = sessionmaker(
 def _build_app() -> FastAPI:
     """Create a minimal FastAPI app with only the routers under test."""
     app = FastAPI()
-    app.include_router(auth.router,          prefix="/auth",          tags=["auth"])
-    app.include_router(chats.router,         prefix="/chats",         tags=["chats"])
-    app.include_router(specialist.router,    prefix="/specialist",    tags=["specialist"])
-    app.include_router(admin.router,         prefix="/admin",         tags=["admin"])
-    app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+    app.include_router(auth.router,          prefix="/auth",
+                       tags=["auth"])
+    app.include_router(
+        chats.router,         prefix="/chats",         tags=["chats"])
+    app.include_router(specialist.router,
+                       prefix="/specialist",    tags=["specialist"])
+    app.include_router(
+        admin.router,         prefix="/admin",         tags=["admin"])
+    app.include_router(notifications.router,
+                       prefix="/notifications", tags=["notifications"])
 
     @app.get("/health")
     def health_check():
@@ -110,8 +117,16 @@ def db_session():
 @pytest.fixture(autouse=True)
 def clear_forgot_password_rate_limit_state():
     auth_service._forgot_password_attempts.clear()
+    auth_service._resend_verification_attempts.clear()
     yield
     auth_service._forgot_password_attempts.clear()
+    auth_service._resend_verification_attempts.clear()
+
+
+@pytest.fixture(autouse=True)
+def default_email_verification_flags(monkeypatch):
+    monkeypatch.setattr("src.core.config.settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
+    monkeypatch.setattr("src.core.config.settings.ALLOW_LEGACY_UNVERIFIED_LOGIN", False)
 
 
 @pytest.fixture()
@@ -261,7 +276,8 @@ def second_gp_headers(registered_second_gp):
 @pytest.fixture()
 def created_chat(client, gp_headers):
     """Create a chat owned by the GP user and return the ChatResponse JSON."""
-    resp = client.post("/chats/", json={"title": "Test Chat", "specialty": "neurology"}, headers=gp_headers)
+    resp = client.post(
+        "/chats/", json={"title": "Test Chat", "specialty": "neurology"}, headers=gp_headers)
     assert resp.status_code == 200, resp.text
     return resp.json()
 
