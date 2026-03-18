@@ -10,6 +10,7 @@ export const mockGPUser: UserProfile = {
   role: 'gp',
   specialty: null,
   is_active: true,
+  email_verified: true,
 };
 
 export const mockSpecialistUser: UserProfile = {
@@ -19,6 +20,7 @@ export const mockSpecialistUser: UserProfile = {
   role: 'specialist',
   specialty: 'neurology',
   is_active: true,
+  email_verified: true,
 };
 
 export const mockAdminUser: UserProfile = {
@@ -28,6 +30,7 @@ export const mockAdminUser: UserProfile = {
   role: 'admin',
   specialty: null,
   is_active: true,
+  email_verified: true,
 };
 
 export const mockLoginResponse: LoginResponse = {
@@ -135,6 +138,26 @@ export const handlers = [
     return HttpResponse.json({
       ...mockLoginResponse,
       user: { ...mockGPUser, full_name: 'New User' },
+      requires_email_verification: false,
+      message: 'Registration successful',
+    });
+  }),
+
+  http.post('/auth/resend-verification', () => {
+    return HttpResponse.json({
+      message: 'If an account exists and requires verification, a verification link will be sent shortly',
+    });
+  }),
+
+  http.post('/auth/verify-email/confirm', () => {
+    return HttpResponse.json({ message: 'Email verified successfully' });
+  }),
+
+  http.get('/auth/verification-status', () => {
+    return HttpResponse.json({
+      email: 'gp@example.com',
+      email_verified: true,
+      email_verified_at: '2025-01-15T10:00:00Z',
     });
   }),
 
