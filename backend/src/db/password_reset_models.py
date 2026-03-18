@@ -20,4 +20,4 @@ class PasswordResetToken(Base):
     used_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    user = relationship("User")
+    user = relationship("User", back_populates="password_reset_tokens")
