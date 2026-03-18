@@ -16,6 +16,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { login, isAuthenticated, role } = useAuth();
@@ -29,6 +30,7 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUnverifiedEmail('');
 
     if (!email || !password) {
       setError('Please enter your email/username and password');
@@ -40,7 +42,11 @@ export function LoginPage() {
       const loggedInRole = await login(email, password);
       navigate(routeForRole(loggedInRole));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Incorrect username or password');
+      const message = err instanceof Error ? err.message : 'Incorrect username or password';
+      setError(message);
+      if (message.toLowerCase().includes('verify your email')) {
+        setUnverifiedEmail(email);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -81,6 +87,16 @@ export function LoginPage() {
             {error && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
+                {unverifiedEmail && (
+                  <div className="mt-2">
+                    <Link
+                      to={`/resend-verification?email=${encodeURIComponent(unverifiedEmail)}`}
+                      className="text-[#005eb8] hover:text-[#003087] font-medium"
+                    >
+                      Resend verification email
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
