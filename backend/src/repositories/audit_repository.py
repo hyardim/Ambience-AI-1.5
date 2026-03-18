@@ -9,7 +9,7 @@ from src.db.models import AuditLog
 def log(
     db: Session,
     *,
-    user_id: int,
+    user_id: Optional[int],
     action: str,
     details: Optional[str] = None,
 ) -> AuditLog:
