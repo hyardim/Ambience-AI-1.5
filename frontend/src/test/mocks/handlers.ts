@@ -138,6 +138,16 @@ export const handlers = [
     });
   }),
 
+  http.post('/auth/forgot-password', () => {
+    return HttpResponse.json({
+      message: 'If that email is registered, a password reset link will be sent shortly',
+    });
+  }),
+
+  http.post('/auth/reset-password/confirm', () => {
+    return HttpResponse.json({ message: 'Password reset successful' });
+  }),
+
   http.post('/auth/logout', () => {
     return HttpResponse.json({ success: true });
   }),
