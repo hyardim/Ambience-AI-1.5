@@ -84,14 +84,23 @@ export async function register(payload: RegisterRequest): Promise<LoginResponse>
   return handleResponse<LoginResponse>(res);
 }
 
-export async function resetPassword(
-  email: string,
-  newPassword: string,
-): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, new_password: newPassword }),
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function resetPasswordConfirm(
+  token: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/auth/reset-password/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
   });
   return handleResponse<{ message: string }>(res);
 }

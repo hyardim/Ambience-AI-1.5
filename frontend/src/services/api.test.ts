@@ -4,6 +4,8 @@ import { server } from '../test/mocks/server';
 import {
   login,
   register,
+  forgotPassword,
+  resetPasswordConfirm,
   logout,
   getProfile,
   updateProfile,
@@ -68,6 +70,20 @@ describe('API service', () => {
         role: 'gp',
       });
       expect(data.access_token).toBe('mock-jwt-token');
+    });
+  });
+
+  describe('forgotPassword()', () => {
+    it('returns a generic success message', async () => {
+      const data = await forgotPassword('gp@example.com');
+      expect(data.message.toLowerCase()).toContain('if that email is registered');
+    });
+  });
+
+  describe('resetPasswordConfirm()', () => {
+    it('submits token + new password', async () => {
+      const data = await resetPasswordConfirm('token-123', 'NewSecure1!');
+      expect(data.message.toLowerCase()).toContain('password reset');
     });
   });
 

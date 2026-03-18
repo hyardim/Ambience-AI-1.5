@@ -22,6 +22,9 @@ function RegisterStub() {
 function ResetStub() {
   return <div>Reset Password Page</div>;
 }
+function ForgotStub() {
+  return <div>Forgot Password Page</div>;
+}
 
 function renderLogin(route = '/login') {
   return renderWithProviders(
@@ -31,6 +34,7 @@ function renderLogin(route = '/login') {
       <Route path="/specialist/queries" element={<SpecialistStub />} />
       <Route path="/admin/users" element={<AdminStub />} />
       <Route path="/register" element={<RegisterStub />} />
+      <Route path="/forgot-password" element={<ForgotStub />} />
       <Route path="/reset-password" element={<ResetStub />} />
     </Routes>,
     { routes: [route] },
@@ -229,6 +233,6 @@ describe('LoginPage', () => {
       expect(screen.getByText(/forgot your password/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/forgot your password/i).closest('a')).toHaveAttribute('href', '/reset-password');
+    expect(screen.getByText(/forgot your password/i).closest('a')).toHaveAttribute('href', '/forgot-password');
   });
 });

@@ -10,6 +10,7 @@ Rules enforced on register, reset-password, and profile PATCH:
 """
 
 import pytest
+from urllib.parse import parse_qs, urlparse
 
 
 STRONG_PASSWORD = "Secure1!"
@@ -76,36 +77,59 @@ class TestPasswordStrengthOnRegister:
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/reset-password
+# POST /auth/reset-password/confirm
 # ---------------------------------------------------------------------------
 
 class TestPasswordStrengthOnReset:
 
-    def test_strong_password_accepted_on_reset(self, client, registered_gp, gp_user_payload):
-        resp = client.post("/auth/reset-password", json={
-            "email": gp_user_payload["email"],
+    @staticmethod
+    def _issue_reset_token(client, email: str, monkeypatch) -> str:
+        payload: dict[str, str] = {}
+
+        def _fake_send_password_reset_email(to_email: str, reset_link: str) -> None:
+            payload["to_email"] = to_email
+            payload["reset_link"] = reset_link
+
+        monkeypatch.setattr(
+            "src.services.email_service.send_password_reset_email",
+            _fake_send_password_reset_email,
+        )
+        resp = client.post("/auth/forgot-password", json={"email": email})
+        assert resp.status_code == 200
+
+        token = parse_qs(urlparse(payload["reset_link"]).query).get("token", [""])[0]
+        assert token
+        return token
+
+    def test_strong_password_accepted_on_reset(self, client, registered_gp, gp_user_payload, monkeypatch):
+        token = self._issue_reset_token(client, gp_user_payload["email"], monkeypatch)
+        resp = client.post("/auth/reset-password/confirm", json={
+            "token": token,
             "new_password": "NewSecure1!",
         })
         assert resp.status_code == 200
 
-    def test_weak_password_rejected_on_reset(self, client, registered_gp, gp_user_payload):
-        resp = client.post("/auth/reset-password", json={
-            "email": gp_user_payload["email"],
+    def test_weak_password_rejected_on_reset(self, client, registered_gp, gp_user_payload, monkeypatch):
+        token = self._issue_reset_token(client, gp_user_payload["email"], monkeypatch)
+        resp = client.post("/auth/reset-password/confirm", json={
+            "token": token,
             "new_password": "weak",
         })
         assert resp.status_code == 400
 
-    def test_no_uppercase_rejected_on_reset(self, client, registered_gp, gp_user_payload):
-        resp = client.post("/auth/reset-password", json={
-            "email": gp_user_payload["email"],
+    def test_no_uppercase_rejected_on_reset(self, client, registered_gp, gp_user_payload, monkeypatch):
+        token = self._issue_reset_token(client, gp_user_payload["email"], monkeypatch)
+        resp = client.post("/auth/reset-password/confirm", json={
+            "token": token,
             "new_password": "abcdefg1!",
         })
         assert resp.status_code == 400
         assert "uppercase" in resp.json()["detail"]
 
-    def test_no_special_char_rejected_on_reset(self, client, registered_gp, gp_user_payload):
-        resp = client.post("/auth/reset-password", json={
-            "email": gp_user_payload["email"],
+    def test_no_special_char_rejected_on_reset(self, client, registered_gp, gp_user_payload, monkeypatch):
+        token = self._issue_reset_token(client, gp_user_payload["email"], monkeypatch)
+        resp = client.post("/auth/reset-password/confirm", json={
+            "token": token,
             "new_password": "Abcdefg1",
         })
         assert resp.status_code == 400

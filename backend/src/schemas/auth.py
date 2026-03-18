@@ -29,8 +29,12 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
-class PasswordResetRequest(BaseModel):
+class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str
     new_password: str
 
 

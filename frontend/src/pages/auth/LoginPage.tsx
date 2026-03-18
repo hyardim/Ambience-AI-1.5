@@ -124,7 +124,7 @@ export function LoginPage() {
 
               <div className="text-right">
                 <Link
-                  to="/reset-password"
+                  to="/forgot-password"
                   className="text-sm text-[#005eb8] hover:text-[#003087] font-medium"
                 >
                   Forgot your password?

@@ -5,7 +5,14 @@ from sqlalchemy.orm import Session
 from src.api.deps import get_current_user_obj
 from src.db.models import User
 from src.db.session import get_db
-from src.schemas.auth import AuthResponse, PasswordResetRequest, ProfileUpdate, UserOut, UserRegister
+from src.schemas.auth import (
+    AuthResponse,
+    ForgotPasswordRequest,
+    PasswordResetConfirmRequest,
+    ProfileUpdate,
+    UserOut,
+    UserRegister,
+)
 from src.services import auth_service
 
 router = APIRouter()
@@ -37,9 +44,14 @@ def logout(
     return auth_service.logout(db, current_user)
 
 
-@router.post("/reset-password")
-def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db)):
-    return auth_service.reset_password(db, payload)
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    return auth_service.forgot_password(db, payload)
+
+
+@router.post("/reset-password/confirm")
+def reset_password_confirm(payload: PasswordResetConfirmRequest, db: Session = Depends(get_db)):
+    return auth_service.reset_password_confirm(db, payload)
 
 
 @router.patch("/profile", response_model=UserOut)

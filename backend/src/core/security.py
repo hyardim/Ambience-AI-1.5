@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
+import secrets
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -49,6 +52,20 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     # Encode with PyJWT
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+def generate_password_reset_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_password_reset_token(token: str) -> str:
+    payload = f"{settings.PASSWORD_RESET_TOKEN_PEPPER}:{token}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_password_reset_token(token: str, token_hash: str) -> bool:
+    calculated = hash_password_reset_token(token)
+    return hmac.compare_digest(calculated, token_hash)
 
 # --- 4. Get Current User ---
 def decode_token(token: str) -> str:

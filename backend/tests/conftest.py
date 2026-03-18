@@ -28,8 +28,10 @@ from sqlalchemy.pool import StaticPool
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 
 from src.db.base import Base
+import src.db.password_reset_models  # noqa: F401
 from src.db.session import get_async_db, get_db
 from src.api import auth, chats, specialist, admin, notifications
+from src.services import auth_service
 
 # ---------------------------------------------------------------------------
 # File-based temp SQLite shared by the sync and async engines so that data
@@ -103,6 +105,13 @@ def db_session():
     finally:
         session.close()
         Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def clear_forgot_password_rate_limit_state():
+    auth_service._forgot_password_attempts.clear()
+    yield
+    auth_service._forgot_password_attempts.clear()
 
 
 @pytest.fixture()
