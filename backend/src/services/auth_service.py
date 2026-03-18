@@ -1,5 +1,7 @@
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
+from collections import defaultdict
+from urllib.parse import quote
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -7,9 +9,37 @@ from sqlalchemy.orm import Session
 from src.core import security
 from src.core.config import settings
 from src.db.models import User, UserRole
-from src.repositories import audit_repository, user_repository
-from src.schemas.auth import AuthResponse, PasswordResetRequest, ProfileUpdate, UserOut, UserRegister
+from src.repositories import audit_repository, password_reset_repository, user_repository
+from src.schemas.auth import (
+    AuthResponse,
+    ForgotPasswordRequest,
+    PasswordResetConfirmRequest,
+    ProfileUpdate,
+    UserOut,
+    UserRegister,
+)
+from src.services import email_service
 from src.utils.cache import cache, cache_keys
+
+
+GENERIC_FORGOT_PASSWORD_MESSAGE = {
+    "message": "If that email is registered, a password reset link will be sent shortly"
+}
+GENERIC_RESET_SUCCESS_MESSAGE = {"message": "Password reset successful"}
+SAFE_INVALID_RESET_TOKEN_MESSAGE = "Invalid or expired reset token"
+
+_forgot_password_attempts: dict[str, list[datetime]] = defaultdict(list)
+
+
+def _is_forgot_password_rate_limited(email: str) -> bool:
+    now = datetime.utcnow()
+    window_start = now - timedelta(seconds=settings.FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS)
+    bucket = _forgot_password_attempts[email.lower()]
+    bucket[:] = [stamp for stamp in bucket if stamp >= window_start]
+    if len(bucket) >= settings.FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS:
+        return True
+    bucket.append(now)
+    return False
 
 
 def _validate_password(password: str) -> None:
@@ -84,21 +114,76 @@ def register(db: Session, payload: UserRegister) -> AuthResponse:
     return _make_auth_response(user)
 
 
-def reset_password(db: Session, payload: PasswordResetRequest) -> dict:
+def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
+    if _is_forgot_password_rate_limited(payload.email):
+        return GENERIC_FORGOT_PASSWORD_MESSAGE
+
     user = user_repository.get_by_email(db, payload.email)
     if not user:
-        # Return generic message to avoid leaking whether the email exists
-        return {"message": "If that email is registered, the password has been reset"}
+        audit_repository.log(
+            db,
+            user_id=None,
+            action="PASSWORD_RESET_REQUESTED",
+            details="user_id=unknown",
+        )
+        return GENERIC_FORGOT_PASSWORD_MESSAGE
+
     if not user.is_active:
+        audit_repository.log(
+            db,
+            user_id=user.id,
+            action="PASSWORD_RESET_REQUESTED",
+            details=f"user_id={user.id} inactive=true",
+        )
+        return GENERIC_FORGOT_PASSWORD_MESSAGE
+
+    now = datetime.utcnow()
+    password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
+
+    raw_token = security.generate_password_reset_token()
+    token_hash = security.hash_password_reset_token(raw_token)
+    expires_at = now + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
+    password_reset_repository.create(
+        db,
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+
+    reset_link = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={quote(raw_token)}"
+    try:
+        email_service.send_password_reset_email(user.email, reset_link)
+    except Exception:
+        # Keep response generic to avoid account existence disclosure.
+        pass
+
+    audit_repository.log(
+        db,
+        user_id=user.id,
+        action="PASSWORD_RESET_REQUESTED",
+        details=f"user_id={user.id}",
+    )
+    return GENERIC_FORGOT_PASSWORD_MESSAGE
+
+
+def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) -> dict:
+    now = datetime.utcnow()
+    token_hash = security.hash_password_reset_token(payload.token)
+    token_row = password_reset_repository.get_valid_by_hash(db, token_hash=token_hash, now=now)
+
+    if not token_row or not security.verify_password_reset_token(payload.token, token_row.token_hash):
+        raise HTTPException(status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
+
+    user = token_row.user
+    if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
+
     _validate_password(payload.new_password)
-    user_repository.update(
-        db, user, hashed_password=security.get_password_hash(payload.new_password))
-    audit_repository.log(db, user_id=user.id,
-                         action="PASSWORD_RESET", details=f"user_id={user.id}")
-    cache.delete_sync(cache_keys.user_profile(user.id),
-                      user_id=user.id, resource="user_profile")
-    return {"message": "If that email is registered, the password has been reset"}
+    user_repository.update(db, user, hashed_password=security.get_password_hash(payload.new_password))
+    password_reset_repository.mark_as_used(db, token_row, used_at=now)
+    audit_repository.log(db, user_id=user.id, action="PASSWORD_RESET_COMPLETED", details=f"user_id={user.id}")
+    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
+    return GENERIC_RESET_SUCCESS_MESSAGE
 
 
 def logout(db: Session, user: User) -> dict:
