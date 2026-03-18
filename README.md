@@ -317,6 +317,59 @@ Operational notes:
 - Send a chat message: `POST /chats/{id}/message` with Bearer token; backend forwards to rag_service `/answer`.
 - View sources: UI “Sources” links hit `http://localhost:8001/docs/{doc_id}#page={page}` and open inline.
 
+## Password reset (secure email-link flow)
+
+The password reset flow now uses a standard, token-based design:
+
+- `POST /auth/forgot-password` accepts only `email` and always returns a generic success message.
+- `POST /auth/reset-password/confirm` accepts `token` and `new_password`.
+- Reset tokens are single-use, expire automatically, and only hashed token values are stored in the database.
+- Invalid, expired, or already-used tokens return a safe error (`Invalid or expired reset token`).
+
+### Auth API contract updates
+
+- Added: `POST /auth/forgot-password`
+	- Request: `{ "email": "user@example.com" }`
+	- Response: generic success message (same for existing/non-existing emails)
+- Added: `POST /auth/reset-password/confirm`
+	- Request: `{ "token": "...", "new_password": "..." }`
+	- Response: success message on completion
+- Removed insecure behavior: direct reset using `{ email, new_password }` in one call
+
+### New backend environment variables
+
+Set these for backend auth email/reset behavior:
+
+- `FRONTEND_BASE_URL` (example: `http://localhost:3000`)
+- `PASSWORD_RESET_TOKEN_TTL_MINUTES` (default: `30`)
+- `PASSWORD_RESET_TOKEN_PEPPER` (optional, defaults to app `SECRET_KEY`)
+- `FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS` (default: `900`)
+- `FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS` (default: `5`)
+- `SMTP_HOST`
+- `SMTP_PORT` (default: `587`)
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM`
+- `SMTP_USE_TLS` (`true`/`false`, default: `true`)
+- `PASSWORD_RESET_EMAIL_LOG_ONLY` (`true`/`false`, default: `true`)
+
+### Local development notes (no real SMTP)
+
+- Keep `PASSWORD_RESET_EMAIL_LOG_ONLY=true` to avoid sending real emails.
+- In this mode, reset links are logged by the backend email service.
+- Frontend uses:
+	- `/forgot-password` page for email submission
+	- `/reset-password?token=...` page for password confirmation
+
+### Manual end-to-end check
+
+1. Open the login page and select `Forgot your password?`.
+2. Submit a known test email.
+3. Copy the logged reset link token (or capture it in local/dev tooling).
+4. Open `/reset-password?token=...`.
+5. Submit a strong new password and verify login works with the new password.
+6. Reuse the same token and confirm it fails with a safe invalid/expired message.
+
 ## Ingestion quick reference
 
 - PDFs live in `rag_service/data/raw/{specialty}/{publisher}/...`.
