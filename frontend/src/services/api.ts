@@ -4,6 +4,7 @@ import type {
   FileAttachment,
   GPMessageResponse,
   LoginResponse,
+  RegisterResponse,
   RegisterRequest,
   ChatCreateRequest,
   MessageCreateRequest,
@@ -17,6 +18,7 @@ import type {
   AuditLogResponse,
   ChatUpdateRequest,
   AdminStatsResponse,
+  VerificationStatusResponse,
 } from '../types/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -74,14 +76,14 @@ export async function login(username: string, password: string): Promise<LoginRe
   return handleResponse<LoginResponse>(res);
 }
 
-export async function register(payload: RegisterRequest): Promise<LoginResponse> {
+export async function register(payload: RegisterRequest): Promise<RegisterResponse> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
-  return handleResponse<LoginResponse>(res);
+  return handleResponse<RegisterResponse>(res);
 }
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
@@ -103,6 +105,31 @@ export async function resetPasswordConfirm(
     body: JSON.stringify({ token, new_password: newPassword }),
   });
   return handleResponse<{ message: string }>(res);
+}
+
+export async function resendVerificationEmail(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function confirmEmailVerification(token: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/auth/verify-email/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function getVerificationStatus(): Promise<VerificationStatusResponse> {
+  const res = await fetch(`${API_BASE}/auth/verification-status`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<VerificationStatusResponse>(res);
 }
 
 export async function logout(): Promise<{ success: boolean }> {
