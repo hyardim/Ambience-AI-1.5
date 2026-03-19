@@ -85,6 +85,10 @@ class Chat(Base):
     specialty = Column(String, nullable=True)
     severity = Column(String, nullable=True)
     patient_context = Column(JSONB, nullable=True)
+    patient_age = Column(Integer, nullable=True)
+    patient_gender = Column(String, nullable=True)
+    patient_notes = Column(Text, nullable=True)
+    is_archived = Column(Boolean, default=False, nullable=False, server_default="false")
 
     specialist_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     assigned_at = Column(DateTime, nullable=True)
