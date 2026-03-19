@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { secureStorage } from '../utils/secureStorage';
 
 // Get the URL from the environment file you just edited
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -12,7 +13,7 @@ export const client = axios.create({
 
 // 1. Interceptor: Add Token to every request
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = secureStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -25,7 +26,7 @@ client.interceptors.response.use(
   (error) => {
     // If the token is invalid or expired, kick user to login
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      secureStorage.removeItem('access_token');
       // Only redirect if we are not already on the login page
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login';
