@@ -1,5 +1,6 @@
-import AES from 'crypto-js/aes';
-import Utf8 from 'crypto-js/enc-utf8';
+import CryptoJS from 'crypto-js';
+const AES = CryptoJS.AES;
+const Utf8 = CryptoJS.enc.Utf8;
 
 // Key sourced from env — falls back to a build-time constant so the app still
 // works in dev without any extra config. In production, set VITE_STORAGE_KEY
