@@ -125,8 +125,10 @@ def clear_forgot_password_rate_limit_state():
 
 @pytest.fixture(autouse=True)
 def default_email_verification_flags(monkeypatch):
-    monkeypatch.setattr("src.core.config.settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
-    monkeypatch.setattr("src.core.config.settings.ALLOW_LEGACY_UNVERIFIED_LOGIN", False)
+    monkeypatch.setattr(
+        "src.core.config.settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
+    monkeypatch.setattr(
+        "src.core.config.settings.ALLOW_LEGACY_UNVERIFIED_LOGIN", False)
 
 
 @pytest.fixture()

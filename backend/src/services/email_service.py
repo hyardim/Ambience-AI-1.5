@@ -57,7 +57,8 @@ def _build_verification_message(to_email: str, verify_link: str) -> EmailMessage
 
 def send_password_reset_email(to_email: str, reset_link: str) -> None:
     if settings.PASSWORD_RESET_EMAIL_LOG_ONLY or not settings.SMTP_HOST:
-        logger.info("Password reset email (log mode) to=%s link=%s", to_email, reset_link)
+        logger.info("Password reset email (log mode) to=%s link=%s",
+                    to_email, reset_link)
         return
 
     message = _build_password_reset_message(to_email, reset_link)
@@ -74,7 +75,8 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
 
 def send_verification_email(to_email: str, verify_link: str) -> None:
     if settings.EMAIL_VERIFICATION_EMAIL_LOG_ONLY or not settings.SMTP_HOST:
-        logger.info("Verification email (log mode) to=%s link=%s", to_email, verify_link)
+        logger.info("Verification email (log mode) to=%s link=%s",
+                    to_email, verify_link)
         return
 
     message = _build_verification_message(to_email, verify_link)
