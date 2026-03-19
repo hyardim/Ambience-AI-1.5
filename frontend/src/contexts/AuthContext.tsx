@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/api';
 import type { RegisterRequest } from '../types/api';
 import type { UserRole } from '../types';
+import { secureStorage } from '../utils/secureStorage';
 
 interface AuthState {
   token: string | null;
@@ -34,12 +35,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   });
 
-  // Restore token from localStorage on mount
+  // Restore token from storage on mount
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    const username = localStorage.getItem('username');
-    const role = localStorage.getItem('user_role') as UserRole | null;
-    const email = localStorage.getItem('user_email');
+    const token = secureStorage.getItem('access_token');
+    const username = secureStorage.getItem('username');
+    const role = secureStorage.getItem('user_role') as UserRole | null;
+    const email = secureStorage.getItem('user_email');
     if (token) {
       setState({ token, username, email, role, isAuthenticated: true, isLoading: false });
     } else {
@@ -49,10 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await apiLogin(username, password);
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('username', data.user.full_name || data.user.email);
-    localStorage.setItem('user_email', data.user.email);
-    localStorage.setItem('user_role', data.user.role);
+    secureStorage.setItem('access_token', data.access_token);
+    secureStorage.setItem('username', data.user.full_name || data.user.email);
+    secureStorage.setItem('user_email', data.user.email);
+    secureStorage.setItem('user_role', data.user.role);
     setState({
       token: data.access_token,
       username: data.user.full_name || data.user.email,
@@ -67,10 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (payload: RegisterRequest) => {
     const data = await apiRegister(payload);
     if (data.access_token) {
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('username', data.user.full_name || data.user.email);
-      localStorage.setItem('user_email', data.user.email);
-      localStorage.setItem('user_role', data.user.role);
+      secureStorage.setItem('access_token', data.access_token);
+      secureStorage.setItem('username', data.user.full_name || data.user.email);
+      secureStorage.setItem('user_email', data.user.email);
+      secureStorage.setItem('user_role', data.user.role);
       setState({
         token: data.access_token,
         username: data.user.full_name || data.user.email,
@@ -86,10 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('user_role');
+    secureStorage.removeItem('access_token');
+    secureStorage.removeItem('username');
+    secureStorage.removeItem('user_email');
+    secureStorage.removeItem('user_role');
     setState({ token: null, username: null, email: null, role: null, isAuthenticated: false, isLoading: false });
     return {
       role: null,
@@ -102,10 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void apiLogout().catch(() => {
       // Best-effort server-side logout; local session is still cleared below.
     });
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('user_role');
+    secureStorage.removeItem('access_token');
+    secureStorage.removeItem('username');
+    secureStorage.removeItem('user_email');
+    secureStorage.removeItem('user_role');
     setState({ token: null, username: null, email: null, role: null, isAuthenticated: false, isLoading: false });
   }, []);
 

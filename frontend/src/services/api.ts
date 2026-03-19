@@ -21,22 +21,24 @@ import type {
   VerificationStatusResponse,
 } from '../types/api';
 
+import { secureStorage } from '../utils/secureStorage';
+
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Helper ──────────────────────────────────────────────────────────────
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('access_token');
+  const token = secureStorage.getItem('access_token');
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('user_email');
+    secureStorage.removeItem('access_token');
+    secureStorage.removeItem('username');
+    secureStorage.removeItem('user_role');
+    secureStorage.removeItem('user_email');
     window.location.href = '/login';
     throw new Error('Session expired');
   }
@@ -522,7 +524,7 @@ export function subscribeToChatStream(
   chatId: number,
   callbacks: ChatStreamCallbacks,
 ): () => void {
-  const token = localStorage.getItem('access_token');
+  const token = secureStorage.getItem('access_token');
   if (!token) {
     callbacks.onConnectionError?.();
     return () => {};

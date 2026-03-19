@@ -6,6 +6,7 @@ import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { useAuth } from '../contexts/AuthContext';
 import { getProfile, updateProfile } from '../services/api';
 import type { UserProfile, ProfileUpdateRequest } from '../types/api';
+import { secureStorage } from '../utils/secureStorage';
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -90,9 +91,9 @@ export function ProfilePage() {
       setNewPassword('');
       setConfirmPassword('');
 
-      // Update localStorage so Header name is in sync
+      // Update stored username so Header name is in sync
       if (updated.full_name) {
-        localStorage.setItem('username', updated.full_name);
+        secureStorage.setItem('username', updated.full_name);
       }
 
       setSuccessMsg('Profile updated successfully');

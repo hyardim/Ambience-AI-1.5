@@ -61,7 +61,7 @@ export function SpecialistQueryDetailPage() {
       setMyUserId(profile.id);
       setChat(chatData);
       setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
-    } catch { /* silent refresh */ }
+    } catch (err) { console.warn('[QueryDetail] Background refresh failed:', err); }
   }, [queryId, username]);
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
