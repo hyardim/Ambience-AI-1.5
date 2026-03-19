@@ -245,7 +245,17 @@ export function GPNewQueryPage() {
                     accept=".pdf,.txt"
                     className="hidden"
                     onChange={(e) => {
-                      if (e.target.files) setAttachedFiles(Array.from(e.target.files));
+                      if (!e.target.files) return;
+                      const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
+                      const selected = Array.from(e.target.files);
+                      const oversized = selected.filter(f => f.size > MAX_FILE_SIZE);
+                      if (oversized.length > 0) {
+                        setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+                        e.target.value = '';
+                        return;
+                      }
+                      setError('');
+                      setAttachedFiles(selected);
                     }}
                   />
                 </label>

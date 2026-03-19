@@ -262,7 +262,8 @@ export function GPQueryDetailPage() {
       });
       setChat({ ...currentChat, ...updated });
       setEditingMeta(false);
-    } catch {
+    } catch (err) {
+      console.error('[GPQueryDetail] Failed to update consultation details:', err);
       setError('Failed to update consultation details');
     } finally {
       setSavingMeta(false);

@@ -339,8 +339,12 @@ export async function getAssignedChats(): Promise<BackendChat[]> {
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getSpecialistChatDetail(chatId: number): Promise<BackendChatWithMessages> {
+export async function getSpecialistChatDetail(
+  chatId: number,
+  options: RequestOptions = {},
+): Promise<BackendChatWithMessages> {
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}`), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -358,8 +362,9 @@ export async function assignChat(chatId: number, specialistId: number): Promise<
 
 export async function reviewChat(
   chatId: number,
-  body: ReviewRequest,
+  decision: string,
 ): Promise<BackendChat> {
+  const body: ReviewRequest = { decision };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -371,8 +376,12 @@ export async function reviewChat(
 export async function reviewMessage(
   chatId: number,
   messageId: number,
-  body: ReviewRequest,
+  decision: string,
+  feedback?: string,
+  manualContent?: string,
+  manualSources?: string[],
 ): Promise<BackendChat> {
+  const body: ReviewRequest = { decision, feedback, manual_content: manualContent, manual_sources: manualSources };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/messages/${messageId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
