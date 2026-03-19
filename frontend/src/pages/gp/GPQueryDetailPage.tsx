@@ -41,7 +41,7 @@ export function GPQueryDetailPage() {
       const found = await getChat(Number(queryId));
       setChat(found);
       setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
-    } catch { /* silent refresh */ }
+    } catch (err) { console.warn('[QueryDetail] Background refresh failed:', err); }
   }, [queryId, username]);
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
@@ -91,7 +91,8 @@ export function GPQueryDetailPage() {
           }
           return fetched;
         });
-      } catch {
+      } catch (err) {
+        console.error('[GPQueryDetail] Failed to send message:', err);
         setError('Failed to send message');
       } finally {
         setSending(false);
@@ -153,7 +154,8 @@ export function GPQueryDetailPage() {
       } else {
         setMessages(mapped);
       }
-    } catch {
+    } catch (err) {
+      console.error('[GPQueryDetail] Failed to load consultation:', err);
       setChat(null);
       setError('Failed to load consultation');
     } finally {
@@ -262,7 +264,8 @@ export function GPQueryDetailPage() {
       });
       setChat(prev => (prev ? { ...prev, ...updated } : prev));
       setEditingMeta(false);
-    } catch {
+    } catch (err) {
+      console.error('[GPQueryDetail] Failed to update consultation details:', err);
       setError('Failed to update consultation details');
     } finally {
       setSavingMeta(false);
