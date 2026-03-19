@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Auth pages
 import { LoginPage } from './pages/auth/LoginPage';
@@ -35,6 +36,7 @@ import { ProfilePage } from './pages/ProfilePage';
 
 function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <Router>
         <Routes>
@@ -56,7 +58,7 @@ function App() {
           <Route path="/gp/queries/new" element={<ProtectedRoute allowedRoles={['gp', 'admin']}><GPNewQueryPage /></ProtectedRoute>} />
           <Route path="/gp/query/:queryId" element={<ProtectedRoute allowedRoles={['gp', 'admin']}><GPQueryDetailPage /></ProtectedRoute>} />
 
-          {/* Specialist routes (demo — mock data) */}
+          {/* Specialist routes */}
           <Route path="/specialist" element={<Navigate to="/specialist/queries" replace />} />
           <Route path="/specialist/queries" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueriesPage /></ProtectedRoute>} />
           <Route path="/specialist/query/:queryId" element={<ProtectedRoute allowedRoles={['specialist', 'admin']}><SpecialistQueryDetailPage /></ProtectedRoute>} />
@@ -77,6 +79,7 @@ function App() {
         </Routes>
       </Router>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
