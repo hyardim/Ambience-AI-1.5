@@ -176,3 +176,79 @@ describe('GPNewQueryPage', () => {
     expect(screen.getByLabelText(/sex/i)).toBeInTheDocument();
   });
 });
+
+describe('GPNewQueryPage — file upload size validation', () => {
+  it('accepts a file under 3 MB and shows it in the list', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/attach files/i)).toBeInTheDocument();
+    });
+
+    const smallFile = new File(['x'.repeat(1024)], 'small.pdf', { type: 'application/pdf' });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, smallFile);
+
+    expect(screen.queryByText(/too large/i)).not.toBeInTheDocument();
+    expect(screen.getByText('small.pdf')).toBeInTheDocument();
+  });
+
+  it('rejects a file over 3 MB and shows an error', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/attach files/i)).toBeInTheDocument();
+    });
+
+    const bigFile = new File(['x'.repeat(4 * 1024 * 1024)], 'big.pdf', { type: 'application/pdf' });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, bigFile);
+
+    await waitFor(() => {
+      expect(screen.getByText(/too large/i)).toBeInTheDocument();
+      expect(screen.getByText(/maximum size is 3 MB/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('big.pdf')).not.toBeInTheDocument();
+  });
+
+  it('includes the oversized filename in the error message', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/attach files/i)).toBeInTheDocument();
+    });
+
+    const bigFile = new File(['x'.repeat(4 * 1024 * 1024)], 'oversized_report.pdf', { type: 'application/pdf' });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, bigFile);
+
+    await waitFor(() => {
+      expect(screen.getByText(/oversized_report\.pdf/i)).toBeInTheDocument();
+    });
+  });
+
+  it('removes a file when the X button is clicked', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/attach files/i)).toBeInTheDocument();
+    });
+
+    const file = new File(['hello'], 'note.pdf', { type: 'application/pdf' });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, file);
+
+    expect(screen.getByText('note.pdf')).toBeInTheDocument();
+
+    // The remove button sits next to the file name in the list item
+    const fileItem = screen.getByText('note.pdf').closest('li')!;
+    const removeBtn = fileItem.querySelector('button') as HTMLButtonElement;
+    await user.click(removeBtn);
+
+    expect(screen.queryByText('note.pdf')).not.toBeInTheDocument();
+  });
+});

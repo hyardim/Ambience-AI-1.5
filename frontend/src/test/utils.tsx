@@ -1,6 +1,7 @@
 import { render, type RenderOptions } from '@testing-library/react';
 import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom';
 import { AuthProvider } from '../contexts/AuthContext';
+import { secureStorage } from '../utils/secureStorage';
 import type { ReactElement } from 'react';
 
 interface WrapperOptions {
@@ -28,7 +29,7 @@ export function renderWithProviders(
 }
 
 /**
- * Seed localStorage with auth state so AuthContext restores it on mount.
+ * Seed encrypted storage with auth state so AuthContext restores it on mount.
  */
 export function seedAuth(overrides: {
   token?: string;
@@ -36,8 +37,8 @@ export function seedAuth(overrides: {
   email?: string;
   role?: string;
 } = {}) {
-  localStorage.setItem('access_token', overrides.token ?? 'mock-jwt-token');
-  localStorage.setItem('username', overrides.username ?? 'Dr GP');
-  localStorage.setItem('user_email', overrides.email ?? 'gp@example.com');
-  localStorage.setItem('user_role', overrides.role ?? 'gp');
+  secureStorage.setItem('access_token', overrides.token ?? 'mock-jwt-token');
+  secureStorage.setItem('username', overrides.username ?? 'Dr GP');
+  secureStorage.setItem('user_email', overrides.email ?? 'gp@example.com');
+  secureStorage.setItem('user_role', overrides.role ?? 'gp');
 }
