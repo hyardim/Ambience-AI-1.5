@@ -9,6 +9,7 @@ import { getErrorMessage } from '../../utils/errors';
 
 function routeForRole(role: UserRole): string {
   if (role === 'specialist') return '/specialist/queries';
+  if (role === 'admin') return '/admin/users';
   return '/gp/queries';
 }
 
@@ -24,6 +25,7 @@ export function RegisterPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -38,6 +40,7 @@ export function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -51,14 +54,18 @@ export function RegisterPage() {
 
     setIsSubmitting(true);
     try {
-      const registeredRole = await register({
+      const result = await register({
         full_name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email,
         password: formData.password,
         role: formData.role,
         specialty: formData.role === 'specialist' ? formData.specialty : undefined,
       });
-      navigate(routeForRole(registeredRole));
+      if (result.requiresEmailVerification) {
+        setSuccessMessage(result.message);
+      } else if (result.role) {
+        navigate(routeForRole(result.role));
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to create account'));
     } finally {
@@ -76,6 +83,21 @@ export function RegisterPage() {
             <h1 className="text-2xl font-bold text-gray-900 text-center mb-8">
               Create your Account
             </h1>
+
+            {successMessage && (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+                <p>{successMessage}</p>
+                <p className="mt-2">
+                  Check your inbox for the verification link before signing in.
+                </p>
+                <Link
+                  to={`/resend-verification?email=${encodeURIComponent(formData.email)}`}
+                  className="mt-3 inline-block text-[#005eb8] hover:text-[#003087] font-medium"
+                >
+                  Resend verification email
+                </Link>
+              </div>
+            )}
 
             {error && (
               <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

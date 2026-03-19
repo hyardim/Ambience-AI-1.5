@@ -322,7 +322,18 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 _ACTION_CATEGORIES: dict[str, set[str]] = {
-    "AUTH": {"LOGIN", "LOGOUT", "REGISTER", "UPDATE_PROFILE", "PASSWORD_RESET"},
+    "AUTH": {
+        "LOGIN",
+        "LOGOUT",
+        "REGISTER",
+        "UPDATE_PROFILE",
+        "PASSWORD_RESET",
+        "PASSWORD_RESET_REQUESTED",
+        "PASSWORD_RESET_COMPLETED",
+        "EMAIL_VERIFICATION_REQUESTED",
+        "EMAIL_VERIFICATION_SENT",
+        "EMAIL_VERIFIED",
+    },
     "CHAT": {
         "CREATE_CHAT",
         "VIEW_CHAT",

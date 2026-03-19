@@ -3,8 +3,6 @@ import type { LoginResponse, UserProfile, BackendChat, BackendChatWithMessages, 
 import type { AdminStatsResponse } from '@/types/api';
 import type { IngestionReport } from '@/services/api';
 
-// ── Fixture data ──────────────────────────────────────────────────────────
-
 export const mockGPUser: UserProfile = {
   id: 1,
   email: 'gp@example.com',
@@ -12,6 +10,7 @@ export const mockGPUser: UserProfile = {
   role: 'gp',
   specialty: null,
   is_active: true,
+  email_verified: true,
 };
 
 export const mockSpecialistUser: UserProfile = {
@@ -21,6 +20,7 @@ export const mockSpecialistUser: UserProfile = {
   role: 'specialist',
   specialty: 'neurology',
   is_active: true,
+  email_verified: true,
 };
 
 export const mockAdminUser: UserProfile = {
@@ -30,6 +30,7 @@ export const mockAdminUser: UserProfile = {
   role: 'admin',
   specialty: null,
   is_active: true,
+  email_verified: true,
 };
 
 export const mockLoginResponse: LoginResponse = {
@@ -128,6 +129,7 @@ export const mockAuditLogs: AuditLogResponse[] = [
 export const mockAdminStats: AdminStatsResponse = {
   total_ai_responses: 24,
   rag_grounded_responses: 18,
+  specialist_responses: 6,
   active_consultations: 7,
   active_users_by_role: {
     gp: 5,
@@ -168,10 +170,7 @@ export const mockIngestionReport: IngestionReport = {
   },
 };
 
-// ── Handlers ──────────────────────────────────────────────────────────────
-
 export const handlers = [
-  // Auth
   http.post('/auth/login', async ({ request }) => {
     const form = await request.formData();
     const email = String(form.get('username') ?? mockGPUser.email);
@@ -196,7 +195,7 @@ export const handlers = [
   }),
 
   http.post('/auth/register', async ({ request }) => {
-    const body = await request.json() as Partial<UserProfile> & { email?: string; role?: string };
+    const body = await request.json() as Partial<UserProfile> & { email?: string; role?: string; full_name?: string };
     return HttpResponse.json({
       ...mockLoginResponse,
       user: {
@@ -205,7 +204,37 @@ export const handlers = [
         full_name: body.full_name ?? 'New User',
         role: (body.role as UserProfile['role']) ?? 'gp',
       },
+      requires_email_verification: false,
+      message: 'Registration successful',
     });
+  }),
+
+  http.post('/auth/resend-verification', () => {
+    return HttpResponse.json({
+      message: 'If an account exists and requires verification, a verification link will be sent shortly',
+    });
+  }),
+
+  http.post('/auth/verify-email/confirm', () => {
+    return HttpResponse.json({ message: 'Email verified successfully' });
+  }),
+
+  http.get('/auth/verification-status', () => {
+    return HttpResponse.json({
+      email: 'gp@example.com',
+      email_verified: true,
+      email_verified_at: '2025-01-15T10:00:00Z',
+    });
+  }),
+
+  http.post('/auth/forgot-password', () => {
+    return HttpResponse.json({
+      message: 'If that email is registered, a password reset link will be sent shortly',
+    });
+  }),
+
+  http.post('/auth/reset-password/confirm', () => {
+    return HttpResponse.json({ message: 'Password reset successful' });
   }),
 
   http.post('/auth/logout', () => {
@@ -229,10 +258,6 @@ export const handlers = [
     });
   }),
 
-  http.post('/auth/reset-password', () => {
-    return HttpResponse.json({ message: 'Password reset successful' });
-  }),
-
   http.get('/auth/me', () => {
     const role = localStorage.getItem('user_role') ?? mockGPUser.role;
     const email = localStorage.getItem('user_email') ?? mockGPUser.email;
@@ -250,7 +275,6 @@ export const handlers = [
     return HttpResponse.json(mockGPUser);
   }),
 
-  // Chats (GP)
   http.get('/chats/', ({ request }) => {
     const url = new URL(request.url);
     let chats = [mockChat, mockChat2];
@@ -282,20 +306,34 @@ export const handlers = [
   }),
 
   http.post('/chats/:chatId/submit', () => {
-    return HttpResponse.json({ ...mockChat, status: 'submitted' });
+    return HttpResponse.json({ ...mockChat2, status: 'submitted' });
   }),
 
   http.post('/chats/:chatId/message', () => {
-    return HttpResponse.json({ status: 'ok', ai_response: 'AI says hello' } satisfies GPMessageResponse);
+    const response: GPMessageResponse = {
+      status: 'success',
+      ai_response: 'Mock AI response',
+      ai_generating: false,
+    };
+    return HttpResponse.json(response);
   }),
 
-  // Specialist
+  http.post('/chats/:chatId/files', () => {
+    return HttpResponse.json({
+      id: 1,
+      filename: 'upload.pdf',
+      file_type: 'application/pdf',
+      file_size: 1234,
+      created_at: '2025-01-15T10:00:00Z',
+    });
+  }),
+
   http.get('/specialist/queue', () => {
-    return HttpResponse.json([{ ...mockChat, status: 'submitted' }]);
+    return HttpResponse.json([mockChat2]);
   }),
 
   http.get('/specialist/assigned', () => {
-    return HttpResponse.json([{ ...mockChat2, status: 'assigned', specialist_id: 2 }]);
+    return HttpResponse.json([{ ...mockChat, status: 'assigned', specialist_id: 2 }]);
   }),
 
   http.get('/specialist/chats/:chatId', ({ params }) => {
@@ -303,71 +341,42 @@ export const handlers = [
   }),
 
   http.post('/specialist/chats/:chatId/assign', () => {
-    return HttpResponse.json({ ...mockChat, status: 'assigned', specialist_id: 2 });
+    return HttpResponse.json({ ...mockChat2, status: 'assigned', specialist_id: 2 });
   }),
 
   http.post('/specialist/chats/:chatId/review', () => {
-    return HttpResponse.json({ ...mockChat, status: 'approved' });
+    return HttpResponse.json({ ...mockChat2, status: 'approved', specialist_id: 2 });
+  }),
+
+  http.post('/specialist/chats/:chatId/messages/:messageId/review', () => {
+    return HttpResponse.json({ ...mockChat2, status: 'reviewing', specialist_id: 2 });
   }),
 
   http.post('/specialist/chats/:chatId/message', () => {
-    return HttpResponse.json({ status: 'ok', message_id: 99 });
+    return HttpResponse.json({ status: 'Message sent', message_id: 99 });
   }),
 
-  // Notifications
-  http.get('/notifications/', () => {
-    return HttpResponse.json(mockNotifications);
-  }),
+  http.get('/notifications/', () => HttpResponse.json(mockNotifications)),
+  http.post('/notifications/:notificationId/read', () => new HttpResponse(null, { status: 204 })),
+  http.post('/notifications/read-all', () => new HttpResponse(null, { status: 204 })),
 
-  http.patch('/notifications/:id/read', () => {
-    return HttpResponse.json({ ...mockNotifications[0], is_read: true });
-  }),
-
-  http.patch('/notifications/read-all', () => {
-    return HttpResponse.json({ marked_read: 2 });
-  }),
-
-  // Admin: Users
-  http.get('/admin/users', () => {
-    return HttpResponse.json([mockGPUser, mockSpecialistUser, mockAdminUser]);
-  }),
-
+  http.get('/admin/users', () => HttpResponse.json([mockGPUser, mockSpecialistUser, mockAdminUser])),
   http.get('/admin/users/:userId', ({ params }) => {
-    return HttpResponse.json({ ...mockGPUser, id: Number(params.userId) });
+    const userId = Number(params.userId);
+    const user = [mockGPUser, mockSpecialistUser, mockAdminUser].find(u => u.id === userId) ?? mockGPUser;
+    return HttpResponse.json(user);
   }),
+  http.patch('/admin/users/:userId', () => HttpResponse.json(mockGPUser)),
+  http.delete('/admin/users/:userId', () => new HttpResponse(null, { status: 204 })),
 
-  http.patch('/admin/users/:userId', () => {
-    return HttpResponse.json(mockGPUser);
-  }),
+  http.get('/admin/chats', () => HttpResponse.json(mockAdminChats)),
+  http.get('/admin/chats/:chatId', ({ params }) => HttpResponse.json({ ...mockAdminChats[0], id: Number(params.chatId) })),
+  http.patch('/admin/chats/:chatId', () => HttpResponse.json(mockAdminChats[0])),
+  http.delete('/admin/chats/:chatId', () => new HttpResponse(null, { status: 204 })),
 
-  http.delete('/admin/users/:userId', () => {
-    return HttpResponse.json({ ...mockGPUser, is_active: false });
-  }),
+  http.get('/admin/stats', () => HttpResponse.json(mockAdminStats)),
+  http.get('/admin/logs', () => HttpResponse.json(mockAuditLogs)),
+  http.post('/admin/guidelines/upload', () => HttpResponse.json(mockIngestionReport)),
 
-  // Admin: Chats
-  http.get('/admin/chats', () => {
-    return HttpResponse.json(mockAdminChats);
-  }),
-
-  http.get('/admin/chats/:chatId', ({ params }) => {
-    return HttpResponse.json({ ...mockChatWithMessages, id: Number(params.chatId) });
-  }),
-
-  http.get('/admin/stats', () => {
-    return HttpResponse.json(mockAdminStats);
-  }),
-
-  // Admin: Audit Logs
-  http.get('/admin/logs', () => {
-    return HttpResponse.json(mockAuditLogs);
-  }),
-
-  http.post('/admin/guidelines/upload', () => {
-    return HttpResponse.json(mockIngestionReport);
-  }),
-
-  // Health
-  http.get('/health', () => {
-    return HttpResponse.json({ status: 'ok', system: 'healthy' });
-  }),
+  http.get('/health', () => HttpResponse.json({ status: 'healthy' })),
 ];

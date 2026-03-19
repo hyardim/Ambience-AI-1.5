@@ -1,6 +1,15 @@
 version: '3.8'
 
 services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ambience_mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - ambience_net
+
   redis:
     image: redis:7-alpine
     container_name: ambience_rag_redis
@@ -44,14 +53,34 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - RAG_SERVICE_URL=http://rag_service:8001
       - RAG_REQUEST_TIMEOUT_SECONDS=120
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:3000}
+      - NEW_USERS_REQUIRE_EMAIL_VERIFICATION=${NEW_USERS_REQUIRE_EMAIL_VERIFICATION:-true}
+      - ALLOW_LEGACY_UNVERIFIED_LOGIN=${ALLOW_LEGACY_UNVERIFIED_LOGIN:-false}
+      - EMAIL_VERIFICATION_TOKEN_TTL_MINUTES=${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:-60}
+      - EMAIL_VERIFICATION_TOKEN_PEPPER=${EMAIL_VERIFICATION_TOKEN_PEPPER:-TEST_SECRET_KEY_DO_NOT_USE_IN_PROD}
+      - RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS=${RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS:-900}
+      - RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS=${RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS:-5}
+      - EMAIL_VERIFICATION_EMAIL_LOG_ONLY=${EMAIL_VERIFICATION_EMAIL_LOG_ONLY:-false}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-ambience.noreply@gmail.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-xngulanotanqgytp}
+      - SMTP_FROM=${SMTP_FROM:-ambience.noreply@gmail.com}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
       - REDIS_URL=redis://redis:6379/0
       - CACHE_ENABLED=true
+      - PASSWORD_RESET_TOKEN_TTL_MINUTES=${PASSWORD_RESET_TOKEN_TTL_MINUTES:-30}
+      - FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS=${FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS:-900}
+      - FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS=${FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS:-5}
+      - PASSWORD_RESET_EMAIL_LOG_ONLY=${PASSWORD_RESET_EMAIL_LOG_ONLY:-false}
 
     ports:
       - "8000:8000"
     depends_on:
       db_vector:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     networks:
       - ambience_net
 

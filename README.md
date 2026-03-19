@@ -23,9 +23,6 @@ Before first run, create a root `.env` from the example and set real secrets:
 
 ```bash
 cp .env.example .env
-```
-
-```bash
 docker compose up --build
 ```
 
@@ -66,59 +63,6 @@ The cloud path expects an OpenAI-compatible endpoint. Common choices:
 - AWS EC2 GPU + vLLM
 - another hosted OpenAI-compatible inference endpoint
 
-### RunPod / vLLM
-
-Recommended pod shape:
-
-- GPU: `2x A100 PCIe`
-- open port: `8000`
-- enough disk for weights and cache
-
-Example vLLM launch pattern:
-
-```bash
-m42-health/Llama3-Med42-70B --host 0.0.0.0 --port 8000 --tensor-parallel-size 2 --dtype bfloat16 --gpu-memory-utilization 0.92 --max-model-len 4096 --disable-custom-all-reduce --enforce-eager
-```
-
-Expected API path:
-
-- `/v1/chat/completions`
-
-Useful env vars:
-
-- `RUNPOD_POD_ID`
-- `RUNPOD_PORT=8000`
-- `RUNPOD_API_KEY`
-- optional direct overrides:
-  - `CLOUD_LLM_BASE_URL`
-  - `CLOUD_LLM_API_KEY`
-  - `CLOUD_LLM_MODEL`
-
-After env changes:
-
-```bash
-docker compose up -d --force-recreate rag_service
-```
-
-Direct pod smoke test:
-
-```bash
-curl -i https://<RUNPOD_POD_ID>-<RUNPOD_PORT>.proxy.runpod.net/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <RUNPOD_API_KEY>" \
-  -d '{"model":"m42-health/Llama3-Med42-70B","messages":[{"role":"user","content":"Say hello"}],"max_tokens":20}'
-```
-
-### AWS / self-hosted vLLM
-
-Typical shape:
-
-1. GPU instance
-2. vLLM server
-3. restricted HTTPS or internal load balancer
-4. backend / rag service allowed to call inference
-5. logging and monitoring
-
 ## Routing behavior
 
 High level:
@@ -139,17 +83,6 @@ Important routing variables:
 
 The backend caches read-heavy endpoints in Redis to reduce database load and improve latency.
 
-Cached data:
-
-- chat list responses
-- chat detail payloads
-- user profile lookups
-- specialist queue and assigned lists
-- admin stats
-- admin chat list/detail
-- admin audit logs
-- notifications list and unread count
-
 Useful backend env vars:
 
 - `REDIS_URL`
@@ -163,6 +96,13 @@ Useful backend env vars:
 - `CACHE_ADMIN_AUDIT_LOG_TTL`
 - `CACHE_NOTIFICATION_TTL`
 - `CACHE_KEY_PREFIX`
+
+Cache troubleshooting:
+
+- To disable caching temporarily, set `CACHE_ENABLED=false` and restart the backend.
+- To reset only backend cache keys, run: `redis-cli KEYS "cache:*" | xargs redis-cli DEL`
+- If you see stale chat data, confirm you updated the correct environment variables for the backend service.
+- If Redis is not reachable, the backend will fall back to database reads and log a `cache.error` warning.
 
 ## Notes
 

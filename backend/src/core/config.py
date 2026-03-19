@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     COOKIE_DOMAIN: str | None = None
 
     # File upload limits
-    MAX_FILE_SIZE_BYTES: int = 3 * 1024 * 1024  # 3 MB per file
+    MAX_FILE_SIZE_BYTES: int = 3 * 1024 * 1024
     MAX_FILES_PER_CHAT: int = 5
     FILE_CONTEXT_CHAR_LIMIT: int = 8_000
     ALLOWED_UPLOAD_EXTENSIONS: list[str] = [
@@ -76,6 +76,27 @@ class Settings(BaseSettings):
     # RAG / chat flow tuning
     CHAT_RAG_TOP_K: int = 4
     CHAT_HISTORY_MESSAGE_LIMIT: int = 8
+
+    # Auth verification / recovery
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
+    PASSWORD_RESET_TOKEN_PEPPER: str = ""
+    EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: int = 60
+    EMAIL_VERIFICATION_TOKEN_PEPPER: str = ""
+    NEW_USERS_REQUIRE_EMAIL_VERIFICATION: bool = True
+    ALLOW_LEGACY_UNVERIFIED_LOGIN: bool = False
+    FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: int = 900
+    FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS: int = 5
+    RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS: int = 900
+    RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS: int = 5
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_USE_TLS: bool = True
+    PASSWORD_RESET_EMAIL_LOG_ONLY: bool = True
+    EMAIL_VERIFICATION_EMAIL_LOG_ONLY: bool = True
 
 
 settings = Settings()

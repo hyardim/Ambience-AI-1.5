@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
+import secrets
 from typing import Any, Optional, cast
 
 import jwt
@@ -88,6 +91,34 @@ def create_refresh_token_for_user(user: User) -> str:
     )
 
 
+def generate_password_reset_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_password_reset_token(token: str) -> str:
+    pepper = settings.PASSWORD_RESET_TOKEN_PEPPER or settings.SECRET_KEY
+    payload = f"{pepper}:{token}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_password_reset_token(token: str, token_hash: str) -> bool:
+    return hmac.compare_digest(hash_password_reset_token(token), token_hash)
+
+
+def generate_email_verification_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_email_verification_token(token: str) -> str:
+    pepper = settings.EMAIL_VERIFICATION_TOKEN_PEPPER or settings.SECRET_KEY
+    payload = f"{pepper}:{token}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_email_verification_token(token: str, token_hash: str) -> bool:
+    return hmac.compare_digest(hash_email_verification_token(token), token_hash)
+
+
 def _decode_token_payload(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
@@ -98,16 +129,10 @@ def decode_token(token: str) -> str:
     except JWTError as exc:
         raise _credentials_exception() from exc
     if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
+        raise _credentials_exception()
     email = payload.get("sub")
     if not isinstance(email, str):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
+        raise _credentials_exception()
     return email
 
 

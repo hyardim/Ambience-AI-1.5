@@ -126,9 +126,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (payload: RegisterRequest) => {
     const data = await apiRegister(payload);
-    persistIdentity(data.user);
-    setState(buildStateFromUser(data.user, data.access_token));
-    return data.user.role;
+    if (data.access_token) {
+      persistIdentity(data.user);
+      setState(buildStateFromUser(data.user, data.access_token));
+      return {
+        role: data.user.role,
+        requiresEmailVerification: false,
+        message: data.message,
+      };
+    }
+
+    clearIdentity();
+    setState({
+      token: null,
+      username: null,
+      email: null,
+      role: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    return {
+      role: null,
+      requiresEmailVerification: data.requires_email_verification,
+      message: data.message,
+    };
   }, []);
 
   const logout = useCallback(() => {

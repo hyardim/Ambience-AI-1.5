@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -21,6 +22,8 @@ def create(
     full_name: Optional[str] = "New User",
     role: UserRole = UserRole.GP,
     specialty: Optional[str] = None,
+    email_verified: bool = True,
+    email_verified_at: Optional[datetime] = None,
 ) -> User:
     user = User(
         email=email,
@@ -28,6 +31,8 @@ def create(
         full_name=full_name,
         role=role,
         specialty=specialty,
+        email_verified=email_verified,
+        email_verified_at=email_verified_at,
     )
     db.add(user)
     db.commit()

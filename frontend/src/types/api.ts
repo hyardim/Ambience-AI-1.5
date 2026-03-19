@@ -67,6 +67,7 @@ export interface UserProfile {
   role: 'gp' | 'specialist' | 'admin';
   specialty: string | null;
   is_active: boolean;
+  email_verified: boolean;
 }
 
 export interface LoginResponse {
@@ -81,6 +82,20 @@ export interface RegisterRequest {
   full_name?: string;
   role: 'gp' | 'specialist' | 'admin';
   specialty?: string;
+}
+
+export interface RegisterResponse {
+  access_token?: string;
+  token_type?: string;
+  user: UserProfile;
+  requires_email_verification: boolean;
+  message: string;
+}
+
+export interface VerificationStatusResponse {
+  email: string;
+  email_verified: boolean;
+  email_verified_at: string | null;
 }
 
 export interface ProfileUpdateRequest {

@@ -7,7 +7,10 @@ import { LoadingScreen } from './components/LoadingScreen';
 
 const LoginPage = lazy(async () => ({ default: (await import('./pages/auth/LoginPage')).LoginPage }));
 const RegisterPage = lazy(async () => ({ default: (await import('./pages/auth/RegisterPage')).RegisterPage }));
+const ForgotPasswordPage = lazy(async () => ({ default: (await import('./pages/auth/ForgotPasswordPage')).ForgotPasswordPage }));
 const ResetPasswordPage = lazy(async () => ({ default: (await import('./pages/auth/ResetPasswordPage')).ResetPasswordPage }));
+const VerifyEmailPage = lazy(async () => ({ default: (await import('./pages/auth/VerifyEmailPage')).VerifyEmailPage }));
+const ResendVerificationPage = lazy(async () => ({ default: (await import('./pages/auth/ResendVerificationPage')).ResendVerificationPage }));
 const AccessDeniedPage = lazy(async () => ({ default: (await import('./pages/auth/AccessDeniedPage')).AccessDeniedPage }));
 const LandingPage = lazy(async () => ({ default: (await import('./pages/LandingPage')).LandingPage }));
 const GPQueriesPage = lazy(async () => ({ default: (await import('./pages/gp/GPQueriesPage')).GPQueriesPage }));
@@ -32,7 +35,10 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/resend-verification" element={<ResendVerificationPage />} />
               <Route path="/access-denied" element={<AccessDeniedPage />} />
 
               <Route path="/gp" element={<Navigate to="/gp/queries" replace />} />

@@ -4,6 +4,7 @@ import type {
   FileAttachment,
   GPMessageResponse,
   LoginResponse,
+  RegisterResponse,
   RegisterRequest,
   ChatCreateRequest,
   MessageCreateRequest,
@@ -17,6 +18,7 @@ import type {
   AuditLogResponse,
   ChatUpdateRequest,
   AdminStatsResponse,
+  VerificationStatusResponse,
 } from '../types/api';
 import { setOptionalSearchParam } from '../utils/url';
 
@@ -42,8 +44,6 @@ function clearStoredSession(): void {
   localStorage.removeItem('user_role');
   localStorage.removeItem('user_email');
 }
-
-// ── Helper ──────────────────────────────────────────────────────────────
 
 function authHeaders(): Record<string, string> {
   return {};
@@ -106,12 +106,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
     throw new Error(errorMessage);
   }
-  // 204 No Content
   if (res.status === 204) return undefined as unknown as T;
   return res.json();
 }
-
-// ── Auth ─────────────────────────────────────────────────────────────────
 
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const body = new URLSearchParams();
@@ -128,7 +125,7 @@ export async function login(username: string, password: string): Promise<LoginRe
   return handleResponse<LoginResponse>(res);
 }
 
-export async function register(payload: RegisterRequest): Promise<LoginResponse> {
+export async function register(payload: RegisterRequest): Promise<RegisterResponse> {
   const res = await apiFetch(apiUrl('/auth/register'), {
     method: 'POST',
     skipAuthRefresh: true,
@@ -136,20 +133,60 @@ export async function register(payload: RegisterRequest): Promise<LoginResponse>
     body: JSON.stringify(payload),
   });
 
-  return handleResponse<LoginResponse>(res);
+  return handleResponse<RegisterResponse>(res);
 }
 
-export async function resetPassword(
-  email: string,
-  newPassword: string,
-): Promise<{ message: string }> {
-  const res = await apiFetch(apiUrl('/auth/reset-password'), {
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const res = await apiFetch(apiUrl('/auth/forgot-password'), {
     method: 'POST',
     skipAuthRefresh: true,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, new_password: newPassword }),
+    body: JSON.stringify({ email }),
   });
   return handleResponse<{ message: string }>(res);
+}
+
+export async function resetPasswordConfirm(
+  token: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  const res = await apiFetch(apiUrl('/auth/reset-password/confirm'), {
+    method: 'POST',
+    skipAuthRefresh: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function resendVerificationEmail(email: string): Promise<{ message: string }> {
+  const res = await apiFetch(apiUrl('/auth/resend-verification'), {
+    method: 'POST',
+    skipAuthRefresh: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function confirmEmailVerification(token: string): Promise<{ message: string }> {
+  const res = await apiFetch(apiUrl('/auth/verify-email/confirm'), {
+    method: 'POST',
+    skipAuthRefresh: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function getVerificationStatus(
+  options: RequestOptions = {},
+): Promise<VerificationStatusResponse> {
+  const res = await apiFetch(apiUrl('/auth/verification-status'), {
+    signal: options.signal,
+    headers: authHeaders(),
+  });
+  return handleResponse<VerificationStatusResponse>(res);
 }
 
 export async function logout(): Promise<{ message?: string; success?: boolean }> {
@@ -170,8 +207,6 @@ export async function refreshSession(options: RequestOptions = {}): Promise<Logi
   return handleResponse<LoginResponse>(res);
 }
 
-// ── Profile ──────────────────────────────────────────────────────────────
-
 export async function getProfile(options: RequestOptions = {}): Promise<UserProfile> {
   const res = await apiFetch(apiUrl('/auth/me'), {
     signal: options.signal,
@@ -188,8 +223,6 @@ export async function updateProfile(data: ProfileUpdateRequest): Promise<UserPro
   });
   return handleResponse<UserProfile>(res);
 }
-
-// ── Chats (GP) ───────────────────────────────────────────────────────────
 
 export interface ChatListFilters {
   skip?: number;
@@ -245,7 +278,7 @@ export async function uploadChatFile(chatId: number, file: File): Promise<FileAt
   formData.append('file', file);
   const res = await apiFetch(apiUrl(`/chats/${chatId}/files`), {
     method: 'POST',
-    headers: authHeaders(),  // no Content-Type — browser sets multipart boundary
+    headers: authHeaders(),
     body: formData,
   });
   return handleResponse<FileAttachment>(res);
@@ -292,34 +325,22 @@ export async function sendMessage(
   return handleResponse<GPMessageResponse>(res);
 }
 
-// ── Specialist ───────────────────────────────────────────────────────────
-
-export async function getSpecialistQueue(
-  options: RequestOptions = {},
-): Promise<BackendChat[]> {
+export async function getSpecialistQueue(): Promise<BackendChat[]> {
   const res = await apiFetch(apiUrl('/specialist/queue'), {
-    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getAssignedChats(
-  options: RequestOptions = {},
-): Promise<BackendChat[]> {
+export async function getAssignedChats(): Promise<BackendChat[]> {
   const res = await apiFetch(apiUrl('/specialist/assigned'), {
-    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getSpecialistChatDetail(
-  chatId: number,
-  options: RequestOptions = {},
-): Promise<BackendChatWithMessages> {
+export async function getSpecialistChatDetail(chatId: number): Promise<BackendChatWithMessages> {
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}`), {
-    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChatWithMessages>(res);
@@ -337,10 +358,8 @@ export async function assignChat(chatId: number, specialistId: number): Promise<
 
 export async function reviewChat(
   chatId: number,
-  action: 'approve' | 'reject' | 'request_changes',
-  feedback?: string,
+  body: ReviewRequest,
 ): Promise<BackendChat> {
-  const body: ReviewRequest = { action, feedback };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -352,17 +371,8 @@ export async function reviewChat(
 export async function reviewMessage(
   chatId: number,
   messageId: number,
-  action: 'approve' | 'reject' | 'request_changes' | 'manual_response',
-  feedback?: string,
-  replacementContent?: string,
-  replacementSources?: string[],
+  body: ReviewRequest,
 ): Promise<BackendChat> {
-  const body: ReviewRequest = {
-    action,
-    feedback,
-    replacement_content: replacementContent,
-    replacement_sources: replacementSources,
-  };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/messages/${messageId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -371,68 +381,55 @@ export async function reviewMessage(
   return handleResponse<BackendChat>(res);
 }
 
-// ── Health ────────────────────────────────────────────────────────────────
-
-export async function healthCheck(): Promise<{ status: string; system: string }> {
-  const res = await apiFetch(apiUrl('/health'));
-  return handleResponse<{ status: string; system: string }>(res);
-}
-
-// ── Specialist messaging ─────────────────────────────────────────────────
-
 export async function sendSpecialistMessage(
   chatId: number,
   content: string,
 ): Promise<{ status: string; message_id: number }> {
+  const body: MessageCreateRequest = { role: 'specialist', content };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
   return handleResponse<{ status: string; message_id: number }>(res);
 }
 
-// ── Notifications ────────────────────────────────────────────────────────
-
-export async function getNotifications(
-  unreadOnly = false,
-): Promise<NotificationResponse[]> {
-  const params = new URLSearchParams();
-  if (unreadOnly) params.set('unread_only', 'true');
-  const res = await apiFetch(apiUrl(`/notifications/?${params}`), {
+export async function getNotifications(): Promise<NotificationResponse[]> {
+  const res = await apiFetch(apiUrl('/notifications/'), {
     headers: authHeaders(),
   });
   return handleResponse<NotificationResponse[]>(res);
 }
 
-export async function markNotificationRead(
-  notificationId: number,
-): Promise<NotificationResponse> {
+export async function markNotificationRead(notificationId: number): Promise<void> {
   const res = await apiFetch(apiUrl(`/notifications/${notificationId}/read`), {
-    method: 'PATCH',
+    method: 'POST',
     headers: authHeaders(),
   });
-  return handleResponse<NotificationResponse>(res);
+  return handleResponse<void>(res);
 }
 
-export async function markAllNotificationsRead(): Promise<{ marked_read: number }> {
+export async function markAllNotificationsRead(): Promise<void> {
   const res = await apiFetch(apiUrl('/notifications/read-all'), {
-    method: 'PATCH',
+    method: 'POST',
     headers: authHeaders(),
   });
-  return handleResponse<{ marked_read: number }>(res);
+  return handleResponse<void>(res);
 }
 
-// ── Admin: Users ─────────────────────────────────────────────────────────
-
-export async function adminGetUsers(
-  role?: string,
-  options: RequestOptions = {},
-): Promise<UserProfile[]> {
-  const params = new URLSearchParams();
-  if (role) params.set('role', role);
-  const res = await apiFetch(apiUrl(`/admin/users?${params}`), {
-    signal: options.signal,
+export async function adminGetUsers(params: {
+  role?: string;
+  specialty?: string;
+  active_only?: boolean;
+  search?: string;
+} = {}): Promise<UserProfile[]> {
+  const query = new URLSearchParams();
+  setOptionalSearchParam(query, 'role', params.role);
+  setOptionalSearchParam(query, 'specialty', params.specialty);
+  if (params.active_only != null) query.set('active_only', String(params.active_only));
+  setOptionalSearchParam(query, 'search', params.search);
+  const suffix = query.toString() ? `?${query}` : '';
+  const res = await apiFetch(apiUrl(`/admin/users${suffix}`), {
     headers: authHeaders(),
   });
   return handleResponse<UserProfile[]>(res);
@@ -445,10 +442,7 @@ export async function adminGetUser(userId: number): Promise<UserProfile> {
   return handleResponse<UserProfile>(res);
 }
 
-export async function adminUpdateUser(
-  userId: number,
-  payload: UserUpdateAdmin,
-): Promise<UserProfile> {
+export async function adminUpdateUser(userId: number, payload: UserUpdateAdmin): Promise<UserProfile> {
   const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -457,53 +451,38 @@ export async function adminUpdateUser(
   return handleResponse<UserProfile>(res);
 }
 
-export async function adminDeactivateUser(userId: number): Promise<UserProfile> {
+export async function adminDeactivateUser(userId: number): Promise<void> {
   const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  return handleResponse<UserProfile>(res);
+  return handleResponse<void>(res);
 }
 
-// ── Admin: Chats ─────────────────────────────────────────────────────────
-
-export async function adminGetChats(filters?: {
+export async function adminGetChats(params: {
   status?: string;
   specialty?: string;
-  user_id?: number;
-  specialist_id?: number;
-  skip?: number;
-  limit?: number;
-}, options: RequestOptions = {}): Promise<AdminChatResponse[]> {
-  const params = new URLSearchParams();
-  if (filters?.status) params.set('status', filters.status);
-  if (filters?.specialty) params.set('specialty', filters.specialty);
-  if (filters?.user_id) params.set('user_id', String(filters.user_id));
-  if (filters?.specialist_id) params.set('specialist_id', String(filters.specialist_id));
-  if (filters?.skip) params.set('skip', String(filters.skip));
-  if (filters?.limit) params.set('limit', String(filters.limit));
-  const res = await apiFetch(apiUrl(`/admin/chats?${params}`), {
-    signal: options.signal,
+  owner_q?: string;
+} = {}): Promise<AdminChatResponse[]> {
+  const query = new URLSearchParams();
+  setOptionalSearchParam(query, 'status', params.status);
+  setOptionalSearchParam(query, 'specialty', params.specialty);
+  setOptionalSearchParam(query, 'owner_q', params.owner_q);
+  const suffix = query.toString() ? `?${query}` : '';
+  const res = await apiFetch(apiUrl(`/admin/chats${suffix}`), {
     headers: authHeaders(),
   });
   return handleResponse<AdminChatResponse[]>(res);
 }
 
-export async function adminGetChat(
-  chatId: number,
-  options: RequestOptions = {},
-): Promise<BackendChatWithMessages> {
+export async function adminGetChat(chatId: number): Promise<AdminChatResponse> {
   const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
-    signal: options.signal,
     headers: authHeaders(),
   });
-  return handleResponse<BackendChatWithMessages>(res);
+  return handleResponse<AdminChatResponse>(res);
 }
 
-export async function adminUpdateChat(
-  chatId: number,
-  payload: ChatUpdateRequest,
-): Promise<AdminChatResponse> {
+export async function adminUpdateChat(chatId: number, payload: ChatUpdateRequest): Promise<AdminChatResponse> {
   const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -520,132 +499,30 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
   return handleResponse<void>(res);
 }
 
-// ── Admin: Dashboard Stats ───────────────────────────────────────────────
-
-export async function adminGetStats(
-  options: RequestOptions = {},
-): Promise<AdminStatsResponse> {
+export async function adminGetStats(): Promise<AdminStatsResponse> {
   const res = await apiFetch(apiUrl('/admin/stats'), {
-    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<AdminStatsResponse>(res);
 }
 
-// ── Admin: Audit Logs ────────────────────────────────────────────────────
-
-export async function adminGetLogs(filters?: {
+export async function adminGetLogs(params: {
   action?: string;
   category?: string;
   search?: string;
   user_id?: number;
-  date_from?: string;
-  date_to?: string;
-  limit?: number;
-}, options: RequestOptions = {}): Promise<AuditLogResponse[]> {
-  const params = new URLSearchParams();
-  setOptionalSearchParam(params, 'action', filters?.action);
-  setOptionalSearchParam(params, 'category', filters?.category);
-  setOptionalSearchParam(params, 'search', filters?.search);
-  setOptionalSearchParam(params, 'user_id', filters?.user_id);
-  setOptionalSearchParam(params, 'date_from', filters?.date_from);
-  setOptionalSearchParam(params, 'date_to', filters?.date_to);
-  setOptionalSearchParam(params, 'limit', filters?.limit);
-  const res = await apiFetch(apiUrl(`/admin/logs?${params}`), {
-    signal: options.signal,
+} = {}): Promise<AuditLogResponse[]> {
+  const query = new URLSearchParams();
+  setOptionalSearchParam(query, 'action', params.action);
+  setOptionalSearchParam(query, 'category', params.category);
+  setOptionalSearchParam(query, 'search', params.search);
+  if (params.user_id != null) query.set('user_id', String(params.user_id));
+  const suffix = query.toString() ? `?${query}` : '';
+  const res = await apiFetch(apiUrl(`/admin/logs${suffix}`), {
     headers: authHeaders(),
   });
   return handleResponse<AuditLogResponse[]>(res);
 }
-
-// ── Chat SSE Stream ──────────────────────────────────────────────────────
-
-/** Event types pushed by the backend SSE endpoint. */
-export type ChatStreamEventType = 'stream_start' | 'content' | 'complete' | 'error';
-
-export interface ChatStreamEvent {
-  type: ChatStreamEventType;
-  chat_id: number;
-  message_id: number;
-  content?: string;
-  citations?: unknown[] | null;
-  error?: string;
-}
-
-export interface ChatStreamCallbacks {
-  onOpen?: () => void;
-  onStreamStart?: (messageId: number) => void;
-  onContent?: (messageId: number, content: string) => void;
-  onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
-  onError?: (messageId: number, error: string) => void;
-  onConnectionError?: () => void;
-}
-
-/**
- * Subscribe to real-time AI generation events for a chat via SSE.
- *
- * Returns a cleanup function to close the connection. If the EventSource
- * cannot connect or encounters an error, `onConnectionError` is called so
- * the caller can fall back to polling.
- */
-export function subscribeToChatStream(
-  chatId: number,
-  callbacks: ChatStreamCallbacks,
-): () => void {
-  const url = apiUrl(`/chats/${chatId}/stream`);
-  const source = new EventSource(url, { withCredentials: true });
-
-  const handleEvent = (eventType: ChatStreamEventType) => (ev: MessageEvent) => {
-    try {
-      const data = JSON.parse(ev.data) as Record<string, unknown>;
-      const messageId = data.message_id as number;
-      switch (eventType) {
-        case 'stream_start':
-          callbacks.onStreamStart?.(messageId);
-          break;
-        case 'content':
-          callbacks.onContent?.(messageId, (data.content as string) ?? '');
-          break;
-        case 'complete':
-          callbacks.onComplete?.(
-            messageId,
-            (data.content as string) ?? '',
-            (data.citations as unknown[] | null) ?? null,
-          );
-          // Server will close the stream after complete; clean up client side.
-          source.close();
-          break;
-        case 'error':
-          callbacks.onError?.(messageId, (data.error as string) ?? 'Unknown error');
-          source.close();
-          break;
-      }
-    } catch {
-      // Malformed event – ignore
-    }
-  };
-
-  source.addEventListener('stream_start', handleEvent('stream_start'));
-  source.addEventListener('content', handleEvent('content'));
-  source.addEventListener('complete', handleEvent('complete'));
-  source.addEventListener('error', handleEvent('error'));
-
-  source.onopen = () => {
-    callbacks.onOpen?.();
-  };
-
-  // Built-in error handler (network failure, 401, etc.)
-  source.onerror = () => {
-    source.close();
-    callbacks.onConnectionError?.();
-  };
-
-  return () => {
-    source.close();
-  };
-}
-
-// ── Admin: Guideline Upload ───────────────────────────────────────────────
 
 export interface IngestionReport {
   source_name: string;
@@ -664,18 +541,54 @@ export interface IngestionReport {
   };
 }
 
-export async function adminUploadGuideline(
-  file: File,
-  sourceName: string,
-): Promise<IngestionReport> {
+export async function adminUploadGuideline(file: File, sourceName: string): Promise<IngestionReport> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('source_name', sourceName);
-  // Do NOT set Content-Type — browser sets the multipart boundary automatically
   const res = await apiFetch(apiUrl('/admin/guidelines/upload'), {
     method: 'POST',
     headers: authHeaders(),
     body: formData,
   });
   return handleResponse<IngestionReport>(res);
+}
+
+export async function healthCheck(): Promise<{ status: string }> {
+  const res = await apiFetch(apiUrl('/health'), {
+    skipAuthRefresh: true,
+  });
+  return handleResponse<{ status: string }>(res);
+}
+
+export function subscribeToChatStream(
+  chatId: number,
+  token: string,
+  handlers: {
+    onStreamStart?: (data: { chat_id: number; message_id: number }) => void;
+    onContent?: (data: { chat_id: number; message_id: number; content: string }) => void;
+    onComplete?: (data: { chat_id: number; message_id: number; content: string; citations?: unknown[] }) => void;
+    onError?: (data: { error: string }) => void;
+  },
+): () => void {
+  const base = import.meta.env.VITE_API_URL || '';
+  const source = new EventSource(`${base}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`);
+
+  source.addEventListener('stream_start', (event) => {
+    handlers.onStreamStart?.(JSON.parse(event.data));
+  });
+  source.addEventListener('content', (event) => {
+    handlers.onContent?.(JSON.parse(event.data));
+  });
+  source.addEventListener('complete', (event) => {
+    handlers.onComplete?.(JSON.parse(event.data));
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(JSON.parse(event.data));
+  });
+
+  source.onerror = () => {
+    source.close();
+  };
+
+  return () => source.close();
 }

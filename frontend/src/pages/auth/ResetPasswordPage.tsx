@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
-import { resetPassword } from '../../services/api';
+import { resetPasswordConfirm } from '../../services/api';
 import { getErrorMessage } from '../../utils/errors';
 
 export function ResetPasswordPage() {
-  const [email, setEmail] = useState('');
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') ?? '';
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,7 +20,11 @@ export function ResetPasswordPage() {
     e.preventDefault();
     setError('');
 
-    if (!email || !newPassword || !confirmPassword) {
+    if (!token) {
+      setError('Reset token is missing. Request a new password reset link.');
+      return;
+    }
+    if (!newPassword || !confirmPassword) {
       setError('All fields are required');
       return;
     }
@@ -30,10 +35,10 @@ export function ResetPasswordPage() {
 
     setSubmitting(true);
     try {
-      await resetPassword(email, newPassword);
+      await resetPasswordConfirm(token, newPassword);
       setSuccess(true);
     } catch (err) {
-      setError(getErrorMessage(err, 'Something went wrong'));
+      setError(getErrorMessage(err, 'Invalid or expired reset link. Request a new one.'));
     } finally {
       setSubmitting(false);
     }
@@ -67,8 +72,14 @@ export function ResetPasswordPage() {
             ) : (
               <>
                 <p className="text-gray-600 text-center mb-8">
-                  Enter your registered email and choose a new password.
+                  Set your new password below.
                 </p>
+
+                {!token && (
+                  <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                    This reset link is incomplete. Please request a new one from Forgot Password.
+                  </div>
+                )}
 
                 {error && (
                   <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -77,22 +88,6 @@ export function ResetPasswordPage() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                      Email address
-                    </label>
-                    <input
-                      id="email"
-                      type="text"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      required
-                    />
-                  </div>
-
                   <div>
                     <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
                       New password
@@ -104,7 +99,7 @@ export function ResetPasswordPage() {
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
-                        placeholder="At least 6 characters"
+                        placeholder="At least 8 characters"
                         autoComplete="new-password"
                         required
                       />
@@ -137,7 +132,7 @@ export function ResetPasswordPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !token}
                     className="w-full bg-[var(--nhs-blue)] text-white py-3 px-4 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {submitting ? 'Resetting…' : 'Reset Password'}
@@ -145,11 +140,11 @@ export function ResetPasswordPage() {
                 </form>
 
                 <Link
-                  to="/login"
+                  to="/forgot-password"
                   className="flex items-center justify-center gap-2 text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium mt-6"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Back to Login
+                  Back to Forgot Password
                 </Link>
               </>
             )}

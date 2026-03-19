@@ -17,6 +17,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { login, isAuthenticated, role } = useAuth();
@@ -30,6 +31,7 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUnverifiedEmail('');
 
     if (!email || !password) {
       setError('Please enter your email/username and password');
@@ -41,7 +43,11 @@ export function LoginPage() {
       const loggedInRole = await login(email, password);
       navigate(routeForRole(loggedInRole));
     } catch (err) {
-      setError(getErrorMessage(err, 'Incorrect username or password'));
+      const message = getErrorMessage(err, 'Incorrect username or password');
+      setError(message);
+      if (message.toLowerCase().includes('verify your email')) {
+        setUnverifiedEmail(email);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -63,7 +69,6 @@ export function LoginPage() {
               Login to your Account
             </h1>
 
-            {/* Demo credentials hint */}
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials</p>
               <p className="text-sm text-blue-700">
@@ -82,6 +87,16 @@ export function LoginPage() {
             {error && (
               <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
+                {unverifiedEmail && (
+                  <div className="mt-2">
+                    <Link
+                      to={`/resend-verification?email=${encodeURIComponent(unverifiedEmail)}`}
+                      className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
+                    >
+                      Resend verification email
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
@@ -127,7 +142,7 @@ export function LoginPage() {
 
               <div className="text-right">
                 <Link
-                  to="/reset-password"
+                  to="/forgot-password"
                   className="text-sm text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
                 >
                   Forgot your password?

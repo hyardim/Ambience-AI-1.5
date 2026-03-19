@@ -10,7 +10,7 @@ from src.utils.cache import cache, cache_keys
 def log(
     db: Session,
     *,
-    user_id: int,
+    user_id: Optional[int],
     action: str,
     details: Optional[str] = None,
     invalidate_admin_cache: bool = True,
