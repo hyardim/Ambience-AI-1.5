@@ -82,7 +82,8 @@ def generate_email_verification_token() -> str:
 
 
 def hash_email_verification_token(token: str) -> str:
-    payload = f"{settings.EMAIL_VERIFICATION_TOKEN_PEPPER}:{token}".encode("utf-8")
+    payload = f"{settings.EMAIL_VERIFICATION_TOKEN_PEPPER}:{token}".encode(
+        "utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 

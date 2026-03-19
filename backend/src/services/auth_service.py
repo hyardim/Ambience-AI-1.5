@@ -1,9 +1,11 @@
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import logging
 from urllib.parse import quote
 
 from fastapi import HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.core import security
@@ -43,6 +45,7 @@ SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE = "Invalid or expired verification token
 
 _forgot_password_attempts: dict[str, list[datetime]] = defaultdict(list)
 _resend_verification_attempts: dict[str, list[datetime]] = defaultdict(list)
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -98,7 +101,8 @@ def _validate_password(password: str) -> None:
     if not re.search(r"[^A-Za-z0-9]", password):
         errors.append("a special character")
     if errors:
-        raise HTTPException(status_code=400, detail=f"Password must contain: {', '.join(errors)}")
+        raise HTTPException(
+            status_code=400, detail=f"Password must contain: {', '.join(errors)}")
 
 
 def _make_auth_response(user: User) -> AuthResponse:
@@ -115,11 +119,14 @@ def _make_auth_response(user: User) -> AuthResponse:
 
 
 def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
-    email_verification_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
+    _ensure_auth_token_tables(db)
+    email_verification_repository.invalidate_active_for_user(
+        db, user_id=user.id, now=now)
 
     raw_token = security.generate_email_verification_token()
     token_hash = security.hash_email_verification_token(raw_token)
-    expires_at = now + timedelta(minutes=settings.EMAIL_VERIFICATION_TOKEN_TTL_MINUTES)
+    expires_at = now + \
+        timedelta(minutes=settings.EMAIL_VERIFICATION_TOKEN_TTL_MINUTES)
 
     email_verification_repository.create(
         db,
@@ -153,7 +160,8 @@ def login(db: Session, email: str, password: str) -> AuthResponse:
             detail="Please verify your email before logging in. You can request a new verification email.",
         )
 
-    audit_repository.log(db, user_id=user.id, action="LOGIN", details=f"user_id={user.id}")
+    audit_repository.log(db, user_id=user.id, action="LOGIN",
+                         details=f"user_id={user.id}")
     return _make_auth_response(user)
 
 
@@ -164,10 +172,12 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
     try:
         role = UserRole(payload.role)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid role: {payload.role}")
 
     if role == UserRole.SPECIALIST and not payload.specialty:
-        raise HTTPException(status_code=400, detail="Specialists must provide a specialty")
+        raise HTTPException(
+            status_code=400, detail="Specialists must provide a specialty")
 
     _validate_password(payload.password)
 
@@ -184,7 +194,8 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
         email_verified_at=None if requires_verification else now,
     )
 
-    audit_repository.log(db, user_id=user.id, action="REGISTER", details=f"user_id={user.id}")
+    audit_repository.log(db, user_id=user.id,
+                         action="REGISTER", details=f"user_id={user.id}")
 
     if requires_verification:
         audit_repository.log(
@@ -195,9 +206,10 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
         )
         try:
             _issue_verification_link(db, user, now)
-        except Exception:
+        except Exception as exc:
             # Registration succeeds even if email transport fails.
-            pass
+            logger.exception(
+                "Verification email dispatch failed during register for user_id=%s: %s", user.id, exc)
         return RegisterResponse(
             user=UserOut.model_validate(user),
             requires_email_verification=True,
@@ -240,9 +252,10 @@ def resend_verification_email(db: Session, payload: EmailVerificationResendReque
 
     try:
         _issue_verification_link(db, user, _utcnow())
-    except Exception:
+    except Exception as exc:
         # Keep response generic to avoid sensitive-state disclosure.
-        pass
+        logger.exception(
+            "Verification email dispatch failed during resend for user_id=%s: %s", user.id, exc)
 
     return GENERIC_RESEND_VERIFICATION_MESSAGE
 
@@ -250,18 +263,22 @@ def resend_verification_email(db: Session, payload: EmailVerificationResendReque
 def confirm_email_verification(db: Session, payload: EmailVerificationConfirmRequest) -> dict:
     now = _utcnow()
     token_hash = security.hash_email_verification_token(payload.token)
-    token_row = email_verification_repository.get_valid_by_hash(db, token_hash=token_hash, now=now)
+    token_row = email_verification_repository.get_valid_by_hash(
+        db, token_hash=token_hash, now=now)
 
     if not token_row or not security.verify_email_verification_token(payload.token, token_row.token_hash):
-        raise HTTPException(status_code=400, detail=SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE)
+        raise HTTPException(
+            status_code=400, detail=SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE)
 
     user = token_row.user
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
 
     if not user.email_verified:
-        user_repository.update(db, user, email_verified=True, email_verified_at=now)
-        cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
+        user_repository.update(
+            db, user, email_verified=True, email_verified_at=now)
+        cache.delete_sync(cache_keys.user_profile(user.id),
+                          user_id=user.id, resource="user_profile")
         audit_repository.log(
             db,
             user_id=user.id,
@@ -297,11 +314,14 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
         return GENERIC_FORGOT_PASSWORD_MESSAGE
 
     now = _utcnow()
-    password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
+    _ensure_auth_token_tables(db)
+    password_reset_repository.invalidate_active_for_user(
+        db, user_id=user.id, now=now)
 
     raw_token = security.generate_password_reset_token()
     token_hash = security.hash_password_reset_token(raw_token)
-    expires_at = now + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
+    expires_at = now + \
+        timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
     password_reset_repository.create(
         db,
         user_id=user.id,
@@ -312,8 +332,9 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
     reset_link = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={quote(raw_token)}"
     try:
         email_service.send_password_reset_email(user.email, reset_link)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception(
+            "Password reset email dispatch failed for user_id=%s: %s", user.id, exc)
 
     audit_repository.log(
         db,
@@ -327,17 +348,20 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
 def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) -> dict:
     now = _utcnow()
     token_hash = security.hash_password_reset_token(payload.token)
-    token_row = password_reset_repository.get_valid_by_hash(db, token_hash=token_hash, now=now)
+    token_row = password_reset_repository.get_valid_by_hash(
+        db, token_hash=token_hash, now=now)
 
     if not token_row or not security.verify_password_reset_token(payload.token, token_row.token_hash):
-        raise HTTPException(status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
+        raise HTTPException(
+            status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
 
     user = token_row.user
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
 
     _validate_password(payload.new_password)
-    user_repository.update(db, user, hashed_password=security.get_password_hash(payload.new_password))
+    user_repository.update(
+        db, user, hashed_password=security.get_password_hash(payload.new_password))
     password_reset_repository.mark_as_used(db, token_row, used_at=now)
     audit_repository.log(
         db,
@@ -345,12 +369,14 @@ def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) ->
         action="PASSWORD_RESET_COMPLETED",
         details=f"user_id={user.id}",
     )
-    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
+    cache.delete_sync(cache_keys.user_profile(user.id),
+                      user_id=user.id, resource="user_profile")
     return GENERIC_RESET_SUCCESS_MESSAGE
 
 
 def logout(db: Session, user: User) -> dict:
-    audit_repository.log(db, user_id=user.id, action="LOGOUT", details=f"user_id={user.id}")
+    audit_repository.log(db, user_id=user.id, action="LOGOUT",
+                         details=f"user_id={user.id}")
     return {"message": "Logged out successfully"}
 
 
@@ -372,13 +398,74 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
 
     if payload.new_password:
         if not payload.current_password:
-            raise HTTPException(status_code=400, detail="current_password is required to set a new password")
+            raise HTTPException(
+                status_code=400, detail="current_password is required to set a new password")
         if not security.verify_password(payload.current_password, user.hashed_password):
-            raise HTTPException(status_code=400, detail="Current password is incorrect")
+            raise HTTPException(
+                status_code=400, detail="Current password is incorrect")
         _validate_password(payload.new_password)
-        fields["hashed_password"] = security.get_password_hash(payload.new_password)
+        fields["hashed_password"] = security.get_password_hash(
+            payload.new_password)
 
     user = user_repository.update(db, user, **fields)
-    audit_repository.log(db, user_id=user.id, action="UPDATE_PROFILE", details=f"user_id={user.id}")
-    cache.delete_sync(cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile")
+    audit_repository.log(db, user_id=user.id,
+                         action="UPDATE_PROFILE", details=f"user_id={user.id}")
+    cache.delete_sync(cache_keys.user_profile(user.id),
+                      user_id=user.id, resource="user_profile")
     return user
+
+
+def _ensure_auth_token_tables(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash VARCHAR NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash VARCHAR NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_created "
+            "ON password_reset_tokens (user_id, created_at)"
+        )
+    )
+    db.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expiry_used "
+            "ON password_reset_tokens (expires_at, used_at)"
+        )
+    )
+    db.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_user_created "
+            "ON email_verification_tokens (user_id, created_at)"
+        )
+    )
+    db.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_expiry_used "
+            "ON email_verification_tokens (expires_at, used_at)"
+        )
+    )
+    db.commit()

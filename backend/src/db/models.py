@@ -52,23 +52,14 @@ class User(Base):
     email_verified = Column(Boolean, default=True, nullable=False)
     email_verified_at = Column(DateTime, nullable=True)
 
-    chats = relationship("Chat", back_populates="owner", foreign_keys="[Chat.user_id]")
+    chats = relationship("Chat", back_populates="owner",
+                         foreign_keys="[Chat.user_id]")
     assigned_chats = relationship(
         "Chat", back_populates="specialist", foreign_keys="[Chat.specialist_id]"
     )
     audit_logs = relationship("AuditLog", back_populates="user")
     files = relationship("FileAttachment", back_populates="uploader")
     notifications = relationship("Notification", back_populates="user")
-    password_reset_tokens = relationship(
-        "PasswordResetToken",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    email_verification_tokens = relationship(
-        "EmailVerificationToken",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
 
 
 class AuditLog(Base):
@@ -88,7 +79,8 @@ class Chat(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, default="New Chat")
-    status = Column(SQLEnum(ChatStatus, **ENUM_VALUE_CONFIG), default=ChatStatus.OPEN)
+    status = Column(SQLEnum(ChatStatus, **ENUM_VALUE_CONFIG),
+                    default=ChatStatus.OPEN)
 
     specialty = Column(String, nullable=True)
     severity = Column(String, nullable=True)
@@ -100,14 +92,19 @@ class Chat(Base):
     review_feedback = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow,
+                        onupdate=datetime.utcnow)
 
     user_id = Column(Integer, ForeignKey("users.id"))
-    owner = relationship("User", back_populates="chats", foreign_keys=[user_id])
-    specialist = relationship("User", back_populates="assigned_chats", foreign_keys=[specialist_id])
+    owner = relationship("User", back_populates="chats",
+                         foreign_keys=[user_id])
+    specialist = relationship(
+        "User", back_populates="assigned_chats", foreign_keys=[specialist_id])
 
-    messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
-    files = relationship("FileAttachment", back_populates="chat", cascade="all, delete-orphan")
+    messages = relationship(
+        "Message", back_populates="chat", cascade="all, delete-orphan")
+    files = relationship(
+        "FileAttachment", back_populates="chat", cascade="all, delete-orphan")
 
 
 class Message(Base):
@@ -135,10 +132,12 @@ class Notification(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    type = Column(SQLEnum(NotificationType, **ENUM_VALUE_CONFIG), nullable=False)
+    type = Column(SQLEnum(NotificationType, **
+                  ENUM_VALUE_CONFIG), nullable=False)
     title = Column(String, nullable=False)
     body = Column(String, nullable=True)
-    chat_id = Column(Integer, ForeignKey("chats.id", ondelete="SET NULL"), nullable=True)
+    chat_id = Column(Integer, ForeignKey(
+        "chats.id", ondelete="SET NULL"), nullable=True)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
