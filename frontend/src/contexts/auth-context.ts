@@ -13,7 +13,11 @@ interface AuthState {
 
 export interface AuthContextValue extends AuthState {
   login: (username: string, password: string) => Promise<UserRole>;
-  register: (payload: RegisterRequest) => Promise<UserRole>;
+  register: (payload: RegisterRequest) => Promise<{
+    role: UserRole | null;
+    requiresEmailVerification: boolean;
+    message: string;
+  }>;
   logout: () => void;
   setUserProfile: (user: { full_name: string | null; email: string; role: UserRole }) => void;
 }

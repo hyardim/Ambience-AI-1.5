@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Integer, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.base import Base
@@ -27,6 +29,8 @@ class User(Base):
     )
     specialty: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     session_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     chats: Mapped[list[Chat]] = relationship(

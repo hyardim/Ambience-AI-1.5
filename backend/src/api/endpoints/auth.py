@@ -9,8 +9,12 @@ from src.db.session import get_db
 from src.repositories import user_repository
 from src.schemas.auth import (
     AuthResponse,
-    PasswordResetRequest,
+    EmailVerificationConfirmRequest,
+    EmailVerificationResendRequest,
+    ForgotPasswordRequest,
+    PasswordResetConfirmRequest,
     ProfileUpdate,
+    RegisterResponse,
     UserOut,
     UserRegister,
 )
@@ -38,7 +42,7 @@ def login(
 
 
 @router.post(
-    "/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+    "/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED
 )
 def register(
     payload: UserRegister,
@@ -46,14 +50,15 @@ def register(
     db: Session = Depends(get_db),
 ):
     auth = auth_service.register(db, payload)
-    user = user_repository.get_by_email(db, auth.user.email)
-    if user is None:  # pragma: no cover - defensive
-        raise RuntimeError("Registered user disappeared before cookie issuance")
-    security.set_auth_cookies(
-        response,
-        access_token=auth.access_token,
-        refresh_token=security.create_refresh_token_for_user(user),
-    )
+    if auth.access_token:
+        user = user_repository.get_by_email(db, auth.user.email)
+        if user is None:  # pragma: no cover - defensive
+            raise RuntimeError("Registered user disappeared before cookie issuance")
+        security.set_auth_cookies(
+            response,
+            access_token=auth.access_token,
+            refresh_token=security.create_refresh_token_for_user(user),
+        )
     return auth
 
 
@@ -87,9 +92,35 @@ def refresh_session(
     return auth
 
 
-@router.post("/reset-password")
-def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db)):
-    return auth_service.reset_password(db, payload)
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    return auth_service.forgot_password(db, payload)
+
+
+@router.post("/reset-password/confirm")
+def reset_password_confirm(
+    payload: PasswordResetConfirmRequest, db: Session = Depends(get_db)
+):
+    return auth_service.reset_password_confirm(db, payload)
+
+
+@router.post("/resend-verification")
+def resend_verification(
+    payload: EmailVerificationResendRequest, db: Session = Depends(get_db)
+):
+    return auth_service.resend_verification_email(db, payload)
+
+
+@router.post("/verify-email/confirm")
+def verify_email_confirm(
+    payload: EmailVerificationConfirmRequest, db: Session = Depends(get_db)
+):
+    return auth_service.confirm_email_verification(db, payload)
+
+
+@router.get("/verification-status")
+def verification_status(current_user: User = Depends(get_current_user_obj)):
+    return auth_service.get_verification_status(current_user)
 
 
 @router.patch("/profile", response_model=UserOut)

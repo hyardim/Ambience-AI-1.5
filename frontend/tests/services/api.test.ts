@@ -28,8 +28,8 @@ import {
   logout,
   markAllNotificationsRead,
   markNotificationRead,
+  forgotPassword,
   register,
-  resetPassword,
   reviewChat,
   reviewMessage,
   sendMessage,
@@ -109,16 +109,16 @@ describe('API service', () => {
       await expect(login('bad', 'creds')).rejects.toThrow('Bad creds');
     });
 
-    it('registers a user and resets password', async () => {
+    it('registers a user and requests a password reset', async () => {
       const loginResponse = await register({
         email: 'new@example.com',
         password: 'pass',
         role: 'gp',
       });
-      const resetResponse = await resetPassword('new@example.com', 'Password1!');
+      const resetResponse = await forgotPassword('new@example.com');
 
       expect(loginResponse.access_token).toBe('mock-jwt-token');
-      expect(resetResponse.message).toMatch(/password reset successful/i);
+      expect(resetResponse.message).toMatch(/password reset link/i);
     });
 
     it('logs out and loads/updates profile', async () => {

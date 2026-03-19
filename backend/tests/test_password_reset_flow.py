@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 from src.db.models import AuditLog, User
-from src.db.password_reset_models import PasswordResetToken
+from src.db.models.password_reset_token import PasswordResetToken
 
 
 def _capture_reset_link(monkeypatch) -> dict[str, str]:

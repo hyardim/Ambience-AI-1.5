@@ -1,7 +1,7 @@
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
-from src.db.email_verification_models import EmailVerificationToken
+from src.db.models.email_verification_token import EmailVerificationToken
 from src.db.models import AuditLog, User
 from src.services import auth_service
 

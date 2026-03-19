@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from src.db.password_reset_models import PasswordResetToken
+from src.db.models.password_reset_token import PasswordResetToken
 
 
 def create(
