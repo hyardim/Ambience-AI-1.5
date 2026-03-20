@@ -24,8 +24,12 @@ class FileAttachment(Base):
     file_type: Mapped[str | None] = mapped_column(String)
     file_size: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)
-    chat_id: Mapped[int] = mapped_column(Integer, ForeignKey("chats.id"), nullable=False)
-    uploader_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("chats.id"), nullable=False
+    )
+    uploader_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
 
     chat: Mapped[Chat | None] = relationship("Chat", back_populates="files")
     uploader: Mapped[User | None] = relationship("User", back_populates="files")

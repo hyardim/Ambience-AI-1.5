@@ -133,9 +133,7 @@ def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
         expires_at=expires_at,
     )
 
-    verify_link = (
-        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/verify-email?token={quote(raw_token)}"
-    )
+    verify_link = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/verify-email?token={quote(raw_token)}"
     email_service.send_verification_email(user.email, verify_link)
     audit_repository.log(
         db,
@@ -160,7 +158,9 @@ def login(db: Session, email: str, password: str) -> AuthResponse:
             detail="Please verify your email before logging in. You can request a new verification email.",
         )
 
-    audit_repository.log(db, user_id=user.id, action="LOGIN", details=f"user_id={user.id}")
+    audit_repository.log(
+        db, user_id=user.id, action="LOGIN", details=f"user_id={user.id}"
+    )
     return _make_auth_response(user)
 
 
@@ -193,7 +193,9 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
         email_verified_at=None if requires_verification else now,
     )
 
-    audit_repository.log(db, user_id=user.id, action="REGISTER", details=f"user_id={user.id}")
+    audit_repository.log(
+        db, user_id=user.id, action="REGISTER", details=f"user_id={user.id}"
+    )
 
     if requires_verification:
         audit_repository.log(
@@ -344,9 +346,7 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
         expires_at=expires_at,
     )
 
-    reset_link = (
-        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={quote(raw_token)}"
-    )
+    reset_link = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={quote(raw_token)}"
     try:
         email_service.send_password_reset_email(user.email, reset_link)
     except Exception as exc:  # pragma: no cover - defensive email transport path
@@ -365,9 +365,7 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
     return GENERIC_FORGOT_PASSWORD_MESSAGE
 
 
-def reset_password_confirm(
-    db: Session, payload: PasswordResetConfirmRequest
-) -> dict:
+def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) -> dict:
     now = _utcnow()
     token_hash = security.hash_password_reset_token(payload.token)
     token_row = password_reset_repository.get_valid_by_hash(
@@ -407,7 +405,9 @@ def reset_password_confirm(
 
 def logout(db: Session, user: User) -> dict:
     user_repository.update(db, user, session_version=user.session_version + 1)
-    audit_repository.log(db, user_id=user.id, action="LOGOUT", details=f"user_id={user.id}")
+    audit_repository.log(
+        db, user_id=user.id, action="LOGOUT", details=f"user_id={user.id}"
+    )
     return {"message": "Logged out successfully"}
 
 

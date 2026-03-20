@@ -651,7 +651,9 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     }
     invalidations = []
 
-    monkeypatch.setattr(specialist_review.httpx, "post", lambda *args, **kwargs: response)
+    monkeypatch.setattr(
+        specialist_review.httpx, "post", lambda *args, **kwargs: response
+    )
     monkeypatch.setattr(
         specialist_review,
         "_invalidate_admin_chat_caches",

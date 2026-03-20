@@ -54,7 +54,9 @@ class Chat(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, default=utc_now, onupdate=utc_now
     )
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
 
     owner: Mapped[User | None] = relationship(
         "User", back_populates="chats", foreign_keys=[user_id]

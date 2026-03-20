@@ -41,7 +41,9 @@ def get_valid_by_hash(
     )
 
 
-def mark_as_used(db: Session, token_row: PasswordResetToken, *, used_at: datetime) -> PasswordResetToken:
+def mark_as_used(
+    db: Session, token_row: PasswordResetToken, *, used_at: datetime
+) -> PasswordResetToken:
     token_row.used_at = used_at
     db.commit()
     db.refresh(token_row)

@@ -23,7 +23,9 @@ class Notification(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
     type: Mapped[NotificationType] = mapped_column(
         SQLEnum(NotificationType, **ENUM_VALUE_CONFIG), nullable=False
     )

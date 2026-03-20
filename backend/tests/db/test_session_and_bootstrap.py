@@ -7,6 +7,12 @@ import pytest
 from src.db import bootstrap, session
 
 
+def _set_demo_seed_passwords(monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap.settings, "DEMO_GP_PASSWORD", "Password1@")
+    monkeypatch.setattr(bootstrap.settings, "DEMO_SPECIALIST_PASSWORD", "Password1@")
+    monkeypatch.setattr(bootstrap.settings, "DEMO_ADMIN_PASSWORD", "Password1@")
+
+
 def test_make_async_url_handles_sqlite():
     assert (
         session._make_async_url("sqlite:///tmp/test.db")
@@ -87,9 +93,21 @@ def test_ensure_default_users_short_circuits_in_production(monkeypatch):
     assert called["session"] == 0
 
 
+def test_ensure_default_users_raises_when_demo_passwords_missing(monkeypatch):
+    monkeypatch.setattr(bootstrap.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
+    monkeypatch.setattr(bootstrap.settings, "APP_ENV", "development")
+    monkeypatch.setattr(bootstrap.settings, "DEMO_GP_PASSWORD", "")
+    monkeypatch.setattr(bootstrap.settings, "DEMO_SPECIALIST_PASSWORD", "")
+    monkeypatch.setattr(bootstrap.settings, "DEMO_ADMIN_PASSWORD", "")
+
+    with pytest.raises(RuntimeError, match="Demo user seeding requires"):
+        bootstrap.ensure_default_users()
+
+
 def test_ensure_default_users_creates_missing_users(monkeypatch):
     monkeypatch.setattr(bootstrap.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
     monkeypatch.setattr(bootstrap.settings, "APP_ENV", "development")
+    _set_demo_seed_passwords(monkeypatch)
 
     class FakeQuery:
         def __init__(self):
@@ -135,6 +153,7 @@ def test_ensure_default_users_creates_missing_users(monkeypatch):
 def test_ensure_default_users_skips_existing(monkeypatch):
     monkeypatch.setattr(bootstrap.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
     monkeypatch.setattr(bootstrap.settings, "APP_ENV", "development")
+    _set_demo_seed_passwords(monkeypatch)
 
     class FakeQuery:
         def filter(self, *args, **kwargs):

@@ -69,6 +69,7 @@ def test_validate_settings_warns_for_insecure_secret(monkeypatch, caplog):
     monkeypatch.setattr(
         core_config.settings, "SECRET_KEY", "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
     )
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -83,6 +84,7 @@ def test_validate_settings_warns_for_insecure_secret(monkeypatch, caplog):
 
 def test_validate_settings_is_silent_for_custom_secret(monkeypatch, caplog):
     monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -101,6 +103,19 @@ def test_validate_settings_rejects_demo_bootstrap_in_production(monkeypatch):
         core_config.validate_settings()
 
     monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+
+
+def test_validate_settings_rejects_missing_demo_passwords(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
+    monkeypatch.setattr(core_config.settings, "DEMO_GP_PASSWORD", "")
+    monkeypatch.setattr(core_config.settings, "DEMO_SPECIALIST_PASSWORD", "")
+    monkeypatch.setattr(core_config.settings, "DEMO_ADMIN_PASSWORD", "")
+
+    with pytest.raises(RuntimeError, match="Missing: DEMO_GP_PASSWORD"):
+        core_config.validate_settings()
+
     monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
 
 

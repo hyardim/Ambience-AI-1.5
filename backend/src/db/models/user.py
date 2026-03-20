@@ -40,5 +40,9 @@ class User(Base):
         "Chat", back_populates="specialist", foreign_keys="[Chat.specialist_id]"
     )
     audit_logs: Mapped[list[AuditLog]] = relationship("AuditLog", back_populates="user")
-    files: Mapped[list[FileAttachment]] = relationship("FileAttachment", back_populates="uploader")
-    notifications: Mapped[list[Notification]] = relationship("Notification", back_populates="user")
+    files: Mapped[list[FileAttachment]] = relationship(
+        "FileAttachment", back_populates="uploader"
+    )
+    notifications: Mapped[list[Notification]] = relationship(
+        "Notification", back_populates="user"
+    )

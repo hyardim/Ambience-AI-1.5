@@ -113,7 +113,9 @@ async def upload_chat_file(
         invalidate_admin_cache=False,
     )
     await cache.delete_pattern(
-        cache_keys.chat_detail_pattern(chat_id), user_id=uploader_id, resource="chat_detail"
+        cache_keys.chat_detail_pattern(chat_id),
+        user_id=uploader_id,
+        resource="chat_detail",
     )
     await cache.delete_pattern(
         cache_keys.chat_list_pattern(owner_id),

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 
 from src.db.models import User, UserRole
-from src.schemas.auth import ForgotPasswordRequest, ProfileUpdate, UserRegister
+from src.schemas.auth import (
+    EmailVerificationConfirmRequest,
+    ForgotPasswordRequest,
+    PasswordResetConfirmRequest,
+    ProfileUpdate,
+    UserRegister,
+)
 from src.services import auth_service
 
 
@@ -89,3 +97,86 @@ def test_update_profile_rejects_wrong_current_password(monkeypatch, db_session):
             ProfileUpdate(current_password="wrong", new_password="StrongPass1!"),
         )
     assert exc.value.status_code == 400
+
+
+def test_resend_verification_returns_generic_for_verified_user(db_session):
+    user = _user(db_session)
+    user.email_verified = True
+    db_session.commit()
+
+    result = auth_service.resend_verification_email(
+        db_session,
+        SimpleNamespace(email=user.email),
+    )
+
+    assert "verification" in result["message"].lower()
+
+
+def test_forgot_password_returns_generic_when_rate_limited(monkeypatch, db_session):
+    monkeypatch.setattr(auth_service, "_is_forgot_password_rate_limited", lambda _e: True)
+
+    result = auth_service.forgot_password(
+        db_session,
+        ForgotPasswordRequest(email="limited@example.com"),
+    )
+
+    assert "registered" in result["message"]
+
+
+def test_confirm_email_verification_rejects_deactivated_user(monkeypatch, db_session):
+    inactive = _user(db_session, active=False)
+    token_row = SimpleNamespace(user=inactive, token_hash="token-hash")
+
+    monkeypatch.setattr(
+        auth_service.email_verification_repository,
+        "get_valid_by_hash",
+        lambda *_args, **_kwargs: token_row,
+    )
+    monkeypatch.setattr(
+        auth_service.security,
+        "verify_email_verification_token",
+        lambda *_args, **_kwargs: True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        auth_service.confirm_email_verification(
+            db_session,
+            EmailVerificationConfirmRequest(token="raw-token"),
+        )
+
+    assert exc.value.status_code == 400
+    assert "deactivated" in exc.value.detail.lower()
+
+
+def test_reset_password_confirm_rejects_deactivated_user(monkeypatch, db_session):
+    inactive = _user(db_session, active=False)
+    token_row = SimpleNamespace(user=inactive, token_hash="token-hash")
+
+    monkeypatch.setattr(
+        auth_service.password_reset_repository,
+        "get_valid_by_hash",
+        lambda *_args, **_kwargs: token_row,
+    )
+    monkeypatch.setattr(
+        auth_service.security,
+        "verify_password_reset_token",
+        lambda *_args, **_kwargs: True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        auth_service.reset_password_confirm(
+            db_session,
+            PasswordResetConfirmRequest(token="raw-token", new_password="StrongPass1!"),
+        )
+
+    assert exc.value.status_code == 400
+    assert "deactivated" in exc.value.detail.lower()
+
+
+def test_get_verification_status_returns_payload(db_session):
+    user = _user(db_session)
+
+    result = auth_service.get_verification_status(user)
+
+    assert result["email"] == user.email
+    assert result["email_verified"] == user.email_verified

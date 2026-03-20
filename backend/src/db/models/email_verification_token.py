@@ -23,9 +23,13 @@ class EmailVerificationToken(Base):
         nullable=False,
         index=True,
     )
-    token_hash: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    token_hash: Mapped[str] = mapped_column(
+        String, nullable=False, unique=True, index=True
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utc_now,

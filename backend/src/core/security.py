@@ -227,7 +227,9 @@ def get_user_from_access_token(db: Session, token: str) -> User:
     return _resolve_user_from_token(db, token, expected_type="access")
 
 
-def set_auth_cookies(response: Response, *, access_token: str, refresh_token: str) -> None:
+def set_auth_cookies(
+    response: Response, *, access_token: str, refresh_token: str
+) -> None:
     cookie_common: dict[str, Any] = {
         "httponly": True,
         "secure": settings.COOKIE_SECURE,

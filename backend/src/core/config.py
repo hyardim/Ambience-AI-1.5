@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _INSECURE_DEFAULT_KEY = "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
+_DEMO_SEED_ALLOWED_ENVS = {"development", "test"}
 
 
 class Settings(BaseSettings):
@@ -31,6 +32,9 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "/app/uploads"
     APP_ENV: Literal["development", "test", "production"] = "development"
     AUTH_BOOTSTRAP_DEMO_USERS: bool = False
+    DEMO_GP_PASSWORD: str = ""
+    DEMO_SPECIALIST_PASSWORD: str = ""
+    DEMO_ADMIN_PASSWORD: str = ""
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
@@ -128,3 +132,22 @@ def validate_settings() -> None:
         raise RuntimeError(
             "Invalid configuration: disable AUTH_BOOTSTRAP_DEMO_USERS in production"
         )
+
+    if (
+        settings.AUTH_BOOTSTRAP_DEMO_USERS
+        and settings.APP_ENV in _DEMO_SEED_ALLOWED_ENVS
+    ):
+        missing = [
+            name
+            for name, value in (
+                ("DEMO_GP_PASSWORD", settings.DEMO_GP_PASSWORD),
+                ("DEMO_SPECIALIST_PASSWORD", settings.DEMO_SPECIALIST_PASSWORD),
+                ("DEMO_ADMIN_PASSWORD", settings.DEMO_ADMIN_PASSWORD),
+            )
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(
+                "Invalid configuration: set demo seed passwords when "
+                "AUTH_BOOTSTRAP_DEMO_USERS is enabled. Missing: " + ", ".join(missing)
+            )

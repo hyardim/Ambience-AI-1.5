@@ -32,7 +32,9 @@ def test_forgot_password_generic_success_for_existing_and_non_existing(
 ):
     captured = _capture_reset_link(monkeypatch)
 
-    existing = client.post("/auth/forgot-password", json={"email": gp_user_payload["email"]})
+    existing = client.post(
+        "/auth/forgot-password", json={"email": gp_user_payload["email"]}
+    )
     non_existing = client.post("/auth/forgot-password", json={"email": "ghost@nhs.uk"})
 
     assert existing.status_code == 200
@@ -51,7 +53,9 @@ def test_forgot_password_creates_hashed_token_record(
 ):
     captured = _capture_reset_link(monkeypatch)
 
-    resp = client.post("/auth/forgot-password", json={"email": gp_user_payload["email"]})
+    resp = client.post(
+        "/auth/forgot-password", json={"email": gp_user_payload["email"]}
+    )
     assert resp.status_code == 200
 
     token_row = db_session.query(PasswordResetToken).one()

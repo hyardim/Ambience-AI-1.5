@@ -36,6 +36,8 @@ class Message(Base):
     review_status: Mapped[str | None] = mapped_column(String, nullable=True)
     review_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    chat_id: Mapped[int] = mapped_column(Integer, ForeignKey("chats.id"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("chats.id"), nullable=False
+    )
 
     chat: Mapped[Chat | None] = relationship("Chat", back_populates="messages")

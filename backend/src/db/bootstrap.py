@@ -35,30 +35,46 @@ def run_migrations() -> None:
     command.upgrade(build_alembic_config(), "head")
 
 
+def _required_demo_passwords() -> tuple[str, str, str]:
+    values = (
+        settings.DEMO_GP_PASSWORD,
+        settings.DEMO_SPECIALIST_PASSWORD,
+        settings.DEMO_ADMIN_PASSWORD,
+    )
+    if not all(values):
+        raise RuntimeError(
+            "Demo user seeding requires DEMO_GP_PASSWORD, "
+            "DEMO_SPECIALIST_PASSWORD, and DEMO_ADMIN_PASSWORD"
+        )
+    return values
+
+
 def ensure_default_users() -> None:
     if not settings.AUTH_BOOTSTRAP_DEMO_USERS:
         return
     if settings.APP_ENV not in DEMO_SEED_ALLOWED_ENVS:
         return
 
+    gp_password, specialist_password, admin_password = _required_demo_passwords()
+
     defaults: list[DefaultUserSpec] = [
         {
             "email": "gp@example.com",
-            "password": "password123",
+            "password": gp_password,
             "full_name": "Dr. GP User",
             "role": UserRole.GP,
             "specialty": None,
         },
         {
             "email": "specialist@example.com",
-            "password": "password123",
+            "password": specialist_password,
             "full_name": "Dr. Specialist User",
             "role": UserRole.SPECIALIST,
             "specialty": "neurology",
         },
         {
             "email": "admin@example.com",
-            "password": "password123",
+            "password": admin_password,
             "full_name": "System Admin",
             "role": UserRole.ADMIN,
             "specialty": None,

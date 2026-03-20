@@ -155,7 +155,9 @@ class TestPasswordStrengthOnProfileUpdate:
         )
         assert resp.status_code == 400
 
-    def test_no_uppercase_rejected_on_profile(self, client, gp_headers, gp_user_payload):
+    def test_no_uppercase_rejected_on_profile(
+        self, client, gp_headers, gp_user_payload
+    ):
         resp = client.patch(
             "/auth/profile",
             json={
