@@ -44,7 +44,8 @@ def ensure_schema() -> None:
         init_db(vector_dim=get_embedding_dimension())
         logger.info("Database schema ready (chunks/documents).")
     except Exception as exc:  # pragma: no cover
-        logger.warning("Failed to initialize database: %s", exc)
+        logger.exception("Failed to initialize database schema.")
+        raise RuntimeError("Database schema initialization failed") from exc
 
 
 async def warmup_ollama() -> None:

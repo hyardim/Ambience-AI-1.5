@@ -5,8 +5,11 @@ from collections.abc import AsyncGenerator
 
 from ..generation.client import ProviderName, generate_answer
 from ..generation.streaming import stream_generate
+from ..utils.logger import setup_logger
 from .citations import extract_citation_results
 from .schemas import SearchResult
+
+logger = setup_logger(__name__)
 
 
 async def streaming_generator(
@@ -29,6 +32,7 @@ async def streaming_generator(
                 provider=provider,
             )
     except Exception as exc:
+        logger.exception("Streaming generation failed")
         yield json.dumps({"type": "error", "error": str(exc)}) + "\n"
         return
 

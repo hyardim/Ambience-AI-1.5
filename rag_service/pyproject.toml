@@ -153,7 +153,7 @@ follow_imports = "skip"
 testpaths = ["tests"]
 python_files = "test_*.py"
 asyncio_mode = "auto"              # needed for any async FastAPI tests
-addopts = "-p no:langsmith --cov=src --cov-report=html --cov-report=term-missing --tb=short"
+addopts = "-p no:langsmith --tb=short"
 
 # Coverage
 [tool.coverage.run]

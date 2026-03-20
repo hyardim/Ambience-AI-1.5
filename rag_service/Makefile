@@ -2,8 +2,9 @@
 export
 
 COMPOSE := docker compose
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-retry-worker
+.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check typecheck clean run-ingest run-retry-worker
 
 help:
 	@echo "Available commands:"
@@ -20,6 +21,7 @@ help:
 	@echo "  make lint               - Run linter (ruff)"
 	@echo "  make format             - Format code (ruff)"
 	@echo "  make type-check         - Run type checker (mypy)"
+	@echo "  make typecheck          - Alias for make type-check"
 	@echo "  make clean              - Clean cache and temp files"
 	@echo "  make run-ingest         - Run ingestion pipeline"
 	@echo "                           Required: INPUT=... SOURCE=..."
@@ -34,8 +36,8 @@ install-dev:
 	$(MAKE) nltk-download
 
 nltk-download:
-	python -m nltk.downloader punkt punkt_tab
-	python scripts/setup/verify_nltk.py
+	$(PYTHON) -m nltk.downloader punkt punkt_tab
+	$(PYTHON) scripts/setup/verify_nltk.py
 
 setup:
 	mkdir -p data/raw data/processed data/debug logs configs
@@ -75,19 +77,21 @@ db-migrate-reset:
 	@echo "Migration reset complete."
 
 test:
-	pytest
+	$(PYTHON) -m pytest
 
 lint:
 	ruff check src/ tests/ scripts/
 	ruff format --check src/ tests/ scripts/
-	mypy src/
+	$(PYTHON) -m mypy src/
 
 format:
 	ruff format src/ tests/ scripts/
 	ruff check src/ tests/ scripts/ --fix
 
 type-check:
-	mypy src/
+	$(PYTHON) -m mypy src/
+
+typecheck: type-check
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -97,7 +101,7 @@ clean:
 	rm -rf htmlcov/ .coverage
 
 run-ingest:
-	python -m src.ingestion.cli ingest \
+	$(PYTHON) -m src.ingestion.cli ingest \
 	  --input $(INPUT) \
 	  --source-name $(SOURCE) \
 	  --log-level $(or $(LOG_LEVEL),INFO) \
@@ -108,4 +112,4 @@ run-ingest:
 	  $(if $(WRITE_DEBUG),--write-debug-artifacts)
 
 run-retry-worker:
-	python scripts/workers/run_retry_worker.py
+	$(PYTHON) scripts/workers/run_retry_worker.py

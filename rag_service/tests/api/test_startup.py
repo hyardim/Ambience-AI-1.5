@@ -28,7 +28,7 @@ def test_ensure_schema_initializes_db(monkeypatch: pytest.MonkeyPatch) -> None:
     assert called == [384]
 
 
-def test_ensure_schema_logs_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_schema_raises_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(startup, "get_embedding_dimension", lambda: 384)
 
     def boom(vector_dim: int) -> None:
@@ -36,7 +36,8 @@ def test_ensure_schema_logs_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(startup, "init_db", boom)
 
-    startup.ensure_schema()
+    with pytest.raises(RuntimeError, match="Database schema initialization failed"):
+        startup.ensure_schema()
 
 
 @pytest.mark.anyio

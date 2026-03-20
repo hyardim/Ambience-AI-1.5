@@ -115,7 +115,8 @@ async def ingest_guideline(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Ingestion error: {exc}") from exc
+        logger.exception("/ingest failed")
+        raise HTTPException(status_code=500, detail="Ingestion error") from exc
 
     return IngestResponse(source_name=source_name, filename=file.filename, **report)
 
@@ -146,7 +147,7 @@ async def clinical_query(request: QueryRequest) -> list[SearchResult]:
         logger.exception("/query failed")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG Inference Error: {exc!s}",
+            detail="RAG inference error",
         ) from exc
 
 
@@ -253,7 +254,7 @@ async def generate_clinical_answer(
         logger.exception("/answer failed")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG Answer Error: {exc!s}",
+            detail="RAG answer error",
         ) from exc
 
 
@@ -362,7 +363,7 @@ async def revise_clinical_answer(
         logger.exception("/revise failed")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG Revise Error: {exc!s}",
+            detail="RAG revise error",
         ) from exc
 
 

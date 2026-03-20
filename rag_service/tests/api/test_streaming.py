@@ -111,6 +111,11 @@ async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> Non
         "src.api.streaming.stream_generate",
         failing_stream,
     )
+    events: list[str] = []
+    monkeypatch.setattr(
+        "src.api.streaming.logger.exception",
+        lambda message: events.append(str(message)),
+    )
 
     lines = []
     async for line in streaming_generator("prompt", 512, []):
@@ -119,3 +124,4 @@ async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(lines) == 1
     assert lines[0]["type"] == "error"
     assert "model crashed" in lines[0]["error"]
+    assert events == ["Streaming generation failed"]

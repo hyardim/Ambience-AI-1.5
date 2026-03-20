@@ -19,7 +19,7 @@ async def test_clinical_query_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(routes, "retrieve_chunks", boom)
 
-    with pytest.raises(HTTPException, match="RAG Inference Error: boom"):
+    with pytest.raises(HTTPException, match="RAG inference error"):
         await routes.clinical_query(QueryRequest(query="q"))
 
 
@@ -110,7 +110,7 @@ def test_ingest_guideline_wraps_unexpected_errors(
     )
 
     assert response.status_code == 500
-    assert response.json()["detail"] == "Ingestion error: unexpected"
+    assert response.json()["detail"] == "Ingestion error"
 
 
 @pytest.mark.anyio
