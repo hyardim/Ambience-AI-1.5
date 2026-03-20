@@ -161,7 +161,7 @@ source = ["src"]
 omit = ["tests/*", "**/__init__.py"]
 
 [tool.coverage.report]
-fail_under = 90                   # enforces 90% coverage target
+fail_under = 100                  # enforce 100% coverage target
 show_missing = true                # prints uncovered line numbers in terminal
 exclude_lines = [
     "pragma: no cover",

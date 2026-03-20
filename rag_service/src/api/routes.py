@@ -83,7 +83,10 @@ async def ingest_guideline(
         )
 
     specialty = sources[source_name].get("specialty", "general")
-    dest_dir = path_config.root / "data" / "Medical" / specialty.title() / source_name
+    data_raw_root = getattr(path_config, "data_raw", path_config.root / "data" / "raw")
+    if not isinstance(data_raw_root, Path):
+        data_raw_root = path_config.root / "data" / "raw"
+    dest_dir = data_raw_root / specialty / source_name
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / file.filename
 

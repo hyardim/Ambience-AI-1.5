@@ -49,9 +49,20 @@ class PathConfig(BaseModel):
 
     root: Path = Field(default_factory=lambda: PROJECT_ROOT)
 
+    def _resolve_data_raw_root(self) -> Path:
+        configured = os.getenv("RAG_DATA_DIR", "").strip()
+        if not configured:
+            return self.root / "data" / "raw"
+        configured_path = Path(configured)
+        return (
+            configured_path
+            if configured_path.is_absolute()
+            else self.root / configured_path
+        )
+
     @property
     def data_raw(self) -> Path:
-        return self.root / "data" / "raw"
+        return self._resolve_data_raw_root()
 
     @property
     def data_processed(self) -> Path:

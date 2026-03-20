@@ -110,6 +110,20 @@ class TestPathConfig:
         config = PathConfig()
         assert config.root == Path(__file__).resolve().parents[2]
 
+    def test_data_raw_respects_relative_rag_data_dir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("RAG_DATA_DIR", "custom/raw")
+        config = PathConfig()
+        assert config.data_raw == config.root / "custom" / "raw"
+
+    def test_data_raw_respects_absolute_rag_data_dir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("RAG_DATA_DIR", "/tmp/ambience-rag-raw")
+        config = PathConfig()
+        assert config.data_raw == Path("/tmp/ambience-rag-raw")
+
 
 def test_first_non_empty_returns_first_truthy() -> None:
     from src.config import _first_non_empty
