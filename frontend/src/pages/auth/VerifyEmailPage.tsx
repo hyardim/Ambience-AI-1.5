@@ -8,19 +8,18 @@ import { confirmEmailVerification } from '../../services/api';
 export function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
+  const missingTokenMessage = 'Verification token is missing. Request a new verification email.';
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(Boolean(token));
+  const [error, setError] = useState(token ? '' : missingTokenMessage);
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     if (!token) {
-      setError('Verification token is missing. Request a new verification email.');
       return;
     }
 
     let mounted = true;
-    setIsLoading(true);
 
     confirmEmailVerification(token)
       .then((response) => {

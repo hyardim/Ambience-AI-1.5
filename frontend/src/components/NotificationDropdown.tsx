@@ -27,8 +27,8 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     try {
       const data = await getNotifications();
       setNotifications(data);
-    } catch (err) {
-      console.warn('[Notifications] Failed to fetch:', err);
+    } catch {
+      // Keep stale notifications if polling fails.
     }
   }, []);
 
@@ -65,8 +65,8 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
         setNotifications(prev =>
           prev.map(n => (n.id === notification.id ? { ...n, is_read: true } : n)),
         );
-      } catch (err) {
-        console.warn('[Notifications] Failed to mark as read:', err);
+      } catch {
+        // Leave the notification unread when the request fails.
       }
     }
 
@@ -82,8 +82,8 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     try {
       await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    } catch (err) {
-      console.warn('[Notifications] Failed to mark all as read:', err);
+    } catch {
+      // Keep existing unread states if mark-all fails.
     }
   };
 

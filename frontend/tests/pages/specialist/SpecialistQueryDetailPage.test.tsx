@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
@@ -448,7 +448,9 @@ describe('SpecialistQueryDetailPage', () => {
       expect(screen.getByText(/ai answer/i)).toBeInTheDocument();
     });
 
-    await latestOnRefresh?.();
+    await act(async () => {
+      await latestOnRefresh?.();
+    });
     await user.click(screen.getByRole('button', { name: /send specialist small file/i }));
   });
 

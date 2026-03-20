@@ -329,7 +329,13 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    let role: string | undefined;
+    let role:
+      | {
+        role: string | null;
+        requiresEmailVerification: boolean;
+        message: string;
+      }
+      | undefined;
     await act(async () => {
       role = await result.current.register({
         email: 'new@example.com',
@@ -338,7 +344,11 @@ describe('AuthContext', () => {
       } satisfies RegisterRequest);
     });
 
-    expect(role).toBe('gp');
+    expect(role).toEqual({
+      role: 'gp',
+      requiresEmailVerification: false,
+      message: 'Registration successful',
+    });
     expect(result.current.isAuthenticated).toBe(true);
     expect(localStorage.getItem('user_email')).toBe('new@example.com');
   });

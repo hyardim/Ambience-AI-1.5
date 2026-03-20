@@ -312,7 +312,7 @@ export const handlers = [
   http.post('/chats/:chatId/message', () => {
     const response: GPMessageResponse = {
       status: 'success',
-      ai_response: 'Mock AI response',
+      ai_response: 'AI says hello',
       ai_generating: false,
     };
     return HttpResponse.json(response);
@@ -329,11 +329,11 @@ export const handlers = [
   }),
 
   http.get('/specialist/queue', () => {
-    return HttpResponse.json([mockChat2]);
+    return HttpResponse.json([{ ...mockChat, status: 'submitted' }]);
   }),
 
   http.get('/specialist/assigned', () => {
-    return HttpResponse.json([{ ...mockChat, status: 'assigned', specialist_id: 2 }]);
+    return HttpResponse.json([{ ...mockChat2, status: 'assigned', specialist_id: 2 }]);
   }),
 
   http.get('/specialist/chats/:chatId', ({ params }) => {
@@ -357,8 +357,13 @@ export const handlers = [
   }),
 
   http.get('/notifications/', () => HttpResponse.json(mockNotifications)),
-  http.post('/notifications/:notificationId/read', () => new HttpResponse(null, { status: 204 })),
-  http.post('/notifications/read-all', () => new HttpResponse(null, { status: 204 })),
+  http.patch('/notifications/:notificationId/read', ({ params }) =>
+    HttpResponse.json({
+      ...mockNotifications[0],
+      id: Number(params.notificationId),
+      is_read: true,
+    })),
+  http.patch('/notifications/read-all', () => HttpResponse.json({ marked_read: 2 })),
 
   http.get('/admin/users', () => HttpResponse.json([mockGPUser, mockSpecialistUser, mockAdminUser])),
   http.get('/admin/users/:userId', ({ params }) => {
@@ -367,10 +372,20 @@ export const handlers = [
     return HttpResponse.json(user);
   }),
   http.patch('/admin/users/:userId', () => HttpResponse.json(mockGPUser)),
-  http.delete('/admin/users/:userId', () => new HttpResponse(null, { status: 204 })),
+  http.delete('/admin/users/:userId', ({ params }) =>
+    HttpResponse.json({
+      ...mockGPUser,
+      id: Number(params.userId),
+      is_active: false,
+    })),
 
   http.get('/admin/chats', () => HttpResponse.json(mockAdminChats)),
-  http.get('/admin/chats/:chatId', ({ params }) => HttpResponse.json({ ...mockAdminChats[0], id: Number(params.chatId) })),
+  http.get('/admin/chats/:chatId', ({ params }) =>
+    HttpResponse.json({
+      ...mockAdminChats[0],
+      id: Number(params.chatId),
+      messages: mockChatWithMessages.messages,
+    })),
   http.patch('/admin/chats/:chatId', () => HttpResponse.json(mockAdminChats[0])),
   http.delete('/admin/chats/:chatId', () => new HttpResponse(null, { status: 204 })),
 

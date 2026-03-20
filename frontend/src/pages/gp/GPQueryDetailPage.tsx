@@ -262,8 +262,7 @@ export function GPQueryDetailPage() {
       });
       setChat({ ...currentChat, ...updated });
       setEditingMeta(false);
-    } catch (err) {
-      console.error('[GPQueryDetail] Failed to update consultation details:', err);
+    } catch {
       setError('Failed to update consultation details');
     } finally {
       setSavingMeta(false);
@@ -429,11 +428,12 @@ export function GPQueryDetailPage() {
 
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {messages.map(message => {
+            {messages.map((message, index) => {
               const inReviewWorkflow = ['submitted', 'assigned', 'reviewing', 'approved', 'rejected'].includes(chat.status);
+              const timestampKey = message.timestamp instanceof Date ? message.timestamp.getTime() : '';
               return (
                 <ChatMessage
-                  key={message.id}
+                  key={`${message.id}-${timestampKey}-${index}`}
                   message={message}
                   isOwnMessage={message.senderType === 'gp'}
                   showReviewStatus={inReviewWorkflow}

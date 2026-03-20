@@ -12,7 +12,9 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
-_SCRIPT_PATH = Path(__file__).parent.parent / "scripts" / "run_retry_worker.py"
+_SCRIPT_PATH = (
+    Path(__file__).parent.parent / "scripts" / "workers" / "run_retry_worker.py"
+)
 
 
 def _load_worker_module(

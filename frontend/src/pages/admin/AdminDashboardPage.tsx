@@ -230,12 +230,6 @@ export default function AdminDashboardPage() {
                 ) : (
                   <ResponsiveContainer width="100%" height={200}>
                     <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="aiGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--nhs-blue)" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="var(--nhs-blue)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
                       <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
@@ -245,7 +239,7 @@ export default function AdminDashboardPage() {
                         dataKey="count"
                         stroke="var(--nhs-blue)"
                         strokeWidth={2}
-                        fill="url(#aiGradient)"
+                        fill="rgba(0, 94, 184, 0.16)"
                         name="AI Queries"
                       />
                     </AreaChart>

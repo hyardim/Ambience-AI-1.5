@@ -363,8 +363,12 @@ export async function assignChat(chatId: number, specialistId: number): Promise<
 export async function reviewChat(
   chatId: number,
   decision: string,
+  feedback?: string,
 ): Promise<BackendChat> {
-  const body: ReviewRequest = { decision };
+  const body: ReviewRequest = {
+    action: decision as ReviewRequest['action'],
+    feedback: feedback ?? null,
+  };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -381,7 +385,12 @@ export async function reviewMessage(
   manualContent?: string,
   manualSources?: string[],
 ): Promise<BackendChat> {
-  const body: ReviewRequest = { decision, feedback, manual_content: manualContent, manual_sources: manualSources };
+  const body: ReviewRequest = {
+    action: decision as ReviewRequest['action'],
+    feedback: feedback ?? null,
+    replacement_content: manualContent ?? null,
+    replacement_sources: manualSources ?? null,
+  };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/messages/${messageId}/review`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -403,35 +412,46 @@ export async function sendSpecialistMessage(
   return handleResponse<{ status: string; message_id: number }>(res);
 }
 
-export async function getNotifications(): Promise<NotificationResponse[]> {
-  const res = await apiFetch(apiUrl('/notifications/'), {
+export async function getNotifications(unreadOnly = false): Promise<NotificationResponse[]> {
+  const query = unreadOnly ? '?unread_only=true' : '';
+  const res = await apiFetch(apiUrl(`/notifications/${query}`), {
     headers: authHeaders(),
   });
   return handleResponse<NotificationResponse[]>(res);
 }
 
-export async function markNotificationRead(notificationId: number): Promise<void> {
+export async function markNotificationRead(
+  notificationId: number,
+): Promise<{ is_read: boolean }> {
   const res = await apiFetch(apiUrl(`/notifications/${notificationId}/read`), {
-    method: 'POST',
+    method: 'PATCH',
     headers: authHeaders(),
   });
-  return handleResponse<void>(res);
+  const payload = await handleResponse<NotificationResponse | undefined>(res);
+  return { is_read: payload?.is_read ?? true };
 }
 
-export async function markAllNotificationsRead(): Promise<void> {
+export async function markAllNotificationsRead(): Promise<{ marked_read: number }> {
   const res = await apiFetch(apiUrl('/notifications/read-all'), {
-    method: 'POST',
+    method: 'PATCH',
     headers: authHeaders(),
   });
-  return handleResponse<void>(res);
+  const payload = await handleResponse<{ marked_read?: number } | undefined>(res);
+  return { marked_read: payload?.marked_read ?? 0 };
 }
 
-export async function adminGetUsers(params: {
+type AdminUserFilters = {
   role?: string;
   specialty?: string;
   active_only?: boolean;
   search?: string;
-} = {}): Promise<UserProfile[]> {
+};
+
+export async function adminGetUsers(
+  roleOrParams: string | AdminUserFilters = {},
+): Promise<UserProfile[]> {
+  const params: AdminUserFilters =
+    typeof roleOrParams === 'string' ? { role: roleOrParams } : roleOrParams;
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'role', params.role);
   setOptionalSearchParam(query, 'specialty', params.specialty);
@@ -460,23 +480,34 @@ export async function adminUpdateUser(userId: number, payload: UserUpdateAdmin):
   return handleResponse<UserProfile>(res);
 }
 
-export async function adminDeactivateUser(userId: number): Promise<void> {
+export async function adminDeactivateUser(userId: number): Promise<UserProfile> {
   const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  return handleResponse<void>(res);
+  const payload = await handleResponse<UserProfile | undefined>(res);
+  return payload ?? ({ id: userId, is_active: false } as UserProfile);
 }
 
 export async function adminGetChats(params: {
   status?: string;
   specialty?: string;
   owner_q?: string;
+  user_id?: number;
+  specialist_id?: number;
+  skip?: number;
+  limit?: number;
 } = {}): Promise<AdminChatResponse[]> {
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'status', params.status);
   setOptionalSearchParam(query, 'specialty', params.specialty);
   setOptionalSearchParam(query, 'owner_q', params.owner_q);
+  if (params.user_id != null) query.set('user_id', String(params.user_id));
+  if (params.specialist_id != null) {
+    query.set('specialist_id', String(params.specialist_id));
+  }
+  if (params.skip != null) query.set('skip', String(params.skip));
+  if (params.limit != null) query.set('limit', String(params.limit));
   const suffix = query.toString() ? `?${query}` : '';
   const res = await apiFetch(apiUrl(`/admin/chats${suffix}`), {
     headers: authHeaders(),
@@ -484,11 +515,19 @@ export async function adminGetChats(params: {
   return handleResponse<AdminChatResponse[]>(res);
 }
 
-export async function adminGetChat(chatId: number): Promise<AdminChatResponse> {
+export async function adminGetChat(
+  chatId: number,
+  options: RequestOptions = {},
+): Promise<BackendChatWithMessages> {
   const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
+    signal: options.signal,
     headers: authHeaders(),
   });
-  return handleResponse<AdminChatResponse>(res);
+  const payload = await handleResponse<Partial<BackendChatWithMessages>>(res);
+  return {
+    ...(payload as BackendChatWithMessages),
+    messages: Array.isArray(payload.messages) ? payload.messages : [],
+  };
 }
 
 export async function adminUpdateChat(chatId: number, payload: ChatUpdateRequest): Promise<AdminChatResponse> {
@@ -520,12 +559,18 @@ export async function adminGetLogs(params: {
   category?: string;
   search?: string;
   user_id?: number;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
 } = {}): Promise<AuditLogResponse[]> {
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'action', params.action);
   setOptionalSearchParam(query, 'category', params.category);
   setOptionalSearchParam(query, 'search', params.search);
   if (params.user_id != null) query.set('user_id', String(params.user_id));
+  setOptionalSearchParam(query, 'date_from', params.date_from);
+  setOptionalSearchParam(query, 'date_to', params.date_to);
+  if (params.limit != null) query.set('limit', String(params.limit));
   const suffix = query.toString() ? `?${query}` : '';
   const res = await apiFetch(apiUrl(`/admin/logs${suffix}`), {
     headers: authHeaders(),
@@ -562,40 +607,89 @@ export async function adminUploadGuideline(file: File, sourceName: string): Prom
   return handleResponse<IngestionReport>(res);
 }
 
-export async function healthCheck(): Promise<{ status: string }> {
+export async function healthCheck(): Promise<{ status: string; system?: string }> {
   const res = await apiFetch(apiUrl('/health'), {
     skipAuthRefresh: true,
   });
-  return handleResponse<{ status: string }>(res);
+  const payload = await handleResponse<{ status: string; system?: string }>(res);
+  if (payload.status === 'healthy') {
+    return { status: 'ok', system: payload.system ?? 'healthy' };
+  }
+  return payload;
 }
 
 export function subscribeToChatStream(
   chatId: number,
-  token: string,
   handlers: {
-    onStreamStart?: (data: { chat_id: number; message_id: number }) => void;
-    onContent?: (data: { chat_id: number; message_id: number; content: string }) => void;
-    onComplete?: (data: { chat_id: number; message_id: number; content: string; citations?: unknown[] }) => void;
-    onError?: (data: { error: string }) => void;
+    onOpen?: () => void;
+    onStreamStart?: (messageId: number) => void;
+    onContent?: (messageId: number, content: string) => void;
+    onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
+    onError?: (messageId: number, errorMessage: string) => void;
+    onConnectionError?: () => void;
   },
 ): () => void {
   const base = import.meta.env.VITE_API_URL || '';
-  const source = new EventSource(`${base}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`);
+  const token = localStorage.getItem('access_token');
+  const streamUrl = token
+    ? `${base}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`
+    : `${base}/chats/${chatId}/stream`;
+  const source = new EventSource(streamUrl);
+
+  source.onopen = () => {
+    handlers.onOpen?.();
+  };
+
+  const parsePayload = <T,>(event: MessageEvent<string>): T | null => {
+    try {
+      return JSON.parse(event.data) as T;
+    } catch {
+      return null;
+    }
+  };
 
   source.addEventListener('stream_start', (event) => {
-    handlers.onStreamStart?.(JSON.parse(event.data));
+    const payload = parsePayload<{ message_id?: number }>(event as MessageEvent<string>);
+    if (typeof payload?.message_id === 'number') {
+      handlers.onStreamStart?.(payload.message_id);
+    }
   });
+
   source.addEventListener('content', (event) => {
-    handlers.onContent?.(JSON.parse(event.data));
+    const payload = parsePayload<{ message_id?: number; content?: string }>(
+      event as MessageEvent<string>,
+    );
+    if (typeof payload?.message_id === 'number') {
+      handlers.onContent?.(payload.message_id, payload.content ?? '');
+    }
   });
+
   source.addEventListener('complete', (event) => {
-    handlers.onComplete?.(JSON.parse(event.data));
+    const payload = parsePayload<{
+      message_id?: number;
+      content?: string;
+      citations?: unknown[];
+    }>(event as MessageEvent<string>);
+    if (typeof payload?.message_id === 'number') {
+      handlers.onComplete?.(
+        payload.message_id,
+        payload.content ?? '',
+        payload.citations ?? null,
+      );
+      source.close();
+    }
   });
+
   source.addEventListener('error', (event) => {
-    handlers.onError?.(JSON.parse(event.data));
+    const payload = parsePayload<{ message_id?: number; error?: string }>(
+      event as MessageEvent<string>,
+    );
+    handlers.onError?.(payload?.message_id ?? chatId, payload?.error ?? 'Unknown error');
+    source.close();
   });
 
   source.onerror = () => {
+    handlers.onConnectionError?.();
     source.close();
   };
 

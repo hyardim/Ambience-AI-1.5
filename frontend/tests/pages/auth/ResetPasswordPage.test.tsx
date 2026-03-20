@@ -13,7 +13,7 @@ function renderReset() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/login" element={<div>Login Page</div>} />
     </Routes>,
-    { routes: ['/reset-password'] },
+    { routes: ['/reset-password?token=test-reset-token'] },
   );
 }
 
@@ -26,7 +26,6 @@ describe('ResetPasswordPage', () => {
     fireEvent.submit(form);
     expect(screen.getByText(/all fields are required/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/email address/i), 'user@example.com');
     await user.type(screen.getByLabelText(/^New password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/^Confirm new password$/i), 'Password2!');
     fireEvent.submit(form);
@@ -43,8 +42,6 @@ describe('ResetPasswordPage', () => {
     await user.click(passwordInput.parentElement!.querySelector('button')!);
     expect(passwordInput).toHaveAttribute('type', 'text');
 
-    await user.clear(screen.getByLabelText(/email address/i));
-    await user.type(screen.getByLabelText(/email address/i), 'user@example.com');
     await user.type(screen.getByLabelText(/^New password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/^Confirm new password$/i), 'Password1!');
     await user.click(screen.getByRole('button', { name: /reset password/i }));
@@ -56,14 +53,13 @@ describe('ResetPasswordPage', () => {
 
   it('shows API errors', async () => {
     server.use(
-      http.post('/auth/reset-password', () =>
+      http.post('/auth/reset-password/confirm', () =>
         HttpResponse.json({ detail: 'Reset failed' }, { status: 400 })),
     );
 
     renderReset();
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText(/email address/i), 'user@example.com');
     await user.type(screen.getByLabelText(/^New password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/^Confirm new password$/i), 'Password1!');
     await user.click(screen.getByRole('button', { name: /reset password/i }));
