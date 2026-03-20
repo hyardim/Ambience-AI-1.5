@@ -21,6 +21,7 @@ const mockConnectStream = vi.fn(() => Promise.resolve());
 const mockStartPolling = vi.fn();
 const mockStopPolling = vi.fn();
 let latestOnRefresh: (() => Promise<void>) | null = null;
+let latestOnFileContextTruncated: (() => void) | null = null;
 const hookState = {
   phase: 'idle' as 'idle' | 'connecting' | 'streaming' | 'completed' | 'fallback_polling',
   isStreaming: false,
@@ -30,9 +31,10 @@ const hookState = {
 vi.mock('@/hooks/useChatStream', () => ({
   useChatStream: (
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-    options: { onRefresh: () => Promise<void> },
+    options: { onRefresh: () => Promise<void>; onFileContextTruncated?: () => void },
   ) => {
     latestOnRefresh = options.onRefresh;
+    latestOnFileContextTruncated = options.onFileContextTruncated ?? null;
     return {
       phase: hookState.phase,
       isStreaming: hookState.isStreaming,
@@ -125,6 +127,7 @@ describe('SpecialistQueryDetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     latestOnRefresh = null;
+    latestOnFileContextTruncated = null;
     hookState.phase = 'idle';
     hookState.isStreaming = false;
     hookState.injectPlaceholder = false;
@@ -630,6 +633,33 @@ describe('SpecialistQueryDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /confirm close & approve/i }));
     await waitFor(() => {
       expect(screen.getByText(/close failed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows file truncation warning when onFileContextTruncated is called', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'reviewing',
+          messages: [],
+        })),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
+    });
+
+    act(() => {
+      latestOnFileContextTruncated?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/file context was truncated/i)).toBeInTheDocument();
     });
   });
 

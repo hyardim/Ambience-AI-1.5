@@ -1,65 +1,96 @@
 from fastapi import APIRouter, HTTPException
 
+from src.api import services as api_services
 from src.api.ask_schemas import (
     AskRequest,
     AskResponse,
     CitationResponse,
     SourceResponse,
 )
-from src.api.dependencies import DbUrl
-from src.config import llm_config
-from src.orchestration.generate import GenerationError, RAGResponse
-from src.orchestration.pipeline import ask
+from src.api.routes import _generate_answer_from_retrieval
+from src.api.schemas import AnswerResponse
+from src.generation.prompts import ACTIVE_PROMPT
 from src.retrieval.query import RetrievalError
 
 router = APIRouter()
 
 
-def _to_response(result: RAGResponse) -> AskResponse:
+def _to_response(result: AnswerResponse, query: str) -> AskResponse:
     return AskResponse(
         answer=result.answer,
         sources=[
             SourceResponse(
-                chunk_id=src.chunk_id,
-                rerank_score=src.rerank_score,
+                chunk_id=src.chunk_id or "",
+                rerank_score=src.score,
                 citation=CitationResponse(
-                    title=src.citation.title,
-                    source_name=src.citation.source_name,
-                    specialty=src.citation.specialty,
-                    section_title=src.citation.section_title,
-                    page_start=src.citation.page_start,
-                    page_end=src.citation.page_end,
-                    source_url=src.citation.source_url,
+                    title=(src.metadata or {}).get("title")
+                    or src.source
+                    or "Unknown Source",
+                    source_name=(src.metadata or {}).get("source_name")
+                    or src.source
+                    or "Unknown Source",
+                    specialty=(src.metadata or {}).get("specialty") or "general",
+                    section_title=src.section_path or "Unknown section",
+                    page_start=src.page_start or 0,
+                    page_end=src.page_end or src.page_start or 0,
+                    source_url=(src.metadata or {}).get("source_url")
+                    or (f"/docs/{src.doc_id}" if src.doc_id else ""),
                 ),
             )
-            for src in result.sources
+            for src in result.citations_retrieved
         ],
-        query=result.query,
-        model=result.model,
+        query=query,
+        model=ACTIVE_PROMPT,
     )
 
 
 @router.post("/ask", response_model=AskResponse)
 async def ask_route(
     payload: AskRequest,
-    db_url: DbUrl,
 ) -> AskResponse:
     try:
-        result = ask(
+        advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
+        if callable(advanced_retriever):
+            retrieved = advanced_retriever(
+                query=payload.query,
+                top_k=payload.top_k,
+                specialty=payload.specialty,
+                source_name=payload.source_name,
+                doc_type=payload.doc_type,
+                score_threshold=payload.score_threshold,
+                expand_query=payload.expand_query,
+            )
+        else:
+            # Backward-compatible fallback for minimal service stubs.
+            retrieved = api_services.retrieve_chunks(
+                payload.query,
+                top_k=payload.top_k,
+                specialty=payload.specialty,
+            )
+        response = await _generate_answer_from_retrieval(
             query=payload.query,
-            db_url=db_url,
-            top_k=payload.top_k,
-            specialty=payload.specialty,
-            source_name=payload.source_name,
-            doc_type=payload.doc_type,
-            score_threshold=payload.score_threshold,
-            expand_query=payload.expand_query,
-            settings=llm_config,
+            max_tokens=1024,
+            patient_context=None,
+            file_context=None,
+            stream=False,
+            severity=None,
+            retrieved=retrieved,
+            route_endpoint="/ask",
+            prompt_label=ACTIVE_PROMPT,
+            request_type="answer",
+            idempotency_key=None,
         )
-        return _to_response(result)
+        if not isinstance(response, AnswerResponse):
+            raise HTTPException(status_code=502, detail="Unexpected response type")
+        return _to_response(response, payload.query)
     except RetrievalError as e:
         raise HTTPException(status_code=502, detail=f"Retrieval failed: {e}") from e
-    except GenerationError as e:
-        raise HTTPException(status_code=502, detail=f"Generation failed: {e}") from e
+    except HTTPException as e:
+        if e.status_code == 500 and e.detail == "RAG answer error":
+            raise HTTPException(
+                status_code=502,
+                detail=f"Generation failed: {e.detail}",
+            ) from e
+        raise
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail="Internal server error") from e

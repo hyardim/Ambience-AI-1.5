@@ -62,19 +62,3 @@ def invalidate_active_for_user(db: Session, *, user_id: int, now: datetime) -> i
     )
     db.commit()
     return updated
-
-
-def cleanup_expired_or_used(db: Session, *, older_than: datetime) -> int:
-    deleted = (
-        db.query(PasswordResetToken)
-        .filter(
-            (PasswordResetToken.expires_at < older_than)
-            | (
-                PasswordResetToken.used_at.is_not(None)
-                & (PasswordResetToken.used_at < older_than)
-            )
-        )
-        .delete(synchronize_session=False)
-    )
-    db.commit()
-    return deleted

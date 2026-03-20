@@ -1,3 +1,5 @@
+import { shouldAutoConnectStream } from './streamConnect';
+
 export function shouldAutoConnectSpecialistStream(params: {
   hasChat: boolean;
   streamConnected: boolean;
@@ -5,9 +7,10 @@ export function shouldAutoConnectSpecialistStream(params: {
   hasPendingAIResponse: boolean;
   hasRevisionInProgress: boolean;
 }) {
-  if (!params.hasChat || params.streamConnected) return false;
-  if (params.streamPhase !== 'idle' && params.streamPhase !== 'fallback_polling') return false;
-  return params.hasPendingAIResponse || params.hasRevisionInProgress;
+  return shouldAutoConnectStream({
+    ...params,
+    allowFallbackPolling: true,
+  });
 }
 
 export function canAssignSpecialist(myUserId: number | null) {

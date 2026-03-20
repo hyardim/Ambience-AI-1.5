@@ -6,7 +6,6 @@ from fastapi import (
     File,
     HTTPException,
     Query,
-    Request,
     UploadFile,
     status,
 )
@@ -15,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user_obj
-from src.core import security
 from src.db.models import User
 from src.db.session import get_async_db, get_db
 from src.schemas.chat import (
@@ -135,33 +133,19 @@ def submit_for_review(
 @router.get("/{chat_id}/stream")
 async def stream_chat(
     chat_id: int,
-    request: Request,
-    token: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user_obj),
     db: Session = Depends(get_db),
 ):
     """SSE endpoint for real-time AI generation events.
 
-    Supports cookie-based auth for normal browser usage and an optional
-    access-token query parameter for compatibility with tests and fallback
-    clients.
+    Uses the same auth dependency chain as other protected routes so
+    session_version invalidation and token validation are consistent.
     """
-    user = None
-    if token:
-        try:
-            user = security.get_user_from_access_token(db, token)
-        except HTTPException:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-    else:
-        try:
-            user = security.get_current_user_from_cookie_or_header(request, db)
-        except HTTPException:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-
     from src.core.chat_policy import can_stream_chat
     from src.db.models import Chat
 
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
-    if not chat or not can_stream_chat(user, chat):
+    if not chat or not can_stream_chat(current_user, chat):
         raise HTTPException(status_code=404, detail="Chat not found")
 
     return StreamingResponse(

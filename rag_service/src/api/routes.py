@@ -162,33 +162,71 @@ async def generate_clinical_answer(
             top_k=request.top_k,
             specialty=request.specialty,
         )
-        filtered = filter_chunks(request.query, retrieved)
+        return await _generate_answer_from_retrieval(
+            query=request.query,
+            max_tokens=request.max_tokens,
+            patient_context=request.patient_context,
+            file_context=request.file_context,
+            stream=request.stream,
+            severity=request.severity,
+            retrieved=retrieved,
+            route_endpoint="/answer",
+            prompt_label=ACTIVE_PROMPT,
+            request_type="answer",
+            idempotency_key=idempotency_key,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("/answer failed")
+        raise HTTPException(
+            status_code=500,
+            detail="RAG answer error",
+        ) from exc
+
+
+async def _generate_answer_from_retrieval(
+    *,
+    query: str,
+    max_tokens: int,
+    patient_context: dict[str, Any] | None,
+    file_context: str | None,
+    stream: bool,
+    severity: str | None,
+    retrieved: list[dict[str, Any]],
+    route_endpoint: str,
+    prompt_label: str,
+    request_type: str,
+    idempotency_key: str | None,
+) -> Any:
+    try:
+        filtered = filter_chunks(query, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
-        if not top_chunks and not request.file_context:
-            return _no_evidence_response(request.stream)
+        if not top_chunks and not file_context:
+            return _no_evidence_response(stream)
 
         evidence = evidence_level(top_chunks)
 
         prompt = build_grounded_prompt(
-            request.query,
+            query,
             top_chunks,
-            patient_context=request.patient_context,
-            file_context=request.file_context,
+            patient_context=patient_context,
+            file_context=file_context,
             evidence_note=low_evidence_note(evidence),
         )
         route = select_generation_provider(
-            query=request.query,
+            query=query,
             retrieved_chunks=filtered or retrieved,
-            severity=request.severity,
+            severity=severity,
             prompt_length_chars=len(prompt),
         )
         log_route_decision(
-            "/answer",
+            route_endpoint,
             route.provider,
             route.score,
             route.threshold,
             route.reasons,
-            query=request.query,
+            query=query,
             retrieved_count=len(filtered or retrieved),
             top_score=top_chunks[0]["score"] if top_chunks else None,
             evidence=evidence,
@@ -196,11 +234,11 @@ async def generate_clinical_answer(
         )
         citations_retrieved = [to_search_result(result) for result in top_chunks]
 
-        if request.stream:
+        if stream:
             return StreamingResponse(
                 streaming_generator(
                     prompt,
-                    request.max_tokens,
+                    max_tokens,
                     citations_retrieved,
                     provider=route.provider,
                 ),
@@ -210,18 +248,18 @@ async def generate_clinical_answer(
         try:
             answer_text = await generate_answer(
                 prompt,
-                max_tokens=request.max_tokens,
+                max_tokens=max_tokens,
                 provider=route.provider,
             )
         except ModelGenerationError as exc:
             if retry_config.retry_enabled and exc.retryable:
                 job_id, status = create_retry_job(
-                    request_type="answer",
+                    request_type=request_type,
                     payload={
                         "prompt": prompt,
                         "provider": route.provider,
-                        "max_tokens": request.max_tokens,
-                        "prompt_label": ACTIVE_PROMPT,
+                        "max_tokens": max_tokens,
+                        "prompt_label": prompt_label,
                         "citations_retrieved": [
                             citation.model_dump() for citation in citations_retrieved
                         ],
@@ -251,7 +289,7 @@ async def generate_clinical_answer(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("/answer failed")
+        logger.exception("%s failed", route_endpoint)
         raise HTTPException(
             status_code=500,
             detail="RAG answer error",

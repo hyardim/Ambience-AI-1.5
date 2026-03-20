@@ -70,7 +70,15 @@ export function SpecialistQueryDetailPage() {
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
     setMessages,
-    { chatId: chat?.id ?? null, onRefresh: refreshData },
+    {
+      chatId: chat?.id ?? null,
+      onRefresh: refreshData,
+      onFileContextTruncated: () => {
+        setError(
+          'Attached file context was truncated before AI revision. Ask for a shorter upload if key details are missing.',
+        );
+      },
+    },
   );
 
   const loadData = useCallback(async (options?: { silent?: boolean }) => {

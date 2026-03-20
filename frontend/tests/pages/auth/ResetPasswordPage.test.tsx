@@ -7,13 +7,14 @@ import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { renderWithProviders } from '@test/utils';
 import { server } from '@test/mocks/server';
 
-function renderReset() {
+function renderReset(route = '/reset-password?token=test-reset-token') {
   return renderWithProviders(
     <Routes>
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/login" element={<div>Login Page</div>} />
+      <Route path="/forgot-password" element={<div>Forgot Password Page</div>} />
     </Routes>,
-    { routes: ['/reset-password?token=test-reset-token'] },
+    { routes: [route] },
   );
 }
 
@@ -49,6 +50,16 @@ describe('ResetPasswordPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/your password has been reset/i)).toBeInTheDocument();
     });
+  });
+
+  it('shows error when token is missing and submit is attempted', async () => {
+    renderReset('/reset-password');
+
+    const form = screen.getByRole('button', { name: /reset password/i }).closest('form')!;
+    fireEvent.submit(form);
+
+    expect(screen.getByText(/reset token is missing/i)).toBeInTheDocument();
+    expect(screen.getByText(/this reset link is incomplete/i)).toBeInTheDocument();
   });
 
   it('shows API errors', async () => {

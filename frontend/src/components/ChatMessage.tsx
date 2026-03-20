@@ -31,7 +31,23 @@ export function ChatMessage({
   onManualResponse,
   actionLoading = false,
 }: ChatMessageProps) {
-  const formatTime = (date: Date) => {
+  const toSafeDate = (value: unknown): Date => {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+
+    return new Date();
+  };
+
+  const formatTime = (value: unknown) => {
+    const date = toSafeDate(value);
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
     const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });

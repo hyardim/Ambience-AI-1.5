@@ -6,9 +6,6 @@ requires-python = ">=3.10"
 dependencies = [
     # Document Loading
     "pymupdf==1.24.10",          # PDF extraction
-    "python-docx>=1.1.0",        # Word documents
-    "python-pptx>=0.6.23",       # PowerPoint
-    "openpyxl>=3.1.0",           # Excel files
     "markdown>=3.5",             # Markdown files
 
     # Text Processing & Chunking
@@ -139,9 +136,6 @@ module = [
     "rq.*",
     "alembic.*",
     "fitz.*",
-    "docx.*",
-    "pptx.*",
-    "openpyxl.*",
     "tiktoken.*",
     "langchain_text_splitters.*",
 ]

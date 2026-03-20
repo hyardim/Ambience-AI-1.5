@@ -37,6 +37,7 @@ class AnswerRequest(QueryRequest):
     max_tokens: int = llm_config.llm_max_tokens
     patient_context: dict[str, Any] | None = None
     file_context: str | None = None
+    file_context_truncated: bool = False
     stream: bool = False
 
 

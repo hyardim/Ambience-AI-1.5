@@ -1,3 +1,5 @@
+import { shouldAutoConnectStream } from './streamConnect';
+
 export function shouldAutoConnectGpStream(params: {
   hasChat: boolean;
   streamConnected: boolean;
@@ -6,7 +8,6 @@ export function shouldAutoConnectGpStream(params: {
   hasPendingAIResponse: boolean;
   hasRevisionInProgress: boolean;
 }) {
-  if (!params.hasChat || params.streamConnected || params.sending) return false;
-  if (params.streamPhase !== 'idle') return false;
-  return params.hasPendingAIResponse || params.hasRevisionInProgress;
+  if (params.sending) return false;
+  return shouldAutoConnectStream(params);
 }

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -412,34 +411,18 @@ def _regenerate_ai_response(
         is_generating=True,
     )
 
-    if settings.INLINE_AI_TASKS:
-        _do_revise(
-            db,
-            placeholder,
-            original_query or "",
-            previous_answer or "",
-            feedback or "",
-            chat.specialty,
-            chat.severity,
-            patient_context,
-            file_context,
-            file_context_result.was_truncated,
-        )
-    else:
-        thread = threading.Thread(
-            target=_regenerate_ai_response_task,
-            args=(
-                placeholder.id,
-                chat.id,
-                original_query,
-                previous_answer,
-                feedback or "",
-                chat.specialty,
-                chat.severity,
-            ),
-            daemon=True,
-        )
-        thread.start()
+    _do_revise(
+        db,
+        placeholder,
+        original_query or "",
+        previous_answer or "",
+        feedback or "",
+        chat.specialty,
+        chat.severity,
+        patient_context,
+        file_context,
+        file_context_result.was_truncated,
+    )
 
     return placeholder
 
@@ -456,6 +439,7 @@ def _do_revise(
     file_context: str | None,
     file_context_truncated: bool,
 ) -> None:
+    revision_failed = False
     rag_payload = {
         "original_query": original_query,
         "previous_answer": previous_answer,
@@ -480,6 +464,7 @@ def _do_revise(
         citations = _select_rag_citations(rag_json) or []
     except Exception as exc:
         logger.warning("RAG /revise failed for chat %s: %s", placeholder.chat_id, exc)
+        revision_failed = True
         revised_content = (
             "The clinical knowledge service is temporarily unavailable for revision. "
             "Please try again shortly."
@@ -495,6 +480,19 @@ def _do_revise(
 
     if chat:
         _invalidate_chat_views(chat, chat.specialist_id)
+        if revision_failed:
+            notification_repository.create(
+                db,
+                user_id=chat.user_id,
+                type=NotificationType.CHAT_REVISION,
+                title="Revision needs retry",
+                body=(
+                    "A specialist requested a revision, but the knowledge service was "
+                    "temporarily unavailable. Please retry shortly."
+                ),
+                chat_id=chat.id,
+            )
+            invalidate_notification_caches(chat.user_id)
     else:
         _invalidate_admin_chat_caches(placeholder.chat_id)
         _invalidate_admin_stats_cache()
@@ -504,7 +502,7 @@ def _do_revise(
             audit_repository.log(
                 db,
                 user_id=chat.specialist_id,
-                action="RAG_REVISE" if revised_content else "RAG_ERROR",
+                action="RAG_ERROR" if revision_failed else "RAG_REVISE",
                 details=f"chunks_used={len(citations)}",
             )
     except Exception:

@@ -11,14 +11,16 @@ class MockEventSource {
   static instances: MockEventSource[] = [];
 
   url: string;
+  withCredentials = false;
   readyState = 0; // CONNECTING
   listeners: Record<string, ESListener[]> = {};
   onerror: ((ev: Event) => void) | null = null;
   onopen: ((ev: Event) => void) | null = null;
   closed = false;
 
-  constructor(url: string) {
+  constructor(url: string, init?: EventSourceInit) {
     this.url = url;
+    this.withCredentials = Boolean(init?.withCredentials);
     MockEventSource.instances.push(this);
   }
 
@@ -71,6 +73,8 @@ describe('subscribeToChatStream', () => {
     subscribeToChatStream(42, {});
     expect(MockEventSource.instances).toHaveLength(1);
     expect(MockEventSource.instances[0].url).toContain('/chats/42/stream');
+    expect(MockEventSource.instances[0].url).not.toContain('?token=');
+    expect(MockEventSource.instances[0].withCredentials).toBe(true);
   });
 
   it('calls onStreamStart when stream_start event arrives', () => {
@@ -107,6 +111,22 @@ describe('subscribeToChatStream', () => {
 
     expect(onComplete).toHaveBeenCalledWith(99, 'full answer', [{ title: 'ref' }]);
     expect(es.closed).toBe(true);
+  });
+
+  it('calls onFileContextTruncated when complete payload flags truncation', () => {
+    const onFileContextTruncated = vi.fn();
+    subscribeToChatStream(1, { onFileContextTruncated });
+
+    const es = MockEventSource.instances[0];
+    es._emit('complete', {
+      chat_id: 1,
+      message_id: 99,
+      content: 'full answer',
+      citations: [],
+      file_context_truncated: true,
+    });
+
+    expect(onFileContextTruncated).toHaveBeenCalledOnce();
   });
 
   it('calls onError and closes the source on error event', () => {
@@ -187,6 +207,67 @@ describe('subscribeToChatStream', () => {
     es._emit('content', { chat_id: 1, message_id: 1, content: 'Hello' });
 
     expect(contents).toEqual(['H', 'He', 'Hel', 'Hell', 'Hello']);
+  });
+
+  it('ignores stream_start events with non-numeric message_id', () => {
+    const onStreamStart = vi.fn();
+    subscribeToChatStream(1, { onStreamStart });
+
+    const es = MockEventSource.instances[0];
+    es._emit('stream_start', { message_id: 'not-a-number' });
+
+    expect(onStreamStart).not.toHaveBeenCalled();
+  });
+
+  it('ignores content events with non-numeric message_id', () => {
+    const onContent = vi.fn();
+    subscribeToChatStream(1, { onContent });
+
+    const es = MockEventSource.instances[0];
+    es._emit('content', { message_id: null, content: 'text' });
+
+    expect(onContent).not.toHaveBeenCalled();
+  });
+
+  it('ignores complete events with non-numeric message_id', () => {
+    const onComplete = vi.fn();
+    subscribeToChatStream(1, { onComplete });
+
+    const es = MockEventSource.instances[0];
+    es._emit('complete', { message_id: undefined, content: 'text' });
+
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('handles malformed JSON in stream events gracefully', () => {
+    const onStreamStart = vi.fn();
+    const onContent = vi.fn();
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+    subscribeToChatStream(1, { onStreamStart, onContent, onComplete, onError });
+
+    const es = MockEventSource.instances[0];
+
+    // Emit events with invalid JSON data by directly triggering listeners
+    for (const type of ['stream_start', 'content', 'complete']) {
+      for (const listener of es.listeners[type] ?? []) {
+        listener(new MessageEvent(type, { data: '{invalid json' }));
+      }
+    }
+
+    expect(onStreamStart).not.toHaveBeenCalled();
+    expect(onContent).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('uses chatId as fallback for error event with missing message_id', () => {
+    const onError = vi.fn();
+    subscribeToChatStream(7, { onError });
+
+    const es = MockEventSource.instances[0];
+    es._emit('error', {});
+
+    expect(onError).toHaveBeenCalledWith(7, 'Unknown error');
   });
 
   it('handles rapid start → content → error sequence without throwing', () => {

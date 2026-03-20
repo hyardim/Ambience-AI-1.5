@@ -59,6 +59,29 @@ def test_forgot_password_returns_generic_message_for_deactivated_user(db_session
     assert "registered" in result["message"]
 
 
+def test_forgot_password_returns_generic_message_for_unverified_user(
+    monkeypatch, db_session
+):
+    user = _user(db_session)
+    user.email_verified = False
+    db_session.commit()
+
+    created = []
+    monkeypatch.setattr(
+        auth_service.password_reset_repository,
+        "create",
+        lambda *args, **kwargs: created.append(True),
+    )
+
+    result = auth_service.forgot_password(
+        db_session,
+        ForgotPasswordRequest(email=user.email),
+    )
+
+    assert "registered" in result["message"]
+    assert created == []
+
+
 def test_logout_returns_message(db_session):
     user = _user(db_session)
     assert auth_service.logout(db_session, user) == {
@@ -173,6 +196,33 @@ def test_reset_password_confirm_rejects_deactivated_user(monkeypatch, db_session
 
     assert exc.value.status_code == 400
     assert "deactivated" in exc.value.detail.lower()
+
+
+def test_reset_password_confirm_rejects_unverified_user(monkeypatch, db_session):
+    user = _user(db_session)
+    user.email_verified = False
+    db_session.commit()
+    token_row = SimpleNamespace(user=user, token_hash="token-hash")
+
+    monkeypatch.setattr(
+        auth_service.password_reset_repository,
+        "get_valid_by_hash",
+        lambda *_args, **_kwargs: token_row,
+    )
+    monkeypatch.setattr(
+        auth_service.security,
+        "verify_password_reset_token",
+        lambda *_args, **_kwargs: True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        auth_service.reset_password_confirm(
+            db_session,
+            PasswordResetConfirmRequest(token="raw-token", new_password="StrongPass1!"),
+        )
+
+    assert exc.value.status_code == 400
+    assert "invalid or expired" in exc.value.detail.lower()
 
 
 def test_get_verification_status_returns_payload(db_session):

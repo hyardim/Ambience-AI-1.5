@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import concurrent.futures
 import json
 import logging
@@ -18,18 +19,50 @@ logger = logging.getLogger("backend.cache")
 # ``asyncio.run()`` anti-pattern which creates and tears down a fresh
 # event loop per call and fails when an event loop is already running.
 _sync_loop: asyncio.AbstractEventLoop | None = None
+_sync_thread: threading.Thread | None = None
 _sync_loop_lock = threading.Lock()
 
 
+def _sync_loop_runner(loop: asyncio.AbstractEventLoop, ready: threading.Event) -> None:
+    asyncio.set_event_loop(loop)
+    ready.set()
+    loop.run_forever()
+
+
+def _stop_sync_loop() -> None:
+    global _sync_loop, _sync_thread
+    loop = _sync_loop
+    if loop is None or loop.is_closed():
+        return
+    loop.call_soon_threadsafe(loop.stop)
+    if _sync_thread is not None and _sync_thread.is_alive():
+        _sync_thread.join(timeout=1)
+    try:
+        loop.close()
+    except RuntimeError:
+        pass
+    _sync_loop = None
+    _sync_thread = None
+
+
+atexit.register(_stop_sync_loop)
+
+
 def _get_sync_loop() -> asyncio.AbstractEventLoop:
-    global _sync_loop
+    global _sync_loop, _sync_thread
     if _sync_loop is not None and not _sync_loop.is_closed():
         return _sync_loop
     with _sync_loop_lock:
         if _sync_loop is None or _sync_loop.is_closed():
             _sync_loop = asyncio.new_event_loop()
-            t = threading.Thread(target=_sync_loop.run_forever, daemon=True)
-            t.start()
+            ready = threading.Event()
+            _sync_thread = threading.Thread(
+                target=_sync_loop_runner,
+                args=(_sync_loop, ready),
+                daemon=True,
+            )
+            _sync_thread.start()
+            ready.wait(timeout=1)
     return _sync_loop
 
 
@@ -39,7 +72,11 @@ def _run_sync(coro: Coroutine[Any, Any, Any]) -> Any:
     future: concurrent.futures.Future[Any] = asyncio.run_coroutine_threadsafe(
         coro, loop
     )
-    return future.result(timeout=5)
+    try:
+        return future.result(timeout=5)
+    except Exception:
+        future.cancel()
+        raise
 
 
 class RedisCache:
@@ -205,7 +242,22 @@ class RedisCache:
     def get_sync(
         self, key: str, *, user_id: Optional[int] = None, resource: str = ""
     ) -> Optional[Any]:
-        return _run_sync(self.get(key, user_id=user_id, resource=resource))
+        coro = self.get(key, user_id=user_id, resource=resource)
+        try:
+            return _run_sync(coro)
+        except Exception as exc:  # pragma: no cover - defensive
+            coro.close()
+            logger.warning(
+                "cache.sync_error",
+                extra={
+                    "operation": "get",
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
+            )
+            return None
 
     def set_sync(
         self,
@@ -216,21 +268,62 @@ class RedisCache:
         user_id: Optional[int] = None,
         resource: str = "",
     ) -> bool:
-        return _run_sync(
-            self.set(key, value, ttl=ttl, user_id=user_id, resource=resource)
-        )
+        coro = self.set(key, value, ttl=ttl, user_id=user_id, resource=resource)
+        try:
+            return _run_sync(coro)
+        except Exception as exc:  # pragma: no cover - defensive
+            coro.close()
+            logger.warning(
+                "cache.sync_error",
+                extra={
+                    "operation": "set",
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
+            )
+            return False
 
     def delete_sync(
         self, key: str, *, user_id: Optional[int] = None, resource: str = ""
     ) -> int:
-        return _run_sync(self.delete(key, user_id=user_id, resource=resource))
+        coro = self.delete(key, user_id=user_id, resource=resource)
+        try:
+            return _run_sync(coro)
+        except Exception as exc:  # pragma: no cover - defensive
+            coro.close()
+            logger.warning(
+                "cache.sync_error",
+                extra={
+                    "operation": "delete",
+                    "key": key,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
+            )
+            return 0
 
     def delete_pattern_sync(
         self, pattern: str, *, user_id: Optional[int] = None, resource: str = ""
     ) -> int:
-        return _run_sync(
-            self.delete_pattern(pattern, user_id=user_id, resource=resource)
-        )
+        coro = self.delete_pattern(pattern, user_id=user_id, resource=resource)
+        try:
+            return _run_sync(coro)
+        except Exception as exc:  # pragma: no cover - defensive
+            coro.close()
+            logger.warning(
+                "cache.sync_error",
+                extra={
+                    "operation": "delete_pattern",
+                    "pattern": pattern,
+                    "user_id": user_id,
+                    "resource": resource,
+                    "error": str(exc),
+                },
+            )
+            return 0
 
 
 # Cache keys include user scoping to avoid cross-tenant leakage.

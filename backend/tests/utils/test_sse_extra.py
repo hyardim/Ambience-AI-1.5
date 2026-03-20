@@ -113,3 +113,31 @@ async def test_sse_event_generator_unsubscribes_on_close(monkeypatch):
 
     assert frames and frames[0].startswith("event: content")
     assert unsubscribed and unsubscribed[0][0] == 9
+
+
+@pytest.mark.asyncio
+async def test_subscribe_replays_start_and_latest_content_during_active_stream():
+    bus = _ChatEventBus()
+    await bus.publish(7, SSEEvent(event="stream_start", data={"message_id": 1}))
+    await bus.publish(7, SSEEvent(event="content", data={"content": "hel"}))
+    await bus.publish(7, SSEEvent(event="content", data={"content": "hello"}))
+
+    q = await bus.subscribe(7)
+    first = q.get_nowait()
+    second = q.get_nowait()
+
+    assert first.event == "stream_start"
+    assert second.event == "content"
+    assert second.data["content"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_does_not_replay_stale_events_after_stream_terminal():
+    bus = _ChatEventBus()
+    await bus.publish(3, SSEEvent(event="stream_start", data={"message_id": 2}))
+    await bus.publish(3, SSEEvent(event="content", data={"content": "draft"}))
+    await bus.publish(3, SSEEvent(event="complete", data={"content": "final"}))
+
+    q = await bus.subscribe(3)
+
+    assert q.empty()

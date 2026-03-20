@@ -13,8 +13,14 @@ function GPStub() {
 function SpecialistStub() {
   return <div>Specialist Page</div>;
 }
+function AdminStub() {
+  return <div>Admin Page</div>;
+}
 function LoginStub() {
   return <div>Login Page</div>;
+}
+function ResendVerificationStub() {
+  return <div>Resend Verification Page</div>;
 }
 
 function renderRegister() {
@@ -23,7 +29,9 @@ function renderRegister() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/gp/queries" element={<GPStub />} />
       <Route path="/specialist/queries" element={<SpecialistStub />} />
+      <Route path="/admin/users" element={<AdminStub />} />
       <Route path="/login" element={<LoginStub />} />
+      <Route path="/resend-verification" element={<ResendVerificationStub />} />
     </Routes>,
     { routes: ['/register'] },
   );
@@ -202,6 +210,75 @@ describe('RegisterPage', () => {
     expect(passwordInput).toHaveAttribute('type', 'text');
   });
 
+  it('registers admin and navigates to admin page', async () => {
+    server.use(
+      http.post('/auth/register', () => {
+        return HttpResponse.json({
+          access_token: 'token',
+          token_type: 'bearer',
+          user: {
+            id: 3,
+            email: 'admin@example.com',
+            full_name: 'Admin User',
+            role: 'admin',
+            specialty: null,
+            is_active: true,
+          },
+        });
+      }),
+    );
+
+    renderRegister();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/first name/i), 'Admin');
+    await user.type(screen.getByLabelText(/last name/i), 'User');
+    await user.type(screen.getByLabelText(/email address/i), 'admin@example.com');
+    await user.selectOptions(screen.getByLabelText(/role/i), 'admin');
+    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin Page')).toBeInTheDocument();
+    });
+  });
+
+  it('navigates to role-based route when register returns a role without requiresEmailVerification', async () => {
+    server.use(
+      http.post('/auth/register', () => {
+        return HttpResponse.json({
+          access_token: 'token',
+          token_type: 'bearer',
+          user: {
+            id: 10,
+            email: 'gp@example.com',
+            full_name: 'GP User',
+            role: 'gp',
+            specialty: null,
+            is_active: true,
+          },
+          requires_email_verification: false,
+          message: '',
+        });
+      }),
+    );
+
+    renderRegister();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/first name/i), 'GP');
+    await user.type(screen.getByLabelText(/last name/i), 'User');
+    await user.type(screen.getByLabelText(/email address/i), 'gp@example.com');
+    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('GP Page')).toBeInTheDocument();
+    });
+  });
+
   it('registers specialists to the specialist portal and omits specialty for GP registrations', async () => {
     server.use(
       http.post('/auth/register', async ({ request }) => {
@@ -235,6 +312,31 @@ describe('RegisterPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Specialist Page')).toBeInTheDocument();
+    });
+  });
+
+  it('stays on register page when backend returns no role and no verification requirement', async () => {
+    server.use(
+      http.post('/auth/register', () => {
+        return HttpResponse.json({
+          requires_email_verification: false,
+          message: '',
+        });
+      }),
+    );
+
+    renderRegister();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/first name/i), 'No');
+    await user.type(screen.getByLabelText(/last name/i), 'Role');
+    await user.type(screen.getByLabelText(/email address/i), 'norole@example.com');
+    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /create your account/i })).toBeInTheDocument();
     });
   });
 });

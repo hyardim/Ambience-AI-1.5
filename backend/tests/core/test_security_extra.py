@@ -89,6 +89,24 @@ def test_get_refresh_cookie_reads_cookie():
     assert security._get_refresh_cookie(request) == "refresh-token"
 
 
+def test_hash_and_verify_password_reset_token_round_trip(monkeypatch):
+    monkeypatch.setattr(settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    token = "reset-token"
+    token_hash = security.hash_password_reset_token(token)
+
+    assert security.verify_password_reset_token(token, token_hash) is True
+    assert security.verify_password_reset_token("other-token", token_hash) is False
+
+
+def test_hash_and_verify_email_verification_token_round_trip(monkeypatch):
+    monkeypatch.setattr(settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper")
+    token = "verify-token"
+    token_hash = security.hash_email_verification_token(token)
+
+    assert security.verify_email_verification_token(token, token_hash) is True
+    assert security.verify_email_verification_token("other-token", token_hash) is False
+
+
 @pytest.mark.parametrize(
     ("payload", "expected_type"),
     [
@@ -101,6 +119,15 @@ def test_validate_payload_rejects_invalid_payload(payload, expected_type):
     with pytest.raises(HTTPException) as exc:
         security._validate_payload(payload, expected_type=expected_type)
     assert exc.value.status_code == 401
+
+
+def test_validate_payload_returns_subject_and_session_version() -> None:
+    email, session_version = security._validate_payload(
+        {"sub": "user@example.com", "type": "access", "sv": 3},
+        expected_type="access",
+    )
+    assert email == "user@example.com"
+    assert session_version == 3
 
 
 def test_resolve_user_from_token_rejects_missing_user(db_session):
@@ -148,6 +175,53 @@ def test_get_refresh_user_rejects_missing_cookie(db_session):
     assert exc.value.status_code == 401
 
 
+def test_get_refresh_user_returns_user_with_valid_refresh_cookie(db_session):
+    from src.db.models import User
+
+    user = User(
+        email="refresh@example.com",
+        hashed_password="hash",
+        full_name="Refresh User",
+        role=UserRole.GP,
+        specialty=None,
+        is_active=True,
+        session_version=1,
+    )
+    db_session.add(user)
+    db_session.commit()
+    token = security.create_refresh_token_for_user(user)
+    request = SimpleNamespace(cookies={settings.REFRESH_COOKIE_NAME: token})
+
+    resolved = security.get_refresh_user(request=request, db=db_session)
+    assert resolved.email == user.email
+
+
+def test_get_current_user_from_cookie_or_header_accepts_bearer_token(db_session):
+    from src.db.models import User
+
+    user = User(
+        email="bearer@example.com",
+        hashed_password="hash",
+        full_name="Bearer User",
+        role=UserRole.GP,
+        specialty=None,
+        is_active=True,
+        session_version=0,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = security.create_access_token_for_user(user)
+    request = SimpleNamespace(cookies={})
+
+    resolved = security.get_current_user_from_cookie_or_header(
+        request=request,
+        db=db_session,
+        bearer_token=token,
+    )
+    assert resolved.email == user.email
+
+
 def test_get_user_from_access_token_returns_user(db_session):
     from src.db.models import User
 
@@ -184,6 +258,24 @@ def test_set_auth_cookies_sets_both_tokens():
 
     client = TestClient(app)
     response = client.get("/cookies")
+    header = response.headers.get("set-cookie", "")
+    assert settings.ACCESS_COOKIE_NAME in header
+    assert settings.REFRESH_COOKIE_NAME in header
+
+
+def test_clear_auth_cookies_deletes_both_tokens():
+    from fastapi import FastAPI, Response
+
+    app = FastAPI()
+
+    @app.get("/clear-cookies")
+    def clear_cookies():
+        response = Response()
+        security.clear_auth_cookies(response)
+        return response
+
+    client = TestClient(app)
+    response = client.get("/clear-cookies")
     header = response.headers.get("set-cookie", "")
     assert settings.ACCESS_COOKIE_NAME in header
     assert settings.REFRESH_COOKIE_NAME in header

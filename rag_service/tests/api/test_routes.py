@@ -181,3 +181,23 @@ async def test_revise_clinical_answer_returns_no_evidence_response(
     )
 
     assert response.answer == routes.NO_EVIDENCE_RESPONSE
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_generic_exception_wrapped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lines 180-182: generic Exception handler in /answer endpoint."""
+
+    def boom_retrieve(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        raise RuntimeError("unexpected failure")
+
+    monkeypatch.setattr(routes, "retrieve_chunks", boom_retrieve)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await routes.generate_clinical_answer(
+            routes.AnswerRequest(query="q", stream=False)
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "RAG answer error"

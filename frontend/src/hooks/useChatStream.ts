@@ -22,6 +22,8 @@ export interface UseChatStreamOptions {
   pollInterval?: number;
   /** SSE connect timeout in ms. Default: 500. */
   connectTimeout?: number;
+  /** Optional callback when backend reports truncated file context. */
+  onFileContextTruncated?: () => void;
 }
 
 export interface UseChatStreamReturn {
@@ -81,6 +83,7 @@ export function useChatStream(
     onRefresh,
     pollInterval = 2000,
     connectTimeout = 500,
+    onFileContextTruncated,
   } = options;
 
   const [phase, setPhase] = useState<StreamPhase>('idle');
@@ -232,6 +235,10 @@ export function useChatStream(
             });
           },
 
+          onFileContextTruncated() {
+            onFileContextTruncated?.();
+          },
+
           onError() {
             if (!mountedRef.current) return;
             cleanupRef.current = null;
@@ -254,7 +261,7 @@ export function useChatStream(
         cleanupRef.current = cleanup;
       });
     },
-    [connectTimeout, onRefresh, setMessages, startPolling],
+    [connectTimeout, onFileContextTruncated, onRefresh, setMessages, startPolling],
   );
 
   return {

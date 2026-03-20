@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
@@ -14,18 +14,21 @@ const mockConnectStream = vi.fn(() => Promise.resolve());
 const mockStartPolling = vi.fn();
 const mockStopPolling = vi.fn();
 let latestOnRefresh: (() => Promise<void>) | null = null;
+let latestOnFileContextTruncated: (() => void) | null = null;
 const hookState = {
   phase: 'idle' as 'idle' | 'connecting' | 'streaming' | 'completed' | 'fallback_polling',
   isStreaming: false,
   injectPlaceholder: false,
+  injectStringTimestamp: false,
 };
 
 vi.mock('@/hooks/useChatStream', () => ({
   useChatStream: (
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-    options: { onRefresh: () => Promise<void> },
+    options: { onRefresh: () => Promise<void>; onFileContextTruncated?: () => void },
   ) => {
     latestOnRefresh = options.onRefresh;
+    latestOnFileContextTruncated = options.onFileContextTruncated ?? null;
     return {
       phase: hookState.phase,
       isStreaming: hookState.isStreaming,
@@ -41,6 +44,20 @@ vi.mock('@/hooks/useChatStream', () => ({
               content: '',
               timestamp: new Date(),
               isGenerating: true,
+            },
+          ]);
+        }
+        if (hookState.injectStringTimestamp) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: '998',
+              senderId: 'ai',
+              senderName: 'NHS AI Assistant',
+              senderType: 'ai',
+              content: 'String timestamp message',
+              timestamp: '2025-01-15T10:02:00Z' as unknown as Date,
+              isGenerating: false,
             },
           ]);
         }
@@ -108,9 +125,11 @@ describe('GPQueryDetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     latestOnRefresh = null;
+    latestOnFileContextTruncated = null;
     hookState.phase = 'idle';
     hookState.isStreaming = false;
     hookState.injectPlaceholder = false;
+    hookState.injectStringTimestamp = false;
   });
 
   it('loads a consultation, edits metadata, sends a message, and shows submitted state', async () => {
@@ -401,6 +420,22 @@ describe('GPQueryDetailPage', () => {
     })).toBe(false);
   });
 
+  it('shows file truncation warning when onFileContextTruncated is called', async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
+    });
+
+    act(() => {
+      latestOnFileContextTruncated?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/files were too long and were truncated/i)).toBeInTheDocument();
+    });
+  });
+
   it('does not auto-connect while a send is already in progress', () => {
     expect(shouldAutoConnectGpStream({
       hasChat: true,
@@ -430,6 +465,35 @@ describe('GPQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/failed to send message/i)).toBeInTheDocument();
     });
+  });
+
+  it('handles non-Date timestamps injected during streaming without crashing', async () => {
+    hookState.injectStringTimestamp = true;
+    server.use(
+      http.get('/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'open',
+        })),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
+    });
+
+    // Send a message to trigger connectStream which injects the string-timestamp message
+    await user.click(screen.getByRole('button', { name: /send stub message/i }));
+
+    await waitFor(() => {
+      expect(mockConnectStream).toHaveBeenCalled();
+    });
+
+    // Rendering remains stable even when streaming injects messages with non-Date timestamps.
+    expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
   });
 
   it('clears specialty and severity metadata and navigates back from the loaded page', async () => {

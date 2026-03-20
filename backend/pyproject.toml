@@ -32,10 +32,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "aiosqlite",
+  "greenlet",
   "httpx",
   "mypy",
   "pytest",
   "pytest-asyncio",
+  "pytest-cov",
   "ruff",
 ]
 

@@ -535,7 +535,7 @@ def test_regenerate_ai_response_handles_empty_context(monkeypatch):
     assert called["args"][9] is True
 
 
-def test_regenerate_ai_response_uses_thread_when_inline_ai_disabled(
+def test_regenerate_ai_response_still_calls_revise_when_inline_ai_disabled(
     monkeypatch, db_session
 ):
     fake_db = SimpleNamespace(
@@ -558,20 +558,18 @@ def test_regenerate_ai_response_uses_thread_when_inline_ai_disabled(
         "create",
         lambda *args, **kwargs: SimpleNamespace(id=7, is_generating=True),
     )
-    started = []
+    called = {}
 
-    class FakeThread:
-        def __init__(self, target, args, daemon):
-            self.args = args
-
-        def start(self):
-            started.append(self.args)
+    def fake_do_revise(*args):
+        called["args"] = args
 
     monkeypatch.setattr(specialist_review.settings, "INLINE_AI_TASKS", False)
-    monkeypatch.setattr(specialist_review.threading, "Thread", FakeThread)
+    monkeypatch.setattr(specialist_review, "_do_revise", fake_do_revise)
     specialist_review._regenerate_ai_response(fake_db, fake_chat, "feedback")
 
-    assert started
+    assert called["args"][2] == "User asks"
+    assert called["args"][3] == ""
+    assert called["args"][4] == "feedback"
 
 
 def test_do_revise_updates_placeholder_and_handles_audit_failure(
@@ -686,6 +684,67 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     )
 
     assert invalidations == [("chat", 5), ("stats", None)]
+
+
+def test_do_revise_failure_logs_rag_error_and_notifies_user(monkeypatch, db_session):
+    owner = _user(db_session, email="gp2@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec2@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    placeholder = Message(
+        chat_id=chat.id, content="old", sender="ai", is_generating=True
+    )
+    db_session.add(placeholder)
+    db_session.commit()
+    db_session.refresh(placeholder)
+
+    audit_actions = []
+    notifications = []
+    invalidated = []
+
+    def fail_post(*args, **kwargs):
+        raise RuntimeError("rag down")
+
+    monkeypatch.setattr(specialist_review.httpx, "post", fail_post)
+    monkeypatch.setattr(
+        specialist_review.audit_repository,
+        "log",
+        lambda *_args, **kwargs: audit_actions.append(kwargs.get("action")),
+    )
+    monkeypatch.setattr(
+        specialist_review.notification_repository,
+        "create",
+        lambda *_args, **kwargs: notifications.append(kwargs),
+    )
+    monkeypatch.setattr(
+        specialist_review,
+        "invalidate_notification_caches",
+        lambda user_id: invalidated.append(user_id),
+    )
+
+    specialist_review._do_revise(
+        db_session,
+        placeholder,
+        "question",
+        "old answer",
+        "feedback",
+        "neurology",
+        None,
+        None,
+        None,
+        False,
+    )
+
+    db_session.refresh(placeholder)
+    assert "temporarily unavailable" in placeholder.content
+    assert audit_actions[-1] == "RAG_ERROR"
+    assert notifications[-1]["user_id"] == owner.id
+    assert notifications[-1]["chat_id"] == chat.id
+    assert invalidated == [owner.id]
 
 
 def test_regenerate_ai_response_task_returns_when_placeholder_missing(monkeypatch):

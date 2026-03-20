@@ -101,3 +101,26 @@ def test_rq_connection_not_imported():
     assert "Connection" not in source_code, (
         "Deprecated rq.Connection must not be used — it was removed in rq >= 1.16"
     )
+
+
+def test_worker_registers_signal_handlers(monkeypatch):
+    """Worker registers SIGTERM/SIGINT handlers that trigger request_stop()."""
+    fake_redis_cls = MagicMock()
+    fake_redis_cls.from_url.return_value = MagicMock()
+    fake_worker_instance = MagicMock()
+    fake_worker_cls = MagicMock(return_value=fake_worker_instance)
+
+    mod = _load_worker_module(fake_redis_cls, fake_worker_cls)
+
+    captured: list[object] = []
+
+    def fake_signal(_sig, handler):
+        captured.append(handler)
+
+    monkeypatch.setattr(mod.signal, "signal", fake_signal)
+    mod.main()
+
+    assert len(captured) == 2
+    for handler in captured:
+        handler(0, None)
+    assert fake_worker_instance.request_stop.call_count == 2

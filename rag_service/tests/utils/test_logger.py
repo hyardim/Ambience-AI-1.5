@@ -1,9 +1,10 @@
+import json
 import logging
 from pathlib import Path
 
 import pytest
 
-from src.utils.logger import setup_logger
+from src.utils.logger import JsonFormatter, setup_logger
 
 
 class TestSetupLogger:
@@ -70,3 +71,51 @@ class TestSetupLogger:
             h for h in logger.handlers if isinstance(h, logging.FileHandler)
         )
         assert file_handler.baseFilename is not None
+
+    def test_log_record_is_valid_json(self) -> None:
+        formatter = JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S")
+        record = logging.LogRecord(
+            name="test.json",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg='quote "safe" payload',
+            args=(),
+            exc_info=None,
+        )
+
+        json.loads(formatter.format(record))
+
+    def test_log_record_includes_extra_fields(self) -> None:
+        formatter = JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S")
+        record = logging.LogRecord(
+            name="test.extra",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="event",
+            args=(),
+            exc_info=None,
+        )
+        record.job_id = "abc123"  # type: ignore[attr-defined]
+
+        payload = json.loads(formatter.format(record))
+        assert payload["job_id"] == "abc123"
+
+    def test_log_record_includes_stack_info(self) -> None:
+        """Line 55: stack_info branch in JsonFormatter."""
+        formatter = JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S")
+        record = logging.LogRecord(
+            name="test.stack",
+            level=logging.WARNING,
+            pathname=__file__,
+            lineno=1,
+            msg="with stack",
+            args=(),
+            exc_info=None,
+        )
+        record.stack_info = 'Stack (most recent call last):\n  File "test.py", line 1'
+
+        payload = json.loads(formatter.format(record))
+        assert "stack_info" in payload
+        assert "Stack (most recent call last)" in payload["stack_info"]

@@ -1,4 +1,5 @@
 import logging
+import os
 import warnings
 from pathlib import Path
 from typing import Literal
@@ -7,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _INSECURE_DEFAULT_KEY = "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
 _DEMO_SEED_ALLOWED_ENVS = {"development", "test"}
+_PLACEHOLDER_MARKERS = ("change_me", "example", "test_secret")
 
 
 class Settings(BaseSettings):
@@ -38,6 +40,12 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ALLOW_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+    CORS_ALLOW_HEADERS: list[str] = [
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+    ]
 
     # Session cookies
     ACCESS_COOKIE_NAME: str = "ambience_access_token"
@@ -112,10 +120,24 @@ def _is_production_env() -> bool:
     return settings.APP_ENV == "production"
 
 
+def _looks_like_placeholder(value: str) -> bool:
+    lowered = value.strip().lower()
+    if not lowered:
+        return True
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
+
+
 def validate_settings() -> None:
     """Emit warnings for insecure defaults at startup."""
     logger = logging.getLogger("backend.config")
     if settings.SECRET_KEY == _INSECURE_DEFAULT_KEY:
+        if _is_production_env():
+            logger.error(
+                "SECRET_KEY is using the insecure default and cannot be used in production"
+            )
+            raise RuntimeError(
+                "Invalid configuration: set SECRET_KEY to a strong non-default value"
+            )
         warnings.warn(
             "SECRET_KEY is using the insecure default value. "
             "Set a strong SECRET_KEY via environment variable before deploying.",
@@ -132,6 +154,49 @@ def validate_settings() -> None:
         raise RuntimeError(
             "Invalid configuration: disable AUTH_BOOTSTRAP_DEMO_USERS in production"
         )
+
+    if _is_production_env():
+        insecure_fields = {
+            "DATABASE_URL": settings.DATABASE_URL,
+            "EMAIL_VERIFICATION_TOKEN_PEPPER": settings.EMAIL_VERIFICATION_TOKEN_PEPPER,
+            "PASSWORD_RESET_TOKEN_PEPPER": settings.PASSWORD_RESET_TOKEN_PEPPER,
+        }
+        bad_fields = [
+            name
+            for name, value in insecure_fields.items()
+            if _looks_like_placeholder(value)
+        ]
+        if bad_fields:
+            raise RuntimeError(
+                "Invalid configuration: set strong non-placeholder values for "
+                + ", ".join(bad_fields)
+            )
+
+    if _is_production_env():
+        origins = [origin.strip().lower() for origin in settings.ALLOWED_ORIGINS]
+        if not origins:
+            raise RuntimeError(
+                "Invalid configuration: ALLOWED_ORIGINS must be set in production"
+            )
+        if any(origin == "*" for origin in origins):
+            raise RuntimeError(
+                "Invalid configuration: wildcard CORS origins are not allowed in production"
+            )
+        if any(
+            "localhost" in origin or "127.0.0.1" in origin or "0.0.0.0" in origin
+            for origin in origins
+        ):
+            raise RuntimeError(
+                "Invalid configuration: localhost CORS origins are not allowed in production"
+            )
+        if any(method == "*" for method in settings.CORS_ALLOW_METHODS):
+            raise RuntimeError(
+                "Invalid configuration: wildcard CORS methods are not allowed in production"
+            )
+        if any(header == "*" for header in settings.CORS_ALLOW_HEADERS):
+            raise RuntimeError(
+                "Invalid configuration: wildcard CORS headers are not allowed in production"
+            )
 
     if (
         settings.AUTH_BOOTSTRAP_DEMO_USERS
@@ -150,4 +215,20 @@ def validate_settings() -> None:
             raise RuntimeError(
                 "Invalid configuration: set demo seed passwords when "
                 "AUTH_BOOTSTRAP_DEMO_USERS is enabled. Missing: " + ", ".join(missing)
+            )
+
+    # SSE uses an in-process event bus. Fail fast if multi-worker server
+    # settings are configured to avoid silent stream delivery gaps.
+    worker_count = os.getenv("WEB_CONCURRENCY") or os.getenv("UVICORN_WORKERS")
+    if worker_count:
+        try:
+            parsed_workers = int(worker_count)
+        except ValueError as exc:
+            raise RuntimeError(
+                "Invalid configuration: WEB_CONCURRENCY/UVICORN_WORKERS must be an integer"
+            ) from exc
+        if parsed_workers > 1:
+            raise RuntimeError(
+                "Invalid configuration: SSE requires a single backend worker with "
+                "the current in-process event bus"
             )

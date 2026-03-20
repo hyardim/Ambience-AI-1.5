@@ -35,6 +35,11 @@ import {
   sendMessage,
   sendSpecialistMessage,
   submitForReview,
+  resendVerificationEmail,
+  confirmEmailVerification,
+  getVerificationStatus,
+  refreshSession,
+  resetPasswordConfirm,
   subscribeToChatStream,
   updateChat,
   updateProfile,
@@ -595,6 +600,106 @@ describe('API service', () => {
       expect(onContent).toHaveBeenCalledWith(9, '');
       expect(onComplete).toHaveBeenCalledWith(9, '', null);
       expect(onError).toHaveBeenCalledWith(9, 'Unknown error');
+    });
+  });
+
+  describe('verification and reset endpoints', () => {
+    it('resends verification email', async () => {
+      const result = await resendVerificationEmail('test@example.com');
+      expect(result.message).toMatch(/verification/i);
+    });
+
+    it('confirms email verification', async () => {
+      const result = await confirmEmailVerification('valid-token');
+      expect(result.message).toMatch(/verified/i);
+    });
+
+    it('gets verification status', async () => {
+      const result = await getVerificationStatus();
+      expect(result.email_verified).toBe(true);
+    });
+
+    it('resets password with token', async () => {
+      const result = await resetPasswordConfirm('token', 'newPass123');
+      expect(result.message).toMatch(/password reset/i);
+    });
+
+    it('refreshes the session', async () => {
+      const result = await refreshSession();
+      expect(result.access_token).toBeTruthy();
+    });
+  });
+
+  describe('admin edge cases', () => {
+    it('fetches logs with no params (empty query string)', async () => {
+      const result = await adminGetLogs();
+      expect(result).toBeDefined();
+    });
+
+    it('adminDeactivateUser returns fallback when response is 204', async () => {
+      server.use(
+        http.delete('/admin/users/:userId', () => new HttpResponse(null, { status: 204 })),
+      );
+
+      const result = await adminDeactivateUser(99);
+      expect(result).toMatchObject({ id: 99, is_active: false });
+    });
+
+    it('adminGetChat returns empty messages array when messages field is missing', async () => {
+      server.use(
+        http.get('/admin/chats/:chatId', () =>
+          HttpResponse.json({ id: 5, title: 'No messages', status: 'open' })),
+      );
+
+      const result = await adminGetChat(5);
+      expect(result.messages).toEqual([]);
+    });
+
+    it('markNotificationRead returns fallback is_read when response is 204', async () => {
+      server.use(
+        http.patch('/notifications/:notificationId/read', () =>
+          new HttpResponse(null, { status: 204 })),
+      );
+
+      const result = await markNotificationRead(1);
+      expect(result.is_read).toBe(true);
+    });
+
+    it('markAllNotificationsRead returns fallback when response is 204', async () => {
+      server.use(
+        http.patch('/notifications/read-all', () =>
+          new HttpResponse(null, { status: 204 })),
+      );
+
+      const result = await markAllNotificationsRead();
+      expect(result.marked_read).toBe(0);
+    });
+
+    it('adminGetUsers with string roleOrParams', async () => {
+      const result = await adminGetUsers('gp');
+      expect(result).toBeDefined();
+    });
+
+    it('adminGetUsers with active_only param', async () => {
+      const result = await adminGetUsers({ active_only: true });
+      expect(result).toBeDefined();
+    });
+
+    it('adminGetChats with specialist_id param', async () => {
+      const result = await adminGetChats({ specialist_id: 2 });
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('healthCheck unhealthy branch', () => {
+    it('returns the payload directly when status is not healthy', async () => {
+      server.use(
+        http.get('/health', () =>
+          HttpResponse.json({ status: 'degraded', system: 'database' })),
+      );
+
+      const result = await healthCheck();
+      expect(result).toEqual({ status: 'degraded', system: 'database' });
     });
   });
 });

@@ -18,8 +18,37 @@ from src.schemas.admin import (
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services import admin_service
+from src.services.chat_uploads import validate_upload_content
 
 router = APIRouter()
+
+_UPLOAD_CHUNK_BYTES = 64 * 1024
+
+
+async def _read_upload_with_limit(file: UploadFile) -> tuple[bytes, bytes]:
+    """Read upload in bounded chunks and return payload + signature sample."""
+    max_size = settings.MAX_FILE_SIZE_BYTES
+    total_size = 0
+    signature = bytearray()
+    chunks: list[bytes] = []
+
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_size:
+            limit_mb = max_size // (1024 * 1024)
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds the {limit_mb} MB limit.",
+            )
+        if len(signature) < 2048:
+            remaining = 2048 - len(signature)
+            signature.extend(chunk[:remaining])
+        chunks.append(chunk)
+
+    return b"".join(chunks), bytes(signature)
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +204,11 @@ async def upload_guideline(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Only PDF files are supported.")
 
-    file_bytes = await file.read()
+    try:
+        file_bytes, signature = await _read_upload_with_limit(file)
+        validate_upload_content(file.filename, file.content_type, signature)
+    finally:
+        await file.close()
 
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:

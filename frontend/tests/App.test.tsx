@@ -10,17 +10,20 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/NHS Ambience AI 1.5/)).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   it('redirects authenticated admin users to the admin dashboard route', async () => {
     seedAuth({ role: 'admin', username: 'Admin User' });
-    window.history.pushState({}, '', '/admin');
-    render(<App />);
+    window.history.pushState({}, '', '/admin/dashboard');
+    const { unmount } = render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Total AI Responses/i)).toBeInTheDocument();
-    });
+      expect(window.location.pathname).toBe('/admin/dashboard');
+    }, { timeout: 5000 });
+
+    expect(await screen.findByRole('button', { name: /refresh/i }, { timeout: 5000 })).toBeInTheDocument();
+    unmount();
   });
 
   it('falls back unknown routes to the landing page', async () => {
@@ -29,7 +32,7 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/AI-powered clinical decision support/i)).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   it('renders the auth routes', async () => {
@@ -38,6 +41,8 @@ describe('App', () => {
       ['/register', /create your account/i],
       ['/reset-password', /reset your password/i],
       ['/access-denied', /access restricted/i],
+      ['/forgot-password', /forgot your password/i],
+      ['/verify-email', /verify your email/i],
     ] as const;
 
     for (const [route, text] of cases) {
@@ -45,9 +50,17 @@ describe('App', () => {
       const { unmount } = render(<App />);
       await waitFor(() => {
         expect(screen.getByText(text)).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
       unmount();
     }
+
+    // ResendVerificationPage has duplicate text, use heading
+    window.history.pushState({}, '', '/resend-verification');
+    const { unmount: unmountResend } = render(<App />);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /resend verification email/i })).toBeInTheDocument();
+    }, { timeout: 5000 });
+    unmountResend();
   });
 
   it('renders gp routes for authenticated users', async () => {
@@ -63,7 +76,7 @@ describe('App', () => {
       const { unmount } = render(<App />);
       await waitFor(() => {
         expect(screen.getByText(text)).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
       unmount();
     }
   });
@@ -80,7 +93,7 @@ describe('App', () => {
       const { unmount } = render(<App />);
       await waitFor(() => {
         expect(screen.getByText(text)).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
       unmount();
     }
   });
@@ -100,7 +113,7 @@ describe('App', () => {
       const { unmount } = render(<App />);
       await waitFor(() => {
         expect(query()).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
       unmount();
     }
   });

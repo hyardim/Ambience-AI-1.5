@@ -8,6 +8,7 @@ type StreamCallbacks = {
   onStreamStart?: (messageId: number) => void;
   onContent?: (messageId: number, content: string) => void;
   onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
+  onFileContextTruncated?: () => void;
   onError?: (messageId: number, errorMessage: string) => void;
   onConnectionError?: () => void;
 };
@@ -741,5 +742,25 @@ describe('useChatStream', () => {
     });
 
     expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
+  it('invokes onFileContextTruncated callback when the stream triggers it', () => {
+    const onFileContextTruncated = vi.fn();
+    const { result } = renderHook(() =>
+      useChatStream(wrapper.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+        onFileContextTruncated,
+      }),
+    );
+
+    act(() => {
+      void result.current.connectStream(1);
+    });
+    act(() => {
+      latestCallbacks.onFileContextTruncated?.();
+    });
+
+    expect(onFileContextTruncated).toHaveBeenCalledOnce();
   });
 });

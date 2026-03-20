@@ -14,7 +14,7 @@ from src.api import deps, router
 from src.api.endpoints import health, rag
 from src.app.main import create_app
 from src.core import config as core_config
-from src.core import rate_limit, security
+from src.core import rate_limit
 from src.db.models import UserRole
 
 
@@ -66,6 +66,7 @@ def test_main_exposes_app(monkeypatch):
 def test_validate_settings_warns_for_insecure_secret(monkeypatch, caplog):
     warnings_seen = []
 
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
     monkeypatch.setattr(
         core_config.settings, "SECRET_KEY", "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
     )
@@ -83,6 +84,7 @@ def test_validate_settings_warns_for_insecure_secret(monkeypatch, caplog):
 
 
 def test_validate_settings_is_silent_for_custom_secret(monkeypatch, caplog):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
     monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
     monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
 
@@ -93,6 +95,19 @@ def test_validate_settings_is_silent_for_custom_secret(monkeypatch, caplog):
 
     assert caught == []
     assert caplog.text == ""
+
+
+def test_validate_settings_rejects_insecure_secret_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(
+        core_config.settings, "SECRET_KEY", "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
+    )
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+
+    with pytest.raises(RuntimeError, match="set SECRET_KEY"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
 
 
 def test_validate_settings_rejects_demo_bootstrap_in_production(monkeypatch):
@@ -119,6 +134,230 @@ def test_validate_settings_rejects_missing_demo_passwords(monkeypatch):
     monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
 
 
+def test_validate_settings_rejects_multi_worker_sse_config(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+
+    with pytest.raises(RuntimeError, match="SSE requires a single backend worker"):
+        core_config.validate_settings()
+
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+
+
+def test_validate_settings_rejects_non_integer_worker_count(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setenv("WEB_CONCURRENCY", "many")
+
+    with pytest.raises(RuntimeError, match="must be an integer"):
+        core_config.validate_settings()
+
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+
+
+def test_validate_settings_rejects_localhost_cors_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["http://localhost:3000"]
+    )
+
+    with pytest.raises(RuntimeError, match="localhost CORS origins"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_empty_origins_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(core_config.settings, "ALLOWED_ORIGINS", [])
+
+    with pytest.raises(RuntimeError, match="ALLOWED_ORIGINS must be set"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_wildcard_origin_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(core_config.settings, "ALLOWED_ORIGINS", ["*"])
+
+    with pytest.raises(RuntimeError, match="wildcard CORS origins"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_wildcard_methods_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(core_config.settings, "CORS_ALLOW_METHODS", ["*"])
+
+    with pytest.raises(RuntimeError, match="wildcard CORS methods"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(
+        core_config.settings,
+        "CORS_ALLOW_METHODS",
+        ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    )
+
+
+def test_validate_settings_rejects_wildcard_headers_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(core_config.settings, "CORS_ALLOW_HEADERS", ["*"])
+
+    with pytest.raises(RuntimeError, match="wildcard CORS headers"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(
+        core_config.settings,
+        "CORS_ALLOW_HEADERS",
+        ["Authorization", "Content-Type", "Idempotency-Key"],
+    )
+
+
+def test_validate_settings_rejects_placeholder_database_url_in_production(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:CHANGE_ME_DB_PASSWORD@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_placeholder_token_pepper_in_production(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "EMAIL_VERIFICATION_TOKEN_PEPPER",
+        "CHANGE_ME_VERIFICATION_PEPPER",
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+
+    with pytest.raises(RuntimeError, match="EMAIL_VERIFICATION_TOKEN_PEPPER"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_empty_password_reset_pepper_in_production(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "")
+
+    with pytest.raises(RuntimeError, match="PASSWORD_RESET_TOKEN_PEPPER"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
 @pytest.mark.asyncio
 async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
     calls = []
@@ -138,7 +377,7 @@ async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
 
     class FakeRedis:
         def get(self, key):
-            assert key == "ratelimit:127.0.0.1"
+            assert key == "ratelimit:anon:127.0.0.1"
             return "1"
 
         def pipeline(self):
@@ -150,10 +389,80 @@ async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
     await rate_limit.rate_limit_dependency(request)
 
     assert calls == [
-        ("incr", "ratelimit:127.0.0.1"),
-        ("expire", "ratelimit:127.0.0.1", 60),
+        ("incr", "ratelimit:anon:127.0.0.1"),
+        ("expire", "ratelimit:anon:127.0.0.1", 60),
         ("execute",),
     ]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_keys_by_session_and_ip(monkeypatch):
+    seen = {}
+
+    class FakePipe:
+        def incr(self, key):
+            seen["key"] = key
+            return self
+
+        def expire(self, key, ttl):
+            return self
+
+        def execute(self):
+            return None
+
+    class FakeRedis:
+        def get(self, key):
+            return None
+
+        def pipeline(self):
+            return FakePipe()
+
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"authorization": "Bearer demo-token"},
+        cookies={},
+    )
+
+    await rate_limit.rate_limit_dependency(request)
+
+    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].endswith(":127.0.0.1")
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_uses_access_cookie_subject(monkeypatch):
+    seen = {}
+
+    class FakePipe:
+        def incr(self, key):
+            seen["key"] = key
+            return self
+
+        def expire(self, key, ttl):
+            return self
+
+        def execute(self):
+            return None
+
+    class FakeRedis:
+        def get(self, key):
+            return None
+
+        def pipeline(self):
+            return FakePipe()
+
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.1"),
+        headers={},
+        cookies={core_config.settings.ACCESS_COOKIE_NAME: "cookie-token"},
+    )
+
+    await rate_limit.rate_limit_dependency(request)
+
+    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].endswith(":10.0.0.1")
 
 
 @pytest.mark.asyncio
@@ -411,31 +720,13 @@ def test_get_specialist_user_rejects_wrong_role(monkeypatch):
     assert exc.value.status_code == 403
 
 
-def test_stream_endpoint_rejects_token_without_subject(
-    client, created_chat, monkeypatch
-):
-    monkeypatch.setattr(
-        security,
-        "decode_token",
-        lambda token: (_ for _ in ()).throw(
-            HTTPException(status_code=401, detail="bad")
-        ),
-    )
+def test_stream_endpoint_rejects_query_token_auth(client, created_chat):
     response = client.get(f"/chats/{created_chat['id']}/stream?token=bad")
     assert response.status_code == 401
 
 
-def test_stream_endpoint_rejects_missing_user_after_token_decode(
-    client, created_chat, monkeypatch
-):
-    monkeypatch.setattr(
-        security,
-        "get_user_from_access_token",
-        lambda db, token: (_ for _ in ()).throw(
-            HTTPException(status_code=401, detail="Could not validate credentials")
-        ),
-    )
-    response = client.get(f"/chats/{created_chat['id']}/stream?token=good")
+def test_stream_endpoint_rejects_missing_credentials(client, created_chat):
+    response = client.get(f"/chats/{created_chat['id']}/stream")
     assert response.status_code == 401
 
 
@@ -473,7 +764,35 @@ def test_admin_guideline_upload_uses_plain_text_error_detail(
         "/admin/guidelines/upload",
         headers=admin_headers,
         data={"source_name": "NICE"},
-        files={"file": ("guide.pdf", b"pdf-bytes", "application/pdf")},
+        files={"file": ("guide.pdf", b"%PDF-1.4\n", "application/pdf")},
     )
     assert response.status_code == 500
     assert response.json()["detail"] == "plain failure"
+
+
+def test_admin_guideline_upload_rejects_non_pdf_signature(client, admin_headers):
+    response = client.post(
+        "/admin/guidelines/upload",
+        headers=admin_headers,
+        data={"source_name": "NICE"},
+        files={"file": ("guide.pdf", b"not-a-pdf", "application/pdf")},
+    )
+
+    assert response.status_code == 415
+
+
+def test_admin_guideline_upload_rejects_oversized_file(client, admin_headers):
+    response = client.post(
+        "/admin/guidelines/upload",
+        headers=admin_headers,
+        data={"source_name": "NICE"},
+        files={
+            "file": (
+                "guide.pdf",
+                b"%PDF-1.4\n" + (b"A" * (3 * 1024 * 1024)),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 413

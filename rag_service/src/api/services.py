@@ -40,7 +40,6 @@ def _cited_result_to_chunk(result: CitedResult) -> dict[str, Any]:
         "publish_date": citation.publish_date,
         "last_updated_date": citation.last_updated_date,
         "source_url": citation.source_url,
-        "source_path": None,
         "content_type": citation.content_type,
     }
     return {
@@ -101,15 +100,37 @@ def retrieve_chunks(
     ]
 
 
+def retrieve_chunks_advanced(
+    query: str,
+    *,
+    top_k: int,
+    specialty: str | None,
+    source_name: str | None,
+    doc_type: str | None,
+    score_threshold: float,
+    expand_query: bool,
+) -> list[dict[str, Any]]:
+    return [
+        _cited_result_to_chunk(result)
+        for result in retrieve(
+            query=query,
+            db_url=db_config.database_url,
+            top_k=top_k,
+            specialty=specialty,
+            source_name=source_name,
+            doc_type=doc_type,
+            score_threshold=score_threshold,
+            expand_query=expand_query,
+        )
+    ]
+
+
 def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         chunk
         for chunk in retrieved
         if chunk.get("score", 0) >= MIN_RELEVANCE
-        and (
-            (chunk.get("metadata") or {}).get("source_url")
-            or (chunk.get("metadata") or {}).get("source_path")
-        )
+        and ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
         and (
             has_query_overlap(query, chunk.get("text", ""))
             or chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE

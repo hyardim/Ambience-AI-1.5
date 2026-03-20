@@ -224,37 +224,38 @@ These are blocking issues that will prevent the app from running correctly.
 
 | # | Issue | Status on rag-updates | Still Needs Fix? |
 |---|-------|-----------------------|-----------------|
-| C1 | Demo users auto-created with password123 | PRESENT — `bootstrap.py` defaults to creating them | YES — default to false |
-| C2 | SECRET_KEY defaults to known string | PRESENT — `config.py:21` | YES — block startup if default |
+| C1 | Demo users auto-created with password123 | FIXED — `AUTH_BOOTSTRAP_DEMO_USERS` defaults to `false` | NO |
+| C2 | SECRET_KEY defaults to known string | FIXED — production startup now blocks insecure default | NO |
 | C3 | RAG service has zero auth | PRESENT — no auth on any endpoint | YES — add API key auth |
-| C4 | JWT in URL query param for SSE | PRESENT — `chats.py:135` accepts `?token=` | YES — use cookies or SSE tickets |
+| C4 | JWT in URL query param for SSE | FIXED — SSE stream now uses standard auth dependency and cookies/headers | NO |
 
 ### High Severity (H1-H8)
 
 | # | Issue | Status on rag-updates | Still Needs Fix? |
 |---|-------|-----------------------|-----------------|
-| H1 | Rate limiting disabled when Redis down | PRESENT — rate limiter exists but needs Redis fallback | YES — add in-memory fallback |
-| H2 | session_version not on SSE path | LIKELY PRESENT — session_version exists on User but SSE may not check | VERIFY |
-| H3 | File read fully into memory before size check | LIKELY PRESENT | YES — stream-check first |
-| H4 | Extension check only, no MIME validation | PRESENT | YES — add python-magic |
-| H5 | Hardcoded passwords in docker-compose | PRESENT — team20_password, SMTP password | YES — move to .env |
-| H6 | Password reset missing email verification | HAS proper token-based flow | VERIFY flow |
-| H7 | File content silently truncated at 8000 chars | UNKNOWN | CHECK RAG context building |
-| H8 | Revision failure is silent | UNKNOWN | CHECK specialist review flow |
+| H1 | Rate limiting disabled when Redis down | FIXED — in-memory fallback added when Redis is unavailable | NO |
+| H2 | session_version not on SSE path | FIXED — SSE now uses shared auth dependency path | NO |
+| H3 | File read fully into memory before size check | FIXED — bounded chunk read with size enforcement | NO |
+| H4 | Extension check only, no MIME validation | FIXED — content validation checks signature/MIME | NO |
+| H5 | Hardcoded passwords in docker-compose | FIXED — compose moved to env-based secrets | NO |
+| H6 | Password reset missing email verification | FIXED — unverified users cannot request/confirm reset | NO |
+| H7 | File content silently truncated at 8000 chars | FIXED — truncation now surfaced to users in stream UX | NO |
+| H8 | Revision failure is silent | FIXED — failure now audited and user-notified | NO |
 
 ### Medium (M1-M10) — Summary
 
 | Status | Issues |
 |--------|--------|
-| FIXED by rag-updates | M1 (two answer paths — documented), M6 (async Redis cache) |
-| STILL PRESENT | M2 (SSE in-process singleton — acceptable for pilot), M3 (mixed concurrency), M4 (source_path bug), M5 (chunk filter discards), M7 (IP-only rate limiting), M8 (CORS — fixed to specific origins now), M9 (O(n^2) rerank dedup), M10 (no specialist auto-assignment) |
+| FIXED by rag-updates | M1 (answer path parity), M4 (source_path metadata bug), M5 (chunk filtering compatibility), M6 (async Redis cache bridge hardening), M7 (rate limiting keys now include session+IP), M8 (CORS policy hardening) |
+| STILL PRESENT | M2 (SSE in-process singleton — acceptable for pilot), M3 (mixed concurrency), M9 (O(n^2) rerank dedup), M10 (no specialist auto-assignment) |
 | ACCEPTABLE | M2, M10 for pilot |
 
 ### Low (L1-L9) — Summary
 
 | Status | Issues |
 |--------|--------|
-| STILL PRESENT | L1-L2 (no restart policies), L3 (Redis no maxmemory), L4 (no rag_service healthcheck), L5 (no worker drain), L6 (telemetry in ephemeral fs), L7 (no structured logging), L8 (LLM fallback not alerted), L9 (multiple READMEs) |
+| FIXED by rag-updates | L1-L2 (restart policies), L3 (Redis maxmemory), L4 (rag_service healthcheck), L5 (worker graceful drain), L6 (telemetry/log volumes), L7 (structured JSON logging) |
+| STILL PRESENT | L8 (LLM fallback alerting still telemetry-only), L9 (multiple READMEs) |
 
 ---
 

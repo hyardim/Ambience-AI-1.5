@@ -332,6 +332,15 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
         )
         return GENERIC_FORGOT_PASSWORD_MESSAGE
 
+    if not user.email_verified:
+        audit_repository.log(
+            db,
+            user_id=user.id,
+            action="PASSWORD_RESET_REQUESTED",
+            details=f"user_id={user.id} email_unverified=true",
+        )
+        return GENERIC_FORGOT_PASSWORD_MESSAGE
+
     now = _utcnow()
     _ensure_auth_token_tables(db)
     password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
@@ -380,6 +389,8 @@ def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) ->
     user = token_row.user
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
+    if not user.email_verified:
+        raise HTTPException(status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
 
     _validate_password(payload.new_password)
     user_repository.update(

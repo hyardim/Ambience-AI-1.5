@@ -2,9 +2,10 @@
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260316_0001"
@@ -48,7 +49,9 @@ def upgrade() -> None:
         sa.Column("status", sa.String(), nullable=True),
         sa.Column("specialty", sa.String(), nullable=True),
         sa.Column("severity", sa.String(), nullable=True),
-        sa.Column("patient_context", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "patient_context", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column("specialist_id", sa.Integer(), nullable=True),
         sa.Column("assigned_at", sa.DateTime(), nullable=True),
         sa.Column("reviewed_at", sa.DateTime(), nullable=True),
@@ -70,7 +73,11 @@ def upgrade() -> None:
         sa.Column("role", sa.String(), nullable=True),
         sa.Column("sender", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
-        sa.Column("citations", postgresql.JSONB(astext_type=sa.Text(), none_as_null=True), nullable=True),
+        sa.Column(
+            "citations",
+            postgresql.JSONB(astext_type=sa.Text(), none_as_null=True),
+            nullable=True,
+        ),
         sa.Column("is_generating", sa.Boolean(), server_default="false", nullable=True),
         sa.Column("review_status", sa.String(), nullable=True),
         sa.Column("review_feedback", sa.Text(), nullable=True),

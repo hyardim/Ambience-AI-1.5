@@ -113,19 +113,28 @@ class TestStreamEndpoint:
         assert resp.status_code == 401
 
     def test_stream_rejects_bad_token(self, client, created_chat):
-        resp = client.get(f"/chats/{created_chat['id']}/stream?token=bad.jwt.token")
+        resp = client.get(
+            f"/chats/{created_chat['id']}/stream",
+            headers={"Authorization": "Bearer bad.jwt.token"},
+        )
         assert resp.status_code == 401
 
     def test_stream_rejects_other_users_chat(
         self, client, created_chat, registered_second_gp
     ):
         other_token = registered_second_gp["access_token"]
-        resp = client.get(f"/chats/{created_chat['id']}/stream?token={other_token}")
+        resp = client.get(
+            f"/chats/{created_chat['id']}/stream",
+            headers={"Authorization": f"Bearer {other_token}"},
+        )
         assert resp.status_code == 404
 
     def test_stream_nonexistent_chat_returns_404(self, client, registered_gp):
         token = registered_gp["access_token"]
-        resp = client.get(f"/chats/99999/stream?token={token}")
+        resp = client.get(
+            "/chats/99999/stream",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert resp.status_code == 404
 
 
@@ -320,7 +329,10 @@ class TestSpecialistStreamAuthorization:
         with patch(
             "src.api.endpoints.chats.sse_event_generator", side_effect=_one_event
         ):
-            resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+            resp = client.get(
+                f"/chats/{chat_id}/stream",
+                headers={"Authorization": f"Bearer {token}"},
+            )
             assert resp.status_code == 200
 
     def test_specialist_can_access_assigned_chat_stream(
@@ -349,7 +361,10 @@ class TestSpecialistStreamAuthorization:
         with patch(
             "src.api.endpoints.chats.sse_event_generator", side_effect=_one_event
         ):
-            resp = client.get(f"/chats/{chat_id}/stream?token={token}")
+            resp = client.get(
+                f"/chats/{chat_id}/stream",
+                headers={"Authorization": f"Bearer {token}"},
+            )
             # Should not be 404 – should be 200 (SSE stream)
             assert resp.status_code == 200
 
@@ -371,6 +386,9 @@ class TestSpecialistStreamAuthorization:
         )
 
         token = registered_specialist["access_token"]
-        resp = client.get(f"/chats/{cardio['id']}/stream?token={token}")
+        resp = client.get(
+            f"/chats/{cardio['id']}/stream",
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
         assert resp.status_code == 404

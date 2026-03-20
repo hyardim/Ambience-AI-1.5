@@ -91,32 +91,51 @@ def create_refresh_token_for_user(user: User) -> str:
     )
 
 
-def generate_password_reset_token() -> str:
+def generate_secure_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def _hash_token(token: str, pepper: str) -> str:
+    payload = f"{pepper}:{token}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _verify_token(token: str, token_hash: str, pepper: str) -> bool:
+    return hmac.compare_digest(_hash_token(token, pepper), token_hash)
+
+
+# Password-reset token helpers (delegate to shared core)
+generate_password_reset_token = generate_secure_token
 
 
 def hash_password_reset_token(token: str) -> str:
-    pepper = settings.PASSWORD_RESET_TOKEN_PEPPER or settings.SECRET_KEY
-    payload = f"{pepper}:{token}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return _hash_token(
+        token, settings.PASSWORD_RESET_TOKEN_PEPPER or settings.SECRET_KEY
+    )
 
 
 def verify_password_reset_token(token: str, token_hash: str) -> bool:
-    return hmac.compare_digest(hash_password_reset_token(token), token_hash)
+    return _verify_token(
+        token, token_hash, settings.PASSWORD_RESET_TOKEN_PEPPER or settings.SECRET_KEY
+    )
 
 
-def generate_email_verification_token() -> str:
-    return secrets.token_urlsafe(32)
+# Email-verification token helpers (delegate to shared core)
+generate_email_verification_token = generate_secure_token
 
 
 def hash_email_verification_token(token: str) -> str:
-    pepper = settings.EMAIL_VERIFICATION_TOKEN_PEPPER or settings.SECRET_KEY
-    payload = f"{pepper}:{token}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return _hash_token(
+        token, settings.EMAIL_VERIFICATION_TOKEN_PEPPER or settings.SECRET_KEY
+    )
 
 
 def verify_email_verification_token(token: str, token_hash: str) -> bool:
-    return hmac.compare_digest(hash_email_verification_token(token), token_hash)
+    return _verify_token(
+        token,
+        token_hash,
+        settings.EMAIL_VERIFICATION_TOKEN_PEPPER or settings.SECRET_KEY,
+    )
 
 
 def _decode_token_payload(token: str) -> dict[str, Any]:

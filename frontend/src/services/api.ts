@@ -316,7 +316,7 @@ export async function sendMessage(
   chatId: number,
   content: string,
 ): Promise<GPMessageResponse> {
-  const body: MessageCreateRequest = { role: 'user', content };
+  const body: MessageCreateRequest = { content };
   const res = await apiFetch(apiUrl(`/chats/${chatId}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -325,15 +325,17 @@ export async function sendMessage(
   return handleResponse<GPMessageResponse>(res);
 }
 
-export async function getSpecialistQueue(): Promise<BackendChat[]> {
+export async function getSpecialistQueue(options: RequestOptions = {}): Promise<BackendChat[]> {
   const res = await apiFetch(apiUrl('/specialist/queue'), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
 }
 
-export async function getAssignedChats(): Promise<BackendChat[]> {
+export async function getAssignedChats(options: RequestOptions = {}): Promise<BackendChat[]> {
   const res = await apiFetch(apiUrl('/specialist/assigned'), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<BackendChat[]>(res);
@@ -403,7 +405,7 @@ export async function sendSpecialistMessage(
   chatId: number,
   content: string,
 ): Promise<{ status: string; message_id: number }> {
-  const body: MessageCreateRequest = { role: 'specialist', content };
+  const body: MessageCreateRequest = { content };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -449,6 +451,7 @@ type AdminUserFilters = {
 
 export async function adminGetUsers(
   roleOrParams: string | AdminUserFilters = {},
+  options: RequestOptions = {},
 ): Promise<UserProfile[]> {
   const params: AdminUserFilters =
     typeof roleOrParams === 'string' ? { role: roleOrParams } : roleOrParams;
@@ -459,6 +462,7 @@ export async function adminGetUsers(
   setOptionalSearchParam(query, 'search', params.search);
   const suffix = query.toString() ? `?${query}` : '';
   const res = await apiFetch(apiUrl(`/admin/users${suffix}`), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<UserProfile[]>(res);
@@ -497,7 +501,7 @@ export async function adminGetChats(params: {
   specialist_id?: number;
   skip?: number;
   limit?: number;
-} = {}): Promise<AdminChatResponse[]> {
+} = {}, options: RequestOptions = {}): Promise<AdminChatResponse[]> {
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'status', params.status);
   setOptionalSearchParam(query, 'specialty', params.specialty);
@@ -510,6 +514,7 @@ export async function adminGetChats(params: {
   if (params.limit != null) query.set('limit', String(params.limit));
   const suffix = query.toString() ? `?${query}` : '';
   const res = await apiFetch(apiUrl(`/admin/chats${suffix}`), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<AdminChatResponse[]>(res);
@@ -547,8 +552,9 @@ export async function adminDeleteChat(chatId: number): Promise<void> {
   return handleResponse<void>(res);
 }
 
-export async function adminGetStats(): Promise<AdminStatsResponse> {
+export async function adminGetStats(options: RequestOptions = {}): Promise<AdminStatsResponse> {
   const res = await apiFetch(apiUrl('/admin/stats'), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<AdminStatsResponse>(res);
@@ -562,7 +568,7 @@ export async function adminGetLogs(params: {
   date_from?: string;
   date_to?: string;
   limit?: number;
-} = {}): Promise<AuditLogResponse[]> {
+} = {}, options: RequestOptions = {}): Promise<AuditLogResponse[]> {
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'action', params.action);
   setOptionalSearchParam(query, 'category', params.category);
@@ -573,6 +579,7 @@ export async function adminGetLogs(params: {
   if (params.limit != null) query.set('limit', String(params.limit));
   const suffix = query.toString() ? `?${query}` : '';
   const res = await apiFetch(apiUrl(`/admin/logs${suffix}`), {
+    signal: options.signal,
     headers: authHeaders(),
   });
   return handleResponse<AuditLogResponse[]>(res);
@@ -625,16 +632,14 @@ export function subscribeToChatStream(
     onStreamStart?: (messageId: number) => void;
     onContent?: (messageId: number, content: string) => void;
     onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
+    onFileContextTruncated?: () => void;
     onError?: (messageId: number, errorMessage: string) => void;
     onConnectionError?: () => void;
   },
 ): () => void {
   const base = import.meta.env.VITE_API_URL || '';
-  const token = localStorage.getItem('access_token');
-  const streamUrl = token
-    ? `${base}/chats/${chatId}/stream?token=${encodeURIComponent(token)}`
-    : `${base}/chats/${chatId}/stream`;
-  const source = new EventSource(streamUrl);
+  const streamUrl = `${base}/chats/${chatId}/stream`;
+  const source = new EventSource(streamUrl, { withCredentials: true });
 
   source.onopen = () => {
     handlers.onOpen?.();
@@ -669,8 +674,12 @@ export function subscribeToChatStream(
       message_id?: number;
       content?: string;
       citations?: unknown[];
+      file_context_truncated?: boolean;
     }>(event as MessageEvent<string>);
     if (typeof payload?.message_id === 'number') {
+      if (payload.file_context_truncated === true) {
+        handlers.onFileContextTruncated?.();
+      }
       handlers.onComplete?.(
         payload.message_id,
         payload.content ?? '',

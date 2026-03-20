@@ -119,7 +119,6 @@ export interface ChatCreateRequest {
 }
 
 export interface MessageCreateRequest {
-  role: string;
   content: string;
 }
 

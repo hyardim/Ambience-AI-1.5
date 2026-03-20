@@ -294,6 +294,17 @@ describe('GPNewQueryPage', () => {
     });
   });
 
+  it('shows error when attaching oversized files via file input', async () => {
+    renderNewQuery();
+    const user = userEvent.setup({ applyAccept: false });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const oversized = new File(['x'.repeat(4 * 1024 * 1024)], 'huge.pdf', { type: 'application/pdf' });
+    await user.upload(fileInput, oversized);
+
+    expect(screen.getByText(/file\(s\) too large.*huge\.pdf.*maximum size is 3 mb/i)).toBeInTheDocument();
+  });
+
   it('ignores cancelled file selections', () => {
     renderNewQuery();
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;

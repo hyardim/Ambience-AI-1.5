@@ -2,6 +2,7 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     container_name: ambience_mailpit
+    restart: unless-stopped
     ports:
       - "8025:8025"
       - "1025:1025"
@@ -11,8 +12,15 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ambience_rag_redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     networks:
       - ambience_net
 
@@ -20,7 +28,7 @@ services:
   db_vector:
     image: pgvector/pgvector:pg16
     container_name: ambience_db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -43,6 +51,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
     container_name: ambience_backend
+    restart: unless-stopped
     volumes:
       # ✅ Fixed: Maps local 'src' to container's '/app/src' for hot-reloading
       - ./backend/src:/app/src
@@ -88,9 +97,12 @@ services:
       context: ./rag_service
       dockerfile: Dockerfile  # ✅ Fixed: Dockerfile is now at root
     container_name: ambience_rag
+    restart: unless-stopped
     depends_on:
-      - db_vector
-      - redis
+      db_vector:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8001:8001"
     volumes:
@@ -99,6 +111,7 @@ services:
       # Mount data and configs so /docs/{doc_id} can serve PDFs and ingestion sees updated sources
       - ./rag_service/data:/app/data
       - ./rag_service/configs:/app/configs
+      - ./rag_service/logs:/app/logs
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - REDIS_URL=redis://redis:6379/0
@@ -115,6 +128,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
     networks:
       - ambience_net
 
@@ -123,11 +148,14 @@ services:
       context: ./rag_service
       dockerfile: Dockerfile
     container_name: ambience_rag_worker
+    restart: unless-stopped
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     volumes:
       - ./rag_service/src:/app/src
       - ./rag_service/scripts:/app/scripts
+      - ./rag_service/logs:/app/logs
     environment:
       - REDIS_URL=redis://redis:6379/0
     command: python scripts/workers/run_retry_worker.py
@@ -138,6 +166,7 @@ services:
   frontend:
     build: ./frontend
     container_name: ambience_frontend
+    restart: unless-stopped
     ports:
       - "3000:5173"  # ✅ Fixed: Maps Host 3000 -> Container 5173 (Vite default)
     volumes:

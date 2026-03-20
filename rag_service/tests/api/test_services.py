@@ -99,7 +99,6 @@ def test_retrieve_chunks_uses_shared_retrieval_pipeline(
                 "publish_date": None,
                 "last_updated_date": None,
                 "source_url": "https://example.com/guide",
-                "source_path": None,
                 "content_type": "text",
             },
         }
@@ -121,6 +120,35 @@ def test_filter_chunks_keeps_high_confidence_semantic_hit_without_token_overlap(
     filtered = filter_chunks("aspirin management", retrieved)
 
     assert filtered == retrieved
+
+
+def test_filter_chunks_keeps_hits_with_doc_id_even_without_public_source_url() -> None:
+    retrieved = [
+        {
+            "text": "Use beta interferon for indicated patients.",
+            "score": 0.9,
+            "metadata": {"source_path": "/app/data/raw/doc.pdf"},
+            "doc_id": "legacy-doc-1",
+        }
+    ]
+
+    filtered = filter_chunks("beta interferon", retrieved)
+
+    assert filtered == retrieved
+
+
+def test_filter_chunks_drops_hits_without_source_url_or_doc_id() -> None:
+    retrieved = [
+        {
+            "text": "Use beta interferon for indicated patients.",
+            "score": 0.9,
+            "metadata": {"source_path": "/app/data/raw/doc.pdf"},
+        }
+    ]
+
+    filtered = filter_chunks("beta interferon", retrieved)
+
+    assert filtered == []
 
 
 def test_to_search_result_uses_default_source_name() -> None:
@@ -168,6 +196,56 @@ def test_query_fingerprint_is_stable() -> None:
         "migraine treatment"
     )
     assert len(query_fingerprint("migraine treatment")) == 12
+
+
+def test_retrieve_chunks_advanced_returns_mapped_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Line 113: retrieve_chunks_advanced function return."""
+    from src.api.services import retrieve_chunks_advanced
+
+    citation = Citation(
+        title="Advanced Guide",
+        source_name="NICE",
+        specialty="cardiology",
+        doc_type="guideline",
+        section_path=["Overview"],
+        section_title="Overview",
+        page_start=1,
+        page_end=2,
+        source_url="https://example.com/adv",
+        doc_id="doc-adv",
+        chunk_id="chunk-adv",
+        content_type="text",
+    )
+    result = CitedResult(
+        chunk_id="chunk-adv",
+        text="advanced chunk",
+        rerank_score=0.85,
+        rrf_score=0.7,
+        vector_score=0.6,
+        keyword_rank=0.5,
+        citation=citation,
+    )
+
+    monkeypatch.setattr("src.api.services.retrieve", lambda **kwargs: [result])
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
+
+    chunks = retrieve_chunks_advanced(
+        "chest pain",
+        top_k=5,
+        specialty="cardiology",
+        source_name="NICE",
+        doc_type="guideline",
+        score_threshold=0.3,
+        expand_query=False,
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0]["text"] == "advanced chunk"
+    assert chunks[0]["score"] == 0.85
+    assert chunks[0]["doc_id"] == "doc-adv"
+    assert chunks[0]["chunk_id"] == "chunk-adv"
 
 
 def test_log_route_decision_records_telemetry(

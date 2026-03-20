@@ -130,3 +130,46 @@ def test_score_ambiguity_moderate_branches() -> None:
     assert score > 0
     assert "moderate_top_score" in reasons
     assert "moderate_top_gap" in reasons
+
+
+def test_select_generation_provider_routes_cloud_when_score_equals_threshold() -> None:
+    decision = select_generation_provider(
+        query="Simple question",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],
+        is_revision=True,
+        threshold=0.65,
+    )
+
+    assert decision.score == 0.65
+    assert decision.threshold == 0.65
+    assert decision.provider == "cloud"
+
+
+def test_select_generation_provider_routes_local_when_score_just_below_threshold() -> (
+    None
+):
+    decision = select_generation_provider(
+        query="What is migraine guidance?",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],
+        prompt_length_chars=4000,
+        threshold=0.301,
+    )
+
+    assert decision.score == 0.3
+    assert decision.threshold == 0.301
+    assert decision.provider == "local"
+
+
+def test_select_generation_provider_revision_not_forced_when_toggle_off(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router.routing_config, "route_revisions_to_cloud", False)
+    decision = select_generation_provider(
+        query="Simple question",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],
+        threshold=0.65,
+        is_revision=True,
+    )
+
+    assert decision.provider == "local"
+    assert "revision_flow" not in decision.reasons

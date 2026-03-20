@@ -50,7 +50,15 @@ export function GPQueryDetailPage() {
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
     setMessages,
-    { chatId: chat?.id ?? null, onRefresh: refreshChat },
+    {
+      chatId: chat?.id ?? null,
+      onRefresh: refreshChat,
+      onFileContextTruncated: () => {
+        setError(
+          'One or more attached files were too long and were truncated before AI generation. Consider uploading a shorter excerpt for best results.',
+        );
+      },
+    },
   );
 
   // ── Auto-send draft message passed from GPNewQueryPage ───────────────

@@ -5,11 +5,14 @@ import httpx
 from ..config import (
     cloud_llm_config,
     local_llm_config,
+    path_config,
 )
 from ..utils.logger import setup_logger
+from ..utils.telemetry import append_jsonl
 
 ProviderName = Literal["local", "cloud"]
 logger = setup_logger(__name__)
+PROVIDER_ALERTS_PATH = path_config.logs / "provider_alerts.jsonl"
 
 
 class ProviderRequestError(RuntimeError):
@@ -39,6 +42,24 @@ class ModelGenerationError(RuntimeError):
 
 def _fallback_provider(provider: ProviderName) -> ProviderName:
     return "cloud" if provider == "local" else "local"
+
+
+def _emit_provider_alert(
+    *,
+    event: str,
+    primary_provider: ProviderName,
+    fallback_provider: ProviderName | None,
+    detail: str,
+) -> None:
+    append_jsonl(
+        PROVIDER_ALERTS_PATH,
+        {
+            "event": event,
+            "primary_provider": primary_provider,
+            "fallback_provider": fallback_provider,
+            "detail": detail,
+        },
+    )
 
 
 async def warmup_model(provider: ProviderName = "local") -> None:
@@ -293,6 +314,15 @@ async def generate_answer(
                     "Generation fallback succeeded with provider=%s",
                     current_provider,
                 )
+                _emit_provider_alert(
+                    event="provider_fallback_succeeded",
+                    primary_provider=provider,
+                    fallback_provider=current_provider,
+                    detail=(
+                        "Primary provider failed and fallback provider returned a "
+                        "response"
+                    ),
+                )
 
             return response
         except Exception as exc:
@@ -300,16 +330,29 @@ async def generate_answer(
             if isinstance(exc, ProviderRequestError):
                 attempt_errors.append(exc)
             if index == 1:
+                fallback_provider = _fallback_provider(current_provider)
                 logger.warning(
                     "Primary generation provider failed (provider=%s): %s. "
                     "Trying fallback provider=%s.",
                     current_provider,
                     exc,
-                    _fallback_provider(current_provider),
+                    fallback_provider,
+                )
+                _emit_provider_alert(
+                    event="provider_fallback_attempt",
+                    primary_provider=current_provider,
+                    fallback_provider=fallback_provider,
+                    detail=str(exc),
                 )
 
     retryable = len(attempt_errors) == len(attempts) and all(
         error.retryable for error in attempt_errors
+    )
+    _emit_provider_alert(
+        event="provider_all_failed",
+        primary_provider=provider,
+        fallback_provider=_fallback_provider(provider),
+        detail=" | ".join(attempts),
     )
     raise ModelGenerationError(
         "All model providers failed. " + " | ".join(attempts),
