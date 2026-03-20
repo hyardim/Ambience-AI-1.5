@@ -35,7 +35,7 @@ class TestRegister:
                 "first_name": "No",
                 "last_name": "Specialty",
                 "email": "no.specialty@nhs.uk",
-                "password": "pass123",
+                "password": "SecurePass123!",
                 "role": "specialist",
             },
         )

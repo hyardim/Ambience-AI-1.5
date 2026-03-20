@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from src.db.models import Chat, ChatStatus, Message, User, UserRole
 from src.schemas.chat import ReviewRequest
@@ -396,17 +397,14 @@ def test_review_message_request_changes_path(monkeypatch, db_session):
 
 
 def test_review_message_rejects_invalid_action(db_session):
-    specialist = _user(
+    _user(
         db_session,
         email="spec@example.com",
         role=UserRole.SPECIALIST,
         specialty="neurology",
     )
-    with pytest.raises(HTTPException) as exc:
-        specialist_service.review_message(
-            db_session, specialist, 1, 1, ReviewRequest(action="ghost")
-        )
-    assert exc.value.status_code == 400
+    with pytest.raises(ValidationError):
+        ReviewRequest(action="ghost")
 
 
 def test_review_message_rejects_missing_chat(db_session):

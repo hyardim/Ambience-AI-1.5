@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from src.db.models import User, UserRole
 from src.schemas.auth import (
@@ -32,14 +33,8 @@ def _user(db_session, *, email="user@example.com", active=True):
 
 
 def test_register_rejects_invalid_role(db_session):
-    with pytest.raises(HTTPException) as exc:
-        auth_service.register(
-            db_session,
-            UserRegister(
-                email="new@example.com", password="StrongPass1!", role="ghost"
-            ),
-        )
-    assert exc.value.status_code == 400
+    with pytest.raises(ValidationError):
+        UserRegister(email="new@example.com", password="StrongPass1!", role="ghost")
 
 
 def test_forgot_password_returns_generic_message_for_unknown_user(db_session):
@@ -95,6 +90,31 @@ def test_refresh_returns_auth_response(db_session):
     assert result.user.email == user.email
     assert result.token_type == "bearer"
     assert result.access_token
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "short",
+        "alllowercase1!",
+        "ALLUPPERCASE1!",
+        "NoDigits!!",
+        "NoSpecial1",
+    ],
+)
+def test_validate_password_rejects_weak_passwords(password):
+    with pytest.raises(HTTPException) as exc:
+        auth_service._validate_password(password)
+    assert exc.value.status_code == 400
+
+
+def test_validate_password_accepts_strong_password():
+    auth_service._validate_password("StrongPass1!")
+
+
+def test_profile_update_accepts_explicit_none_new_password():
+    payload = ProfileUpdate(new_password=None)
+    assert payload.new_password is None
 
 
 def test_update_profile_requires_current_password_when_setting_new_one(db_session):

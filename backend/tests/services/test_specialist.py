@@ -282,7 +282,7 @@ class TestSpecialistReview:
             json={"action": "maybe"},
             headers=specialist_headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_review_unassigned_chat_fails(
         self, client, specialist_headers, submitted_chat

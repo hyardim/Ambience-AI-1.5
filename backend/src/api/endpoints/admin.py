@@ -229,10 +229,9 @@ async def upload_guideline(
             ) from e
 
     if response.status_code != 200:
-        try:
-            detail = response.json().get("detail", response.text)
-        except Exception:
-            detail = response.text
-        raise HTTPException(status_code=response.status_code, detail=detail)
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="Guideline ingestion failed. Check RAG service logs for details.",
+        )
 
     return response.json()

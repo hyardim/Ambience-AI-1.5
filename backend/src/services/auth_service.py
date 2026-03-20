@@ -168,10 +168,7 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
     if user_repository.get_by_email(db, payload.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    try:
-        role = UserRole(payload.role)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+    role = UserRole(payload.role)
 
     if role == UserRole.SPECIALIST and not payload.specialty:
         raise HTTPException(

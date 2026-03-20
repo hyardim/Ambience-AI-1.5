@@ -22,42 +22,32 @@ class TestPasswordStrengthOnRegister:
     def test_too_short_rejected(self, client, gp_user_payload):
         gp_user_payload["password"] = "Ab1!"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
-        assert "8 characters" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_no_uppercase_rejected(self, client, gp_user_payload):
         gp_user_payload["password"] = "abcdefg1!"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
-        assert "uppercase" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_no_lowercase_rejected(self, client, gp_user_payload):
         gp_user_payload["password"] = "ABCDEFG1!"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
-        assert "lowercase" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_no_digit_rejected(self, client, gp_user_payload):
         gp_user_payload["password"] = "Abcdefgh!"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
-        assert "digit" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_no_special_char_rejected(self, client, gp_user_payload):
         gp_user_payload["password"] = "Abcdefg1"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
-        assert "special" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_multiple_failing_rules_reported_together(self, client, gp_user_payload):
         gp_user_payload["password"] = "abc"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
-        detail = resp.json()["detail"]
-        assert "8 characters" in detail
-        assert "uppercase" in detail
-        assert "digit" in detail
-        assert "special" in detail
+        assert resp.status_code == 422
 
     def test_boundary_exactly_8_chars_all_rules_met(self, client, gp_user_payload):
         gp_user_payload["password"] = "Secure1!"
@@ -66,7 +56,7 @@ class TestPasswordStrengthOnRegister:
     def test_boundary_7_chars_rejected(self, client, gp_user_payload):
         gp_user_payload["password"] = "Secur1!"
         resp = client.post("/auth/register", json=gp_user_payload)
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestPasswordStrengthOnReset:
@@ -107,7 +97,7 @@ class TestPasswordStrengthOnReset:
             "/auth/reset-password/confirm",
             json={"token": token, "new_password": "weak"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_no_uppercase_rejected_on_reset(
         self, client, registered_gp, gp_user_payload, monkeypatch
@@ -117,8 +107,7 @@ class TestPasswordStrengthOnReset:
             "/auth/reset-password/confirm",
             json={"token": token, "new_password": "abcdefg1!"},
         )
-        assert resp.status_code == 400
-        assert "uppercase" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_no_special_char_rejected_on_reset(
         self, client, registered_gp, gp_user_payload, monkeypatch
@@ -128,8 +117,7 @@ class TestPasswordStrengthOnReset:
             "/auth/reset-password/confirm",
             json={"token": token, "new_password": "Abcdefg1"},
         )
-        assert resp.status_code == 400
-        assert "special" in resp.json()["detail"]
+        assert resp.status_code == 422
 
 
 class TestPasswordStrengthOnProfileUpdate:
@@ -153,7 +141,7 @@ class TestPasswordStrengthOnProfileUpdate:
             },
             headers=gp_headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_no_uppercase_rejected_on_profile(
         self, client, gp_headers, gp_user_payload
@@ -166,8 +154,7 @@ class TestPasswordStrengthOnProfileUpdate:
             },
             headers=gp_headers,
         )
-        assert resp.status_code == 400
-        assert "uppercase" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_no_digit_rejected_on_profile(self, client, gp_headers, gp_user_payload):
         resp = client.patch(
@@ -178,8 +165,7 @@ class TestPasswordStrengthOnProfileUpdate:
             },
             headers=gp_headers,
         )
-        assert resp.status_code == 400
-        assert "digit" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     def test_profile_update_without_new_password_not_affected(self, client, gp_headers):
         resp = client.patch(

@@ -6,6 +6,7 @@ from typing import Any, cast
 import numpy as np
 import psycopg2
 import psycopg2.extras
+import psycopg2.sql
 from pgvector.psycopg2 import register_vector
 
 from ..utils.db import db
@@ -219,23 +220,27 @@ def _normalise_metadata(value: Any) -> Any:
 
 
 def _savepoint_name(chunk_id: str) -> str:
+    # Use only digits to guarantee the name is safe for SQL identifiers.
     return f"chunk_{abs(hash(chunk_id))}"
 
 
 def _begin_savepoint(conn: Any, chunk_id: str) -> None:
+    name = psycopg2.sql.Identifier(_savepoint_name(chunk_id))
     with conn.cursor() as cur:
-        cur.execute(f"SAVEPOINT {_savepoint_name(chunk_id)}")
+        cur.execute(psycopg2.sql.SQL("SAVEPOINT {}").format(name))
 
 
 def _release_savepoint(conn: Any, chunk_id: str) -> None:
+    name = psycopg2.sql.Identifier(_savepoint_name(chunk_id))
     with conn.cursor() as cur:
-        cur.execute(f"RELEASE SAVEPOINT {_savepoint_name(chunk_id)}")
+        cur.execute(psycopg2.sql.SQL("RELEASE SAVEPOINT {}").format(name))
 
 
 def _rollback_to_savepoint(conn: Any, chunk_id: str) -> None:
     try:
+        name = psycopg2.sql.Identifier(_savepoint_name(chunk_id))
         with conn.cursor() as cur:
-            cur.execute(f"ROLLBACK TO SAVEPOINT {_savepoint_name(chunk_id)}")
+            cur.execute(psycopg2.sql.SQL("ROLLBACK TO SAVEPOINT {}").format(name))
     except Exception:
         rollback = cast(Any, getattr(conn, "rollback", None))
         if callable(rollback):

@@ -215,7 +215,7 @@ class TestGuidelinesUploadRagErrors:
             )
 
         assert resp.status_code == 422
-        assert "FAKE" in resp.json()["detail"]
+        assert "Guideline ingestion failed" in resp.json()["detail"]
 
     def test_rag_500_propagated(self, client, admin_headers):
         mock_resp = _mock_rag_error(500, "Pipeline failed at stage embed: OOM")

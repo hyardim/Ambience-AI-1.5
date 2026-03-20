@@ -182,12 +182,6 @@ def review_message(
     message_id: int,
     body: ReviewRequest,
 ) -> ChatResponse:
-    if body.action not in ("approve", "reject", "request_changes", "manual_response"):
-        raise HTTPException(
-            status_code=400,
-            detail="action must be 'approve', 'reject', 'request_changes', or 'manual_response'",
-        )
-
     chat = (
         db.query(Chat)
         .filter(Chat.id == chat_id, Chat.specialist_id == specialist.id)

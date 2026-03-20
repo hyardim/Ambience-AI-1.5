@@ -16,7 +16,7 @@ async def search_clinical_guidelines(
     current_user=Depends(get_current_user),
 ):
     """Proxy evidence retrieval through the authenticated backend."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=settings.RAG_REQUEST_TIMEOUT_SECONDS) as client:
         try:
             response = await client.post(
                 f"{settings.RAG_SERVICE_URL}/query",
@@ -40,7 +40,7 @@ async def search_clinical_guidelines(
     if response.status_code != 200:
         raise HTTPException(
             status_code=response.status_code,
-            detail=response.text or "RAG service request failed.",
+            detail="RAG service request failed.",
         )
 
     return response.json()

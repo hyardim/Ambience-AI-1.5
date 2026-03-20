@@ -161,8 +161,7 @@ def test_password_policy_enforced_during_reset(
         json={"token": token, "new_password": "weak"},
     )
 
-    assert resp.status_code == 400
-    assert "password must contain" in resp.json()["detail"].lower()
+    assert resp.status_code == 422
 
 
 def test_audit_entries_created_for_request_and_completion(

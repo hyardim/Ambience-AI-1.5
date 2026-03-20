@@ -42,6 +42,7 @@ def test_create_app_builds_fastapi_app(monkeypatch):
     monkeypatch.setattr(
         "src.app.main.validate_settings", lambda: called.__setitem__("settings", 1)
     )
+    monkeypatch.setattr("src.app.main.settings.COOKIE_SECURE", True)
 
     app = create_app()
     client = TestClient(app)
@@ -50,6 +51,14 @@ def test_create_app_builds_fastapi_app(monkeypatch):
     assert called == {"logging": 1, "db": 1, "settings": 1}
     assert response.status_code == 200
     assert response.json() == {"status": "Ambience Backend Running"}
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert "default-src 'none'" in response.headers["Content-Security-Policy"]
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["X-Permitted-Cross-Domain-Policies"] == "none"
+    assert response.headers["Strict-Transport-Security"] == (
+        "max-age=63072000; includeSubDomains"
+    )
 
 
 def test_main_exposes_app(monkeypatch):
@@ -605,6 +614,9 @@ async def test_rag_search_proxy_success(monkeypatch):
             return {"results": [1]}
 
     class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -627,6 +639,9 @@ async def test_rag_search_proxy_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_rag_search_proxy_connection_error(monkeypatch):
     class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -645,6 +660,9 @@ async def test_rag_search_proxy_connection_error(monkeypatch):
 @pytest.mark.asyncio
 async def test_rag_search_proxy_timeout(monkeypatch):
     class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -667,6 +685,9 @@ async def test_rag_search_proxy_non_200(monkeypatch):
         text = "down"
 
     class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -680,7 +701,7 @@ async def test_rag_search_proxy_non_200(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await rag.search_clinical_guidelines("query", current_user="user@nhs.uk")
     assert exc.value.status_code == 503
-    assert exc.value.detail == "down"
+    assert exc.value.detail == "RAG service request failed."
 
 
 def test_get_current_user_obj_raises_401_when_user_missing(monkeypatch):
@@ -736,7 +757,7 @@ def test_logout_route_returns_service_payload(client, gp_headers):
     assert response.json() == {"message": "Logged out successfully"}
 
 
-def test_admin_guideline_upload_uses_plain_text_error_detail(
+def test_admin_guideline_upload_uses_sanitised_error_detail(
     client, admin_headers, monkeypatch
 ):
     class FakeResponse:
@@ -767,7 +788,7 @@ def test_admin_guideline_upload_uses_plain_text_error_detail(
         files={"file": ("guide.pdf", b"%PDF-1.4\n", "application/pdf")},
     )
     assert response.status_code == 500
-    assert response.json()["detail"] == "plain failure"
+    assert response.json()["detail"] == "Guideline ingestion failed. Check RAG service logs for details."
 
 
 def test_admin_guideline_upload_rejects_non_pdf_signature(client, admin_headers):

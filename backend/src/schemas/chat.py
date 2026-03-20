@@ -1,7 +1,15 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+# ---------------------------------------------------------------------------
+# Shared types
+# ---------------------------------------------------------------------------
+
+Severity = Literal["low", "medium", "high", "urgent"]
+Gender = Literal["male", "female", "other"]
+ReviewAction = Literal["approve", "reject", "request_changes", "manual_response"]
 
 # ---------------------------------------------------------------------------
 # File attachment
@@ -24,7 +32,7 @@ class FileAttachmentResponse(BaseModel):
 
 
 class MessageBase(BaseModel):
-    content: str
+    content: str = Field(min_length=1, max_length=50_000)
 
 
 class MessageCreate(MessageBase):
@@ -66,19 +74,19 @@ class MessageResponse(BaseModel):
 
 
 class ChatCreate(BaseModel):
-    title: str = "New Chat"
-    specialty: str
-    severity: Optional[str] = None
-    patient_age: Optional[int] = None
-    patient_gender: Optional[str] = None  # "male" | "female" | "other"
-    patient_notes: Optional[str] = None  # free-text clinical notes
+    title: str = Field(default="New Chat", min_length=1, max_length=200)
+    specialty: str = Field(min_length=1, max_length=100)
+    severity: Optional[Severity] = None
+    patient_age: Optional[int] = Field(default=None, ge=0, le=150)
+    patient_gender: Optional[Gender] = None
+    patient_notes: Optional[str] = Field(default=None, max_length=10_000)
 
 
 class ChatUpdate(BaseModel):
-    title: Optional[str] = None
-    status: Optional[str] = None
-    specialty: Optional[str] = None
-    severity: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    status: Optional[str] = Field(default=None, max_length=50)
+    specialty: Optional[str] = Field(default=None, max_length=100)
+    severity: Optional[Severity] = None
 
 
 # ---------------------------------------------------------------------------
@@ -120,9 +128,9 @@ class AssignRequest(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    action: str  # "approve" | "reject" | "request_changes" | "manual_response"
-    feedback: Optional[str] = None
-    replacement_content: Optional[str] = (
-        None  # required when action == "manual_response"
+    action: ReviewAction
+    feedback: Optional[str] = Field(default=None, max_length=10_000)
+    replacement_content: Optional[str] = Field(
+        default=None, max_length=50_000
     )
     replacement_sources: Optional[List[str]] = None
