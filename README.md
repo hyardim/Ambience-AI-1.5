@@ -108,3 +108,13 @@ Cache troubleshooting:
 
 - The cloud-hosting guide has been merged into this README.
 - `rag_service/README.md` remains the detailed service setup and maintenance guide.
+
+## Legacy Deployment Note
+
+The old Gaudi/Habana Med42 TGI deployment helper scripts were retired.
+
+- The former `serve/` scripts for a `tgi-med42` container are no longer part of this active stack.
+- Current `rag_service` generation uses the configured local/cloud providers from `rag_service/src/config.py`.
+- Default local development setup is Ollama-based (see `rag_service/README.md`).
+
+If historical Gaudi/TGI details are needed, recover them from git history.

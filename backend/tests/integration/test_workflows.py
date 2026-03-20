@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.db.models import Chat, Message, User
+from src.db.models import User
 
 
 def test_cookie_auth_refresh_logout_flow(client, db_session, gp_user_payload):
@@ -36,7 +36,20 @@ def test_gp_to_specialist_manual_response_flow(
     db_session,
     gp_user_payload,
     specialist_user_payload,
+    monkeypatch,
 ):
+    class _FakeRagResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"answer": "AI draft recommendation", "citations_used": []}
+
+    monkeypatch.setattr(
+        "src.services.chat_service.httpx.post",
+        lambda *args, **kwargs: _FakeRagResponse(),
+    )
+
     gp_register = client.post("/auth/register", json=gp_user_payload)
     assert gp_register.status_code == 201
     gp_headers = {"Authorization": f"Bearer {gp_register.json()['access_token']}"}
@@ -58,9 +71,12 @@ def test_gp_to_specialist_manual_response_flow(
     assert create_chat.status_code == 200
     chat_id = create_chat.json()["id"]
 
-    submit = client.post(f"/chats/{chat_id}/submit", headers=gp_headers)
-    assert submit.status_code == 200
-    assert submit.json()["status"] == "submitted"
+    send_message = client.post(
+        f"/chats/{chat_id}/message",
+        json={"role": "user", "content": "Please review this AI draft."},
+        headers=gp_headers,
+    )
+    assert send_message.status_code == 200
 
     assign = client.post(
         f"/specialist/chats/{chat_id}/assign",
@@ -70,19 +86,19 @@ def test_gp_to_specialist_manual_response_flow(
     assert assign.status_code == 200
     assert assign.json()["status"] == "assigned"
 
-    chat = db_session.query(Chat).filter(Chat.id == chat_id).first()
-    assert chat is not None
-    ai_message = Message(
-        chat_id=chat_id,
-        content="AI draft recommendation",
-        sender="ai",
+    specialist_detail = client.get(
+        f"/specialist/chats/{chat_id}",
+        headers=specialist_headers,
     )
-    db_session.add(ai_message)
-    db_session.commit()
-    db_session.refresh(ai_message)
+    assert specialist_detail.status_code == 200
+    ai_message = next(
+        (m for m in specialist_detail.json()["messages"] if m["sender"] == "ai"),
+        None,
+    )
+    assert ai_message is not None
 
     review = client.post(
-        f"/specialist/chats/{chat_id}/messages/{ai_message.id}/review",
+        f"/specialist/chats/{chat_id}/messages/{ai_message['id']}/review",
         json={
             "action": "manual_response",
             "replacement_content": "Specialist-confirmed answer",
@@ -107,7 +123,9 @@ def test_gp_to_specialist_manual_response_flow(
         "Local MS protocol",
     ]
 
-    refreshed_ai = db_session.query(Message).filter(Message.id == ai_message.id).first()
-    assert refreshed_ai is not None
-    assert refreshed_ai.review_status == "replaced"
-    assert refreshed_ai.review_feedback == "Use specialist-approved wording"
+    reviewed_ai = next(
+        (m for m in data["messages"] if m["id"] == ai_message["id"]), None
+    )
+    assert reviewed_ai is not None
+    assert reviewed_ai["review_status"] == "replaced"
+    assert reviewed_ai["review_feedback"] == "Use specialist-approved wording"

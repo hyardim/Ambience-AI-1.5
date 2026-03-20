@@ -31,7 +31,9 @@ from src.services.chat_service import (
 )
 from src.services.notification_service import invalidate_notification_caches
 from src.services.rag_context import (
+    FileContextBuildResult,
     build_file_context,
+    build_file_context_result,
     build_patient_context,
     extract_text,
 )
@@ -59,6 +61,10 @@ def _build_patient_context(chat: Chat, messages: list[Message]) -> dict | None:
 
 def _build_file_context(chat: Chat) -> str | None:
     return build_file_context(chat, extract_text_fn=_extract_text)
+
+
+def _build_file_context_result(chat: Chat) -> FileContextBuildResult:
+    return build_file_context_result(chat, extract_text_fn=_extract_text)
 
 
 def review(
@@ -394,7 +400,8 @@ def _regenerate_ai_response(
     original_query = user_messages[-1].content if user_messages else "consultation"
     previous_answer = ai_messages[-1].content if ai_messages else ""
     patient_context = _build_patient_context(chat, messages)
-    file_context = _build_file_context(chat)
+    file_context_result = _build_file_context_result(chat)
+    file_context = file_context_result.file_context
 
     placeholder = message_repository.create(
         db,
@@ -416,6 +423,7 @@ def _regenerate_ai_response(
             chat.severity,
             patient_context,
             file_context,
+            file_context_result.was_truncated,
         )
     else:
         thread = threading.Thread(
@@ -446,6 +454,7 @@ def _do_revise(
     severity: str | None,
     patient_context: dict | None,
     file_context: str | None,
+    file_context_truncated: bool,
 ) -> None:
     rag_payload = {
         "original_query": original_query,
@@ -456,6 +465,7 @@ def _do_revise(
         "severity": severity,
         "patient_context": patient_context,
         "file_context": file_context,
+        "file_context_truncated": file_context_truncated,
     }
 
     try:
@@ -522,12 +532,15 @@ def _regenerate_ai_response_task(
         chat = db.query(Chat).filter(Chat.id == chat_id).first()
         patient_context = None
         file_context = None
+        file_context_truncated = False
         if chat:
             patient_context = _build_patient_context(
                 chat,
                 message_repository.list_for_chat(db, chat.id),
             )
-            file_context = _build_file_context(chat)
+            file_context_result = _build_file_context_result(chat)
+            file_context = file_context_result.file_context
+            file_context_truncated = file_context_result.was_truncated
 
         chat_event_bus.publish_threadsafe(
             chat_id,
@@ -550,6 +563,7 @@ def _regenerate_ai_response_task(
             rag_payload["patient_context"] = patient_context
         if file_context:
             rag_payload["file_context"] = file_context
+        rag_payload["file_context_truncated"] = file_context_truncated
 
         accumulated = ""
         citations: list = []
@@ -630,6 +644,7 @@ def _regenerate_ai_response_task(
                     "message_id": placeholder_id,
                     "content": accumulated,
                     "citations": citations,
+                    "file_context_truncated": file_context_truncated,
                 },
             ),
         )

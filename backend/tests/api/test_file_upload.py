@@ -272,3 +272,41 @@ class TestFileUploadLimits:
             )
         assert resp.status_code == 415
         assert "not allowed" in resp.json()["detail"]
+
+    def test_pdf_extension_with_non_pdf_content_returns_415(
+        self, client, gp_headers, created_chat, tmp_path
+    ):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={
+                    "file": (
+                        "spoofed.pdf",
+                        io.BytesIO(b"This is not actually a PDF"),
+                        "application/pdf",
+                    )
+                },
+                headers=gp_headers,
+            )
+
+        assert resp.status_code == 415
+        assert "valid PDF" in resp.json()["detail"]
+
+    def test_text_extension_with_binary_mime_returns_415(
+        self, client, gp_headers, created_chat, tmp_path
+    ):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            resp = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={
+                    "file": (
+                        "notes.txt",
+                        io.BytesIO(b"Clinical notes"),
+                        "application/octet-stream",
+                    )
+                },
+                headers=gp_headers,
+            )
+
+        assert resp.status_code == 415
+        assert "Binary MIME type" in resp.json()["detail"]

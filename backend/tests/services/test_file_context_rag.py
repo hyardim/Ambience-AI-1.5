@@ -53,6 +53,7 @@ class TestFileContextRAGPayload:
 
         assert "file_context" in captured
         assert "natalizumab" in captured["file_context"]
+        assert captured["file_context_truncated"] is False
 
     def test_file_context_absent_when_no_files_uploaded(
         self, client, gp_headers, created_chat
@@ -69,6 +70,7 @@ class TestFileContextRAGPayload:
             )
 
         assert "file_context" not in captured
+        assert captured["file_context_truncated"] is False
 
     def test_multiple_files_concatenated_in_file_context(
         self, client, gp_headers, created_chat, tmp_path
@@ -102,6 +104,7 @@ class TestFileContextRAGPayload:
         fc = captured.get("file_context", "")
         assert "natalizumab" in fc
         assert "ocrelizumab" in fc
+        assert captured["file_context_truncated"] is False
 
     def test_file_context_truncated_at_8000_chars(
         self, client, gp_headers, created_chat, tmp_path
@@ -131,6 +134,7 @@ class TestFileContextRAGPayload:
         fc = captured.get("file_context", "")
         assert len(fc) <= 8_100  # cap + truncation message overhead
         assert "truncated" in fc.lower()
+        assert captured["file_context_truncated"] is True
 
     def test_file_context_not_truncated_when_under_limit(
         self, client, gp_headers, created_chat, tmp_path
@@ -160,6 +164,7 @@ class TestFileContextRAGPayload:
         fc = captured.get("file_context", "")
         assert "truncated" not in fc.lower()
         assert "Short clinical note" in fc
+        assert captured["file_context_truncated"] is False
 
     def test_filename_label_included_in_file_context(
         self, client, gp_headers, created_chat, tmp_path
@@ -194,3 +199,4 @@ class TestFileContextRAGPayload:
 
         fc = captured.get("file_context", "")
         assert "discharge_summary.txt" in fc
+        assert captured["file_context_truncated"] is False

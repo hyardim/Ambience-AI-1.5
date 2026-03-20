@@ -38,8 +38,10 @@ from src.services.chat_uploads import (
     validate_upload_extension,
 )
 from src.services.rag_context import (
+    FileContextBuildResult,
     build_conversation_history_from_messages,
     build_file_context,
+    build_file_context_result,
     build_patient_context,
     extract_text,
     select_rag_citations,
@@ -306,6 +308,10 @@ def _build_file_context(chat: Chat) -> str | None:
     return build_file_context(chat, extract_text_fn=_extract_text)
 
 
+def _build_file_context_result(chat: Chat) -> FileContextBuildResult:
+    return build_file_context_result(chat, extract_text_fn=_extract_text)
+
+
 async def upload_file(
     db: Session,
     user: User,
@@ -376,7 +382,8 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             )
             messages = list(message_rows.scalars())
             patient_context = _build_patient_context(chat, messages)
-            file_context = _build_file_context(chat)
+            file_context_result = _build_file_context_result(chat)
+            file_context = file_context_result.file_context
 
             rag_payload: dict = {
                 "query": content,
@@ -388,6 +395,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             }
             if file_context:
                 rag_payload["file_context"] = file_context
+            rag_payload["file_context_truncated"] = file_context_result.was_truncated
 
             rag_action = "RAG_ERROR"
             rag_details = f"query_len={len(content)} error=unknown"
@@ -521,6 +529,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                         "message_id": placeholder.id,
                         "content": ai_content,
                         "citations": citations,
+                        "file_context_truncated": file_context_result.was_truncated,
                     },
                 ),
             )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +9,13 @@ from src.db.models import Chat, Message
 
 FILE_CONTEXT_CHAR_LIMIT = settings.FILE_CONTEXT_CHAR_LIMIT
 CHAT_HISTORY_MESSAGE_LIMIT = settings.CHAT_HISTORY_MESSAGE_LIMIT
+FILE_CONTEXT_TRUNCATION_NOTICE = "[Document truncated to fit context window]"
+
+
+@dataclass(frozen=True)
+class FileContextBuildResult:
+    file_context: str | None
+    was_truncated: bool = False
 
 
 def extract_text(file_path: str, file_type: Optional[str]) -> str:
@@ -65,18 +73,30 @@ def build_file_context(
     *,
     extract_text_fn=extract_text,
 ) -> str | None:
+    return build_file_context_result(chat, extract_text_fn=extract_text_fn).file_context
+
+
+def build_file_context_result(
+    chat: Chat,
+    *,
+    extract_text_fn=extract_text,
+) -> FileContextBuildResult:
     file_texts: list[str] = []
     for attachment in chat.files or []:
         text = extract_text_fn(attachment.file_path, attachment.file_type)
         if text.strip():
             file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
     file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
+    was_truncated = False
     if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
+        was_truncated = True
         file_context = (
             file_context[:FILE_CONTEXT_CHAR_LIMIT]
-            + "\n\n[Document truncated to fit context window]"
+            + f"\n\n{FILE_CONTEXT_TRUNCATION_NOTICE}"
         )
-    return file_context
+    return FileContextBuildResult(
+        file_context=file_context, was_truncated=was_truncated
+    )
 
 
 def select_rag_citations(payload: dict) -> list | None:

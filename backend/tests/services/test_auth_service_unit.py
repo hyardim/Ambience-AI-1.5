@@ -113,7 +113,9 @@ def test_resend_verification_returns_generic_for_verified_user(db_session):
 
 
 def test_forgot_password_returns_generic_when_rate_limited(monkeypatch, db_session):
-    monkeypatch.setattr(auth_service, "_is_forgot_password_rate_limited", lambda _e: True)
+    monkeypatch.setattr(
+        auth_service, "_is_forgot_password_rate_limited", lambda _e: True
+    )
 
     result = auth_service.forgot_password(
         db_session,

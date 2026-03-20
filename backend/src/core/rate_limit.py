@@ -1,11 +1,12 @@
 """Simple sliding-window rate limiter backed by Redis.
 
-Falls back to no-op when Redis is unavailable so the app degrades
-gracefully (the rate limiter is a best-effort protection, not a
-hard gate).
+When Redis is unavailable, enforcement falls back to in-process limits to
+avoid a fail-open posture during cache outages.
 """
 
 import logging
+import threading
+import time
 
 from fastapi import HTTPException, Request, status
 
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 _redis_init_attempted = False
+_local_windows: dict[str, list[float]] = {}
+_local_windows_lock = threading.Lock()
 
 
 def _get_redis():
@@ -40,19 +43,36 @@ def _get_redis():
     return _redis_client
 
 
+def _enforce_inprocess_limit(client_ip: str, window: int) -> None:
+    """Best-effort local fallback limiter used when Redis is unavailable."""
+    now = time.monotonic()
+    cutoff = now - window
+    with _local_windows_lock:
+        window_hits = _local_windows.setdefault(client_ip, [])
+        window_hits[:] = [ts for ts in window_hits if ts > cutoff]
+        if len(window_hits) >= settings.RATE_LIMIT_PER_MINUTE:
+            retry_after = max(1, int(window - (now - window_hits[0])))
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(f"Rate limit exceeded. Try again in {retry_after} seconds."),
+            )
+        window_hits.append(now)
+
+
 async def rate_limit_dependency(request: Request) -> None:
     """FastAPI dependency that enforces per-IP rate limiting.
 
     Uses a sliding window counter stored in Redis.  Each IP gets
     ``settings.RATE_LIMIT_PER_MINUTE`` requests per 60-second window.
     """
+    client_ip = request.client.host if request.client else "unknown"
+    window = 60  # seconds
     client = _get_redis()
     if client is None:
-        return  # Redis not available — skip rate limiting
+        _enforce_inprocess_limit(client_ip, window)
+        return
 
-    client_ip = request.client.host if request.client else "unknown"
     key = f"ratelimit:{client_ip}"
-    window = 60  # seconds
 
     try:
         current = client.get(key)
@@ -69,5 +89,8 @@ async def rate_limit_dependency(request: Request) -> None:
     except HTTPException:
         raise
     except Exception as exc:
-        # Redis failure should not break the request — degrade gracefully
-        logger.debug("Rate limiter error: %s", exc)
+        logger.warning(
+            "Rate limiter Redis error (%s) - falling back to in-process limits",
+            exc,
+        )
+        _enforce_inprocess_limit(client_ip, window)

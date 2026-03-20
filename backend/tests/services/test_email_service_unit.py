@@ -85,7 +85,9 @@ def test_send_password_reset_email_via_smtp(monkeypatch):
 
 
 def test_send_verification_email_log_mode_without_host(monkeypatch):
-    monkeypatch.setattr(email_service.settings, "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", False)
+    monkeypatch.setattr(
+        email_service.settings, "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", False
+    )
     monkeypatch.setattr(email_service.settings, "SMTP_HOST", "")
     calls = []
     monkeypatch.setattr(email_service.logger, "info", lambda *args: calls.append(args))
@@ -97,7 +99,9 @@ def test_send_verification_email_log_mode_without_host(monkeypatch):
 
 def test_send_verification_email_via_smtp_without_login(monkeypatch):
     fake = FakeSMTP("smtp.example.com", 25, 20)
-    monkeypatch.setattr(email_service.settings, "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", False)
+    monkeypatch.setattr(
+        email_service.settings, "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", False
+    )
     monkeypatch.setattr(email_service.settings, "SMTP_HOST", "smtp.example.com")
     monkeypatch.setattr(email_service.settings, "SMTP_PORT", 25)
     monkeypatch.setattr(email_service.settings, "SMTP_USE_TLS", False)
@@ -114,7 +118,9 @@ def test_send_verification_email_via_smtp_without_login(monkeypatch):
 
 def test_send_verification_email_via_smtp_with_tls_and_login(monkeypatch):
     fake = FakeSMTP("smtp.example.com", 587, 20)
-    monkeypatch.setattr(email_service.settings, "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", False)
+    monkeypatch.setattr(
+        email_service.settings, "EMAIL_VERIFICATION_EMAIL_LOG_ONLY", False
+    )
     monkeypatch.setattr(email_service.settings, "SMTP_HOST", "smtp.example.com")
     monkeypatch.setattr(email_service.settings, "SMTP_PORT", 587)
     monkeypatch.setattr(email_service.settings, "SMTP_USE_TLS", True)

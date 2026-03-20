@@ -532,6 +532,7 @@ def test_regenerate_ai_response_handles_empty_context(monkeypatch):
     assert called["args"][6] is None
     assert called["args"][7] is None
     assert called["args"][8].endswith("[Document truncated to fit context window]")
+    assert called["args"][9] is True
 
 
 def test_regenerate_ai_response_uses_thread_when_inline_ai_disabled(
@@ -616,6 +617,7 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
         None,
         None,
         None,
+        False,
     )
 
     db_session.refresh(placeholder)
@@ -680,6 +682,7 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
         None,
         None,
         None,
+        False,
     )
 
     assert invalidations == [("chat", 5), ("stats", None)]

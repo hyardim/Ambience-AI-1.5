@@ -181,6 +181,7 @@ async def test_rate_limit_dependency_degrades_gracefully_on_redis_error(monkeypa
         def get(self, key):
             raise RuntimeError("redis down")
 
+    monkeypatch.setattr(rate_limit, "_local_windows", {})
     monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
     request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
@@ -188,11 +189,47 @@ async def test_rate_limit_dependency_degrades_gracefully_on_redis_error(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_dependency_skips_when_redis_unavailable(monkeypatch):
+async def test_rate_limit_dependency_allows_request_when_redis_unavailable(monkeypatch):
+    monkeypatch.setattr(rate_limit, "_local_windows", {})
     monkeypatch.setattr(rate_limit, "_get_redis", lambda: None)
     request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
     await rate_limit.rate_limit_dependency(request)
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_blocks_with_local_fallback(monkeypatch):
+    monkeypatch.setattr(rate_limit, "_local_windows", {})
+    monkeypatch.setattr(core_config.settings, "RATE_LIMIT_PER_MINUTE", 2)
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: None)
+    request = SimpleNamespace(client=SimpleNamespace(host="192.168.0.10"))
+
+    await rate_limit.rate_limit_dependency(request)
+    await rate_limit.rate_limit_dependency(request)
+
+    with pytest.raises(HTTPException) as exc:
+        await rate_limit.rate_limit_dependency(request)
+
+    assert exc.value.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_redis_error_uses_local_fallback(monkeypatch):
+    class FakeRedis:
+        def get(self, key):
+            raise RuntimeError("redis down")
+
+    monkeypatch.setattr(rate_limit, "_local_windows", {})
+    monkeypatch.setattr(core_config.settings, "RATE_LIMIT_PER_MINUTE", 1)
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(client=SimpleNamespace(host="192.168.0.11"))
+
+    await rate_limit.rate_limit_dependency(request)
+
+    with pytest.raises(HTTPException) as exc:
+        await rate_limit.rate_limit_dependency(request)
+
+    assert exc.value.status_code == 429
 
 
 def test_get_redis_returns_none_when_cache_disabled(monkeypatch):
