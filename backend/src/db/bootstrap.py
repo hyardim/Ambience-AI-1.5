@@ -2,8 +2,9 @@ import argparse
 from pathlib import Path
 from typing import TypedDict
 
-from alembic import command
 from alembic.config import Config
+
+from alembic import command
 from src.core import security
 from src.core.config import settings
 from src.db.models import User, UserRole
@@ -12,6 +13,7 @@ from src.db.session import SessionLocal
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI_PATH = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_SCRIPT_PATH = PROJECT_ROOT / "alembic"
+DEMO_SEED_ALLOWED_ENVS = {"development", "test"}
 
 
 class DefaultUserSpec(TypedDict):
@@ -35,6 +37,8 @@ def run_migrations() -> None:
 
 def ensure_default_users() -> None:
     if not settings.AUTH_BOOTSTRAP_DEMO_USERS:
+        return
+    if settings.APP_ENV not in DEMO_SEED_ALLOWED_ENVS:
         return
 
     defaults: list[DefaultUserSpec] = [

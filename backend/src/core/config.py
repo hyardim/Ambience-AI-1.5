@@ -1,6 +1,7 @@
 import logging
 import warnings
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,7 +29,8 @@ class Settings(BaseSettings):
     RAG_SERVICE_URL: str = "http://rag_service:8001"
     RAG_REQUEST_TIMEOUT_SECONDS: float = 120.0
     UPLOAD_DIR: str = "/app/uploads"
-    AUTH_BOOTSTRAP_DEMO_USERS: bool = True
+    APP_ENV: Literal["development", "test", "production"] = "development"
+    AUTH_BOOTSTRAP_DEMO_USERS: bool = False
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
@@ -102,6 +104,10 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+def _is_production_env() -> bool:
+    return settings.APP_ENV == "production"
+
+
 def validate_settings() -> None:
     """Emit warnings for insecure defaults at startup."""
     logger = logging.getLogger("backend.config")
@@ -113,4 +119,12 @@ def validate_settings() -> None:
         )
         logger.warning(
             "SECRET_KEY is using the insecure default — do NOT deploy to production"
+        )
+
+    if _is_production_env() and settings.AUTH_BOOTSTRAP_DEMO_USERS:
+        logger.error(
+            "AUTH_BOOTSTRAP_DEMO_USERS cannot be enabled when APP_ENV=production"
+        )
+        raise RuntimeError(
+            "Invalid configuration: disable AUTH_BOOTSTRAP_DEMO_USERS in production"
         )

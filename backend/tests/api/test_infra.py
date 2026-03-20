@@ -9,6 +9,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+
 from src.api import deps, router
 from src.api.endpoints import health, rag
 from src.app.main import create_app
@@ -90,6 +91,17 @@ def test_validate_settings_is_silent_for_custom_secret(monkeypatch, caplog):
 
     assert caught == []
     assert caplog.text == ""
+
+
+def test_validate_settings_rejects_demo_bootstrap_in_production(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
+
+    with pytest.raises(RuntimeError, match="disable AUTH_BOOTSTRAP_DEMO_USERS"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ can_send_message.
 from types import SimpleNamespace
 
 import pytest
+
 from src.core.chat_policy import (
     can_send_message,
     can_stream_chat,

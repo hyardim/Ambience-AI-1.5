@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import jwt
 import pytest
+
 from src.core.config import settings
 from src.core.security import (
     create_access_token,

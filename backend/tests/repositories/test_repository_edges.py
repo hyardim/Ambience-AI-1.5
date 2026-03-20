@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from src.db.models import AuditLog, ChatStatus, User, UserRole
 from src.repositories import audit_repository, chat_repository
 from tests.conftest import TestingAsyncSessionLocal

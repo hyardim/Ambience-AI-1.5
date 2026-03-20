@@ -13,6 +13,7 @@ import asyncio
 import json
 
 import pytest
+
 from src.utils.sse import SSEEvent, _ChatEventBus
 
 # ---------------------------------------------------------------------------

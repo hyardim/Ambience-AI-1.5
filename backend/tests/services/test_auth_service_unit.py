@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 from fastapi import HTTPException
+
 from src.db.models import User, UserRole
-from src.schemas.auth import PasswordResetRequest, ProfileUpdate, UserRegister
+from src.schemas.auth import ForgotPasswordRequest, ProfileUpdate, UserRegister
 from src.services import auth_service
 
 
@@ -33,22 +34,21 @@ def test_register_rejects_invalid_role(db_session):
     assert exc.value.status_code == 400
 
 
-def test_reset_password_returns_generic_message_for_unknown_user(db_session):
-    result = auth_service.reset_password(
+def test_forgot_password_returns_generic_message_for_unknown_user(db_session):
+    result = auth_service.forgot_password(
         db_session,
-        PasswordResetRequest(email="missing@example.com", new_password="StrongPass1!"),
+        ForgotPasswordRequest(email="missing@example.com"),
     )
     assert "registered" in result["message"]
 
 
-def test_reset_password_rejects_deactivated_user(db_session):
+def test_forgot_password_returns_generic_message_for_deactivated_user(db_session):
     _user(db_session, active=False)
-    with pytest.raises(HTTPException) as exc:
-        auth_service.reset_password(
-            db_session,
-            PasswordResetRequest(email="user@example.com", new_password="StrongPass1!"),
-        )
-    assert exc.value.status_code == 400
+    result = auth_service.forgot_password(
+        db_session,
+        ForgotPasswordRequest(email="user@example.com"),
+    )
+    assert "registered" in result["message"]
 
 
 def test_logout_returns_message(db_session):

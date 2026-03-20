@@ -1,8 +1,8 @@
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
-from src.db.models.email_verification_token import EmailVerificationToken
 from src.db.models import AuditLog, User
+from src.db.models.email_verification_token import EmailVerificationToken
 from src.services import auth_service
 
 

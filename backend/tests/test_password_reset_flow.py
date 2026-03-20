@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
 from src.db.models import AuditLog, User
 from src.db.models.password_reset_token import PasswordResetToken
+from src.services import auth_service
 
 
 def _capture_reset_link(monkeypatch) -> dict[str, str]:
@@ -119,7 +120,7 @@ def test_expired_token_rejected(
     client.post("/auth/forgot-password", json={"email": gp_user_payload["email"]})
 
     token_row = db_session.query(PasswordResetToken).one()
-    token_row.expires_at = datetime.utcnow() - timedelta(minutes=1)
+    token_row.expires_at = auth_service._utcnow() - timedelta(minutes=1)
     db_session.commit()
 
     token = _token_from_link(captured["reset_link"])

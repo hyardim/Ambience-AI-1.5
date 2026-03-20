@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
 from src.utils import sse
 from src.utils.sse import SSEEvent, _ChatEventBus
 

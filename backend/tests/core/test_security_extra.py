@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+
 from src.core import security
 from src.core.config import settings
 from src.db.models import UserRole

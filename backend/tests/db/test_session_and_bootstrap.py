@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 
 import pytest
+
 from src.db import bootstrap, session
 
 
@@ -73,8 +74,22 @@ def test_ensure_default_users_short_circuits_when_disabled(monkeypatch):
     assert called["session"] == 0
 
 
+def test_ensure_default_users_short_circuits_in_production(monkeypatch):
+    monkeypatch.setattr(bootstrap.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
+    monkeypatch.setattr(bootstrap.settings, "APP_ENV", "production")
+    called = {"session": 0}
+    monkeypatch.setattr(
+        bootstrap, "SessionLocal", lambda: called.__setitem__("session", 1)
+    )
+
+    bootstrap.ensure_default_users()
+
+    assert called["session"] == 0
+
+
 def test_ensure_default_users_creates_missing_users(monkeypatch):
     monkeypatch.setattr(bootstrap.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
+    monkeypatch.setattr(bootstrap.settings, "APP_ENV", "development")
 
     class FakeQuery:
         def __init__(self):
@@ -119,6 +134,7 @@ def test_ensure_default_users_creates_missing_users(monkeypatch):
 
 def test_ensure_default_users_skips_existing(monkeypatch):
     monkeypatch.setattr(bootstrap.settings, "AUTH_BOOTSTRAP_DEMO_USERS", True)
+    monkeypatch.setattr(bootstrap.settings, "APP_ENV", "development")
 
     class FakeQuery:
         def filter(self, *args, **kwargs):

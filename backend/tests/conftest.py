@@ -22,13 +22,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import src.db.models.email_verification_token  # noqa: F401
+import src.db.models.password_reset_token  # noqa: F401
 from src.api.endpoints import admin, auth, chats, notifications, specialist
 from src.core.config import settings
 from src.db.base import Base
 from src.db.session import get_async_db, get_db
 from src.services import auth_service
-import src.db.models.email_verification_token  # noqa: F401
-import src.db.models.password_reset_token  # noqa: F401
 
 # SQLite has no native JSONB type. Teach the SQLite type compiler to render
 # JSONB columns as plain JSON so that Base.metadata.create_all() works against

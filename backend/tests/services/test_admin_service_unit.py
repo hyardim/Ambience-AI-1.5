@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
+
 from src.db.models import AuditLog, Chat, ChatStatus, Message, User, UserRole
 from src.schemas.admin import UserUpdateAdmin
 from src.schemas.chat import ChatUpdate

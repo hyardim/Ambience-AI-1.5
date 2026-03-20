@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
+
 from src.db.models import Chat, ChatStatus, Message, User, UserRole
 from src.schemas.chat import ReviewRequest
 from src.services import (

@@ -122,6 +122,8 @@ def get_user(db: Session, user_id: int) -> UserOut:
     cache_key = cache_keys.user_profile(user_id)
     cached = cache.get_sync(cache_key, user_id=user_id, resource="user_profile")
     if cached is not None:
+        if "email_verified" not in cached:
+            cached = {**cached, "email_verified": False}
         return UserOut(**cached)
 
     user = user_repository.get_by_id(db, user_id)

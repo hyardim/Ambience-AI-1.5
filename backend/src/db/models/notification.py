@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.db.base import Base
 from src.db.models.common import ENUM_VALUE_CONFIG, NotificationType, utc_now
 

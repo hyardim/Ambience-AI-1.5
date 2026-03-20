@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.db.base import Base
 from src.db.models.common import ENUM_VALUE_CONFIG, ChatStatus, utc_now
 

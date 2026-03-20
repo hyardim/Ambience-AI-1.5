@@ -2,15 +2,18 @@ import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from typing import cast
 from urllib.parse import quote
 
 from fastapi import HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import Table
 from sqlalchemy.orm import Session
 
 from src.core import security
 from src.core.config import settings
 from src.db.models import User, UserRole
+from src.db.models.email_verification_token import EmailVerificationToken
+from src.db.models.password_reset_token import PasswordResetToken
 from src.repositories import (
     audit_repository,
     email_verification_repository,
@@ -451,56 +454,10 @@ def refresh(user: User) -> AuthResponse:
 
 
 def _ensure_auth_token_tables(db: Session) -> None:
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS password_reset_tokens (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                token_hash VARCHAR NOT NULL UNIQUE,
-                expires_at TIMESTAMP NOT NULL,
-                used_at TIMESTAMP,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS email_verification_tokens (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                token_hash VARCHAR NOT NULL UNIQUE,
-                expires_at TIMESTAMP NOT NULL,
-                used_at TIMESTAMP,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_created "
-            "ON password_reset_tokens (user_id, created_at)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expiry_used "
-            "ON password_reset_tokens (expires_at, used_at)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_user_created "
-            "ON email_verification_tokens (user_id, created_at)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_expiry_used "
-            "ON email_verification_tokens (expires_at, used_at)"
-        )
-    )
+    bind = db.get_bind()
+    tables = [
+        cast(Table, PasswordResetToken.__table__),
+        cast(Table, EmailVerificationToken.__table__),
+    ]
+    PasswordResetToken.metadata.create_all(bind=bind, tables=tables, checkfirst=True)
     db.commit()

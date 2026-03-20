@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+
 from src.db.models import Chat, ChatStatus, FileAttachment, Message, User, UserRole
 from src.services import chat_service
 from tests.conftest import TestingAsyncSessionLocal
