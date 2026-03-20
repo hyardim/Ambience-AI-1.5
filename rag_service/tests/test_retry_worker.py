@@ -3,6 +3,7 @@
 Verifies that the Worker is constructed correctly after removing the
 deprecated `rq.Connection` context manager (removed in rq >= 1.16).
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -11,12 +12,12 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
-import pytest
-
 _SCRIPT_PATH = Path(__file__).parent.parent / "scripts" / "run_retry_worker.py"
 
 
-def _load_worker_module(fake_redis_cls: MagicMock, fake_worker_cls: MagicMock) -> ModuleType:
+def _load_worker_module(
+    fake_redis_cls: MagicMock, fake_worker_cls: MagicMock
+) -> ModuleType:
     """Load run_retry_worker with redis and rq stubbed out."""
     # Stub redis package
     redis_mod = ModuleType("redis")

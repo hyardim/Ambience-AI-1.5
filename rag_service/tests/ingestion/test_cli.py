@@ -69,12 +69,12 @@ class TestResolveDbUrl:
         with (
             patch.dict(os.environ, {}, clear=True),
             runner.isolated_filesystem(),
+            tempfile.TemporaryDirectory() as tmp,
         ):
-            with tempfile.TemporaryDirectory() as tmp:
-                result = runner.invoke(
-                    cli,
-                    ["ingest", "--input", tmp, "--source-name", "NICE"],
-                )
+            result = runner.invoke(
+                cli,
+                ["ingest", "--input", tmp, "--source-name", "NICE"],
+            )
         assert result.exit_code == 1
 
 
@@ -151,11 +151,11 @@ def test_module_entrypoint_invokes_main() -> None:
 
 
 class TestIngestCommand:
-    @pytest.fixture()
+    @pytest.fixture
     def runner(self) -> CliRunner:
         return CliRunner()
 
-    @pytest.fixture()
+    @pytest.fixture
     def input_dir(self, tmp_path: Any) -> str:
         (tmp_path / "test.pdf").touch()
         return str(tmp_path)

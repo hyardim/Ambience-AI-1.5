@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 import nltk
-from nltk.tokenize import sent_tokenize  # noqa: E402
+from nltk.tokenize import sent_tokenize
 
 from ..utils.logger import setup_logger
 from ..utils.tokenizer import count_tokens as shared_count_tokens

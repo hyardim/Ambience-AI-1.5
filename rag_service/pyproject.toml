@@ -36,18 +36,16 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.1",             # .env files
     "tqdm>=4.66.0",                     # Progress bars
-
-    "pyyaml>=6.0.0",    # for configs/ingestion.yaml and configs/sources.yaml
-    "click>=8.1.0",     # for CLI
+    "pyyaml>=6.0.0",                    # for configs/ingestion.yaml and configs/sources.yaml
+    "click>=8.1.0",                     # for CLI
 
     # API & HTTP
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "httpx>=0.27.0",
-    "python-multipart>0.0.12",  # FastAPI runtime check requires >0.0.12
+    "python-multipart>=0.0.13",
     "redis>=5.0.0",
     "rq>=1.16.2",
-
 ]
 
 [project.optional-dependencies]
@@ -55,15 +53,17 @@ dev = [
     # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",      # async test support for FastAPI
 
     # Code Quality
-    "ruff>=0.1.0",
+    "ruff>=0.5.0",
     "mypy>=1.7.0",
 
     # Type stubs
     "types-tqdm>=4.66.0",
     "types-psycopg2>=2.9.0",
     "types-PyYAML>=6.0.0",
+    "types-Markdown>=3.5.0",
 ]
 
 [build-system]
@@ -85,15 +85,22 @@ exclude = [
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "RUF",  # ruff-specific rules (catches real bugs)
+    "SIM",  # flake8-simplify (cleaner code patterns)
+    "T20",  # flake8-print (catch stray print() calls)
+    "PT",   # flake8-pytest-style (consistent test patterns)
 ]
-ignore = []
+ignore = [
+    "B008",   # FastAPI uses Depends() as default arg — this is intentional
+    "SIM108", # ternary operator enforcement is too aggressive
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
@@ -110,14 +117,43 @@ line-ending = "auto"
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
+warn_unused_ignores = true         # catches stale # type: ignore comments
 disallow_untyped_defs = true
+check_untyped_defs = true          # also checks bodies of unannotated functions
 ignore_missing_imports = true
+follow_imports = "silent"          # don't recurse into imported packages
+exclude = [
+    "\\.venv",
+    "venv",
+    "build",
+    "dist",
+]
+
+# Skip heavy ML/data libs — no stubs, mypy hangs trying to parse them.
+[[tool.mypy.overrides]]
+module = [
+    "torch.*",
+    "sentence_transformers.*",
+    "nltk.*",
+    "pgvector.*",
+    "rq.*",
+    "alembic.*",
+    "fitz.*",
+    "docx.*",
+    "pptx.*",
+    "openpyxl.*",
+    "tiktoken.*",
+    "langchain_text_splitters.*",
+]
+ignore_errors = true
+follow_imports = "skip"
 
 # Pytest
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-addopts = "-p no:langsmith --cov=src --cov-report=html --cov-report=term"
+asyncio_mode = "auto"              # needed for any async FastAPI tests
+addopts = "-p no:langsmith --cov=src --cov-report=html --cov-report=term-missing --tb=short"
 
 # Coverage
 [tool.coverage.run]
@@ -125,6 +161,8 @@ source = ["src"]
 omit = ["tests/*", "**/__init__.py"]
 
 [tool.coverage.report]
+fail_under = 90                   # enforces 90% coverage target
+show_missing = true                # prints uncovered line numbers in terminal
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

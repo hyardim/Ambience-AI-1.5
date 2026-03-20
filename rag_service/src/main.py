@@ -44,10 +44,10 @@ _streaming_generator = streaming_generator
 
 __all__ = [
     "MAX_CITATIONS",
-    "ModelGenerationError",
     "AnswerRequest",
     "AnswerResponse",
     "IngestResponse",
+    "ModelGenerationError",
     "QueryRequest",
     "RetryAcceptedResponse",
     "RetryJobResponse",

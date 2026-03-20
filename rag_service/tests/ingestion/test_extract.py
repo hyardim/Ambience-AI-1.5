@@ -322,28 +322,34 @@ class TestExtractPage:
 
 class TestOpenPdf:
     def test_file_not_found_raises_error(self) -> None:
-        with patch(
-            "src.ingestion.extract.fitz.open",
-            side_effect=FileNotFoundError("no such file"),
+        with (
+            patch(
+                "src.ingestion.extract.fitz.open",
+                side_effect=FileNotFoundError("no such file"),
+            ),
+            pytest.raises(PDFExtractionError, match="PDF file not found"),
         ):
-            with pytest.raises(PDFExtractionError, match="PDF file not found"):
-                _open_pdf("missing.pdf")
+            _open_pdf("missing.pdf")
 
     def test_permission_error_raises_error(self) -> None:
-        with patch(
-            "src.ingestion.extract.fitz.open",
-            side_effect=PermissionError("access denied"),
+        with (
+            patch(
+                "src.ingestion.extract.fitz.open",
+                side_effect=PermissionError("access denied"),
+            ),
+            pytest.raises(PDFExtractionError, match="Permission denied"),
         ):
-            with pytest.raises(PDFExtractionError, match="Permission denied"):
-                _open_pdf("locked.pdf")
+            _open_pdf("locked.pdf")
 
     def test_generic_open_error_raises_error(self) -> None:
-        with patch(
-            "src.ingestion.extract.fitz.open",
-            side_effect=RuntimeError("unexpected error"),
+        with (
+            patch(
+                "src.ingestion.extract.fitz.open",
+                side_effect=RuntimeError("unexpected error"),
+            ),
+            pytest.raises(PDFExtractionError, match="Failed to open PDF"),
         ):
-            with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
-                _open_pdf("broken.pdf")
+            _open_pdf("broken.pdf")
 
 
 # -----------------------------------------------------------------------
@@ -381,12 +387,14 @@ class TestExtractRawDocument:
         assert result["needs_ocr"] is False
 
     def test_corrupted_pdf_raises_error(self) -> None:
-        with patch(
-            "src.ingestion.extract.fitz.open",
-            side_effect=Exception("corrupted"),
+        with (
+            patch(
+                "src.ingestion.extract.fitz.open",
+                side_effect=Exception("corrupted"),
+            ),
+            pytest.raises(PDFExtractionError, match="Failed to open PDF"),
         ):
-            with pytest.raises(PDFExtractionError, match="Failed to open PDF"):
-                extract_raw_document("corrupted.pdf")
+            extract_raw_document("corrupted.pdf")
 
     def test_bad_page_skipped_not_crash(self) -> None:
         good_page = make_fitz_page()

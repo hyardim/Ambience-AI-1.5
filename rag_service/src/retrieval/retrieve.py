@@ -66,7 +66,7 @@ def retrieve(
     logger.info(f'Retrieving for query: "{query}", top_k={top_k}')
     total_start = time.perf_counter()
 
-    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]  # noqa: S324
+    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
     artifacts: dict[str, Any] = {}
 
     # ------------------------------------------------------------------

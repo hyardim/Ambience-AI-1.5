@@ -143,7 +143,7 @@ async def clinical_query(request: QueryRequest) -> list[SearchResult]:
         logger.exception("/query failed")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG Inference Error: {str(exc)}",
+            detail=f"RAG Inference Error: {exc!s}",
         ) from exc
 
 
@@ -250,7 +250,7 @@ async def generate_clinical_answer(
         logger.exception("/answer failed")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG Answer Error: {str(exc)}",
+            detail=f"RAG Answer Error: {exc!s}",
         ) from exc
 
 
@@ -359,7 +359,7 @@ async def revise_clinical_answer(
         logger.exception("/revise failed")
         raise HTTPException(
             status_code=500,
-            detail=f"RAG Revise Error: {str(exc)}",
+            detail=f"RAG Revise Error: {exc!s}",
         ) from exc
 
 

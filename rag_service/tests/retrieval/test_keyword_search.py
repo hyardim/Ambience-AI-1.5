@@ -129,84 +129,94 @@ class TestKeywordSearch:
         assert ranks == sorted(ranks, reverse=True)
 
     def test_top_k_passed_as_limit_to_sql(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
-            ) as mock_run:
-                keyword_search(QUERY, db_url="postgresql://fake", top_k=5)
+            ) as mock_run,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake", top_k=5)
         args = mock_run.call_args[0]
         assert args[2] == 5
 
     def test_specialty_filter_passed_to_run_query(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
-            ) as mock_run:
-                keyword_search(
-                    QUERY, db_url="postgresql://fake", specialty="rheumatology"
-                )
+            ) as mock_run,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake", specialty="rheumatology")
         args = mock_run.call_args[0]
         assert "rheumatology" in args
 
     def test_source_name_filter_passed_to_run_query(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
-            ) as mock_run:
-                keyword_search(QUERY, db_url="postgresql://fake", source_name="NICE")
+            ) as mock_run,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake", source_name="NICE")
         args = mock_run.call_args[0]
         assert "NICE" in args
 
     def test_doc_type_filter_passed_to_run_query(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
-            ) as mock_run:
-                keyword_search(QUERY, db_url="postgresql://fake", doc_type="guideline")
+            ) as mock_run,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake", doc_type="guideline")
         args = mock_run.call_args[0]
         assert "guideline" in args
 
     def test_multiple_filters_combined(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
-            ) as mock_run:
-                keyword_search(
-                    QUERY,
-                    db_url="postgresql://fake",
-                    specialty="rheumatology",
-                    source_name="NICE",
-                    doc_type="guideline",
-                )
+            ) as mock_run,
+        ):
+            keyword_search(
+                QUERY,
+                db_url="postgresql://fake",
+                specialty="rheumatology",
+                source_name="NICE",
+                doc_type="guideline",
+            )
         args = mock_run.call_args[0]
         assert "rheumatology" in args
         assert "NICE" in args
         assert "guideline" in args
 
     def test_no_filters_passes_none_values(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query", return_value=[]
-            ) as mock_run:
-                keyword_search(QUERY, db_url="postgresql://fake")
+            ) as mock_run,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake")
         args = mock_run.call_args[0]
         assert args[3] is None  # specialty
         assert args[4] is None  # source_name
@@ -267,25 +277,29 @@ class TestKeywordSearch:
         assert "top_k" in exc_info.value.message
 
     def test_db_connection_failure_raises_retrieval_error(self):
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect",
-            side_effect=Exception("connection refused"),
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect",
+                side_effect=Exception("connection refused"),
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                keyword_search(QUERY, db_url="postgresql://fake")
+            keyword_search(QUERY, db_url="postgresql://fake")
         assert exc_info.value.stage == "KEYWORD_SEARCH"
 
     def test_undefined_column_raises_retrieval_error_with_migration_hint(self):
         mock_conn = make_mock_conn([])
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query",
                 side_effect=pg_errors.UndefinedColumn("column does not exist"),
-            ):
-                with pytest.raises(RetrievalError) as exc_info:
-                    keyword_search(QUERY, db_url="postgresql://fake")
+            ),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake")
         assert exc_info.value.stage == "KEYWORD_SEARCH"
         assert exc_info.value.query == QUERY
         assert "migration" in exc_info.value.message
@@ -297,15 +311,17 @@ class TestKeywordSearch:
             query=QUERY,
             message="something specific failed",
         )
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query",
                 side_effect=original_error,
-            ):
-                with pytest.raises(RetrievalError) as exc_info:
-                    keyword_search(QUERY, db_url="postgresql://fake")
+            ),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake")
         assert exc_info.value is original_error
         assert exc_info.value.message == "something specific failed"
 
@@ -319,15 +335,17 @@ class TestKeywordSearch:
 
     def test_connection_closed_on_failure(self):
         mock_conn = make_mock_conn([])
-        with patch(
-            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch(
                 "src.retrieval.keyword_search._run_query",
                 side_effect=Exception("query failed"),
-            ):
-                with pytest.raises(RetrievalError):
-                    keyword_search(QUERY, db_url="postgresql://fake")
+            ),
+            pytest.raises(RetrievalError),
+        ):
+            keyword_search(QUERY, db_url="postgresql://fake")
         mock_conn.close.assert_called_once()
 
     def test_metadata_fields_populated(self):
@@ -369,11 +387,13 @@ class TestKeywordSearch:
 
     def test_stopword_only_warning_does_not_leak_query_text(self):
         mock_conn = make_mock_conn([], tsquery_result="")
-        with patch("src.retrieval.keyword_search.logger") as mock_logger:
-            with patch(
+        with (
+            patch("src.retrieval.keyword_search.logger") as mock_logger,
+            patch(
                 "src.retrieval.keyword_search.psycopg2.connect",
                 return_value=mock_conn,
-            ):
-                keyword_search("the a is", db_url="postgresql://fake")
+            ),
+        ):
+            keyword_search("the a is", db_url="postgresql://fake")
         warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
         assert not any("the a is" in c for c in warning_calls)

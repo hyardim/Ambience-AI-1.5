@@ -89,12 +89,14 @@ class TestProcessQuery:
         assert result.embedding_model == EMBEDDING_MODEL_NAME
 
     def test_process_query_wraps_model_load_failure_as_retrieval_error(self):
-        with patch(
-            "src.retrieval.query._load_model",
-            side_effect=RuntimeError("model not found"),
+        with (
+            patch(
+                "src.retrieval.query._load_model",
+                side_effect=RuntimeError("model not found"),
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                process_query("gout treatment")
+            process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
     def test_embedding_failure_raises_retrieval_error(self):

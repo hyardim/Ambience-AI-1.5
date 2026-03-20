@@ -303,7 +303,7 @@ def _restore_modules(originals: dict[str, types.ModuleType | None]) -> None:
             sys.modules[name] = module
 
 
-@pytest.fixture()
+@pytest.fixture
 def main_module():
     originals = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
     _install_stubs()
@@ -322,7 +322,7 @@ def main_module():
         _restore_modules(originals)
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(main_module):
     return TestClient(main_module.app, raise_server_exceptions=False)
 
@@ -362,7 +362,7 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
         ]
     )
 
-    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def fail(*args, **kwargs):
         raise main_module.ModelGenerationError("transient", retryable=True)
 
     monkeypatch.setattr(main_module.routes, "generate_answer", fail)
@@ -395,7 +395,7 @@ def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_modul
         ]
     )
 
-    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def fail(*args, **kwargs):
         raise main_module.ModelGenerationError("transient", retryable=True)
 
     monkeypatch.setattr(main_module.routes, "generate_answer", fail)
@@ -461,7 +461,7 @@ def test_answer_non_retryable_generation_error_returns_500(
         ]
     )
 
-    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def fail(*args, **kwargs):
         raise main_module.ModelGenerationError("fatal", retryable=False)
 
     monkeypatch.setattr(main_module.routes, "generate_answer", fail)
@@ -483,7 +483,7 @@ def test_answer_passes_specialty_to_similarity_search(client, main_module):
     )
     main_module.routes.retrieve_chunks = search_mock
 
-    async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def ok_answer(*args, **kwargs):
         return "ok"
 
     main_module.routes.generate_answer = ok_answer
@@ -513,7 +513,7 @@ def test_revise_passes_specialty_to_similarity_search(client, main_module):
     )
     main_module.routes.retrieve_chunks = search_mock
 
-    async def ok_answer(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def ok_answer(*args, **kwargs):
         return "ok"
 
     main_module.routes.generate_answer = ok_answer
@@ -578,7 +578,7 @@ def test_revise_non_retryable_generation_error_returns_500(
         ]
     )
 
-    async def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def fail(*args, **kwargs):
         raise main_module.ModelGenerationError("fatal", retryable=False)
 
     monkeypatch.setattr(main_module.routes, "generate_answer", fail)

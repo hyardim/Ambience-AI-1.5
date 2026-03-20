@@ -88,149 +88,171 @@ class TestVectorSearch:
     def test_returns_list_of_vector_search_results(self):
         rows = [make_row()]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert isinstance(results, list)
         assert all(isinstance(r, VectorSearchResult) for r in results)
 
     def test_result_is_pydantic_model(self):
         rows = [make_row()]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert isinstance(results[0], VectorSearchResult)
         assert hasattr(results[0], "model_dump")
 
     def test_results_ordered_by_score_descending(self):
         rows = [make_row(score=0.9), make_row(score=0.7), make_row(score=0.5)]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
 
     def test_score_is_cosine_similarity_not_distance(self):
         rows = [make_row(score=0.85)]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert 0.0 <= results[0].score <= 1.0
 
     def test_score_floored_at_zero(self):
         rows = [make_row(score=-0.1)]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results[0].score == 0.0
 
     def test_top_k_passed_as_limit_to_sql(self):
         rows = [make_row(chunk_id=f"c{i}") for i in range(10)]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=5)
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=5)
         execute_args = mock_conn.cursor.return_value.execute.call_args[0][1]
         assert execute_args[-1] == 5
 
     def test_specialty_filter_passed_to_query(self):
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query", return_value=[]
+            ) as mock_run,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query", return_value=[]
-                ) as mock_run:
-                    vector_search(
-                        VALID_EMBEDDING,
-                        db_url="postgresql://fake",
-                        specialty="rheumatology",
-                    )
+            vector_search(
+                VALID_EMBEDDING,
+                db_url="postgresql://fake",
+                specialty="rheumatology",
+            )
         args = mock_run.call_args[0]
         assert "rheumatology" in args
 
     def test_source_name_filter_passed_to_query(self):
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query", return_value=[]
+            ) as mock_run,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query", return_value=[]
-                ) as mock_run:
-                    vector_search(
-                        VALID_EMBEDDING,
-                        db_url="postgresql://fake",
-                        source_name="NICE",
-                    )
+            vector_search(
+                VALID_EMBEDDING,
+                db_url="postgresql://fake",
+                source_name="NICE",
+            )
         args = mock_run.call_args[0]
         assert "NICE" in args
 
     def test_doc_type_filter_passed_to_query(self):
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query", return_value=[]
+            ) as mock_run,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query", return_value=[]
-                ) as mock_run:
-                    vector_search(
-                        VALID_EMBEDDING,
-                        db_url="postgresql://fake",
-                        doc_type="guideline",
-                    )
+            vector_search(
+                VALID_EMBEDDING,
+                db_url="postgresql://fake",
+                doc_type="guideline",
+            )
         args = mock_run.call_args[0]
         assert "guideline" in args
 
     def test_multiple_filters_combined(self):
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query", return_value=[]
+            ) as mock_run,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query", return_value=[]
-                ) as mock_run:
-                    vector_search(
-                        VALID_EMBEDDING,
-                        db_url="postgresql://fake",
-                        specialty="rheumatology",
-                        source_name="NICE",
-                        doc_type="guideline",
-                    )
+            vector_search(
+                VALID_EMBEDDING,
+                db_url="postgresql://fake",
+                specialty="rheumatology",
+                source_name="NICE",
+                doc_type="guideline",
+            )
         args = mock_run.call_args[0]
         assert "rheumatology" in args
         assert "NICE" in args
         assert "guideline" in args
 
     def test_no_filters_passes_none_values(self):
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect",
-            return_value=make_mock_conn([]),
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect",
+                return_value=make_mock_conn([]),
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query", return_value=[]
+            ) as mock_run,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query", return_value=[]
-                ) as mock_run:
-                    vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         args = mock_run.call_args[0]
         assert args[3] is None  # specialty
         assert args[4] is None  # source_name
@@ -239,31 +261,37 @@ class TestVectorSearch:
     def test_result_metadata_includes_document_dates(self):
         rows = [make_row()]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results[0].metadata["creation_date"] == "2020-01-01"
         assert results[0].metadata["publish_date"] == "2021-06-30"
         assert results[0].metadata["last_updated_date"] == "2024-01-15"
 
     def test_empty_result_returns_empty_list(self):
         mock_conn = make_mock_conn([])
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results == []
 
     def test_db_connection_failure_raises_retrieval_error(self):
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect",
-            side_effect=Exception("connection refused"),
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect",
+                side_effect=Exception("connection refused"),
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert exc_info.value.stage == "VECTOR_SEARCH"
 
     def test_invalid_embedding_dimensions_raises_retrieval_error(self):
@@ -276,36 +304,42 @@ class TestVectorSearch:
             make_row(specialty="rheumatology", source_name="NICE", title="RA Guide")
         ]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results[0].metadata["specialty"] == "rheumatology"
         assert results[0].metadata["source_name"] == "NICE"
         assert results[0].metadata["title"] == "RA Guide"
 
     def test_connection_closed_after_query(self):
         mock_conn = make_mock_conn([])
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         mock_conn.close.assert_called_once()
 
     def test_connection_closed_on_query_failure(self):
         mock_conn = make_mock_conn([])
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query",
+                side_effect=Exception("query failed"),
+            ),
+            pytest.raises(RetrievalError),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query",
-                    side_effect=Exception("query failed"),
-                ):
-                    with pytest.raises(RetrievalError):
-                        vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         mock_conn.close.assert_called_once()
 
     def test_retrieval_error_from_run_query_propagates_unchanged(self):
@@ -315,27 +349,31 @@ class TestVectorSearch:
             query="",
             message="something specific failed",
         )
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search._run_query",
+                side_effect=original_error,
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search._run_query",
-                    side_effect=original_error,
-                ):
-                    with pytest.raises(RetrievalError) as exc_info:
-                        vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert exc_info.value is original_error
         assert exc_info.value.message == "something specific failed"
 
     def test_section_path_is_list_not_string(self):
         rows = [make_row(section_path=["Treatment", "First-line therapy"])]
         mock_conn = make_mock_conn(rows)
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert isinstance(results[0].metadata["section_path"], list)
         assert results[0].metadata["section_path"] == [
             "Treatment",
@@ -344,14 +382,16 @@ class TestVectorSearch:
 
     def test_register_default_jsonb_called_on_connection(self):
         mock_conn = make_mock_conn([])
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
+            patch(
+                "src.retrieval.vector_search.psycopg2.extras.register_default_jsonb"
+            ) as mock_jsonb_reg,
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                with patch(
-                    "src.retrieval.vector_search.psycopg2.extras.register_default_jsonb"
-                ) as mock_jsonb_reg:
-                    vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         mock_jsonb_reg.assert_called_once_with(mock_conn)
 
     def test_zero_top_k_raises_retrieval_error(self):
@@ -370,11 +410,13 @@ class TestVectorSearch:
         row = make_row()
         row = row[:14] + (None, None) + row[16:]
         mock_conn = make_mock_conn([row])
-        with patch(
-            "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+        with (
+            patch(
+                "src.retrieval.vector_search.psycopg2.connect", return_value=mock_conn
+            ),
+            patch("src.retrieval.vector_search.register_vector"),
         ):
-            with patch("src.retrieval.vector_search.register_vector"):
-                results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
+            results = vector_search(VALID_EMBEDDING, db_url="postgresql://fake")
         assert results[0].metadata["page_start"] == 0
         assert results[0].metadata["page_end"] == 0
 

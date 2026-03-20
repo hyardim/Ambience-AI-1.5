@@ -159,16 +159,18 @@ class TestRerank:
         assert output == []
 
     def test_model_load_failure_raises_retrieval_error(self):
-        with patch(
-            "src.retrieval.rerank._load_model",
-            side_effect=RetrievalError(
-                stage="RERANK",
-                query=QUERY,
-                message="Failed to load model",
+        with (
+            patch(
+                "src.retrieval.rerank._load_model",
+                side_effect=RetrievalError(
+                    stage="RERANK",
+                    query=QUERY,
+                    message="Failed to load model",
+                ),
             ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank(QUERY, [make_fused_result("c1")])
+            rerank(QUERY, [make_fused_result("c1")])
         assert exc_info.value.stage == "RERANK"
 
     def test_single_pair_scoring_failure_assigns_zero_score(self):
@@ -193,11 +195,13 @@ class TestRerank:
     def test_large_input_logs_warning(self):
         results = [make_fused_result(f"c{i}") for i in range(51)]
         logits = [1.0] * 51
-        with patch(
-            "src.retrieval.rerank._load_model", return_value=make_mock_model(logits)
+        with (
+            patch(
+                "src.retrieval.rerank._load_model", return_value=make_mock_model(logits)
+            ),
+            patch("src.retrieval.rerank.logger") as mock_logger,
         ):
-            with patch("src.retrieval.rerank.logger") as mock_logger:
-                rerank(QUERY, results)
+            rerank(QUERY, results)
         warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
         assert any("51" in c for c in warning_calls)
 
@@ -419,12 +423,14 @@ class TestLoadModel:
     def test_load_model_failure_raises_retrieval_error(self):
         rerank_module._model = None
         rerank_module._model_name_loaded = None
-        with patch(
-            "src.retrieval.rerank._CrossEncoder",
-            side_effect=Exception("model not found"),
+        with (
+            patch(
+                "src.retrieval.rerank._CrossEncoder",
+                side_effect=Exception("model not found"),
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank_module._load_model("bad-model-name")
+            rerank_module._load_model("bad-model-name")
         assert exc_info.value.stage == "RERANK"
         assert "bad-model-name" in exc_info.value.message
 

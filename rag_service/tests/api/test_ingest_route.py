@@ -330,7 +330,7 @@ def main_app():
     # src.generation.router only uses stdlib + the fake config above.
 
     try:
-        import src.main as _main  # noqa: E402
+        import src.main as _main
 
         _routes = importlib.import_module("src.api.routes")
 
@@ -342,7 +342,7 @@ def main_app():
         sys.modules.update(saved)
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(main_app):
     return TestClient(main_app.app, raise_server_exceptions=False)
 

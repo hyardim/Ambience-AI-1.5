@@ -7,11 +7,11 @@ from src.generation import client
 async def test_generate_answer_routes_local_first_and_falls_back_to_cloud(monkeypatch):
     calls: list[str] = []
 
-    async def fail_local(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def fail_local(prompt: str, max_tokens=None) -> str:
         calls.append("local")
         raise RuntimeError("local down")
 
-    async def ok_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def ok_cloud(prompt: str, max_tokens=None) -> str:
         calls.append("cloud")
         return "cloud answer"
 
@@ -32,11 +32,11 @@ async def test_generate_answer_routes_local_first_and_falls_back_to_cloud(monkey
 async def test_generate_answer_routes_cloud_first_and_falls_back_to_local(monkeypatch):
     calls: list[str] = []
 
-    async def fail_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def fail_cloud(prompt: str, max_tokens=None) -> str:
         calls.append("cloud")
         raise RuntimeError("cloud down")
 
-    async def ok_local(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def ok_local(prompt: str, max_tokens=None) -> str:
         calls.append("local")
         return "local answer"
 
@@ -57,11 +57,11 @@ async def test_generate_answer_routes_cloud_first_and_falls_back_to_local(monkey
 async def test_generate_answer_cloud_first_success(monkeypatch):
     calls: list[str] = []
 
-    async def ok_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def ok_cloud(prompt: str, max_tokens=None) -> str:
         calls.append("cloud")
         return "cloud answer"
 
-    async def ok_local(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def ok_local(prompt: str, max_tokens=None) -> str:
         calls.append("local")
         return "local answer"
 
@@ -80,10 +80,10 @@ async def test_generate_answer_cloud_first_success(monkeypatch):
 
 @pytest.mark.anyio
 async def test_generate_answer_raises_when_both_fail(monkeypatch):
-    async def fail_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def fail_cloud(prompt: str, max_tokens=None) -> str:
         raise RuntimeError("cloud down")
 
-    async def fail_local(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def fail_local(prompt: str, max_tokens=None) -> str:
         raise RuntimeError("local down")
 
     monkeypatch.setattr(client, "_call_local_model", fail_local)
@@ -570,10 +570,10 @@ async def test_generate_cloud_answer_maps_request_error(monkeypatch):
 
 @pytest.mark.anyio
 async def test_generate_answer_raises_for_empty_response(monkeypatch):
-    async def empty_local(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def empty_local(prompt: str, max_tokens=None) -> str:
         return ""
 
-    async def empty_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def empty_cloud(prompt: str, max_tokens=None) -> str:
         return ""
 
     monkeypatch.setattr(client, "_call_local_model", empty_local)
@@ -585,10 +585,10 @@ async def test_generate_answer_raises_for_empty_response(monkeypatch):
 
 @pytest.mark.anyio
 async def test_call_model_wrappers_delegate(monkeypatch):
-    async def fake_local(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def fake_local(prompt: str, max_tokens=None) -> str:
         return "local"
 
-    async def fake_cloud(prompt: str, max_tokens=None) -> str:  # noqa: ANN001
+    async def fake_cloud(prompt: str, max_tokens=None) -> str:
         return "cloud"
 
     monkeypatch.setattr(client, "_generate_local_answer", fake_local)

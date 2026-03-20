@@ -8,7 +8,7 @@ import pytest
 from src.generation.streaming import stream_generate
 
 
-@pytest.fixture()
+@pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
 

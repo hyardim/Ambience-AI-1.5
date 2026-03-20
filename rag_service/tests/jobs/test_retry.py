@@ -50,12 +50,12 @@ class FakeRedis:
         item = self.hashes.get(key, {})
         return {k.encode("utf-8"): v.encode("utf-8") for k, v in item.items()}
 
-    def expire(self, key: str, ttl: int) -> None:  # noqa: ARG002
+    def expire(self, key: str, ttl: int) -> None:
         return
 
     def set(
         self, key: str, value: str, ex: int | None = None, nx: bool = False
-    ) -> bool:  # noqa: ARG002
+    ) -> bool:
         if nx and key in self.kv:
             return False
         self.kv[key] = value
@@ -68,7 +68,7 @@ class FakeRedis:
         return value.encode("utf-8")
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_backend(monkeypatch):
     redis_conn = FakeRedis()
     queue = FakeQueue()
@@ -94,7 +94,7 @@ def test_retries_on_transient_generation_error(fake_backend, monkeypatch):
     )
     assert status == RetryJobStatus.QUEUED
 
-    async def transient_fail(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def transient_fail(*args, **kwargs):
         raise ModelGenerationError("temporary", retryable=True)
 
     monkeypatch.setattr("src.jobs.retry.generate_answer", transient_fail)
@@ -130,7 +130,7 @@ def test_status_transitions_to_succeeded(fake_backend, monkeypatch):
         request_type="answer", payload=_payload(), connection=redis_conn
     )
 
-    async def succeed(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def succeed(*args, **kwargs):
         return "Answer with citation [1]"
 
     monkeypatch.setattr("src.jobs.retry.generate_answer", succeed)
@@ -154,7 +154,7 @@ def test_exhausted_retries_marks_failed(fake_backend, monkeypatch):
         f"rag:job:{job_id}", mapping={"attempt_count": "2", "status": "queued"}
     )
 
-    async def transient_fail(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def transient_fail(*args, **kwargs):
         raise ModelGenerationError("temporary", retryable=True)
 
     monkeypatch.setattr("src.jobs.retry.generate_answer", transient_fail)
@@ -385,7 +385,7 @@ def test_process_retry_job_marks_failed_on_unexpected_exception(
         request_type="answer", payload=_payload(), connection=redis_conn
     )
 
-    async def explode(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def explode(*args, **kwargs):
         raise RuntimeError("unexpected")
 
     monkeypatch.setattr("src.jobs.retry.generate_answer", explode)
@@ -406,7 +406,7 @@ def test_process_retry_job_builds_revise_response(fake_backend, monkeypatch) -> 
         connection=redis_conn,
     )
 
-    async def succeed(*args, **kwargs):  # noqa: ANN002, ANN003
+    async def succeed(*args, **kwargs):
         return "Answer with citation [1]"
 
     monkeypatch.setattr("src.jobs.retry.generate_answer", succeed)

@@ -30,26 +30,28 @@ async def stream_generate(
     }
 
     try:
-        async with httpx.AsyncClient(
-            timeout=generation_config.ollama_timeout_seconds
-        ) as client:
-            async with client.stream(
+        async with (
+            httpx.AsyncClient(
+                timeout=generation_config.ollama_timeout_seconds
+            ) as client,
+            client.stream(
                 "POST",
                 f"{generation_config.ollama_base_url}/api/generate",
                 json=payload,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    token = chunk.get("response", "")
-                    if token:
-                        yield token
-                    if chunk.get("done", False):
-                        return
+            ) as response,
+        ):
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                token = chunk.get("response", "")
+                if token:
+                    yield token
+                if chunk.get("done", False):
+                    return
     except httpx.HTTPError as exc:
         raise RuntimeError(f"Ollama streaming request failed: {exc}") from exc

@@ -40,7 +40,7 @@ def _ensure_resource(nltk: object, download_dir: Path, resource: str) -> bool:
             nltk.data.find(f"tokenizers/{resource}")
             print(f"OK: {resource} found")
             return True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _cleanup_resource(download_dir, resource)
             print(f"WARN: failed to install {resource} (attempt {attempt}/3): {exc}")
 
@@ -72,7 +72,7 @@ def verify() -> None:
         result = sent_tokenize("This is a test. It should tokenize correctly.")
         assert len(result) == 2, f"Expected 2 sentences, got {len(result)}"
         print("OK: tokenizer functional")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"ERROR: tokenizer failed: {exc}")
         failed = True
 

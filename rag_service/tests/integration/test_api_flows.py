@@ -29,8 +29,8 @@ def test_answer_route_integration_returns_grounded_citations(
                     "publish_date": "2024-01-01",
                 },
             }
-            ],
-        )
+        ],
+    )
     monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
     monkeypatch.setattr(
         routes,
