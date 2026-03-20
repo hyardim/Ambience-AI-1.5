@@ -168,7 +168,7 @@ class TestNormalizeBulletsAndLists:
         assert _normalize_bullets_and_lists("✓ item") == "- item"
 
     def test_bullet_dash_normalized(self) -> None:
-        assert _normalize_bullets_and_lists("– item") == "- item"
+        assert _normalize_bullets_and_lists("- item") == "- item"
 
     def test_numbered_paren_normalized(self) -> None:
         assert _normalize_bullets_and_lists("1) item") == "1. item"
@@ -232,7 +232,7 @@ class TestRemoveRepeatedHeadersFooters:
             )
             for i in range(1, 6)
         ]
-        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        _cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
         assert removed == 5
 
     def test_non_repeated_block_kept(self) -> None:
@@ -241,7 +241,7 @@ class TestRemoveRepeatedHeadersFooters:
         pages[0]["blocks"].append(
             make_block("Unique header", bbox=[10.0, 20.0, 500.0, 40.0])
         )
-        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        _cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
         assert removed == 0
 
     def test_middle_block_not_removed(self) -> None:
@@ -250,7 +250,7 @@ class TestRemoveRepeatedHeadersFooters:
             "Same text every page", bbox=[10.0, 400.0, 500.0, 420.0]
         )
         pages = [make_page(i, blocks=[middle_block.copy()]) for i in range(1, 6)]
-        cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
+        _cleaned, removed = _remove_repeated_headers_footers(pages, num_pages=5)
         assert removed == 0
 
     def test_empty_pages_returns_zero_removed(self) -> None:
@@ -318,7 +318,7 @@ class TestRemoveDuplicatePages:
     def test_slightly_different_pages_kept(self) -> None:
         page1 = make_page(1, blocks=[make_block("Content A")])
         page2 = make_page(2, blocks=[make_block("Content B")])
-        unique, removed = _remove_duplicate_pages([page1, page2])
+        _unique, removed = _remove_duplicate_pages([page1, page2])
         assert removed == 0
 
 

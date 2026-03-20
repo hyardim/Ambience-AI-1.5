@@ -344,7 +344,7 @@ def chunk_section_group(
     i = 0
     while i < len(sentence_block_pairs):
         sentence, block = sentence_block_pairs[i]
-        candidate_pairs = current_pairs + [(sentence, block)]
+        candidate_pairs = [*current_pairs, (sentence, block)]
         candidate = [current_sentence for current_sentence, _ in candidate_pairs]
         candidate_tokens = count_tokens(" ".join(candidate))
 
@@ -450,7 +450,7 @@ def _compute_overlap(
     """Take sentences from end of list until overlap token budget is reached."""
     overlap: list[str] = []
     for sentence in reversed(sentences):
-        candidate = [sentence] + overlap
+        candidate = [sentence, *overlap]
         if count_tokens(" ".join(candidate)) > overlap_tokens:
             break
         overlap = candidate

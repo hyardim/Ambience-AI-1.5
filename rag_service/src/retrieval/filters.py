@@ -137,8 +137,7 @@ def _passes_metadata_filters(result: FusedResult, config: FilterConfig) -> bool:
     if config.doc_type is not None and meta.get("doc_type") != config.doc_type:
         return False
 
-    if config.content_types is not None:
-        if meta.get("content_type") not in config.content_types:
-            return False
-
-    return True
+    return not (
+        config.content_types is not None
+        and meta.get("content_type") not in config.content_types
+    )

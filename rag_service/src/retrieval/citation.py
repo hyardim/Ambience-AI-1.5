@@ -157,7 +157,7 @@ def format_citation(citation: Citation) -> str:
     return (
         f"{citation.title} — {citation.source_name} ({citation.specialty})\n"
         f"Section: {section}\n"
-        f"Pages: {citation.page_start}–{citation.page_end}\n"
+        f"Pages: {citation.page_start}-{citation.page_end}\n"
         f"Source: {citation.source_url}"
     )
 

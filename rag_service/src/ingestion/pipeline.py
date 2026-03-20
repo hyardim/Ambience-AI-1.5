@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -105,10 +106,8 @@ def _backfill_debug_artifacts(doc_id: str, temp_id: str) -> None:
         if not target.exists():
             artifact.rename(target)
 
-    try:
+    with contextlib.suppress(OSError):
         pending_dir.rmdir()
-    except OSError:
-        pass
 
 
 # -----------------------------------------------------------------------

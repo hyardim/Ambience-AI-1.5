@@ -6,7 +6,7 @@ from typing import Any
 try:
     from sentence_transformers import CrossEncoder as _CrossEncoder
 except ImportError:
-    _CrossEncoder = None  # type: ignore[assignment,misc]
+    _CrossEncoder = None
 
 from pydantic import BaseModel
 

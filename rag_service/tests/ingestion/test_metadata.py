@@ -580,19 +580,21 @@ class TestValidateMetadata:
     def test_missing_doc_field_raises(self) -> None:
         doc = self._make_valid_doc()
         del doc["doc_meta"]["doc_id"]
-        with pytest.raises(MetadataValidationError, match="Missing doc_meta.doc_id"):
+        with pytest.raises(MetadataValidationError, match=r"Missing doc_meta\.doc_id"):
             validate_metadata(doc)
 
     def test_empty_doc_field_raises(self) -> None:
         doc = self._make_valid_doc()
         doc["doc_meta"]["title"] = ""
-        with pytest.raises(MetadataValidationError, match="Empty doc_meta.title"):
+        with pytest.raises(MetadataValidationError, match=r"Empty doc_meta\.title"):
             validate_metadata(doc)
 
     def test_missing_specialty_raises(self) -> None:
         doc = self._make_valid_doc()
         del doc["doc_meta"]["specialty"]
-        with pytest.raises(MetadataValidationError, match="Missing doc_meta.specialty"):
+        with pytest.raises(
+            MetadataValidationError, match=r"Missing doc_meta\.specialty"
+        ):
             validate_metadata(doc)
 
     def test_missing_block_field_raises(self) -> None:
@@ -721,25 +723,29 @@ class TestAttachMetadata:
         assert result["doc_meta"]["source_name"] == "BSR"
 
     def test_invalid_specialty_raises(self) -> None:
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="Invalid specialty"):
-                attach_metadata(
-                    make_table_aware_doc(), make_source_info(specialty="cardiology")
-                )
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="Invalid specialty"),
+        ):
+            attach_metadata(
+                make_table_aware_doc(), make_source_info(specialty="cardiology")
+            )
 
     def test_invalid_source_name_raises(self) -> None:
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="Invalid source_name"):
-                attach_metadata(
-                    make_table_aware_doc(), make_source_info(source_name="NHS")
-                )
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="Invalid source_name"),
+        ):
+            attach_metadata(make_table_aware_doc(), make_source_info(source_name="NHS"))
 
     def test_invalid_doc_type_raises(self) -> None:
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="Invalid doc_type"):
-                attach_metadata(
-                    make_table_aware_doc(), make_source_info(doc_type="leaflet")
-                )
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="Invalid doc_type"),
+        ):
+            attach_metadata(
+                make_table_aware_doc(), make_source_info(doc_type="leaflet")
+            )
 
     def test_deterministic_block_uids(self) -> None:
         doc = make_table_aware_doc()
@@ -783,9 +789,11 @@ class TestAttachMetadata:
             "specialty": "rheumatology",
             # source_path deliberately omitted
         }
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="source_path"):
-                attach_metadata(doc, source_info)
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="source_path"),
+        ):
+            attach_metadata(doc, source_info)
 
     def test_block_page_number_set_from_page(self) -> None:
         block = make_block("Some text")

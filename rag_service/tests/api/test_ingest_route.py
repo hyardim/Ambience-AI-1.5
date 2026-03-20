@@ -534,13 +534,15 @@ class TestIngestErrors:
 
     def test_file_save_error_returns_500(self, client, main_app, monkeypatch):
         _patch_ingest(monkeypatch, main_app)
-        with patch.object(Path, "mkdir"):
-            with patch.object(Path, "open", side_effect=OSError("disk full")):
-                resp = client.post(
-                    "/ingest",
-                    files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
-                    data={"source_name": "NICE"},
-                )
+        with (
+            patch.object(Path, "mkdir"),
+            patch.object(Path, "open", side_effect=OSError("disk full")),
+        ):
+            resp = client.post(
+                "/ingest",
+                files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
+                data={"source_name": "NICE"},
+            )
 
         assert resp.status_code == 500
         assert "disk full" in resp.json()["detail"]

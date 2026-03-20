@@ -89,11 +89,11 @@ class TestIsNumberedHeading:
         assert clean == "Monitoring"
 
     def test_dosage_not_heading(self) -> None:
-        match, level, clean = is_numbered_heading("2.5 mg dose")
+        match, _level, _clean = is_numbered_heading("2.5 mg dose")
         assert match is False
 
     def test_lowercase_after_number_not_heading(self) -> None:
-        match, level, _ = is_numbered_heading("1 tablet daily")
+        match, _level, _ = is_numbered_heading("1 tablet daily")
         assert match is False
 
     def test_short_text_not_heading(self) -> None:
@@ -109,17 +109,17 @@ class TestIsNumberedHeading:
         assert match is False
 
     def test_hyphenated_heading(self) -> None:
-        match, level, clean = is_numbered_heading("1 COVID-19 Guidelines")
+        match, _level, clean = is_numbered_heading("1 COVID-19 Guidelines")
         assert match is True
         assert clean == "COVID-19 Guidelines"
 
     def test_heading_with_colon(self) -> None:
-        match, level, clean = is_numbered_heading("3 Section A: Overview")
+        match, _level, clean = is_numbered_heading("3 Section A: Overview")
         assert match is True
         assert clean == "Section A: Overview"
 
     def test_postoperative_heading(self) -> None:
-        match, level, clean = is_numbered_heading("2.1 Post-operative Care")
+        match, _level, clean = is_numbered_heading("2.1 Post-operative Care")
         assert match is True
         assert clean == "Post-operative Care"
 
@@ -318,20 +318,20 @@ class TestComputePageMedianFontSize:
 class TestDetectHeading:
     def test_numbered_wins_over_bold(self) -> None:
         block = make_block("1 Introduction", is_bold=True, font_size=18.0)
-        matched, level, clean, htype = _detect_heading(block, "1 Introduction", 12.0)
+        matched, _level, clean, htype = _detect_heading(block, "1 Introduction", 12.0)
         assert matched is True
         assert htype == "numbered"
         assert clean == "Introduction"
 
     def test_allcaps_wins_over_bold(self) -> None:
         block = make_block("INTRODUCTION", is_bold=True)
-        matched, level, clean, htype = _detect_heading(block, "INTRODUCTION", 12.0)
+        matched, _level, _clean, htype = _detect_heading(block, "INTRODUCTION", 12.0)
         assert matched is True
         assert htype == "allcaps"
 
     def test_bold_wins_over_fontsize(self) -> None:
         block = make_block("Clinical Presentation", is_bold=True, font_size=16.0)
-        matched, level, clean, htype = _detect_heading(
+        matched, _level, _clean, htype = _detect_heading(
             block, "Clinical Presentation", 12.0
         )
         assert matched is True
@@ -339,7 +339,7 @@ class TestDetectHeading:
 
     def test_fontsize_matched_when_no_other_rule(self) -> None:
         block = make_block("Some heading", is_bold=False, font_size=18.0)
-        matched, level, clean, htype = _detect_heading(block, "Some heading", 12.0)
+        matched, _level, _clean, htype = _detect_heading(block, "Some heading", 12.0)
         assert matched is True
         assert htype == "fontsize"
 

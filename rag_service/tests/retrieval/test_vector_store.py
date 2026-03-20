@@ -118,7 +118,7 @@ def test_insert_chunks_returns_early_for_empty_input() -> None:
 
 
 def test_insert_chunks_uses_execute_values() -> None:
-    conn, cur = make_conn(None)
+    conn, _cur = make_conn(None)
     chunks = [
         {
             "doc_id": "doc-1",

@@ -476,6 +476,8 @@ class TestExtractRawDocument:
 
         type(doc).page_count = property(_raise_unexpected)
 
-        with patch("src.ingestion.extract.fitz.open", return_value=doc):
-            with pytest.raises(PDFExtractionError, match="Failed to extract PDF"):
-                extract_raw_document("test.pdf")
+        with (
+            patch("src.ingestion.extract.fitz.open", return_value=doc),
+            pytest.raises(PDFExtractionError, match="Failed to extract PDF"),
+        ):
+            extract_raw_document("test.pdf")

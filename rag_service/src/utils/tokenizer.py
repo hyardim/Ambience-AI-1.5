@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Protocol
+from typing import Protocol, cast
 
 import tiktoken
 
@@ -22,7 +22,7 @@ _FALLBACK_TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 def _load_encoder() -> _Encoder | None:
     """Load the preferred tokenizer, falling back offline if unavailable."""
     try:
-        return tiktoken.get_encoding("cl100k_base")
+        return cast(_Encoder, tiktoken.get_encoding("cl100k_base"))
     except Exception as exc:  # pragma: no cover - exercised via public fallback path
         logger.warning(
             "Falling back to regex token counting because "

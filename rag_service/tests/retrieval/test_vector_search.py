@@ -408,7 +408,7 @@ class TestVectorSearch:
 
     def test_null_page_values_default_to_zero(self):
         row = make_row()
-        row = row[:14] + (None, None) + row[16:]
+        row = (*row[:14], None, None, *row[16:])
         mock_conn = make_mock_conn([row])
         with (
             patch(

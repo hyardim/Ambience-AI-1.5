@@ -185,9 +185,8 @@ class TestEmbedBatch:
 
     def test_raises_after_max_retries(self) -> None:
         model = make_mock_model(fail=True)
-        with patch("src.ingestion.embed.time.sleep"):
-            with pytest.raises(RuntimeError):
-                _embed_batch(model, ["text"])
+        with patch("src.ingestion.embed.time.sleep"), pytest.raises(RuntimeError):
+            _embed_batch(model, ["text"])
 
     def test_encode_called_once_on_success(self) -> None:
         model = make_mock_model()

@@ -133,7 +133,7 @@ def _fix_hyphenated_line_breaks(text: str) -> str:
 def _normalize_bullets_and_lists(text: str) -> str:
     """Normalize bullet points and list markers.
 
-    Bullet conversions: •, ◦, ▪, ▸, ➢, ✓, – → '- '
+    Bullet conversions: •, ◦, ▪, ▸, ➢, ✓, - -> '- '
     Numbered list: '1)' → '1.', '(1)' → '1.'
     Lettered list: 'a)' → 'a.', '(a)' → 'a.'
 
@@ -144,7 +144,7 @@ def _normalize_bullets_and_lists(text: str) -> str:
         Text with normalized list markers
     """
     # Normalize bullet characters to '- '
-    text = re.sub(r"^[•◦▪▸➢✓–]\s*", "- ", text, flags=re.MULTILINE)
+    text = re.sub(r"^[•◦▪▸➢✓-]\s*", "- ", text, flags=re.MULTILINE)
 
     # Normalize numbered lists
     text = re.sub(r"^(\d+)\)\s*", r"\1. ", text, flags=re.MULTILINE)

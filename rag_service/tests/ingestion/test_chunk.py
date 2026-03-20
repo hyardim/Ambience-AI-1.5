@@ -175,9 +175,11 @@ class TestSplitIntoSentences:
 
     def test_raises_runtime_error_if_nltk_data_missing(self) -> None:
         chunk_module._NLTK_INITIALISED = False
-        with patch("nltk.data.find", side_effect=LookupError):
-            with pytest.raises(RuntimeError, match="punkt"):
-                chunk_module._ensure_nltk_data()
+        with (
+            patch("nltk.data.find", side_effect=LookupError),
+            pytest.raises(RuntimeError, match="punkt"),
+        ):
+            chunk_module._ensure_nltk_data()
 
         chunk_module._NLTK_INITIALISED = True
 

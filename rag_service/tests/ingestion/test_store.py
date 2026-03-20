@@ -192,7 +192,7 @@ class TestUpsertChunk:
         chunk = make_chunk()
         metadata = _build_metadata(chunk)
         existing_row = (chunk["text"], metadata)
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "skipped"
         conn.commit.assert_not_called()
@@ -200,7 +200,7 @@ class TestUpsertChunk:
     def test_updates_on_text_change(self) -> None:
         chunk = make_chunk(text="New text.")
         existing_row = ("Old text.", _build_metadata(chunk))
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "updated"
         conn.commit.assert_not_called()
@@ -217,7 +217,7 @@ class TestUpsertChunk:
             "citation": {},
         }
         existing_row = (chunk["text"], old_metadata)
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "updated"
         conn.commit.assert_not_called()
@@ -237,7 +237,7 @@ class TestUpsertChunk:
 class TestStoreChunks:
     def test_inserts_new_chunk(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -255,7 +255,7 @@ class TestStoreChunks:
         metadata = _build_metadata(chunk)
         existing_row = (chunk["text"], metadata)
         doc = make_embedded_doc(chunks=[chunk])
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -312,7 +312,7 @@ class TestStoreChunks:
         chunk_new = make_chunk("new")
         chunk_fail = make_chunk("fail", embedding_status="failed")
         doc = make_embedded_doc(chunks=[chunk_new, chunk_fail])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -336,7 +336,7 @@ class TestStoreChunks:
 
     def test_report_has_all_keys(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -348,7 +348,7 @@ class TestStoreChunks:
 
     def test_connection_closed_after_run(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),

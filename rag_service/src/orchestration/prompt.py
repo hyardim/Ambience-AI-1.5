@@ -23,7 +23,7 @@ def format_context(context: list[CitedResult]) -> str:
         )
         meta = (
             f"Section: {citation.section_title} | {section} | "
-            f"Pages: {citation.page_start}–{citation.page_end}"
+            f"Pages: {citation.page_start}-{citation.page_end}"
         )
         block = f"{header}\n{meta}\n---\n{item.text.strip()}"
         blocks.append(block)

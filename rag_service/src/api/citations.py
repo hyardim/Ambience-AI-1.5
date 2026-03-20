@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Any
 
@@ -77,10 +78,8 @@ def parse_citation_group(raw: str) -> list[int]:
             except ValueError:
                 pass
         else:
-            try:
+            with contextlib.suppress(ValueError):
                 numbers.append(int(part))
-            except ValueError:
-                pass
     return numbers
 
 

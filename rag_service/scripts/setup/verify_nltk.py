@@ -28,7 +28,7 @@ def _cleanup_resource(download_dir: Path, resource: str) -> None:
 
 
 def _ensure_resource(nltk: object, download_dir: Path, resource: str) -> bool:
-    for attempt in range(1, 4):
+    for _attempt in range(1, 4):
         try:
             nltk.download(
                 resource,
@@ -38,13 +38,10 @@ def _ensure_resource(nltk: object, download_dir: Path, resource: str) -> bool:
                 download_dir=str(download_dir),
             )
             nltk.data.find(f"tokenizers/{resource}")
-            print(f"OK: {resource} found")
             return True
-        except Exception as exc:
+        except Exception:
             _cleanup_resource(download_dir, resource)
-            print(f"WARN: failed to install {resource} (attempt {attempt}/3): {exc}")
 
-    print(f"ERROR: unable to install {resource} after 3 attempts")
     return False
 
 
@@ -54,7 +51,6 @@ def verify() -> None:
     try:
         import nltk
     except ImportError:
-        print("ERROR: nltk is not installed — run: pip install nltk")
         sys.exit(1)
 
     download_dir = _download_dir()
@@ -71,15 +67,11 @@ def verify() -> None:
 
         result = sent_tokenize("This is a test. It should tokenize correctly.")
         assert len(result) == 2, f"Expected 2 sentences, got {len(result)}"
-        print("OK: tokenizer functional")
-    except Exception as exc:
-        print(f"ERROR: tokenizer failed: {exc}")
+    except Exception:
         failed = True
 
     if failed:
         sys.exit(1)
-
-    print("NLTK data verified.")
 
 
 if __name__ == "__main__":

@@ -238,9 +238,11 @@ class TestRerank:
     def test_scoring_failure_raises_retrieval_error(self):
         mock_model = MagicMock()
         mock_model.predict.side_effect = Exception("predict failed")
-        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank(QUERY, [make_fused_result("c1")])
+        with (
+            patch("src.retrieval.rerank._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            rerank(QUERY, [make_fused_result("c1")])
         assert exc_info.value.stage == "RERANK"
         assert "scoring" in exc_info.value.message.lower()
 
@@ -264,9 +266,11 @@ class TestRerank:
 
     def test_logits_length_mismatch_raises_retrieval_error(self):
         mock_model = make_mock_model([1.0, 2.0])  # 2 logits for 1 result
-        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank(QUERY, [make_fused_result("c1")])
+        with (
+            patch("src.retrieval.rerank._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            rerank(QUERY, [make_fused_result("c1")])
         assert exc_info.value.stage == "RERANK"
         assert "logits" in exc_info.value.message
 

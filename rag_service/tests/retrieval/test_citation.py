@@ -305,7 +305,7 @@ class TestFormatCitation:
         expected = (
             "Gout: diagnosis and management — NICE (rheumatology)\n"
             "Section: Treatment > Urate-lowering therapy\n"
-            "Pages: 12–13\n"
+            "Pages: 12-13\n"
             "Source: https://www.nice.org.uk/guidance/cg56"
         )
         assert result == expected
@@ -323,4 +323,4 @@ class TestFormatCitation:
     def test_format_citation_zero_pages(self):
         citation = self._make_citation(page_start=0, page_end=0)
         result = format_citation(citation)
-        assert "Pages: 0–0" in result
+        assert "Pages: 0-0" in result

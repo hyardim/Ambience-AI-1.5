@@ -102,9 +102,11 @@ class TestProcessQuery:
     def test_embedding_failure_raises_retrieval_error(self):
         mock_model = _make_mock_model()
         mock_model.encode.side_effect = RuntimeError("CUDA out of memory")
-        with patch("src.retrieval.query._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                process_query("gout treatment")
+        with (
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
     def test_wrong_embedding_dimensions_raises_validation_error(self):
@@ -118,40 +120,46 @@ class TestProcessQuery:
 
     def test_query_exceeding_token_limit_raises_value_error(self):
         long_query = " ".join(["gout"] * 2000)
-        with patch("src.retrieval.query.embed_config.query_max_tokens", 32):
-            with pytest.raises(ValueError, match="exceeds 32 token limit"):
-                process_query(long_query)
+        with (
+            patch("src.retrieval.query.embed_config.query_max_tokens", 32),
+            pytest.raises(ValueError, match="exceeds 32 token limit"),
+        ):
+            process_query(long_query)
 
     def test_expanded_query_exceeding_token_limit_raises_value_error(self):
         # Patch _expand_query to return a very long string
         # simulating expansion pushing query over the limit
         long_expansion = "gout " + " ".join(["urate"] * 400)
         mock_model = _make_mock_model()
-        with patch("src.retrieval.query.embed_config.query_max_tokens", 32):
-            with patch("src.retrieval.query._load_model", return_value=mock_model):
-                with patch(
-                    "src.retrieval.query._expand_query", return_value=long_expansion
-                ):
-                    with pytest.raises(ValueError, match="exceeds 32 token limit"):
-                        process_query("gout", expand=True)
+        with (
+            patch("src.retrieval.query.embed_config.query_max_tokens", 32),
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            patch("src.retrieval.query._expand_query", return_value=long_expansion),
+            pytest.raises(ValueError, match="exceeds 32 token limit"),
+        ):
+            process_query("gout", expand=True)
 
     def test_invalid_embedding_wraps_as_retrieval_error(self):
         # Force _embed to return wrong dimensions so ProcessedQuery construction fails
         mock_model = _make_mock_model(
             embedding=np.array([[0.1] * 100], dtype=np.float32)  # wrong dims
         )
-        with patch("src.retrieval.query._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                process_query("gout treatment")
+        with (
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
     def test_token_length_uses_shared_counter(self):
         mock_model = _make_mock_model()
-        with patch("src.retrieval.query.count_tokens", return_value=99):
-            with patch("src.retrieval.query.embed_config.query_max_tokens", 32):
-                with patch("src.retrieval.query._load_model", return_value=mock_model):
-                    with pytest.raises(ValueError, match="exceeds 32 token limit"):
-                        process_query("gout treatment")
+        with (
+            patch("src.retrieval.query.count_tokens", return_value=99),
+            patch("src.retrieval.query.embed_config.query_max_tokens", 32),
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            pytest.raises(ValueError, match="exceeds 32 token limit"),
+        ):
+            process_query("gout treatment")
 
 
 # -----------------------------------------------------------------------
