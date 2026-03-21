@@ -315,6 +315,60 @@ def test_validate_settings_rejects_placeholder_database_url_in_production(
     monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
 
 
+def test_validate_settings_rejects_missing_rag_internal_api_key_in_production(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(core_config.settings, "RAG_INTERNAL_API_KEY", "")
+
+    with pytest.raises(RuntimeError, match="RAG_INTERNAL_API_KEY"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_default_rag_internal_api_key_in_production(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(
+        core_config.settings, "RAG_INTERNAL_API_KEY", "dev-rag-internal-key"
+    )
+
+    with pytest.raises(RuntimeError, match="RAG_INTERNAL_API_KEY"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
 def test_validate_settings_rejects_placeholder_token_pepper_in_production(
     monkeypatch,
 ):
@@ -702,6 +756,37 @@ async def test_rag_search_proxy_non_200(monkeypatch):
         await rag.search_clinical_guidelines("query", current_user="user@nhs.uk")
     assert exc.value.status_code == 503
     assert exc.value.detail == "RAG service request failed."
+
+
+@pytest.mark.asyncio
+async def test_rag_search_proxy_forwards_internal_headers(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, json, headers=None):
+            assert headers == {"X-Internal-API-Key": "k"}
+            return FakeResponse()
+
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr(
+        "src.api.endpoints.rag.build_rag_headers",
+        lambda: {"X-Internal-API-Key": "k"},
+    )
+    result = await rag.search_clinical_guidelines("query", current_user="user@nhs.uk")
+    assert result == {"ok": True}
 
 
 def test_get_current_user_obj_raises_401_when_user_missing(monkeypatch):

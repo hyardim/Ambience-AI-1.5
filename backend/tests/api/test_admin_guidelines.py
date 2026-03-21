@@ -149,6 +149,33 @@ class TestGuidelinesUploadSuccess:
             assert "source_name" in str(call_kwargs)
             assert "BSR" in str(call_kwargs)
 
+    def test_rag_called_with_internal_headers(self, client, admin_headers):
+        mock_resp = _mock_rag_success()
+
+        with patch("src.api.endpoints.admin.httpx.AsyncClient") as mock_client_cls:
+            mock_async_client = AsyncMock()
+            mock_async_client.post = AsyncMock(return_value=mock_resp)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_async_client
+            )
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch(
+                "src.api.endpoints.admin.build_rag_headers",
+                return_value={"X-Internal-API-Key": "k"},
+            ):
+                client.post(
+                    UPLOAD_URL,
+                    files={"file": ("NG193.pdf", PDF_BYTES, "application/pdf")},
+                    data={"source_name": "NICE"},
+                    headers=admin_headers,
+                )
+
+            assert (
+                mock_async_client.post.call_args.kwargs["headers"]
+                == {"X-Internal-API-Key": "k"}
+            )
+
 
 # ---------------------------------------------------------------------------
 # RAG service error propagation

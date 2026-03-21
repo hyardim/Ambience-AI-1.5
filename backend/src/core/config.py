@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _INSECURE_DEFAULT_KEY = "TEST_SECRET_KEY_DO_NOT_USE_IN_PROD"
+_INSECURE_RAG_INTERNAL_DEFAULT = "dev-rag-internal-key"
 _DEMO_SEED_ALLOWED_ENVS = {"development", "test"}
 _PLACEHOLDER_MARKERS = ("change_me", "example", "test_secret")
 
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
         "postgresql://admin:CHANGE_ME_DB_PASSWORD@db_vector:5432/ambience_knowledge"
     )
     RAG_SERVICE_URL: str = "http://rag_service:8001"
+    RAG_INTERNAL_API_KEY: str = ""
     RAG_REQUEST_TIMEOUT_SECONDS: float = 120.0
     UPLOAD_DIR: str = "/app/uploads"
     APP_ENV: Literal["development", "test", "production"] = "development"
@@ -215,6 +217,14 @@ def validate_settings() -> None:
             raise RuntimeError(
                 "Invalid configuration: set demo seed passwords when "
                 "AUTH_BOOTSTRAP_DEMO_USERS is enabled. Missing: " + ", ".join(missing)
+            )
+
+    if _is_production_env():
+        rag_key = settings.RAG_INTERNAL_API_KEY.strip()
+        if not rag_key or rag_key == _INSECURE_RAG_INTERNAL_DEFAULT:
+            raise RuntimeError(
+                "Invalid configuration: set RAG_INTERNAL_API_KEY to a strong "
+                "non-default value in production"
             )
 
     # SSE uses an in-process event bus. Fail fast if multi-worker server

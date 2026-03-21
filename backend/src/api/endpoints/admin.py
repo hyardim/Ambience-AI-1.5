@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -19,6 +19,7 @@ from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services import admin_service
 from src.services.chat_uploads import validate_upload_content
+from src.services.rag_client import build_rag_headers
 
 router = APIRouter()
 
@@ -212,10 +213,15 @@ async def upload_guideline(
 
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
+            rag_headers = build_rag_headers()
+            request_kwargs: dict[str, Any] = {}
+            if rag_headers:
+                request_kwargs["headers"] = rag_headers
             response = await client.post(
                 f"{settings.RAG_SERVICE_URL}/ingest",
                 files={"file": (file.filename, file_bytes, "application/pdf")},
                 data={"source_name": source_name},
+                **request_kwargs,
             )
         except httpx.ConnectError as e:
             raise HTTPException(

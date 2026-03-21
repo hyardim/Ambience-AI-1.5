@@ -104,6 +104,11 @@ async def test_lifespan_runs_startup_steps(monkeypatch: pytest.MonkeyPatch) -> N
     calls: list[str] = []
     monkeypatch.setattr(
         startup,
+        "validate_internal_api_key_config",
+        lambda: calls.append("validate"),
+    )
+    monkeypatch.setattr(
+        startup,
         "get_embedding_dimension",
         lambda: calls.append("dim") or 384,
     )
@@ -117,7 +122,45 @@ async def test_lifespan_runs_startup_steps(monkeypatch: pytest.MonkeyPatch) -> N
     async with startup.lifespan(object()):  # type: ignore[arg-type]
         calls.append("inside")
 
-    assert calls == ["dim", "schema", "warmup", "inside"]
+    assert calls == ["validate", "dim", "schema", "warmup", "inside"]
+
+
+def test_validate_internal_api_key_config_production_requires_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("RAG_INTERNAL_API_KEY", "")
+
+    with pytest.raises(RuntimeError, match="RAG_INTERNAL_API_KEY"):
+        startup.validate_internal_api_key_config()
+
+
+def test_validate_internal_api_key_config_production_rejects_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("RAG_INTERNAL_API_KEY", "dev-rag-internal-key")
+
+    with pytest.raises(RuntimeError, match="RAG_INTERNAL_API_KEY"):
+        startup.validate_internal_api_key_config()
+
+
+def test_validate_internal_api_key_config_allows_custom_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("RAG_INTERNAL_API_KEY", "super-strong-internal-key")
+
+    startup.validate_internal_api_key_config()
+
+
+def test_validate_internal_api_key_config_is_noop_in_non_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.delenv("RAG_INTERNAL_API_KEY", raising=False)
+
+    startup.validate_internal_api_key_config()
 
 
 @pytest.mark.anyio

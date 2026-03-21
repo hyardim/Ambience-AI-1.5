@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -12,6 +13,22 @@ from ..generation.client import ProviderName
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+_INSECURE_RAG_INTERNAL_DEFAULT = "dev-rag-internal-key"
+
+
+def validate_internal_api_key_config() -> None:
+    """Fail fast in production if internal API key auth is not safely configured."""
+
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    if app_env != "production":
+        return
+
+    rag_key = os.getenv("RAG_INTERNAL_API_KEY", "").strip()
+    if not rag_key or rag_key == _INSECURE_RAG_INTERNAL_DEFAULT:
+        raise RuntimeError(
+            "Invalid configuration: set RAG_INTERNAL_API_KEY to a strong "
+            "non-default value in production"
+        )
 
 
 async def warmup_model(provider: ProviderName = "local") -> None:
@@ -65,6 +82,7 @@ async def warmup_ollama() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     del app
+    validate_internal_api_key_config()
     get_embedding_dimension()
     ensure_schema()
     await warmup_ollama()

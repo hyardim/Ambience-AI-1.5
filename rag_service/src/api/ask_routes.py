@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..generation.prompts import ACTIVE_PROMPT
 from ..retrieval.query import RetrievalError
@@ -11,6 +11,7 @@ from .ask_schemas import (
 )
 from .routes import _generate_answer_from_retrieval
 from .schemas import AnswerResponse
+from .security import require_internal_api_key
 
 router = APIRouter()
 
@@ -44,7 +45,11 @@ def _to_response(result: AnswerResponse, query: str) -> AskResponse:
     )
 
 
-@router.post("/ask", response_model=AskResponse)
+@router.post(
+    "/ask",
+    response_model=AskResponse,
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def ask_route(
     payload: AskRequest,
 ) -> AskResponse:

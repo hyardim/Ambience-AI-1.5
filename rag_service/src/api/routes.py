@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from ..config import (
@@ -37,6 +37,7 @@ from .schemas import (
     ReviseRequest,
     SearchResult,
 )
+from .security import require_internal_api_key
 from .services import (
     NO_EVIDENCE_RESPONSE,
     evidence_level,
@@ -66,7 +67,11 @@ def _no_evidence_response(stream: bool) -> AnswerResponse | StreamingResponse:
     )
 
 
-@router.post("/ingest", response_model=IngestResponse)
+@router.post(
+    "/ingest",
+    response_model=IngestResponse,
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def ingest_guideline(
     file: Annotated[UploadFile, File(...)],
     source_name: Annotated[str, Form(...)],
@@ -133,7 +138,11 @@ async def health_check() -> dict[str, Any]:
     }
 
 
-@router.post("/query", response_model=list[SearchResult])
+@router.post(
+    "/query",
+    response_model=list[SearchResult],
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def clinical_query(request: QueryRequest) -> list[SearchResult]:
     """Embed the query and return the top-k nearest chunks."""
     try:
@@ -151,7 +160,11 @@ async def clinical_query(request: QueryRequest) -> list[SearchResult]:
         ) from exc
 
 
-@router.post("/answer", response_model=AnswerResponse | RetryAcceptedResponse)
+@router.post(
+    "/answer",
+    response_model=AnswerResponse | RetryAcceptedResponse,
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def generate_clinical_answer(
     request: AnswerRequest,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -296,7 +309,11 @@ async def _generate_answer_from_retrieval(
         ) from exc
 
 
-@router.post("/revise", response_model=AnswerResponse | RetryAcceptedResponse)
+@router.post(
+    "/revise",
+    response_model=AnswerResponse | RetryAcceptedResponse,
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def revise_clinical_answer(
     request: ReviseRequest,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -405,7 +422,11 @@ async def revise_clinical_answer(
         ) from exc
 
 
-@router.get("/jobs/{job_id}", response_model=RetryJobResponse)
+@router.get(
+    "/jobs/{job_id}",
+    response_model=RetryJobResponse,
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def get_retry_job_status(job_id: str) -> RetryJobResponse:
     state = get_retry_job(job_id)
     if not state:
@@ -422,7 +443,10 @@ async def get_retry_job_status(job_id: str) -> RetryJobResponse:
     )
 
 
-@router.get("/docs/{doc_id}")
+@router.get(
+    "/docs/{doc_id}",
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def fetch_document(doc_id: str) -> FileResponse:
     """Stream the source PDF for a given doc_id (for citation deep links)."""
     source_path = get_source_path_for_doc(doc_id)

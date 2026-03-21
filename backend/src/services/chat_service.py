@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import httpx
 from fastapi import HTTPException, UploadFile
@@ -37,6 +37,7 @@ from src.services.chat_uploads import (
     upload_chat_file,
     validate_upload_extension,
 )
+from src.services.rag_client import build_rag_headers
 from src.services.rag_context import (
     FileContextBuildResult,
     build_conversation_history_from_messages,
@@ -404,10 +405,15 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             try:
                 if settings.INLINE_AI_TASKS:
                     try:
+                        rag_headers = build_rag_headers()
+                        request_kwargs_inline: dict[str, Any] = {}
+                        if rag_headers:
+                            request_kwargs_inline["headers"] = rag_headers
                         rag_response = httpx.post(
                             f"{RAG_SERVICE_URL}/answer",
                             json=rag_payload,
                             timeout=RAG_REQUEST_TIMEOUT_SECONDS,
+                            **request_kwargs_inline,
                         )
                         rag_response.raise_for_status()
                         rag_json = rag_response.json()
@@ -416,9 +422,14 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                         async with httpx.AsyncClient(
                             timeout=RAG_REQUEST_TIMEOUT_SECONDS
                         ) as client:
+                            rag_headers = build_rag_headers()
+                            request_kwargs_fallback: dict[str, Any] = {}
+                            if rag_headers:
+                                request_kwargs_fallback["headers"] = rag_headers
                             rag_response = await client.post(
                                 f"{RAG_SERVICE_URL}/answer",
                                 json=rag_payload,
+                                **request_kwargs_fallback,
                             )
                             rag_response.raise_for_status()
                             rag_json = rag_response.json()
@@ -429,10 +440,15 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                     async with httpx.AsyncClient(
                         timeout=RAG_REQUEST_TIMEOUT_SECONDS
                     ) as client:
+                        rag_headers = build_rag_headers()
+                        request_kwargs_stream: dict[str, Any] = {}
+                        if rag_headers:
+                            request_kwargs_stream["headers"] = rag_headers
                         async with client.stream(
                             "POST",
                             f"{RAG_SERVICE_URL}/answer",
                             json=rag_payload,
+                            **request_kwargs_stream,
                         ) as rag_response:
                             rag_response.raise_for_status()
                             async for line in rag_response.aiter_lines():

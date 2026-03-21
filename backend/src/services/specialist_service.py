@@ -18,7 +18,6 @@ from src.services.specialist_review import (
     _mark_last_ai_message,
     _mark_message,
     _regenerate_ai_response,
-    _regenerate_ai_response_task,
     review,
     review_message,
     send_message,
@@ -43,5 +42,4 @@ __all__ = [
     "_mark_last_ai_message",
     "_mark_message",
     "_regenerate_ai_response",
-    "_regenerate_ai_response_task",
 ]

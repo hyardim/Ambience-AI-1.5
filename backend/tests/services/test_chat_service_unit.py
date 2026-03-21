@@ -300,6 +300,171 @@ async def test_async_generate_ai_response_falls_back_to_async_client_post(
 
 
 @pytest.mark.asyncio
+async def test_async_generate_ai_response_fallback_forwards_internal_headers(
+    monkeypatch, db_session
+):
+    user = _user(db_session)
+    chat = _chat(db_session, user, status=ChatStatus.SUBMITTED)
+    db_session.add(Message(chat_id=chat.id, content="Question", sender="user"))
+    db_session.commit()
+
+    monkeypatch.setattr(chat_service, "AsyncSessionLocal", TestingAsyncSessionLocal)
+    monkeypatch.setattr(chat_service.chat_event_bus, "publish", AsyncMock())
+    monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", AsyncMock())
+    monkeypatch.setattr(chat_service.cache, "delete_pattern", AsyncMock())
+    monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
+    monkeypatch.setattr(chat_service.audit_repository, "async_log", AsyncMock())
+    monkeypatch.setattr(chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+    monkeypatch.setattr(
+        chat_service.httpx,
+        "post",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("sync fail")),
+    )
+
+    class FakeAsyncResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"answer": "Async fallback", "citations": []}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, json, headers=None):
+            assert headers == {"X-Internal-API-Key": "k"}
+            return FakeAsyncResponse()
+
+    monkeypatch.setattr(chat_service.httpx, "AsyncClient", FakeAsyncClient)
+
+    await chat_service._async_generate_ai_response(chat.id, user.id, "Question")
+
+
+@pytest.mark.asyncio
+async def test_async_generate_ai_response_streaming_forwards_internal_headers(
+    monkeypatch,
+):
+    monkeypatch.setattr(chat_service.settings, "INLINE_AI_TASKS", False)
+    publish = AsyncMock()
+    close_chat = AsyncMock()
+    async_update = AsyncMock()
+    placeholder = SimpleNamespace(id=77)
+    fake_chat = SimpleNamespace(
+        id=5,
+        user_id=9,
+        specialty="neurology",
+        severity=None,
+        patient_context=None,
+        files=[],
+        specialist_id=None,
+    )
+
+    class FakeResult:
+        def scalars(self):
+            return []
+
+    class FakeDB:
+        bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def execute(self, stmt):
+            return FakeResult()
+
+        async def rollback(self):
+            return None
+
+    class FakeStreamResponse:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        def raise_for_status(self):
+            return None
+
+        async def aiter_lines(self):
+            yield '{"type":"done","answer":"Hello world","citations_used":[]}'
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        def stream(self, method, url, json, headers=None):
+            assert headers == {"X-Internal-API-Key": "k"}
+            return FakeStreamResponse()
+
+    monkeypatch.setattr(chat_service, "AsyncSessionLocal", lambda: FakeDB())
+    monkeypatch.setattr(
+        chat_service.chat_repository, "async_get", AsyncMock(return_value=fake_chat)
+    )
+    monkeypatch.setattr(
+        chat_service.message_repository,
+        "async_create",
+        AsyncMock(return_value=placeholder),
+    )
+    monkeypatch.setattr(chat_service.message_repository, "async_update", async_update)
+    monkeypatch.setattr(chat_service.audit_repository, "async_log", AsyncMock())
+    monkeypatch.setattr(chat_service.cache, "delete_pattern", AsyncMock())
+    monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
+    monkeypatch.setattr(chat_service.chat_event_bus, "publish", publish)
+    monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", close_chat)
+    monkeypatch.setattr(chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+    monkeypatch.setattr(chat_service.httpx, "AsyncClient", FakeAsyncClient)
+
+    await chat_service._async_generate_ai_response(5, 9, "Question")
+
+
+@pytest.mark.asyncio
+async def test_async_generate_ai_response_inline_forwards_internal_headers(
+    monkeypatch, db_session
+):
+    monkeypatch.setattr(chat_service.settings, "INLINE_AI_TASKS", True)
+    user = _user(db_session)
+    chat = _chat(db_session, user, status=ChatStatus.SUBMITTED)
+    db_session.add(Message(chat_id=chat.id, content="Question", sender="user"))
+    db_session.commit()
+
+    monkeypatch.setattr(chat_service, "AsyncSessionLocal", TestingAsyncSessionLocal)
+    monkeypatch.setattr(chat_service.chat_event_bus, "publish", AsyncMock())
+    monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", AsyncMock())
+    monkeypatch.setattr(chat_service.cache, "delete_pattern", AsyncMock())
+    monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
+    monkeypatch.setattr(chat_service.audit_repository, "async_log", AsyncMock())
+    monkeypatch.setattr(chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {"answer": "AI answer", "citations_used": []}
+
+    def fake_post(url, json, timeout, headers=None):
+        assert headers == {"X-Internal-API-Key": "k"}
+        return response
+
+    monkeypatch.setattr(chat_service.httpx, "post", fake_post)
+
+    await chat_service._async_generate_ai_response(chat.id, user.id, "Question")
+
+
+@pytest.mark.asyncio
 async def test_async_generate_ai_response_publishes_error_on_failure(
     monkeypatch, db_session
 ):

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException
@@ -11,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from src.core.config import settings
 from src.db.models import Chat, ChatStatus, Message, NotificationType, User
-from src.db.session import SessionLocal
 from src.repositories import (
     audit_repository,
     chat_repository,
@@ -29,6 +27,7 @@ from src.services.chat_service import (
     _select_rag_citations,
 )
 from src.services.notification_service import invalidate_notification_caches
+from src.services.rag_client import build_rag_headers
 from src.services.rag_context import (
     FileContextBuildResult,
     build_file_context,
@@ -40,7 +39,6 @@ from src.services.specialist_shared import (
     _build_manual_citations,
 )
 from src.utils.cache import cache, cache_keys
-from src.utils.sse import SSEEvent, chat_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -447,10 +445,15 @@ def _do_revise(
     }
 
     try:
+        rag_headers = build_rag_headers()
+        request_kwargs: dict[str, Any] = {}
+        if rag_headers:
+            request_kwargs["headers"] = rag_headers
         rag_response = httpx.post(
             f"{RAG_SERVICE_URL}/revise",
             json=rag_payload,
             timeout=RAG_REQUEST_TIMEOUT_SECONDS,
+            **request_kwargs,
         )
         rag_response.raise_for_status()
         rag_json = rag_response.json()
@@ -501,163 +504,3 @@ def _do_revise(
             )
     except Exception:
         pass
-
-
-def _regenerate_ai_response_task(
-    placeholder_id: int,
-    chat_id: int,
-    original_query: str,
-    previous_answer: str,
-    feedback: str,
-    specialty: str | None,
-    severity: str | None,
-) -> None:
-    db = SessionLocal()
-    try:
-        placeholder = db.query(Message).filter(Message.id == placeholder_id).first()
-        if not placeholder:
-            logger.warning(
-                "Placeholder message %s not found — aborting revision", placeholder_id
-            )
-            return
-
-        chat = db.query(Chat).filter(Chat.id == chat_id).first()
-        patient_context = None
-        file_context = None
-        file_context_truncated = False
-        if chat:
-            patient_context = _build_patient_context(
-                chat,
-                message_repository.list_for_chat(db, chat.id),
-            )
-            file_context_result = _build_file_context_result(chat)
-            file_context = file_context_result.file_context
-            file_context_truncated = file_context_result.was_truncated
-
-        chat_event_bus.publish_threadsafe(
-            chat_id,
-            SSEEvent(
-                event="stream_start",
-                data={"chat_id": chat_id, "message_id": placeholder_id},
-            ),
-        )
-
-        rag_payload = {
-            "original_query": original_query,
-            "previous_answer": previous_answer,
-            "feedback": feedback,
-            "top_k": CHAT_RAG_TOP_K,
-            "stream": True,
-            "specialty": specialty,
-            "severity": severity,
-        }
-        if patient_context:
-            rag_payload["patient_context"] = patient_context
-        if file_context:
-            rag_payload["file_context"] = file_context
-        rag_payload["file_context_truncated"] = file_context_truncated
-
-        accumulated = ""
-        citations: list = []
-
-        try:
-            with httpx.Client(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
-                with client.stream(
-                    "POST",
-                    f"{RAG_SERVICE_URL}/revise",
-                    json=rag_payload,
-                ) as response:
-                    response.raise_for_status()
-                    for line in response.iter_lines():
-                        if not line.strip():
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-
-                        if chunk.get("type") == "chunk":
-                            accumulated += chunk.get("delta", "")
-                            chat_event_bus.publish_threadsafe(
-                                chat_id,
-                                SSEEvent(
-                                    event="content",
-                                    data={
-                                        "chat_id": chat_id,
-                                        "message_id": placeholder_id,
-                                        "content": accumulated,
-                                    },
-                                ),
-                            )
-                        elif chunk.get("type") == "done":
-                            accumulated = chunk.get("answer", accumulated)
-                            citations = _select_rag_citations(chunk) or []
-                        elif chunk.get("type") == "error":
-                            raise RuntimeError(
-                                chunk.get("error", "RAG streaming error")
-                            )
-        except Exception as exc:
-            logger.warning("RAG streaming /revise failed for chat %s: %s", chat_id, exc)
-            accumulated = (
-                "The clinical knowledge service is temporarily unavailable for revision. "
-                "Please try again shortly."
-            )
-            citations = []
-
-        placeholder.content = accumulated
-        placeholder.citations = citations
-        placeholder.is_generating = False
-        db.commit()
-        db.refresh(placeholder)
-
-        if chat:
-            _invalidate_chat_views(chat, chat.specialist_id)
-        else:
-            _invalidate_admin_chat_caches(chat_id)
-            _invalidate_admin_stats_cache()
-
-        chat_event_bus.publish_threadsafe(
-            chat_id,
-            SSEEvent(
-                event="content",
-                data={
-                    "chat_id": chat_id,
-                    "message_id": placeholder_id,
-                    "content": accumulated,
-                },
-            ),
-        )
-        chat_event_bus.publish_threadsafe(
-            chat_id,
-            SSEEvent(
-                event="complete",
-                data={
-                    "chat_id": chat_id,
-                    "message_id": placeholder_id,
-                    "content": accumulated,
-                    "citations": citations,
-                    "file_context_truncated": file_context_truncated,
-                },
-            ),
-        )
-
-        try:
-            if chat and chat.specialist_id is not None:
-                audit_repository.log(
-                    db,
-                    user_id=chat.specialist_id,
-                    action="RAG_REVISE" if accumulated else "RAG_ERROR",
-                    details=f"chunks_used={len(citations)}",
-                )
-        except Exception:
-            pass
-    except Exception:
-        logger.exception(
-            "Background revision thread failed for chat %s (placeholder %s)",
-            chat_id,
-            placeholder_id,
-        )
-        db.rollback()
-    finally:
-        chat_event_bus.close_chat_threadsafe(chat_id)
-        db.close()

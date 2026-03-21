@@ -1,10 +1,11 @@
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.core.config import settings
 from src.core.security import get_current_user
+from src.services.rag_client import build_rag_headers
 
 router = APIRouter()
 
@@ -16,8 +17,14 @@ async def search_clinical_guidelines(
     current_user=Depends(get_current_user),
 ):
     """Proxy evidence retrieval through the authenticated backend."""
-    async with httpx.AsyncClient(timeout=settings.RAG_REQUEST_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(
+        timeout=settings.RAG_REQUEST_TIMEOUT_SECONDS
+    ) as client:
         try:
+            rag_headers = build_rag_headers()
+            request_kwargs: dict[str, Any] = {}
+            if rag_headers:
+                request_kwargs["headers"] = rag_headers
             response = await client.post(
                 f"{settings.RAG_SERVICE_URL}/query",
                 json={
@@ -25,6 +32,7 @@ async def search_clinical_guidelines(
                     "top_k": 3,
                     **({"specialty": specialty} if specialty else {}),
                 },
+                **request_kwargs,
             )
         except httpx.ConnectError as exc:
             raise HTTPException(
