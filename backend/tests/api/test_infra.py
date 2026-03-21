@@ -656,7 +656,7 @@ def test_get_redis_logs_and_returns_none_on_failure(monkeypatch, caplog):
     with caplog.at_level("WARNING"):
         assert rate_limit._get_redis() is None
 
-    assert "rate limiting disabled" in caplog.text
+    assert "falling back to in-process limits" in caplog.text
 
 
 @pytest.mark.asyncio

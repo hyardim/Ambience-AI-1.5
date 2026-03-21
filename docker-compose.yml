@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -44,7 +44,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-ambience_knowledge}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
     networks:
@@ -70,7 +70,7 @@ services:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - RAG_SERVICE_URL=http://rag_service:8001
-      - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:-dev-rag-internal-key}
+      - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:?RAG_INTERNAL_API_KEY must be set}
       - RAG_REQUEST_TIMEOUT_SECONDS=120
       - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:3000}
       - NEW_USERS_REQUIRE_EMAIL_VERIFICATION=${NEW_USERS_REQUIRE_EMAIL_VERIFICATION:-true}
@@ -93,7 +93,7 @@ services:
       - FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS=${FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS:-5}
       - PASSWORD_RESET_EMAIL_LOG_ONLY=${PASSWORD_RESET_EMAIL_LOG_ONLY:-false}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db_vector:
         condition: service_healthy
@@ -118,7 +118,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       - ./rag_service/src:/app/src
       - ./rag_service/data:/app/data
@@ -127,7 +127,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - REDIS_URL=redis://redis:6379/0
-      - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:-dev-rag-internal-key}
+      - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:?RAG_INTERNAL_API_KEY must be set}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=thewindmom/llama3-med42-8b
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
@@ -213,7 +213,7 @@ services:
     container_name: ambience_frontend
     restart: unless-stopped
     ports:
-      - "3000:5173"
+      - "127.0.0.1:3000:5173"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/vite.config.ts:/app/vite.config.ts

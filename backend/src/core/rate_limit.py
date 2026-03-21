@@ -19,6 +19,8 @@ _redis_client = None
 _redis_init_attempted = False
 _local_windows: dict[str, list[float]] = {}
 _local_windows_lock = threading.Lock()
+_local_cleanup_counter = 0
+_LOCAL_CLEANUP_INTERVAL = 256
 
 
 def _request_subject(request: Request) -> str:
@@ -57,17 +59,32 @@ def _get_redis():
         _redis_client.ping()
     except Exception as exc:
         logger.warning(
-            "Rate limiter: Redis unavailable (%s) — rate limiting disabled", exc
+            "Rate limiter: Redis unavailable (%s) — falling back to in-process limits",
+            exc,
         )
         _redis_client = None
     return _redis_client
 
 
+def _cleanup_local_windows(cutoff: float) -> None:
+    """Prune stale in-process rate-limit buckets to avoid unbounded memory growth."""
+    stale_keys = [
+        key for key, timestamps in _local_windows.items() if not timestamps or timestamps[-1] <= cutoff
+    ]
+    for key in stale_keys:
+        _local_windows.pop(key, None)
+
+
 def _enforce_inprocess_limit(bucket_key: str, window: int) -> None:
     """Best-effort local fallback limiter used when Redis is unavailable."""
+    global _local_cleanup_counter
     now = time.monotonic()
     cutoff = now - window
     with _local_windows_lock:
+        _local_cleanup_counter += 1
+        if _local_cleanup_counter % _LOCAL_CLEANUP_INTERVAL == 0:
+            _cleanup_local_windows(cutoff)
+
         window_hits = _local_windows.setdefault(bucket_key, [])
         window_hits[:] = [ts for ts in window_hits if ts > cutoff]
         if len(window_hits) >= settings.RATE_LIMIT_PER_MINUTE:

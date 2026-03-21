@@ -154,13 +154,14 @@ def test_validate_internal_api_key_config_allows_custom_key(
     startup.validate_internal_api_key_config()
 
 
-def test_validate_internal_api_key_config_is_noop_in_non_production(
+def test_validate_internal_api_key_config_non_test_requires_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.delenv("RAG_INTERNAL_API_KEY", raising=False)
 
-    startup.validate_internal_api_key_config()
+    with pytest.raises(RuntimeError, match="RAG_INTERNAL_API_KEY"):
+        startup.validate_internal_api_key_config()
 
 
 @pytest.mark.anyio

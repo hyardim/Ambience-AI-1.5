@@ -11,7 +11,7 @@ services:
     image: redis:7-alpine
     container_name: ambience_rag_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     logging: *default-logging
     networks:
       - ambience_rag_net
@@ -27,7 +27,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
     networks:
@@ -59,7 +59,7 @@ services:
       LLM_FALLBACK_ALERT_WEBHOOK_URL: ${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
       LLM_FALLBACK_ALERT_TIMEOUT_SECONDS: ${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts

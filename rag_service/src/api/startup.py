@@ -17,17 +17,17 @@ _INSECURE_RAG_INTERNAL_DEFAULT = "dev-rag-internal-key"
 
 
 def validate_internal_api_key_config() -> None:
-    """Fail fast in production if internal API key auth is not safely configured."""
+    """Fail fast outside tests if internal API key auth is not safely configured."""
 
     app_env = os.getenv("APP_ENV", "development").strip().lower()
-    if app_env != "production":
+    if app_env == "test":
         return
 
     rag_key = os.getenv("RAG_INTERNAL_API_KEY", "").strip()
     if not rag_key or rag_key == _INSECURE_RAG_INTERNAL_DEFAULT:
         raise RuntimeError(
             "Invalid configuration: set RAG_INTERNAL_API_KEY to a strong "
-            "non-default value in production"
+            "non-default value"
         )
 
 

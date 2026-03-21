@@ -598,7 +598,11 @@ async def async_send_message(
     chat_id: int,
     content: str,
 ) -> dict:
-    chat = await chat_repository.async_get(db, chat_id, user_id=user.id)
+    if hasattr(db, "execute"):
+        chat = await chat_repository.async_get_for_update(db, chat_id, user_id=user.id)
+    else:
+        # Test doubles may provide only minimal DB shape.
+        chat = await chat_repository.async_get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 

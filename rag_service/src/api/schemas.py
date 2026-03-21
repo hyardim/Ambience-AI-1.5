@@ -9,7 +9,7 @@ from ..jobs.retry import RetryJobStatus
 
 
 class QueryRequest(BaseModel):
-    query: str = Field(min_length=1)
+    query: str = Field(min_length=1, max_length=5000)
     top_k: int = Field(default=5, ge=1, le=20)
     specialty: str | None = None
     severity: str | None = None
