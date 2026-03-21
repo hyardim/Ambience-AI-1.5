@@ -284,4 +284,55 @@ describe('subscribeToChatStream', () => {
     expect(onError).toHaveBeenCalledWith(1, 'LLM timeout');
     expect(es.closed).toBe(true);
   });
+
+  it('does not fire onConnectionError after a handled SSE error event', () => {
+    const onError = vi.fn();
+    const onConnectionError = vi.fn();
+    subscribeToChatStream(3, { onError, onConnectionError });
+
+    const es = MockEventSource.instances[0];
+    es._emit('error', { message_id: 55, error: 'boom' });
+    es._triggerError();
+
+    expect(onError).toHaveBeenCalledWith(55, 'boom');
+    expect(onConnectionError).not.toHaveBeenCalled();
+  });
+
+  it('ignores open and stream events after cleanup closes the source', () => {
+    const onOpen = vi.fn();
+    const onStreamStart = vi.fn();
+    const onContent = vi.fn();
+    const onComplete = vi.fn();
+
+    const cleanup = subscribeToChatStream(8, {
+      onOpen,
+      onStreamStart,
+      onContent,
+      onComplete,
+    });
+
+    const es = MockEventSource.instances[0];
+    cleanup();
+
+    es._triggerOpen();
+    es._emit('stream_start', { message_id: 1 });
+    es._emit('content', { message_id: 1, content: 'x' });
+    es._emit('complete', { message_id: 1, content: 'y', citations: [] });
+
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onStreamStart).not.toHaveBeenCalled();
+    expect(onContent).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('ignores native onerror callback after source is manually closed', () => {
+    const onConnectionError = vi.fn();
+    const cleanup = subscribeToChatStream(9, { onConnectionError });
+
+    const es = MockEventSource.instances[0];
+    cleanup();
+    es._triggerError();
+
+    expect(onConnectionError).not.toHaveBeenCalled();
+  });
 });

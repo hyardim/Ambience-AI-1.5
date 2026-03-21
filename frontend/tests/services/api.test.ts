@@ -152,6 +152,25 @@ describe('API service', () => {
       await expect(getProfile()).resolves.toMatchObject({ email: 'gp@example.com' });
     });
 
+    it('adds bearer auth header when access token exists', async () => {
+      localStorage.setItem('access_token', 'jwt-abc');
+      server.use(
+        http.get('/auth/me', ({ request }) => {
+          expect(request.headers.get('authorization')).toBe('Bearer jwt-abc');
+          return HttpResponse.json({
+            id: 1,
+            email: 'gp@example.com',
+            full_name: 'Dr GP',
+            role: 'gp',
+            specialty: null,
+            is_active: true,
+          });
+        }),
+      );
+
+      await expect(getProfile()).resolves.toMatchObject({ email: 'gp@example.com' });
+    });
+
     it('surfaces plain-text errors and redirects on 401 responses', async () => {
       server.use(
         http.get('/auth/me', () => new HttpResponse('Plain failure', { status: 500 })),
@@ -576,12 +595,12 @@ describe('API service', () => {
       expect(onStreamStart).toHaveBeenCalledWith(7);
       expect(onContent).toHaveBeenCalledWith(7, 'partial');
       expect(onComplete).toHaveBeenCalledWith(7, 'final', [{ title: 'A' }]);
-      expect(onError).toHaveBeenCalledWith(7, 'boom');
-      expect(onConnectionError).toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      expect(onConnectionError).not.toHaveBeenCalled();
       expect(source.close).toHaveBeenCalled();
     });
 
-    it('falls back to empty payload values for stream content, completion, and errors', () => {
+    it('falls back to empty payload values for stream content and completion', () => {
       const onContent = vi.fn();
       const onComplete = vi.fn();
       const onError = vi.fn();
@@ -599,7 +618,7 @@ describe('API service', () => {
 
       expect(onContent).toHaveBeenCalledWith(9, '');
       expect(onComplete).toHaveBeenCalledWith(9, '', null);
-      expect(onError).toHaveBeenCalledWith(9, 'Unknown error');
+      expect(onError).not.toHaveBeenCalled();
     });
   });
 

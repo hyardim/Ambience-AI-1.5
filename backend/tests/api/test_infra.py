@@ -873,7 +873,10 @@ def test_admin_guideline_upload_uses_sanitised_error_detail(
         files={"file": ("guide.pdf", b"%PDF-1.4\n", "application/pdf")},
     )
     assert response.status_code == 500
-    assert response.json()["detail"] == "Guideline ingestion failed. Check RAG service logs for details."
+    assert (
+        response.json()["detail"]
+        == "Guideline ingestion failed. Check RAG service logs for details."
+    )
 
 
 def test_admin_guideline_upload_rejects_non_pdf_signature(client, admin_headers):

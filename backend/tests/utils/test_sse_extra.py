@@ -141,3 +141,34 @@ async def test_subscribe_does_not_replay_stale_events_after_stream_terminal():
     q = await bus.subscribe(3)
 
     assert q.empty()
+
+
+@pytest.mark.asyncio
+async def test_close_chat_clears_replay_state():
+    bus = _ChatEventBus()
+    await bus.publish(21, SSEEvent(event="stream_start", data={"message_id": 11}))
+    await bus.publish(21, SSEEvent(event="content", data={"content": "hello"}))
+
+    assert 21 in bus._stream_start
+    assert 21 in bus._last_content
+
+    await bus.close_chat(21)
+
+    assert 21 not in bus._stream_start
+    assert 21 not in bus._last_content
+    assert 21 not in bus._active_streams
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_clears_terminal_replay_state_when_no_subscribers():
+    bus = _ChatEventBus()
+    q = await bus.subscribe(22)
+    await bus.publish(22, SSEEvent(event="stream_start", data={"message_id": 11}))
+    await bus.publish(22, SSEEvent(event="content", data={"content": "hello"}))
+    await bus.publish(22, SSEEvent(event="complete", data={"content": "final"}))
+
+    await bus.unsubscribe(22, q)
+
+    assert 22 not in bus._stream_start
+    assert 22 not in bus._last_content
+    assert 22 not in bus._active_streams

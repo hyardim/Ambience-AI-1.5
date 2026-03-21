@@ -171,10 +171,9 @@ class TestGuidelinesUploadSuccess:
                     headers=admin_headers,
                 )
 
-            assert (
-                mock_async_client.post.call_args.kwargs["headers"]
-                == {"X-Internal-API-Key": "k"}
-            )
+            assert mock_async_client.post.call_args.kwargs["headers"] == {
+                "X-Internal-API-Key": "k"
+            }
 
 
 # ---------------------------------------------------------------------------

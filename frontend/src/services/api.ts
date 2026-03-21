@@ -46,7 +46,9 @@ function clearStoredSession(): void {
 }
 
 function authHeaders(): Record<string, string> {
-  return {};
+  const token = localStorage.getItem('access_token');
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function refreshSessionRequest(): Promise<boolean> {
@@ -640,8 +642,17 @@ export function subscribeToChatStream(
   const base = import.meta.env.VITE_API_URL || '';
   const streamUrl = `${base}/chats/${chatId}/stream`;
   const source = new EventSource(streamUrl, { withCredentials: true });
+  let closed = false;
+  let handledError = false;
+
+  const closeSource = () => {
+    if (closed) return;
+    closed = true;
+    source.close();
+  };
 
   source.onopen = () => {
+    if (closed) return;
     handlers.onOpen?.();
   };
 
@@ -654,6 +665,7 @@ export function subscribeToChatStream(
   };
 
   source.addEventListener('stream_start', (event) => {
+    if (closed) return;
     const payload = parsePayload<{ message_id?: number }>(event as MessageEvent<string>);
     if (typeof payload?.message_id === 'number') {
       handlers.onStreamStart?.(payload.message_id);
@@ -661,6 +673,7 @@ export function subscribeToChatStream(
   });
 
   source.addEventListener('content', (event) => {
+    if (closed) return;
     const payload = parsePayload<{ message_id?: number; content?: string }>(
       event as MessageEvent<string>,
     );
@@ -670,6 +683,7 @@ export function subscribeToChatStream(
   });
 
   source.addEventListener('complete', (event) => {
+    if (closed) return;
     const payload = parsePayload<{
       message_id?: number;
       content?: string;
@@ -685,22 +699,26 @@ export function subscribeToChatStream(
         payload.content ?? '',
         payload.citations ?? null,
       );
-      source.close();
+      closeSource();
     }
   });
 
   source.addEventListener('error', (event) => {
+    if (handledError || closed) return;
+    handledError = true;
     const payload = parsePayload<{ message_id?: number; error?: string }>(
       event as MessageEvent<string>,
     );
     handlers.onError?.(payload?.message_id ?? chatId, payload?.error ?? 'Unknown error');
-    source.close();
+    closeSource();
   });
 
   source.onerror = () => {
+    if (handledError || closed) return;
+    handledError = true;
     handlers.onConnectionError?.();
-    source.close();
+    closeSource();
   };
 
-  return () => source.close();
+  return closeSource;
 }

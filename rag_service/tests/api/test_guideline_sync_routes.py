@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import src.main as main
@@ -72,6 +73,34 @@ async def test_guideline_sync_status_route(monkeypatch: pytest.MonkeyPatch) -> N
     assert status.running is True
     assert status.enabled is True
     assert status.last_result["summary"]["discovered_count"] == 1
+
+
+@pytest.mark.anyio
+async def test_trigger_guideline_sync_sanitizes_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingScheduler:
+        async def trigger_once(self, **kwargs: object) -> dict[str, object]:
+            del kwargs
+            raise RuntimeError("db credentials leaked")
+
+        def status(self) -> dict[str, object]:
+            return {
+                "running": False,
+                "enabled": True,
+                "last_started_at": None,
+                "last_finished_at": None,
+                "last_error": None,
+                "last_result": None,
+            }
+
+    monkeypatch.setattr(main, "sync_scheduler", FailingScheduler())
+
+    with pytest.raises(HTTPException) as exc:
+        await main.trigger_guideline_sync(main.GuidelineSyncTriggerRequest())
+
+    assert exc.value.status_code == 500
+    assert exc.value.detail == "Guideline sync failed"
 
 
 @pytest.mark.anyio

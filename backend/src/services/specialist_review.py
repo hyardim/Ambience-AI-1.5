@@ -503,4 +503,7 @@ def _do_revise(
                 details=f"chunks_used={len(citations)}",
             )
     except Exception:
-        pass
+        logger.exception(
+            "Failed to write specialist revision audit log for chat %s",
+            placeholder.chat_id,
+        )

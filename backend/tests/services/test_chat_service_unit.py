@@ -314,7 +314,9 @@ async def test_async_generate_ai_response_fallback_forwards_internal_headers(
     monkeypatch.setattr(chat_service.cache, "delete_pattern", AsyncMock())
     monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
     monkeypatch.setattr(chat_service.audit_repository, "async_log", AsyncMock())
-    monkeypatch.setattr(chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+    monkeypatch.setattr(
+        chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
+    )
     monkeypatch.setattr(
         chat_service.httpx,
         "post",
@@ -427,7 +429,9 @@ async def test_async_generate_ai_response_streaming_forwards_internal_headers(
     monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
     monkeypatch.setattr(chat_service.chat_event_bus, "publish", publish)
     monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", close_chat)
-    monkeypatch.setattr(chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+    monkeypatch.setattr(
+        chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
+    )
     monkeypatch.setattr(chat_service.httpx, "AsyncClient", FakeAsyncClient)
 
     await chat_service._async_generate_ai_response(5, 9, "Question")
@@ -449,7 +453,9 @@ async def test_async_generate_ai_response_inline_forwards_internal_headers(
     monkeypatch.setattr(chat_service.cache, "delete_pattern", AsyncMock())
     monkeypatch.setattr(chat_service.cache, "delete", AsyncMock())
     monkeypatch.setattr(chat_service.audit_repository, "async_log", AsyncMock())
-    monkeypatch.setattr(chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+    monkeypatch.setattr(
+        chat_service, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
+    )
 
     response = MagicMock()
     response.raise_for_status = MagicMock()

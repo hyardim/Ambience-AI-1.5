@@ -712,7 +712,9 @@ def test_do_revise_forwards_internal_headers(monkeypatch):
         assert headers == {"X-Internal-API-Key": "k"}
         return response
 
-    monkeypatch.setattr(specialist_review, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
+    monkeypatch.setattr(
+        specialist_review, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
+    )
     monkeypatch.setattr(specialist_review.httpx, "post", fake_post)
     monkeypatch.setattr(
         specialist_review.audit_repository,

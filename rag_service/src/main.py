@@ -1,5 +1,6 @@
 """Backward-compatible entrypoint for the full clinical RAG service."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -42,6 +43,8 @@ from .generation.client import ModelGenerationError, generate_answer
 from .ingestion.web_scheduler import GuidelineSyncScheduler
 from .ingestion.web_sync import GuidelineWebSync
 from .jobs.retry import RetryJobStatus, create_retry_job, get_retry_job
+
+logger = logging.getLogger(__name__)
 
 
 class GuidelineSyncTriggerRequest(BaseModel):
@@ -110,7 +113,8 @@ async def trigger_guideline_sync(
         )
         return {"status": "ok", **result}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("guideline.sync.trigger_failed")
+        raise HTTPException(status_code=500, detail="Guideline sync failed") from exc
 
 
 @app.get(

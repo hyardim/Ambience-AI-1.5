@@ -32,6 +32,31 @@ Main endpoints:
 - rag service: `http://localhost:8001`
 - frontend: `http://localhost:3000`
 
+## Nginx in this repo
+
+`nginx/` contains a production reverse-proxy config used by the optional
+`nginx` Docker Compose service.
+
+What it does:
+
+- terminates TLS on `:443` using certs mounted from `nginx/certs/`
+- redirects `http` (`:80`) to `https`
+- proxies frontend traffic (`/`) to the frontend container
+- proxies backend API traffic (`/api/`) to the backend container
+- disables buffering on `/api/` for SSE chat streaming reliability
+
+How it is used:
+
+- the `nginx` service is behind the Compose `production` profile
+- it is not started by default during local development
+- local dev usually accesses `frontend:3000` and `backend:8000` directly
+
+Start with nginx enabled:
+
+```bash
+docker compose --profile production up --build
+```
+
 ## Model paths
 
 The project supports:

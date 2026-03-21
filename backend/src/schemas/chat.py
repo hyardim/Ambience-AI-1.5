@@ -130,7 +130,5 @@ class AssignRequest(BaseModel):
 class ReviewRequest(BaseModel):
     action: ReviewAction
     feedback: Optional[str] = Field(default=None, max_length=10_000)
-    replacement_content: Optional[str] = Field(
-        default=None, max_length=50_000
-    )
+    replacement_content: Optional[str] = Field(default=None, max_length=50_000)
     replacement_sources: Optional[List[str]] = None

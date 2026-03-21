@@ -275,7 +275,9 @@ def test_chat_lifecycle_request_changes_triggers_revision(
     detail = client.get(f"/chats/{chat_id}", headers=gp_headers)
     assert detail.status_code == 200
     ai_messages = [m for m in detail.json()["messages"] if m["sender"] == "ai"]
-    assert any("Revised based on specialist feedback" in m["content"] for m in ai_messages)
+    assert any(
+        "Revised based on specialist feedback" in m["content"] for m in ai_messages
+    )
     assert any(m.get("review_status") == "rejected" for m in ai_messages)
 
 
@@ -338,7 +340,9 @@ def test_specialist_per_message_approve(
     assert reviewed.status_code == 200
 
     detail = client.get(f"/chats/{chat_id}", headers=gp_headers).json()
-    reviewed_message = next(m for m in detail["messages"] if m["id"] == ai_message["id"])
+    reviewed_message = next(
+        m for m in detail["messages"] if m["id"] == ai_message["id"]
+    )
     assert reviewed_message["review_status"] == "approved"
 
 
@@ -517,7 +521,10 @@ def test_admin_deactivate_user_prevents_login(
     client.cookies.clear()
     login = client.post(
         "/auth/login",
-        data={"username": gp_user_payload["email"], "password": gp_user_payload["password"]},
+        data={
+            "username": gp_user_payload["email"],
+            "password": gp_user_payload["password"],
+        },
     )
     assert login.status_code == 400
     assert "deactivated" in login.json()["detail"].lower()

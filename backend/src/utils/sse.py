@@ -5,8 +5,8 @@ Events are keyed by chat_id so every SSE client watching a chat receives
 the same generation lifecycle events.  Each subscriber gets its own
 asyncio.Queue so back-pressure on one client does not block others.
 
-A short-lived **replay buffer** retains the latest ``stream_start``,
-``content``, and terminal (``complete`` / ``error``) events per chat so
+A short-lived **replay buffer** retains the latest ``stream_start`` and
+``content`` events per chat so
 that late-connecting clients still receive current state instead of
 missing the generation entirely.
 
@@ -58,7 +58,6 @@ class _ChatEventBus:
         # Replay buffer per chat
         self._stream_start: dict[int, SSEEvent] = {}
         self._last_content: dict[int, SSEEvent] = {}
-        self._terminal: dict[int, SSEEvent] = {}
         self._active_streams: set[int] = set()
         # Reference to the main event loop (set on first subscribe)
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -100,6 +99,8 @@ class _ChatEventBus:
                     pass
                 if not subs:
                     del self._subscribers[chat_id]
+                    if chat_id not in self._active_streams:
+                        self._clear_buffer(chat_id)
 
     async def publish(self, chat_id: int, event: SSEEvent) -> None:
         async with self._lock:
@@ -117,6 +118,7 @@ class _ChatEventBus:
         """Send a sentinel (None) to all subscribers so they can exit cleanly."""
         async with self._lock:
             subs = list(self._subscribers.get(chat_id, []))
+            self._clear_buffer(chat_id)
         for q in subs:
             try:
                 q.put_nowait(None)
@@ -167,12 +169,16 @@ class _ChatEventBus:
             self._active_streams.add(chat_id)
             self._stream_start[chat_id] = event
             self._last_content.pop(chat_id, None)
-            self._terminal.pop(chat_id, None)
         elif event.event == "content":
             self._last_content[chat_id] = event
         elif event.event in ("complete", "error"):
             self._active_streams.discard(chat_id)
-            self._terminal[chat_id] = event
+
+    def _clear_buffer(self, chat_id: int) -> None:
+        """Drop replay state for a chat once streaming is done/closed."""
+        self._active_streams.discard(chat_id)
+        self._stream_start.pop(chat_id, None)
+        self._last_content.pop(chat_id, None)
 
     def _sync_put(self, chat_id: int, event: SSEEvent) -> None:
         """Put an event into all subscriber queues (runs on the event loop)."""
@@ -191,6 +197,7 @@ class _ChatEventBus:
                 q.put_nowait(None)
             except asyncio.QueueFull:
                 pass
+        self._clear_buffer(chat_id)
 
 
 # Module-level singleton

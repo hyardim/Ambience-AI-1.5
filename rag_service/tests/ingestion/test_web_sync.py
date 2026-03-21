@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from pathlib import Path
 
 import httpx
+import pytest
 
+import src.ingestion.web_sync as web_sync
 from src.ingestion.web_sources import DiscoveredDocument
-from src.ingestion.web_sync import GuidelineWebSync, _download_file
+from src.ingestion.web_sync import (
+    GuidelineWebSync,
+    SyncAlreadyRunningError,
+    _compute_file_hash,
+    _download_file,
+    _run_ingestion,
+)
 
 
 class _FakeDiscoveryClient:
@@ -194,3 +203,247 @@ def test_download_file_uses_response_headers_and_writes_content(tmp_path: Path) 
     assert content_hash == hashlib.sha256(content).hexdigest()
     assert metadata["etag"] == "etag-123"
     assert metadata["content_length"] == str(len(content))
+
+
+def test_default_state_path_falls_back_to_root(monkeypatch, tmp_path: Path) -> None:
+    class _PathConfig:
+        root = tmp_path
+
+    monkeypatch.setattr(web_sync, "path_config", _PathConfig())
+    assert web_sync._default_state_path() == (
+        tmp_path / "data" / "raw" / "_sync_state" / "guideline_sync_state.json"
+    )
+
+
+def test_compute_file_hash(tmp_path: Path) -> None:
+    path = tmp_path / "f.bin"
+    path.write_bytes(b"abc123")
+    assert _compute_file_hash(path) == hashlib.sha256(b"abc123").hexdigest()
+
+
+def test_load_state_handles_non_dict_content(tmp_path: Path) -> None:
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    sync = GuidelineWebSync(state_path=state_path)
+    assert sync.load_state() == {"version": 1, "documents": {}, "last_run": None}
+
+
+def test_last_status_exposes_last_run(tmp_path: Path) -> None:
+    state_path = tmp_path / "state.json"
+    sync = GuidelineWebSync(state_path=state_path)
+    sync.save_state(
+        {
+            "version": 1,
+            "documents": {},
+            "last_run": {"summary": {"discovered_count": 0}},
+        }
+    )
+    status = sync.last_status()
+    assert status["running"] is False
+    assert status["last_run"] is not None
+
+
+def test_sync_once_raises_when_already_running(tmp_path: Path) -> None:
+    sync = GuidelineWebSync(state_path=tmp_path / "state.json")
+
+    async def run_locked() -> None:
+        async with sync._lock:
+            with pytest.raises(SyncAlreadyRunningError):
+                await sync.sync_once(db_url="postgresql://localhost/test")
+
+    asyncio.run(run_locked())
+
+
+def test_sync_once_records_discovery_error(monkeypatch, tmp_path: Path) -> None:
+    class _FailDiscovery:
+        async def discover_source(self, source):
+            del source
+            raise RuntimeError("discovery broke")
+
+    sync = GuidelineWebSync(
+        state_path=tmp_path / "state.json",
+        discovery_client=_FailDiscovery(),
+    )
+
+    result = asyncio.run(sync.sync_once(db_url="postgresql://localhost/test"))
+    errors = result["summary"]["errors"]
+    assert errors
+    assert "discovery failed" in errors[0]
+
+
+def test_sync_once_dry_run_counts_downloads(monkeypatch, tmp_path: Path) -> None:
+    doc = _make_doc(
+        canonical_url="https://www.nice.org.uk/guidance/ng193",
+        doc_url="https://cdn.example.com/ng193.pdf",
+    )
+    sync = GuidelineWebSync(
+        state_path=tmp_path / "state.json",
+        discovery_client=_FakeDiscoveryClient([doc]),
+    )
+
+    result = asyncio.run(
+        sync.sync_once(db_url="postgresql://localhost/test", dry_run=True)
+    )
+    assert result["summary"]["downloaded_new_count"] == 1
+
+
+def test_sync_once_records_download_failure(monkeypatch, tmp_path: Path) -> None:
+    doc = _make_doc(
+        canonical_url="https://www.nice.org.uk/guidance/ng193",
+        doc_url="https://cdn.example.com/ng193.pdf",
+    )
+    sync = GuidelineWebSync(
+        state_path=tmp_path / "state.json",
+        discovery_client=_FakeDiscoveryClient([doc]),
+    )
+
+    async def fail_download(**kwargs):
+        del kwargs
+        raise RuntimeError("download boom")
+
+    monkeypatch.setattr("src.ingestion.web_sync._download_file", fail_download)
+    result = asyncio.run(sync.sync_once(db_url="postgresql://localhost/test"))
+    assert any("download failed" in err for err in result["summary"]["errors"])
+
+
+def test_sync_once_skips_when_content_hash_unchanged(
+    monkeypatch, tmp_path: Path
+) -> None:
+    doc = _make_doc(
+        canonical_url="https://www.nice.org.uk/guidance/ng193",
+        doc_url="https://cdn.example.com/ng193.pdf",
+        etag="etag-new",
+    )
+    existing_path = tmp_path / "existing.pdf"
+    existing_path.write_bytes(b"same-content")
+    content_hash = hashlib.sha256(b"same-content").hexdigest()
+
+    sync = GuidelineWebSync(
+        state_path=tmp_path / "state.json",
+        discovery_client=_FakeDiscoveryClient([doc]),
+    )
+    sync.save_state(
+        {
+            "version": 1,
+            "documents": {
+                "NICE|https://www.nice.org.uk/guidance/ng193": {
+                    "source_name": "NICE",
+                    "etag": "etag-old",
+                    "last_modified": "Wed, 01 Jan 2025 00:00:00 GMT",
+                    "content_length": 100,
+                    "content_hash": content_hash,
+                    "local_path": str(existing_path),
+                }
+            },
+            "last_run": None,
+        }
+    )
+
+    async def fake_download(**kwargs):
+        destination = kwargs["destination"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"same-content")
+        return (
+            content_hash,
+            {"etag": "etag-new", "last_modified": "Thu", "content_length": "12"},
+        )
+
+    monkeypatch.setattr("src.ingestion.web_sync._download_file", fake_download)
+    monkeypatch.setattr("src.ingestion.web_sync._run_ingestion", lambda **kwargs: {})
+    result = asyncio.run(sync.sync_once(db_url="postgresql://localhost/test"))
+    assert result["summary"]["skipped_unchanged_count"] == 1
+
+
+def test_sync_once_records_ingestion_failure_and_stale_docs(
+    monkeypatch, tmp_path: Path
+) -> None:
+    doc = _make_doc(
+        canonical_url="https://www.nice.org.uk/guidance/ng193",
+        doc_url="https://cdn.example.com/ng193.pdf",
+    )
+    sync = GuidelineWebSync(
+        state_path=tmp_path / "state.json",
+        discovery_client=_FakeDiscoveryClient([doc]),
+    )
+    sync.save_state(
+        {
+            "version": 1,
+            "documents": {
+                "NICE|https://www.nice.org.uk/guidance/stale": {
+                    "source_name": "NICE",
+                    "title": "Old",
+                }
+            },
+            "last_run": None,
+        }
+    )
+
+    async def fake_download(**kwargs):
+        destination = kwargs["destination"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"new-content")
+        return (
+            hashlib.sha256(b"new-content").hexdigest(),
+            {"etag": "etag-v1", "last_modified": "Wed", "content_length": "11"},
+        )
+
+    monkeypatch.setattr("src.ingestion.web_sync._download_file", fake_download)
+
+    def fail_ingest(**kwargs):
+        del kwargs
+        raise RuntimeError("ingest failed")
+
+    monkeypatch.setattr("src.ingestion.web_sync._run_ingestion", fail_ingest)
+    result = asyncio.run(sync.sync_once(db_url="postgresql://localhost/test"))
+    assert result["summary"]["ingest_failed_count"] == 1
+    assert any("ingestion failed" in err for err in result["summary"]["errors"])
+
+    state = sync.load_state()
+    stale = state["documents"]["NICE|https://www.nice.org.uk/guidance/stale"]
+    assert stale["stale"] is True
+
+
+def test_run_ingestion_wrapper_calls_pipeline(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_ingestion(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    import src.ingestion.pipeline as pipeline_module
+
+    monkeypatch.setattr(pipeline_module, "run_ingestion", fake_run_ingestion)
+    result = _run_ingestion(input_path=Path("/tmp/x"), source_name="NICE", db_url="d")
+    assert result == {"ok": True}
+    assert captured["source_name"] == "NICE"
+
+
+def test_sync_once_dry_run_counts_updated_documents(tmp_path: Path) -> None:
+    doc = _make_doc(
+        canonical_url="https://www.nice.org.uk/guidance/ng193",
+        doc_url="https://cdn.example.com/ng193.pdf",
+        etag="etag-new",
+    )
+    sync = GuidelineWebSync(
+        state_path=tmp_path / "state.json",
+        discovery_client=_FakeDiscoveryClient([doc]),
+    )
+    sync.save_state(
+        {
+            "version": 1,
+            "documents": {
+                "NICE|https://www.nice.org.uk/guidance/ng193": {
+                    "source_name": "NICE",
+                    "etag": "etag-old",
+                    "last_modified": "Wed, 01 Jan 2025 00:00:00 GMT",
+                    "content_length": 100,
+                }
+            },
+            "last_run": None,
+        }
+    )
+
+    result = asyncio.run(
+        sync.sync_once(db_url="postgresql://localhost/test", dry_run=True)
+    )
+    assert result["summary"]["downloaded_updated_count"] == 1

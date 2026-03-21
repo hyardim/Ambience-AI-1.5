@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -45,3 +46,33 @@ async def test_main_fetch_document_reexport(tmp_path: Path) -> None:
         routes.get_source_path_for_doc = original_get_source
 
     assert response.path == doc.resolve()
+
+
+@pytest.mark.anyio
+async def test_main_lifespan_starts_and_stops_scheduler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    async def fake_start() -> None:
+        calls.append("start")
+
+    async def fake_stop() -> None:
+        calls.append("stop")
+
+    @asynccontextmanager
+    async def fake_base_lifespan(_app):
+        calls.append("base_enter")
+        try:
+            yield
+        finally:
+            calls.append("base_exit")
+
+    monkeypatch.setattr(main, "start_guideline_sync_scheduler", fake_start)
+    monkeypatch.setattr(main, "stop_guideline_sync_scheduler", fake_stop)
+    monkeypatch.setattr(main, "_base_lifespan", fake_base_lifespan)
+
+    async with main._main_lifespan(main.app):
+        calls.append("inside")
+
+    assert calls == ["start", "base_enter", "inside", "base_exit", "stop"]
