@@ -44,6 +44,11 @@ class TestPasswordStrengthOnRegister:
         resp = client.post("/auth/register", json=gp_user_payload)
         assert resp.status_code == 422
 
+    def test_common_password_rejected(self, client, gp_user_payload):
+        gp_user_payload["password"] = "Password123!"
+        resp = client.post("/auth/register", json=gp_user_payload)
+        assert resp.status_code == 422
+
     def test_multiple_failing_rules_reported_together(self, client, gp_user_payload):
         gp_user_payload["password"] = "abc"
         resp = client.post("/auth/register", json=gp_user_payload)
@@ -119,6 +124,16 @@ class TestPasswordStrengthOnReset:
         )
         assert resp.status_code == 422
 
+    def test_common_password_rejected_on_reset(
+        self, client, registered_gp, gp_user_payload, monkeypatch
+    ):
+        token = self._issue_reset_token(client, gp_user_payload["email"], monkeypatch)
+        resp = client.post(
+            "/auth/reset-password/confirm",
+            json={"token": token, "new_password": "Password123!"},
+        )
+        assert resp.status_code == 422
+
 
 class TestPasswordStrengthOnProfileUpdate:
     def test_strong_new_password_accepted(self, client, gp_headers, gp_user_payload):
@@ -162,6 +177,19 @@ class TestPasswordStrengthOnProfileUpdate:
             json={
                 "current_password": gp_user_payload["password"],
                 "new_password": "Abcdefgh!",
+            },
+            headers=gp_headers,
+        )
+        assert resp.status_code == 422
+
+    def test_common_password_rejected_on_profile(
+        self, client, gp_headers, gp_user_payload
+    ):
+        resp = client.patch(
+            "/auth/profile",
+            json={
+                "current_password": gp_user_payload["password"],
+                "new_password": "Password123!",
             },
             headers=gp_headers,
         )

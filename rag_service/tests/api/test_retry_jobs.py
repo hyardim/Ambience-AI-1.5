@@ -352,14 +352,18 @@ def test_jobs_status_returns_404_when_missing(client, main_module):
 
 
 def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_module):
-    main_module.routes.retrieve_chunks = MagicMock(
-        return_value=[
-            {
-                "text": "headache guidance",
-                "score": 0.9,
-                "metadata": {"source_path": "x"},
-            },
-        ]
+    monkeypatch.setattr(
+        main_module.routes.api_services,
+        "retrieve_chunks_advanced",
+        MagicMock(
+            return_value=[
+                {
+                    "text": "headache guidance",
+                    "score": 0.9,
+                    "metadata": {"source_path": "x"},
+                },
+            ]
+        ),
     )
 
     async def fail(*args, **kwargs):
@@ -372,8 +376,12 @@ def test_answer_returns_202_on_retryable_failure(monkeypatch, client, main_modul
     assert resp.json()["job_id"] == "job-1"
 
 
-def test_answer_returns_done_stream_when_no_results(client, main_module):
-    main_module.routes.retrieve_chunks = MagicMock(return_value=[])
+def test_answer_returns_done_stream_when_no_results(monkeypatch, client, main_module):
+    monkeypatch.setattr(
+        main_module.routes.api_services,
+        "retrieve_chunks_advanced",
+        MagicMock(return_value=[]),
+    )
 
     resp = client.post(
         "/answer",
@@ -414,8 +422,12 @@ def test_revise_returns_202_on_retryable_failure(monkeypatch, client, main_modul
     assert resp.json()["job_id"] == "job-1"
 
 
-def test_answer_returns_non_stream_empty_response(client, main_module):
-    main_module.routes.retrieve_chunks = MagicMock(return_value=[])
+def test_answer_returns_non_stream_empty_response(monkeypatch, client, main_module):
+    monkeypatch.setattr(
+        main_module.routes.api_services,
+        "retrieve_chunks_advanced",
+        MagicMock(return_value=[]),
+    )
 
     resp = client.post(
         "/answer",
@@ -426,15 +438,19 @@ def test_answer_returns_non_stream_empty_response(client, main_module):
     assert resp.json()["answer"] == "No evidence"
 
 
-def test_answer_streams_with_results(client, main_module):
-    main_module.routes.retrieve_chunks = MagicMock(
-        return_value=[
-            {
-                "text": "headache guidance",
-                "score": 0.9,
-                "metadata": {"source_path": "x"},
-            },
-        ]
+def test_answer_streams_with_results(monkeypatch, client, main_module):
+    monkeypatch.setattr(
+        main_module.routes.api_services,
+        "retrieve_chunks_advanced",
+        MagicMock(
+            return_value=[
+                {
+                    "text": "headache guidance",
+                    "score": 0.9,
+                    "metadata": {"source_path": "x"},
+                },
+            ]
+        ),
     )
 
     resp = client.post(
@@ -451,14 +467,18 @@ def test_answer_non_retryable_generation_error_returns_500(
     client,
     main_module,
 ):
-    main_module.routes.retrieve_chunks = MagicMock(
-        return_value=[
-            {
-                "text": "headache guidance",
-                "score": 0.9,
-                "metadata": {"source_path": "x"},
-            },
-        ]
+    monkeypatch.setattr(
+        main_module.routes.api_services,
+        "retrieve_chunks_advanced",
+        MagicMock(
+            return_value=[
+                {
+                    "text": "headache guidance",
+                    "score": 0.9,
+                    "metadata": {"source_path": "x"},
+                },
+            ]
+        ),
     )
 
     async def fail(*args, **kwargs):
@@ -471,7 +491,7 @@ def test_answer_non_retryable_generation_error_returns_500(
     assert resp.status_code == 500
 
 
-def test_answer_passes_specialty_to_similarity_search(client, main_module):
+def test_answer_passes_specialty_to_similarity_search(monkeypatch, client, main_module):
     search_mock = MagicMock(
         return_value=[
             {
@@ -481,7 +501,11 @@ def test_answer_passes_specialty_to_similarity_search(client, main_module):
             },
         ]
     )
-    main_module.routes.retrieve_chunks = search_mock
+    monkeypatch.setattr(
+        main_module.routes.api_services,
+        "retrieve_chunks_advanced",
+        search_mock,
+    )
 
     async def ok_answer(*args, **kwargs):
         return "ok"
@@ -495,9 +519,13 @@ def test_answer_passes_specialty_to_similarity_search(client, main_module):
 
     assert resp.status_code != 500
     search_mock.assert_called_once_with(
-        "headache",
+        query="headache",
         top_k=1,
         specialty="neurology",
+        source_name=None,
+        doc_type=None,
+        score_threshold=0.3,
+        expand_query=False,
     )
 
 

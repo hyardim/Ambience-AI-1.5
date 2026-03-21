@@ -15,9 +15,9 @@ def test_answer_route_integration_returns_grounded_citations(
     client = TestClient(create_app(), raise_server_exceptions=False)
 
     monkeypatch.setattr(
-        routes,
-        "retrieve_chunks",
-        lambda query, top_k, specialty: [
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [
             {
                 "text": "Neurology guidance recommends ocrelizumab for active RRMS.",
                 "score": 0.92,

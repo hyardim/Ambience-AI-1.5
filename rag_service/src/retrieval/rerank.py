@@ -188,16 +188,31 @@ def deduplicate(
             f"got {similarity_threshold!r}"
         )
 
+    token_sets = [_token_set(result.text) for result in results]
+    token_lengths = [len(tokens) for tokens in token_sets]
     dropped: set[str] = set()
 
     for i, result_a in enumerate(results):
         if result_a.chunk_id in dropped:
             continue
-        for result_b in results[i + 1 :]:
+        tokens_a = token_sets[i]
+        len_a = token_lengths[i]
+        for j in range(i + 1, len(results)):
+            result_b = results[j]
             if result_b.chunk_id in dropped:
                 continue
+            tokens_b = token_sets[j]
+            len_b = token_lengths[j]
+
+            # Exact upper bound for Jaccard. If even max overlap cannot
+            # reach threshold, skip the expensive intersection/union.
+            if max(len_a, len_b) > 0:
+                max_possible = min(len_a, len_b) / max(len_a, len_b)
+                if max_possible < similarity_threshold:
+                    continue
+
             if (
-                _jaccard_similarity(result_a.text, result_b.text)
+                _jaccard_similarity_from_sets(tokens_a, tokens_b)
                 >= similarity_threshold
             ):
                 if result_a.rerank_score >= result_b.rerank_score:
@@ -260,8 +275,17 @@ def _sigmoid(logit: float) -> float:
 
 def _jaccard_similarity(text_a: str, text_b: str) -> float:
     """Compute token-level Jaccard similarity between two strings."""
-    tokens_a = set(text_a.lower().split())
-    tokens_b = set(text_b.lower().split())
+    tokens_a = _token_set(text_a)
+    tokens_b = _token_set(text_b)
+    return _jaccard_similarity_from_sets(tokens_a, tokens_b)
+
+
+def _token_set(text: str) -> set[str]:
+    return set(text.lower().split())
+
+
+def _jaccard_similarity_from_sets(tokens_a: set[str], tokens_b: set[str]) -> float:
+    """Compute exact Jaccard from precomputed token sets."""
     if not tokens_a and not tokens_b:
         return 1.0
     return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)

@@ -117,7 +117,11 @@ def test_ingest_guideline_wraps_unexpected_errors(
 async def test_generate_clinical_answer_preserves_http_exceptions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(routes, "retrieve_chunks", lambda query, top_k, specialty: [{}])
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [{}],
+    )
     monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
     monkeypatch.setattr(
         routes,
@@ -192,7 +196,11 @@ async def test_generate_clinical_answer_generic_exception_wrapped(
     def boom_retrieve(*args: object, **kwargs: object) -> list[dict[str, object]]:
         raise RuntimeError("unexpected failure")
 
-    monkeypatch.setattr(routes, "retrieve_chunks", boom_retrieve)
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: boom_retrieve(),
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await routes.generate_clinical_answer(
@@ -201,3 +209,111 @@ async def test_generate_clinical_answer_generic_exception_wrapped(
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "RAG answer error"
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        captured.update(kwargs)
+        return [
+            {
+                "text": "chunk",
+                "score": 0.9,
+                "metadata": {"title": "Guide"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "A"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references: (answer, []),
+    )
+
+    await routes.generate_clinical_answer(
+        routes.AnswerRequest(
+            query="q",
+            specialty="neurology",
+            source_name="NICE",
+            doc_type="guideline",
+            score_threshold=0.42,
+            expand_query=True,
+            stream=False,
+        )
+    )
+
+    assert captured["query"] == "q"
+    assert captured["specialty"] == "neurology"
+    assert captured["source_name"] == "NICE"
+    assert captured["doc_type"] == "guideline"
+    assert captured["score_threshold"] == 0.42
+    assert captured["expand_query"] is True
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: dict[str, object] = {}
+
+    monkeypatch.delattr(routes.api_services, "retrieve_chunks_advanced", raising=False)
+
+    def fake_basic(query: str, *, top_k: int, specialty: str | None):
+        called.update({"query": query, "top_k": top_k, "specialty": specialty})
+        return [
+            {
+                "text": "chunk",
+                "score": 0.9,
+                "metadata": {"title": "Guide"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes, "retrieve_chunks", fake_basic)
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "A"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references: (answer, []),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query="q", top_k=3, specialty="neurology")
+    )
+
+    assert response.answer == "A"
+    assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}

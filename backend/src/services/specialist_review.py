@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -449,12 +450,7 @@ def _do_revise(
         request_kwargs: dict[str, Any] = {}
         if rag_headers:
             request_kwargs["headers"] = rag_headers
-        rag_response = httpx.post(
-            f"{RAG_SERVICE_URL}/revise",
-            json=rag_payload,
-            timeout=RAG_REQUEST_TIMEOUT_SECONDS,
-            **request_kwargs,
-        )
+        rag_response = _post_revise_request(rag_payload, request_kwargs)
         rag_response.raise_for_status()
         rag_json = rag_response.json()
         revised_content = rag_json.get("answer", "")
@@ -504,3 +500,27 @@ def _do_revise(
             )
     except Exception:
         pass
+
+
+def _post_revise_request(
+    rag_payload: dict[str, Any],
+    request_kwargs: dict[str, Any],
+) -> httpx.Response:
+    async def _post_async() -> httpx.Response:
+        async with httpx.AsyncClient(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
+            return await client.post(
+                f"{RAG_SERVICE_URL}/revise",
+                json=rag_payload,
+                **request_kwargs,
+            )
+
+    try:
+        return asyncio.run(_post_async())
+    except RuntimeError:
+        # Compatibility fallback for environments that already own the loop.
+        return httpx.post(
+            f"{RAG_SERVICE_URL}/revise",
+            json=rag_payload,
+            timeout=RAG_REQUEST_TIMEOUT_SECONDS,
+            **request_kwargs,
+        )

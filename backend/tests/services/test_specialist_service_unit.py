@@ -595,7 +595,9 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
         "citations_used": [{"title": "Doc"}],
     }
     monkeypatch.setattr(
-        specialist_review.httpx, "post", lambda *args, **kwargs: response
+        specialist_review,
+        "_post_revise_request",
+        lambda *args, **kwargs: response,
     )
     monkeypatch.setattr(
         specialist_review.audit_repository,
@@ -650,7 +652,9 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     invalidations = []
 
     monkeypatch.setattr(
-        specialist_review.httpx, "post", lambda *args, **kwargs: response
+        specialist_review,
+        "_post_revise_request",
+        lambda *args, **kwargs: response,
     )
     monkeypatch.setattr(
         specialist_review,
@@ -708,12 +712,17 @@ def test_do_revise_forwards_internal_headers(monkeypatch):
     response.raise_for_status = MagicMock()
     response.json.return_value = {"answer": "revised", "citations_used": []}
 
-    def fake_post(url, json, timeout, headers=None):
+    def fake_revise_post(rag_payload, request_kwargs):
+        headers = request_kwargs.get("headers")
         assert headers == {"X-Internal-API-Key": "k"}
         return response
 
-    monkeypatch.setattr(specialist_review, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"})
-    monkeypatch.setattr(specialist_review.httpx, "post", fake_post)
+    monkeypatch.setattr(
+        specialist_review,
+        "build_rag_headers",
+        lambda: {"X-Internal-API-Key": "k"},
+    )
+    monkeypatch.setattr(specialist_review, "_post_revise_request", fake_revise_post)
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",
@@ -757,7 +766,7 @@ def test_do_revise_failure_logs_rag_error_and_notifies_user(monkeypatch, db_sess
     def fail_post(*args, **kwargs):
         raise RuntimeError("rag down")
 
-    monkeypatch.setattr(specialist_review.httpx, "post", fail_post)
+    monkeypatch.setattr(specialist_review, "_post_revise_request", fail_post)
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",

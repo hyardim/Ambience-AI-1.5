@@ -26,6 +26,7 @@ from ..ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from ..jobs.retry import RetryJobStatus, create_retry_job, get_retry_job
 from ..retrieval.vector_store import get_source_path_for_doc
 from ..utils.logger import setup_logger
+from . import services as api_services
 from .citations import MAX_CITATIONS, extract_citation_results
 from .schemas import (
     AnswerRequest,
@@ -170,11 +171,23 @@ async def generate_clinical_answer(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Any:
     try:
-        retrieved = retrieve_chunks(
-            request.query,
-            top_k=request.top_k,
-            specialty=request.specialty,
-        )
+        advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
+        if callable(advanced_retriever):
+            retrieved = advanced_retriever(
+                query=request.query,
+                top_k=request.top_k,
+                specialty=request.specialty,
+                source_name=request.source_name,
+                doc_type=request.doc_type,
+                score_threshold=request.score_threshold,
+                expand_query=request.expand_query,
+            )
+        else:
+            retrieved = retrieve_chunks(
+                request.query,
+                top_k=request.top_k,
+                specialty=request.specialty,
+            )
         return await _generate_answer_from_retrieval(
             query=request.query,
             max_tokens=request.max_tokens,

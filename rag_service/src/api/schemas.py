@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..config import llm_config
 from ..jobs.retry import RetryJobStatus
 
 
 class QueryRequest(BaseModel):
-    query: str
-    top_k: int = 5
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
     specialty: str | None = None
     severity: str | None = None
 
@@ -34,6 +34,10 @@ class SearchResult(BaseModel):
 
 
 class AnswerRequest(QueryRequest):
+    source_name: str | None = None
+    doc_type: str | None = None
+    score_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
+    expand_query: bool = False
     max_tokens: int = llm_config.llm_max_tokens
     patient_context: dict[str, Any] | None = None
     file_context: str | None = None
