@@ -234,3 +234,24 @@ RETRY_MAX_ATTEMPTS = retry_config.retry_max_attempts
 RETRY_BACKOFF_SECONDS = retry_config.retry_backoff_seconds
 RETRY_BACKOFF_MULTIPLIER = retry_config.retry_backoff_multiplier
 RETRY_JOB_TTL_SECONDS = retry_config.retry_job_ttl_seconds
+
+GUIDELINE_SYNC_ENABLED = os.getenv("GUIDELINE_SYNC_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+GUIDELINE_SYNC_INTERVAL_MINUTES = int(
+    os.getenv("GUIDELINE_SYNC_INTERVAL_MINUTES", "720")
+)
+GUIDELINE_SYNC_RUN_ON_STARTUP = os.getenv(
+    "GUIDELINE_SYNC_RUN_ON_STARTUP", "true"
+).lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+GUIDELINE_SYNC_TIMEOUT_SECONDS = int(
+    os.getenv("GUIDELINE_SYNC_TIMEOUT_SECONDS", "900")
+)
