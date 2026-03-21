@@ -94,7 +94,53 @@ RETRY_MAX_ATTEMPTS=3
 RETRY_BACKOFF_SECONDS=10
 RETRY_BACKOFF_MULTIPLIER=2
 RETRY_JOB_TTL_SECONDS=86400
+
+# Guideline web sync
+GUIDELINE_SYNC_ENABLED=false
+GUIDELINE_SYNC_INTERVAL_MINUTES=720
+GUIDELINE_SYNC_RUN_ON_STARTUP=true
+GUIDELINE_SYNC_TIMEOUT_SECONDS=900
 ```
+
+### Ingestion Quick Reference
+
+Manual file ingestion (existing flow):
+
+```bash
+python -m src.ingestion.cli ingest \
+  --input data/raw/rheumatology/NICE \
+  --source-name NICE \
+  --db-url postgresql://admin:password@localhost:5432/ambience_knowledge
+```
+
+Manual web sync trigger (new flow):
+
+```bash
+python -m src.ingestion.cli sync-web --log-level INFO
+python -m src.ingestion.cli sync-web --source NICE --source BSR --dry-run
+```
+
+API trigger/status:
+
+```bash
+curl -X POST http://localhost:8001/guidelines/sync \
+  -H "Content-Type: application/json" \
+  -d '{"source_names": ["NICE", "BSR"], "dry_run": false}'
+
+curl http://localhost:8001/guidelines/sync/status
+```
+
+Expected sync log pattern:
+
+- `sync.run.start source_filter=... dry_run=...`
+- `sync.complete discovered=... new=... updated=... unchanged=... ingest_ok=... ingest_failed=...`
+- `sync.run.end last_error=...`
+
+Troubleshooting:
+
+- If discovery is blocked by `robots.txt`, the source is skipped and sync continues.
+- If files are unchanged (same etag/last-modified/hash), they are skipped.
+- If a document disappears from the source page, it is marked stale in sync state and not deleted locally.
 
 ---
 
