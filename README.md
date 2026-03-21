@@ -2,6 +2,67 @@
 
 **A Specialized Clinical Decision Support System for Rheumatology & Neurology.**
 
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- [Ollama](https://ollama.com) installed on the host machine
+
+### 1. Pull the local AI model
+
+```bash
+ollama pull thewindmom/llama3-med42-8b
+ollama serve
+```
+
+### 2. Start all services
+
+```bash
+docker compose up --build -d
+```
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8000 |
+| RAG Service | http://localhost:8001 |
+
+Email (verification, password reset) is pre-configured and works out of the box.
+
+### 3. Create your first admin account
+
+1. Open http://localhost:3000 and click **Register**
+2. Check your email for a verification link and click it
+3. Your account is active but defaults to GP role — promote it to admin:
+   ```bash
+   docker exec ambience_db psql -U admin -d ambience_knowledge \
+     -c "UPDATE users SET role='admin' WHERE email='your@email.com'"
+   ```
+4. Log in and go to **Admin → Users** to create and manage GP and Specialist accounts
+
+### 4. Medical guidelines
+
+261 guidelines (NICE neurology, NICE rheumatology, BSR) are pre-ingested and ready to use. To pull the latest from the web:
+
+```bash
+# Preview first (no changes)
+curl -X POST http://localhost:8001/guidelines/sync \
+  -H "Content-Type: application/json" -d '{"dry_run": true}'
+
+# Full sync (~15 min)
+curl -X POST http://localhost:8001/guidelines/sync \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+### 5. Production deployment
+
+For production (HTTPS, custom domain), see `.env.example` for all configurable secrets and `nginx/nginx.conf` for the included reverse proxy configuration.
+
+---
+
 ## 📖 Project Overview
 
 This project implements a **Microservices-based Retrieval-Augmented Generation (RAG)** system designed to assist clinicians with accurate, guideline-backed answers. Unlike generic chatbots, this system functions as a "hyper-tuned" medical specialist. It decouples application logic from high-performance inference to ensure scalability and clinical safety.
