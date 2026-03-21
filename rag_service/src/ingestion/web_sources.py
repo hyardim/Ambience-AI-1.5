@@ -19,6 +19,13 @@ DEFAULT_USER_AGENT = "AmbienceRAGGuidelineSync/1.0 (+https://example.invalid/con
 DEFAULT_TIMEOUT_SECONDS = 20.0
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF_SECONDS = 1.0
+MAX_NICE_CRAWL_DEPTH = 2
+MAX_NICE_CRAWL_PAGES = 120
+
+NICE_GUIDELINE_PATH_RE = re.compile(
+    r"^/guidance/(ng|cg|qs|ta|ipg|mtg|dg|hst|es)\d+",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -127,6 +134,46 @@ def _extract_candidate_links(html: str, base_url: str, parser: str) -> list[str]
                 links.append(normalized)
         elif _likely_guideline_link(normalized, text):
             links.append(normalized)
+    return sorted(set(links))
+
+
+def _is_nice_guideline_link(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.netloc.endswith("nice.org.uk") and bool(
+        NICE_GUIDELINE_PATH_RE.match(parsed.path)
+    )
+
+
+def _extract_nice_subcategory_links(html: str, listing_url: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    listing_prefix = normalize_url(listing_url).rstrip("/") + "/"
+    links: list[str] = []
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href", "")).strip()
+        if not href:
+            continue
+        absolute = normalize_url(href, base_url=listing_url)
+        if not absolute.startswith(listing_prefix):
+            continue
+        parsed = urlparse(absolute)
+        if not parsed.path.startswith(urlparse(listing_prefix).path):
+            continue
+        if parsed.path.endswith(".pdf"):
+            continue
+        links.append(absolute)
+    return sorted(set(links))
+
+
+def _extract_nice_guideline_links(html: str, base_url: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    links: list[str] = []
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href", "")).strip()
+        if not href:
+            continue
+        absolute = normalize_url(href, base_url=base_url)
+        if _is_nice_guideline_link(absolute):
+            links.append(absolute)
     return sorted(set(links))
 
 
@@ -266,11 +313,18 @@ class SourceDiscoveryClient:
                 )
                 return []
 
-            candidate_links = _extract_candidate_links(
-                listing_response.text,
-                base_url=source.listing_url,
-                parser=source.parser,
-            )
+            if source.parser == "nice":
+                candidate_links = await self._discover_nice_candidates(
+                    client=client,
+                    source=source,
+                    listing_html=listing_response.text,
+                )
+            else:
+                candidate_links = _extract_candidate_links(
+                    listing_response.text,
+                    base_url=source.listing_url,
+                    parser=source.parser,
+                )
 
             discovered: dict[str, DiscoveredDocument] = {}
             for candidate in candidate_links:
@@ -318,6 +372,57 @@ class SourceDiscoveryClient:
                     )
 
             return list(discovered.values())
+
+    async def _discover_nice_candidates(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        source: WebSourceConfig,
+        listing_html: str,
+    ) -> list[str]:
+        """Discover NICE guideline/detail/PDF candidates via category crawl."""
+        start_url = normalize_url(source.listing_url)
+        queue: list[tuple[str, int, str]] = [(start_url, 0, listing_html)]
+        visited: set[str] = set()
+        guideline_links: set[str] = set()
+        direct_pdf_links: set[str] = set()
+
+        while queue and len(visited) < MAX_NICE_CRAWL_PAGES:
+            page_url, depth, html = queue.pop(0)
+            normalized_page = normalize_url(page_url)
+            if normalized_page in visited:
+                continue
+            visited.add(normalized_page)
+
+            for guideline_url in _extract_nice_guideline_links(html, base_url=normalized_page):
+                guideline_links.add(guideline_url)
+
+            for pdf_url in _extract_pdf_links(html, base_url=normalized_page):
+                if pdf_url.lower().endswith(".pdf"):
+                    direct_pdf_links.add(pdf_url)
+
+            if depth >= MAX_NICE_CRAWL_DEPTH:
+                continue
+
+            for child_url in _extract_nice_subcategory_links(html, listing_url=start_url):
+                if child_url in visited:
+                    continue
+                try:
+                    child_response = await self._request(client, "GET", child_url)
+                except Exception:
+                    continue
+                if child_response.status_code >= 400:
+                    continue
+                queue.append((child_url, depth + 1, child_response.text))
+
+        logger.info(
+            "sync.discovery.nice source=%s visited=%s guideline_links=%s direct_pdfs=%s",
+            source.source_name,
+            len(visited),
+            len(guideline_links),
+            len(direct_pdf_links),
+        )
+        return sorted(guideline_links.union(direct_pdf_links))
 
 
 class PathLikeTitle:

@@ -90,3 +90,47 @@ def test_discover_source_finds_detail_and_pdf_links(monkeypatch) -> None:
     assert doc.canonical_url == "https://www.nice.org.uk/guidance/ng193"
     assert doc.doc_url.endswith("full-guideline.pdf")
     assert doc.etag == "etag-1"
+
+
+def test_discover_source_crawls_nice_subcategories(monkeypatch) -> None:
+    source = WEB_SOURCES["nice-musculoskeletal"]
+    discovery = SourceDiscoveryClient(retries=1)
+
+    listing_html = (
+        "<a href='/guidance/conditions-and-diseases/musculoskeletal-conditions/"
+        "arthritis'>Arthritis</a>"
+    )
+    subcategory_html = "<a href='/guidance/ng100'>RA guideline</a>"
+    detail_html = "<a href='/guidance/ng100/resources/ng100-pdf.pdf'>PDF</a>"
+
+    async def fake_request(
+        client: httpx.AsyncClient, method: str, url: str
+    ) -> httpx.Response:
+        if method != "GET":
+            return _response(url)
+        if url.endswith("musculoskeletal-conditions"):
+            return _response(url, listing_html)
+        if url.endswith("musculoskeletal-conditions/arthritis"):
+            return _response(url, subcategory_html)
+        if url.endswith("/guidance/ng100"):
+            return _response(url, detail_html)
+        return _response(url)
+
+    async def fake_robots(client: httpx.AsyncClient, url: str) -> bool:
+        return True
+
+    async def fake_head(
+        client: httpx.AsyncClient, url: str
+    ) -> tuple[str | None, str | None, int | None]:
+        return ("etag-sub", "Wed, 01 Jan 2025 00:00:00 GMT", 2222)
+
+    monkeypatch.setattr(discovery, "_request", fake_request)
+    monkeypatch.setattr(discovery, "_is_allowed_by_robots", fake_robots)
+    monkeypatch.setattr(discovery, "_head_metadata", fake_head)
+
+    docs = asyncio.run(discovery.discover_source(source))
+
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc.canonical_url == "https://www.nice.org.uk/guidance/ng100"
+    assert doc.doc_url.endswith("ng100-pdf.pdf")
