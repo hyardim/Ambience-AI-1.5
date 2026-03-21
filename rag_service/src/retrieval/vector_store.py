@@ -3,7 +3,7 @@ from typing import Any
 import psycopg2
 import psycopg2.extras
 
-from src.config import db_config, vector_config
+from ..config import db_config, vector_config
 
 
 def get_conn() -> Any:

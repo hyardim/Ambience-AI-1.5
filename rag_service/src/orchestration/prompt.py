@@ -1,4 +1,4 @@
-from src.retrieval.citation import CitedResult, format_section_path
+from ..retrieval.citation import CitedResult, format_section_path
 
 
 def build_system_prompt() -> str:

@@ -1,16 +1,16 @@
 from fastapi import APIRouter, HTTPException
 
-from src.api import services as api_services
-from src.api.ask_schemas import (
+from ..generation.prompts import ACTIVE_PROMPT
+from ..retrieval.query import RetrievalError
+from . import services as api_services
+from .ask_schemas import (
     AskRequest,
     AskResponse,
     CitationResponse,
     SourceResponse,
 )
-from src.api.routes import _generate_answer_from_retrieval
-from src.api.schemas import AnswerResponse
-from src.generation.prompts import ACTIVE_PROMPT
-from src.retrieval.query import RetrievalError
+from .routes import _generate_answer_from_retrieval
+from .schemas import AnswerResponse
 
 router = APIRouter()
 

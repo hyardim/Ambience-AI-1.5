@@ -4,10 +4,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from src.config import llm_config
-from src.generation.client import _request_chat_completion_sync
-from src.orchestration.prompt import build_system_prompt, format_context
-from src.retrieval.citation import CitedResult
+from ..config import llm_config
+from ..generation.client import _request_chat_completion_sync
+from ..retrieval.citation import CitedResult
+from .prompt import build_system_prompt, format_context
 
 
 class GenerationError(Exception):
