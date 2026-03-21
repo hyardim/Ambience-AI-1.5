@@ -45,6 +45,32 @@ function buildChat(id: number, status: string, title = `Consultation ${id}`) {
 async function installApiMocks(page: Page) {
   let currentRole: MockRole = 'gp';
   const createdChats = [buildChat(1, 'open', 'Headache follow-up')];
+  const specialistMessages = [
+    { id: 1, content: 'Initial user message', sender: 'user', created_at: new Date().toISOString() },
+    { id: 2, content: 'AI draft response', sender: 'ai', created_at: new Date().toISOString() },
+  ];
+  let specialistChatStatus: 'submitted' | 'assigned' | 'reviewing' | 'approved' = 'assigned';
+
+  const baseLogs = [
+    {
+      id: 1,
+      action: 'LOGIN',
+      category: 'AUTH',
+      details: 'user login',
+      timestamp: new Date().toISOString(),
+      user_id: 1,
+      user_identifier: 'gp_1',
+    },
+    {
+      id: 2,
+      action: 'SUBMIT_FOR_REVIEW',
+      category: 'CHAT',
+      details: 'consultation submitted',
+      timestamp: new Date().toISOString(),
+      user_id: 1,
+      user_identifier: 'gp_1',
+    },
+  ];
 
   await page.route('**/*', async (route: Route) => {
     const req = route.request();
@@ -144,7 +170,12 @@ async function installApiMocks(page: Page) {
     }
 
     if (pathname.startsWith('/chats/') && pathname.endsWith('/submit') && method === 'POST') {
-      return json(200, { ...createdChats[0], status: 'submitted' });
+      const id = Number(pathname.split('/')[2]);
+      const chatIndex = createdChats.findIndex((c) => c.id === id);
+      if (chatIndex >= 0) {
+        createdChats[chatIndex] = { ...createdChats[chatIndex], status: 'submitted' };
+      }
+      return json(200, { ...(createdChats[chatIndex] ?? buildChat(id, 'submitted')), status: 'submitted' });
     }
 
     if (pathname.startsWith('/chats/') && pathname.endsWith('/message') && method === 'POST') {
@@ -161,11 +192,8 @@ async function installApiMocks(page: Page) {
 
     if (pathname.startsWith('/specialist/chats/') && method === 'GET') {
       return json(200, {
-        ...buildChat(11, 'assigned', 'Assigned consultation'),
-        messages: [
-          { id: 1, content: 'Initial user message', sender: 'user', created_at: new Date().toISOString() },
-          { id: 2, content: 'AI draft response', sender: 'ai', created_at: new Date().toISOString() },
-        ],
+        ...buildChat(11, specialistChatStatus, 'Assigned consultation'),
+        messages: specialistMessages,
       });
     }
 
@@ -174,11 +202,22 @@ async function installApiMocks(page: Page) {
     }
 
     if (pathname.startsWith('/specialist/chats/') && pathname.includes('/messages/') && pathname.endsWith('/review') && method === 'POST') {
-      return json(200, buildChat(11, 'reviewing', 'Assigned consultation'));
+      const messageId = Number(pathname.split('/')[5]);
+      const body = req.postDataJSON() as { action?: string };
+      const target = specialistMessages.find((m) => m.id === messageId && m.sender === 'ai');
+      if (target && body.action === 'approve') {
+        Object.assign(target, { review_status: 'approved' });
+      }
+      if (target && body.action === 'request_changes') {
+        Object.assign(target, { review_status: 'rejected' });
+      }
+      specialistChatStatus = 'reviewing';
+      return json(200, buildChat(11, specialistChatStatus, 'Assigned consultation'));
     }
 
     if (pathname.startsWith('/specialist/chats/') && pathname.endsWith('/review') && method === 'POST') {
-      return json(200, buildChat(11, 'approved', 'Assigned consultation'));
+      specialistChatStatus = 'approved';
+      return json(200, buildChat(11, specialistChatStatus, 'Assigned consultation'));
     }
 
     if (pathname.startsWith('/specialist/chats/') && pathname.endsWith('/message') && method === 'POST') {
@@ -217,9 +256,24 @@ async function installApiMocks(page: Page) {
     }
 
     if (pathname.startsWith('/admin/logs') && method === 'GET') {
-      return json(200, [
-        { id: 1, action: 'LOGIN', category: 'AUTH', details: 'user login', timestamp: new Date().toISOString(), user_id: 1, user_identifier: 'gp_1' },
-      ]);
+      let logs = [...baseLogs];
+      const category = searchParams.get('category');
+      const action = searchParams.get('action');
+      const search = (searchParams.get('search') ?? '').toLowerCase();
+      if (category) {
+        logs = logs.filter((entry) => entry.category === category);
+      }
+      if (action) {
+        logs = logs.filter((entry) => entry.action === action);
+      }
+      if (search) {
+        logs = logs.filter(
+          (entry) =>
+            entry.action.toLowerCase().includes(search) ||
+            entry.details.toLowerCase().includes(search),
+        );
+      }
+      return json(200, logs);
     }
 
     if (pathname === '/admin/guidelines/upload' && method === 'POST') {
@@ -276,7 +330,10 @@ test('login with valid credentials', async ({ page }) => {
   await page.getByLabel(/username/i).fill('gp@example.com');
   await page.getByLabel(/password/i).fill('password123');
   await page.getByRole('button', { name: /login/i }).click();
-  await expect(page).toHaveURL(/\/login|\/gp\/queries/);
+  await expect(page.locator('body')).not.toContainText(/incorrect username or password/i);
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('user_role')))
+    .toBe('gp');
 });
 
 test('login with invalid credentials', async ({ page }) => {
@@ -347,10 +404,16 @@ test('gp sends followup message', async ({ page }) => {
   await expect(page.locator('body')).toContainText(/my consultations|consultation/i);
 });
 
-test('gp submits chat for review', async ({ page }) => {
+test('gp submitted consultation shows review state', async ({ page }) => {
   await setAuthenticatedSession(page, 'gp');
   await page.goto('/login');
-  await expect(page.locator('body')).toContainText(/consultation|review/i);
+  await page.evaluate(async () => {
+    await fetch('/chats/1/submit', { method: 'POST', credentials: 'include' });
+    window.history.pushState({}, '', '/gp/query/1');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.locator('body')).toContainText(/submitted for specialist review/i);
+  await expect(page.getByText(/^Submitted$/).first()).toBeVisible();
 });
 
 test('gp views reviewed feedback', async ({ page }) => {
@@ -389,7 +452,16 @@ test('specialist assigns from queue', async ({ page }) => {
 test('specialist reviews and approves', async ({ page }) => {
   await setAuthenticatedSession(page, 'specialist');
   await page.goto('/login');
-  await expect(page.locator('body')).toContainText(/review/i);
+  await page.getByText(/queue consultation/i).click();
+  await expect(page.locator('body')).toContainText(/review this ai response/i);
+
+  await page.getByRole('button', { name: /^approve$/i }).first().click();
+  await page.getByRole('button', { name: /confirm approval/i }).click();
+  await expect(page.locator('body')).toContainText(/all ai responses have been reviewed/i);
+
+  await page.getByRole('button', { name: /close & approve consultation/i }).first().click();
+  await page.getByRole('button', { name: /confirm close & approve/i }).click();
+  await expect(page.locator('body')).toContainText(/consultation approved/i);
 });
 
 test('specialist rejects with feedback', async ({ page }) => {
@@ -458,11 +530,14 @@ test('admin guidelines upload', async ({ page }) => {
 test('admin audit logs with filters', async ({ page }) => {
   await setAuthenticatedSession(page, 'admin');
   await page.goto('/login');
-  await page.evaluate(() => {
-    window.history.pushState({}, '', '/admin/logs');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  });
-  await expect(page).toHaveURL(/\/admin\/(users|logs)/);
+  await page.getByRole('link', { name: /logs/i }).click();
+  await expect(page.getByRole('heading', { name: /audit logs/i })).toBeVisible();
+  await page.getByPlaceholder(/search action or details/i).fill('login');
+  await page.getByRole('combobox').first().selectOption('AUTH');
+  await page.getByPlaceholder(/exact action/i).fill('LOGIN');
+  await page.getByRole('button', { name: /^apply$/i }).click();
+  await expect(page.locator('body')).toContainText('LOGIN');
+  await expect(page.locator('body')).not.toContainText('SUBMIT_FOR_REVIEW');
 });
 
 // E. Cross-Role Access Control (4)
@@ -501,7 +576,10 @@ test('deep link preserved after login', async ({ page }) => {
   await page.getByLabel(/username/i).fill('gp@example.com');
   await page.getByLabel(/password/i).fill('password123');
   await page.getByRole('button', { name: /login/i }).click();
-  await expect(page).toHaveURL(/\/login|\/gp\/queries|\/gp\/query\/1/);
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('user_role')))
+    .toBe('gp');
+  await expect(page.locator('body')).not.toContainText(/incorrect username or password/i);
 });
 
 // F. UI States & Edge Cases (3)

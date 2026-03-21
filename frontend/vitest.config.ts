@@ -3,6 +3,35 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'node:path';
 
+function sanitizedExecArgv(argv: string[]): string[] {
+  const cleaned: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const current = argv[index];
+
+    // VS Code can inject this flag for extension-host processes; forwarding it
+    // to test workers can trigger noisy "without a valid path" warnings.
+    if (current === '--localstorage-file') {
+      index += 1;
+      continue;
+    }
+
+    if (current.startsWith('--localstorage-file=')) {
+      continue;
+    }
+
+    cleaned.push(current);
+  }
+
+  if (!cleaned.includes('--no-warnings')) {
+    cleaned.push('--no-warnings');
+  }
+
+  return cleaned;
+}
+
+const workerExecArgv = sanitizedExecArgv(process.execArgv);
+
 export default defineConfig({
   plugins: [react()],
   define: {
@@ -19,6 +48,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/support/setup.ts'],
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
+    execArgv: workerExecArgv,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
