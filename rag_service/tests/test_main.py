@@ -21,9 +21,9 @@ def test_main_reexports_query_model() -> None:
     assert payload.top_k == 2
 
 
-def test_main_reexports_helper_aliases() -> None:
-    assert main._retrieve_chunks is main.retrieve_chunks
-    assert main._streaming_generator is main.streaming_generator
+def test_main_reexports_public_helpers() -> None:
+    assert callable(main.retrieve_chunks)
+    assert callable(main.streaming_generator)
 
 
 @pytest.mark.anyio

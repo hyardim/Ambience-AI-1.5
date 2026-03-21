@@ -268,11 +268,7 @@ def main_app():
         return_value=MagicMock()
     )  # type: ignore[attr-defined]
     sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(return_value=384)  # type: ignore[attr-defined]
-    sys.modules["src.ingestion.embed"].embed_text = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.retrieval.vector_store"].init_db = MagicMock()  # type: ignore[attr-defined]
-    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(
-        return_value=[]
-    )  # type: ignore[attr-defined]
     sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
         return_value=None
     )  # type: ignore[attr-defined]

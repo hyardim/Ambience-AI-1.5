@@ -35,13 +35,6 @@ from .api.streaming import ndjson_done_only, streaming_generator
 from .generation.client import ModelGenerationError, generate_answer
 from .jobs.retry import RetryJobStatus, create_retry_job, get_retry_job
 
-_extract_citation_results = extract_citation_results
-_filter_chunks = filter_chunks
-_ndjson_done_only = ndjson_done_only
-_parse_citation_group = parse_citation_group
-_retrieve_chunks = retrieve_chunks
-_streaming_generator = streaming_generator
-
 __all__ = [
     "MAX_CITATIONS",
     "AnswerRequest",

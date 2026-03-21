@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from ..config import routing_config
-
-ProviderName = Literal["local", "cloud"]
+from .client import ProviderName
 
 _COMPLEXITY_TERMS = {
     "differential",

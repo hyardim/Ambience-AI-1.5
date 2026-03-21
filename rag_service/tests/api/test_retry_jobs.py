@@ -205,12 +205,7 @@ def _install_stubs() -> None:
         return_value=MagicMock()
     )
     sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(return_value=384)
-    sys.modules["src.ingestion.embed"].embed_text = MagicMock(return_value=[[0.1]])
-
     sys.modules["src.retrieval.vector_store"].init_db = MagicMock()
-    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(
-        return_value=[]
-    )
     sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
         return_value=None
     )

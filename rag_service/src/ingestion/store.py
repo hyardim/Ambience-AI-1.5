@@ -195,13 +195,6 @@ def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _metadata_json(metadata: dict[str, Any]) -> str:
-    """Serialise metadata to sorted JSON string for comparison."""
-    if isinstance(metadata, str):
-        metadata = json.loads(metadata)
-    return json.dumps(metadata, sort_keys=True)
-
-
 def _metadata_equals(left: Any, right: Any) -> bool:
     return bool(_normalise_metadata(left) == _normalise_metadata(right))
 

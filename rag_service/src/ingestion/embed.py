@@ -161,21 +161,6 @@ def embed_chunks(
     return {**chunked_doc, "chunks": chunks}
 
 
-def embed_text(
-    model: SentenceTransformer, texts: list[str], batch_size: int = EMBEDDING_BATCH_SIZE
-) -> list[list[float]]:
-    """Embed arbitrary texts (e.g., user queries) with normalization."""
-    if not texts:
-        return []
-    vectors = model.encode(
-        texts,
-        batch_size=batch_size,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-    )
-    return [v.tolist() for v in vectors]
-
-
 # -----------------------------------------------------------------------
 # Batch + single embedding with retry
 # -----------------------------------------------------------------------

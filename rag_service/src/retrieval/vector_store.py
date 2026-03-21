@@ -1,7 +1,6 @@
 from typing import Any
 
 import psycopg2
-import psycopg2.extras
 
 from ..config import db_config, vector_config
 
@@ -73,16 +72,6 @@ def init_db(vector_dim: int) -> None:
     conn.close()
 
 
-def delete_chunks_for_doc(doc_id: str) -> None:
-    """
-    Deletes all chunks for a given document (used for clean re-ingestion).
-    """
-    conn = get_conn()
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s;", (doc_id,))
-    conn.close()
-
-
 def get_source_path_for_doc(doc_id: str) -> str | None:
     """Return the source_path for a given doc_id, if present in metadata."""
     conn = get_conn()
@@ -101,121 +90,3 @@ def get_source_path_for_doc(doc_id: str) -> str | None:
             return row[0] if row and row[0] else None
     finally:
         conn.close()
-
-
-def insert_chunks(chunks: list[dict[str, Any]]) -> None:
-    """
-    Bulk-inserts chunk rows.
-    """
-    if not chunks:
-        return
-
-    conn = get_conn()
-    with conn.cursor() as cur:
-        psycopg2.extras.execute_values(
-            cur,
-            """
-            INSERT INTO rag_chunks (
-                doc_id,
-                doc_version,
-                chunk_id,
-                chunk_index,
-                content_type,
-                text,
-                embedding,
-                metadata
-            )
-            VALUES %s
-            ON CONFLICT (doc_id, doc_version, chunk_id) DO UPDATE SET
-                chunk_index = EXCLUDED.chunk_index,
-                content_type = EXCLUDED.content_type,
-                text = EXCLUDED.text,
-                embedding = EXCLUDED.embedding,
-                metadata = EXCLUDED.metadata,
-                updated_at = NOW()
-            """,
-            [
-                (
-                    c["doc_id"],
-                    c["doc_version"],
-                    c["chunk_id"],
-                    c["chunk_index"],
-                    c.get("content_type", "text/plain"),
-                    c["text"],
-                    c["embedding"],
-                    c.get("metadata", {}),
-                )
-                for c in chunks
-            ],
-            page_size=500,
-        )
-    conn.close()
-
-
-def search_similar_chunks(
-    query_embedding: list[float],
-    limit: int = 5,
-    specialty: str | None = None,
-) -> list[dict[str, Any]]:
-    """Performs a vector similarity search (Cosine Distance) to find relevant chunks."""
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    doc_id,
-                    doc_version,
-                    chunk_id,
-                    chunk_index,
-                    content_type,
-                    text,
-                    metadata,
-                    (1 - (embedding <=> %s::vector)) AS score
-                FROM rag_chunks
-                WHERE (%s::text IS NULL OR metadata->>'specialty' = %s)
-                ORDER BY embedding <=> %s::vector ASC
-                LIMIT %s;
-                """,
-                (
-                    query_embedding,
-                    specialty,
-                    specialty,
-                    query_embedding,
-                    limit,
-                ),
-            )
-            results = cur.fetchall()
-
-        return [
-            {
-                "id": row[0],
-                "doc_id": row[1],
-                "doc_version": row[2],
-                "chunk_id": row[3],
-                "chunk_index": row[4],
-                "content_type": row[5],
-                "text": row[6],
-                "metadata": row[7] or {},
-                "score": float(row[8]),
-                "page_start": (row[7] or {}).get("page_start"),
-                "page_end": (row[7] or {}).get("page_end"),
-                # section_path can be stored as a list in metadata; join it here.
-                "section_path": _normalize_section_path(
-                    (row[7] or {}).get("section_path")
-                ),
-            }
-            for row in results
-        ]
-    finally:
-        conn.close()
-
-
-def _normalize_section_path(section_path: Any) -> str | None:
-    """Return a string section path, tolerating list metadata."""
-    if section_path is None:
-        return None
-    if isinstance(section_path, list):
-        return " > ".join(str(part) for part in section_path) if section_path else None
-    return str(section_path)

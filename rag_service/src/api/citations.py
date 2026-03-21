@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-import contextlib
 import re
 from typing import Any
 
+from ..utils.citation_utils import (
+    extract_citation_indices,
+    parse_citation_group,
+    rewrite_citations,
+)
 from .schemas import SearchResult
 
 MAX_CITATIONS = 3
@@ -39,7 +43,17 @@ BOILERPLATE_PATTERNS = [
     "manuscript",
 ]
 
-_CITATION_RE = re.compile(r"\[[\d,\s\-]+\]")
+# Re-export for existing consumers
+__all__ = [
+    "MAX_CITATIONS",
+    "MIN_RELEVANCE",
+    "extract_citation_indices",
+    "extract_citation_results",
+    "has_query_overlap",
+    "is_boilerplate",
+    "parse_citation_group",
+    "rewrite_citations",
+]
 
 
 def has_query_overlap(question: str, chunk_text: str) -> bool:
@@ -60,49 +74,10 @@ def has_query_overlap(question: str, chunk_text: str) -> bool:
 
 def is_boilerplate(chunk: dict[str, Any]) -> bool:
     text = (chunk.get("text") or "").lower()
-    section = ((chunk.get("section_path") or "") or "").lower()
+    section = (chunk.get("section_path") or "").lower()
     return any(
         pattern in text or pattern in section for pattern in BOILERPLATE_PATTERNS
     )
-
-
-def parse_citation_group(raw: str) -> list[int]:
-    """Parse a citation group string into a list of ints, handling ranges."""
-    numbers: list[int] = []
-    for part in raw.split(","):
-        part = part.strip()
-        if "-" in part:
-            try:
-                start, end = part.split("-", 1)
-                numbers.extend(range(int(start), int(end) + 1))
-            except ValueError:
-                pass
-        else:
-            with contextlib.suppress(ValueError):
-                numbers.append(int(part))
-    return numbers
-
-
-def extract_citation_indices(text: str) -> set[int]:
-    """Return all 1-based citation indices found in the text."""
-    return {
-        number
-        for match in _CITATION_RE.findall(text)
-        for number in parse_citation_group(match[1:-1])
-    }
-
-
-def rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
-    """Renumber valid citations and strip out-of-range references."""
-
-    def _rewrite(match: re.Match[str]) -> str:
-        numbers = parse_citation_group(match.group(0)[1:-1])
-        kept = sorted(
-            {renumber_map[number] for number in numbers if number in renumber_map}
-        )
-        return f"[{', '.join(str(number) for number in kept)}]" if kept else ""
-
-    return _CITATION_RE.sub(_rewrite, text)
 
 
 def extract_citation_results(

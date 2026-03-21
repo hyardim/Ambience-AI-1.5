@@ -671,3 +671,8 @@ async def test_call_model_wrappers_delegate(monkeypatch):
 
     assert await client._call_local_model("prompt") == "local"
     assert await client._call_cloud_model("prompt") == "cloud"
+
+
+def test_extract_chat_completion_text_returns_empty_for_empty_choices() -> None:
+    assert client._extract_chat_completion_text({"choices": []}) == ""
+    assert client._extract_chat_completion_text({}) == ""

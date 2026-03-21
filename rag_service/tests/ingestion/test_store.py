@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +8,6 @@ import pytest
 from src.ingestion.store import (
     _build_metadata,
     _metadata_equals,
-    _metadata_json,
     _upsert_chunk,
     store_chunks,
 )
@@ -140,32 +138,6 @@ class TestBuildMetadata:
         chunk["source_path"] = "data/raw/neurology/test.pdf"
         metadata = _build_metadata(chunk)
         assert metadata["source_path"] == "data/raw/neurology/test.pdf"
-
-
-# -----------------------------------------------------------------------
-# _metadata_json
-# -----------------------------------------------------------------------
-
-
-class TestMetadataJson:
-    def test_returns_string(self) -> None:
-        assert isinstance(_metadata_json({"a": 1}), str)
-
-    def test_sorted_keys(self) -> None:
-        result = _metadata_json({"b": 2, "a": 1})
-        assert result.index('"a"') < result.index('"b"')
-
-    def test_deterministic(self) -> None:
-        meta = {"b": 2, "a": 1, "c": [1, 2, 3]}
-        assert _metadata_json(meta) == _metadata_json(meta)
-
-    def test_different_metadata_different_json(self) -> None:
-        assert _metadata_json({"a": 1}) != _metadata_json({"a": 2})
-
-    def test_handles_string_input(self) -> None:
-        meta = {"b": 2, "a": 1}
-        as_string = json.dumps(meta)
-        assert _metadata_json(as_string) == _metadata_json(meta)
 
 
 class TestMetadataEquals:

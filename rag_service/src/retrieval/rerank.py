@@ -273,13 +273,6 @@ def _sigmoid(logit: float) -> float:
     return 1.0 / (1.0 + exp(-logit))
 
 
-def _jaccard_similarity(text_a: str, text_b: str) -> float:
-    """Compute token-level Jaccard similarity between two strings."""
-    tokens_a = _token_set(text_a)
-    tokens_b = _token_set(text_b)
-    return _jaccard_similarity_from_sets(tokens_a, tokens_b)
-
-
 def _token_set(text: str) -> set[str]:
     return set(text.lower().split())
 

@@ -32,15 +32,3 @@ class AskResponse(BaseModel):
     sources: list[SourceResponse]
     query: str
     model: str
-
-
-class IngestResponse(BaseModel):
-    source_name: str
-    filename: str
-    files_scanned: int
-    files_succeeded: int
-    files_failed: int
-    total_chunks: int
-    embeddings_succeeded: int
-    embeddings_failed: int
-    db: dict  # keys: inserted, updated, skipped, failed

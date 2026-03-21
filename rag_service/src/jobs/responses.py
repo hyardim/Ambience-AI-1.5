@@ -3,43 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_CITATION_RE = re.compile(r"\[[\d,\s\-]+\]")
-
-
-def parse_citation_group(raw: str) -> list[int]:
-    numbers: list[int] = []
-    for part in raw.split(","):
-        token = part.strip()
-        if "-" in token:
-            try:
-                start_str, end_str = token.split("-", 1)
-                start, end = int(start_str), int(end_str)
-                numbers.extend(range(start, end + 1))
-            except ValueError:
-                continue
-            continue
-        try:
-            numbers.append(int(token))
-        except ValueError:
-            continue
-    return numbers
-
-
-def extract_citation_indices(text: str) -> set[int]:
-    return {
-        n
-        for match in _CITATION_RE.findall(text)
-        for n in parse_citation_group(match[1:-1])
-    }
-
-
-def rewrite_citations(text: str, renumber_map: dict[int, int]) -> str:
-    def _rewrite(match: re.Match[str]) -> str:
-        numbers = parse_citation_group(match.group(0)[1:-1])
-        kept = sorted({renumber_map[n] for n in numbers if n in renumber_map})
-        return f"[{', '.join(str(k) for k in kept)}]" if kept else ""
-
-    return _CITATION_RE.sub(_rewrite, text)
+from ..utils.citation_utils import (
+    extract_citation_indices,
+    rewrite_citations,
+)
 
 
 def select_citations(

@@ -177,13 +177,11 @@ async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> 
 
 
 def _extract_chat_completion_text(data: dict[str, Any]) -> str:
+    choices = cast(list[dict[str, Any]], data.get("choices", []))
+    if not choices:
+        return ""
     return str(
-        cast(
-            dict[str, Any],
-            cast(list[dict[str, Any]], data.get("choices", [{}]))[0],
-        )
-        .get("message", {})
-        .get("content", "")
+        cast(dict[str, Any], choices[0]).get("message", {}).get("content", "")
     ).strip()
 
 

@@ -21,9 +21,6 @@ from ..utils.telemetry import append_jsonl
 from .responses import (
     build_answer_response,
     build_revise_response,
-    parse_citation_group,
-    rewrite_citations,
-    select_citations,
 )
 from .state import (
     build_idempotency_identifier,
@@ -406,12 +403,4 @@ def process_retry_job(job_id: str) -> None:
         )
 
 
-_build_answer_response = build_answer_response
-_build_revise_response = build_revise_response
 _build_idempotency_identifier = build_idempotency_identifier
-_compute_backoff_seconds = compute_backoff_seconds
-_decode_mapping = decode_mapping
-_deserialize = deserialize
-_parse_citation_group = parse_citation_group
-_rewrite_citations = rewrite_citations
-_select_citations = select_citations

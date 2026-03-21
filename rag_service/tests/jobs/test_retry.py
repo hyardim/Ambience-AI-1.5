@@ -5,24 +5,23 @@ from typing import Any
 
 import pytest
 
+from src.api.citations import parse_citation_group, rewrite_citations
 from src.generation.client import ModelGenerationError
+from src.jobs.responses import (
+    build_answer_response,
+    build_revise_response,
+    select_citations,
+)
 from src.jobs.retry import (
     RetryJobStatus,
-    _build_answer_response,
     _build_idempotency_identifier,
-    _build_revise_response,
-    _compute_backoff_seconds,
-    _decode_mapping,
-    _deserialize,
     _extract_retry_payload,
-    _parse_citation_group,
-    _rewrite_citations,
-    _select_citations,
     create_retry_job,
     get_retry_job,
     get_retry_queue,
     process_retry_job,
 )
+from src.jobs.state import compute_backoff_seconds, decode_mapping, deserialize
 
 
 class FakeQueue:
@@ -189,14 +188,14 @@ def test_idempotency_key_dedup(fake_backend):
 
 
 def test_deserialize_handles_none_and_bytes() -> None:
-    assert _deserialize(None, default="x") == "x"
-    assert _deserialize(b'{"a":1}') == {"a": 1}
-    assert _deserialize("not-json", default=[]) == []
+    assert deserialize(None, default="x") == "x"
+    assert deserialize(b'{"a":1}') == {"a": 1}
+    assert deserialize("not-json", default=[]) == []
 
 
 def test_decode_mapping_decodes_bytes() -> None:
     raw = {b"a": b"1", "b": 2}
-    assert _decode_mapping(raw) == {"a": "1", "b": "2"}
+    assert decode_mapping(raw) == {"a": "1", "b": "2"}
 
 
 def test_build_idempotency_identifier_prefers_explicit_key() -> None:
@@ -206,26 +205,26 @@ def test_build_idempotency_identifier_prefers_explicit_key() -> None:
 def test_compute_backoff_seconds_never_below_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_seconds", 0)
-    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_multiplier", 0)
-    assert _compute_backoff_seconds(0) == 1
+    monkeypatch.setattr("src.jobs.state.retry_config.retry_backoff_seconds", 0)
+    monkeypatch.setattr("src.jobs.state.retry_config.retry_backoff_multiplier", 0)
+    assert compute_backoff_seconds(0) == 1
 
 
 def test_compute_backoff_seconds_respects_max_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_seconds", 100)
-    monkeypatch.setattr("src.jobs.retry.retry_config.retry_backoff_multiplier", 10)
-    monkeypatch.setattr("src.jobs.retry.retry_config.retry_max_backoff_seconds", 250)
-    assert _compute_backoff_seconds(4) == 250
+    monkeypatch.setattr("src.jobs.state.retry_config.retry_backoff_seconds", 100)
+    monkeypatch.setattr("src.jobs.state.retry_config.retry_backoff_multiplier", 10)
+    monkeypatch.setattr("src.jobs.state.retry_config.retry_max_backoff_seconds", 250)
+    assert compute_backoff_seconds(4) == 250
 
 
 def test_parse_citation_group_handles_ranges_and_invalid_tokens() -> None:
-    assert _parse_citation_group("1, 3-4, nope, 7-") == [1, 3, 4]
+    assert parse_citation_group("1, 3-4, nope, 7-") == [1, 3, 4]
 
 
-def test_rewrite_and_select_citations() -> None:
-    answer, citations = _select_citations(
+def test_rewrite_andselect_citations() -> None:
+    answer, citations = select_citations(
         "Answer [2, 1]\nReferences: hidden",
         [{"id": 1}, {"id": 2}],
         strip_references=True,
@@ -233,18 +232,18 @@ def test_rewrite_and_select_citations() -> None:
 
     assert answer == "Answer [1, 2]"
     assert citations == [{"id": 1}, {"id": 2}]
-    assert _rewrite_citations("See [2]", {2: 1}) == "See [1]"
+    assert rewrite_citations("See [2]", {2: 1}) == "See [1]"
 
 
 def test_build_answer_and_revise_response_shapes() -> None:
     citations = [{"id": 1}]
 
-    answer_response = _build_answer_response(
+    answer_response = build_answer_response(
         answer_text="Done [1]",
         prompt_label="new",
         citations_retrieved=citations,
     )
-    revise_response = _build_revise_response(
+    revise_response = build_revise_response(
         answer_text="Done [1]",
         citations_retrieved=citations,
     )
