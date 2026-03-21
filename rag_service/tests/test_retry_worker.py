@@ -16,6 +16,26 @@ import pytest
 _SCRIPT_PATH = Path(__file__).parent.parent / "scripts" / "run_retry_worker.py"
 
 
+@pytest.fixture(autouse=True)
+def _restore_stubbed_modules_after_test():
+    module_names = [
+        "redis",
+        "rq",
+        "src.config",
+        "src.retry_queue",
+        "run_retry_worker",
+    ]
+    originals = {name: sys.modules.get(name) for name in module_names}
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
 def _load_worker_module(fake_redis_cls: MagicMock, fake_worker_cls: MagicMock) -> ModuleType:
     """Load run_retry_worker with redis and rq stubbed out."""
     # Stub redis package

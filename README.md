@@ -55,10 +55,16 @@ Enable periodic sync with environment variables (in `rag_service/.env` or compos
 Manual operations:
 
 - CLI: `python -m src.ingestion.cli sync-web --log-level INFO`
+- CLI dry-run by source: `python -m src.ingestion.cli sync-web --source NICE --source NICE_NEURO --source BSR --dry-run`
 - API trigger: `POST /guidelines/sync`
 - API status: `GET /guidelines/sync/status`
 
 The sync process is idempotent: unchanged files are skipped, updated files are re-downloaded and re-ingested, and disappeared remote files are marked stale in local sync state (not auto-deleted).
+
+Practical notes:
+
+- `dry_run=true` performs discovery/download checks only and does not ingest into the vector store.
+- A full NICE/NICE_NEURO ingest can take several minutes depending on PDF volume and model speed.
 
 ## Running with RunPod (2x A100 PCIe + vLLM)
 

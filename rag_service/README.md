@@ -117,7 +117,7 @@ Manual web sync trigger (new flow):
 
 ```bash
 python -m src.ingestion.cli sync-web --log-level INFO
-python -m src.ingestion.cli sync-web --source NICE --source BSR --dry-run
+python -m src.ingestion.cli sync-web --source NICE --source NICE_NEURO --source BSR --dry-run
 ```
 
 API trigger/status:
@@ -125,7 +125,7 @@ API trigger/status:
 ```bash
 curl -X POST http://localhost:8001/guidelines/sync \
   -H "Content-Type: application/json" \
-  -d '{"source_names": ["NICE", "BSR"], "dry_run": false}'
+  -d '{"source_names": ["NICE", "NICE_NEURO", "BSR"], "dry_run": false}'
 
 curl http://localhost:8001/guidelines/sync/status
 ```
@@ -141,6 +141,7 @@ Troubleshooting:
 - If discovery is blocked by `robots.txt`, the source is skipped and sync continues.
 - If files are unchanged (same etag/last-modified/hash), they are skipped.
 - If a document disappears from the source page, it is marked stale in sync state and not deleted locally.
+- If `/guidelines/sync` is slow for full runs, use `dry_run=true` first to validate discovery quickly.
 
 ---
 
@@ -265,7 +266,7 @@ data/
 │   │   ├── NICE/
 │   │   └── BSR/
 │   └── neurology/
-│       ├── NICE/
+│       ├── NICE_NEURO/
 │       └── BSR/
 └── processed/
 ```
@@ -293,7 +294,7 @@ Each line is a self-contained JSON object with a `type` discriminator:
 ```bash
 curl -s -N http://localhost:8001/answer \
   -H 'Content-Type: application/json' \
-  -d '{"question":"What is migraine?","specialty":"neurology","stream":true}'
+  -d '{"query":"What is migraine?","specialty":"neurology","stream":true}'
 ```
 
 ### Streaming helper
