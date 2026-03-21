@@ -1,6 +1,9 @@
 import { http, HttpResponse } from 'msw';
 import type { LoginResponse, UserProfile, BackendChat, BackendChatWithMessages, GPMessageResponse, NotificationResponse, AdminChatResponse, AuditLogResponse } from '../../types/api';
 
+// Must match VITE_API_URL in .env.local so MSW intercepts absolute fetch calls
+const API = 'http://localhost:8000';
+
 // ── Fixture data ──────────────────────────────────────────────────────────
 
 export const mockGPUser: UserProfile = {
@@ -104,9 +107,9 @@ export const mockAdminChats: AdminChatResponse[] = [
     specialty: 'neurology',
     severity: 'medium',
     user_id: 1,
-    owner_name: 'Dr GP',
+    owner_identifier: 'Dr GP',
     specialist_id: null,
-    specialist_name: null,
+    specialist_identifier: null,
     assigned_at: null,
     reviewed_at: null,
     review_feedback: null,
@@ -118,7 +121,7 @@ export const mockAuditLogs: AuditLogResponse[] = [
   {
     id: 1,
     user_id: 1,
-    user_email: 'gp@example.com',
+    user_identifier: 'gp@example.com',
     action: 'LOGIN',
     category: 'AUTH',
     details: 'User logged in',
@@ -130,11 +133,11 @@ export const mockAuditLogs: AuditLogResponse[] = [
 
 export const handlers = [
   // Auth
-  http.post('/auth/login', () => {
+  http.post(`${API}/auth/login`, () => {
     return HttpResponse.json(mockLoginResponse);
   }),
 
-  http.post('/auth/register', () => {
+  http.post(`${API}/auth/register`, () => {
     return HttpResponse.json({
       ...mockLoginResponse,
       user: { ...mockGPUser, full_name: 'New User' },
@@ -143,17 +146,17 @@ export const handlers = [
     });
   }),
 
-  http.post('/auth/resend-verification', () => {
+  http.post(`${API}/auth/resend-verification`, () => {
     return HttpResponse.json({
       message: 'If an account exists and requires verification, a verification link will be sent shortly',
     });
   }),
 
-  http.post('/auth/verify-email/confirm', () => {
+  http.post(`${API}/auth/verify-email/confirm`, () => {
     return HttpResponse.json({ message: 'Email verified successfully' });
   }),
 
-  http.get('/auth/verification-status', () => {
+  http.get(`${API}/auth/verification-status`, () => {
     return HttpResponse.json({
       email: 'gp@example.com',
       email_verified: true,
@@ -161,30 +164,30 @@ export const handlers = [
     });
   }),
 
-  http.post('/auth/forgot-password', () => {
+  http.post(`${API}/auth/forgot-password`, () => {
     return HttpResponse.json({
       message: 'If that email is registered, a password reset link will be sent shortly',
     });
   }),
 
-  http.post('/auth/reset-password/confirm', () => {
+  http.post(`${API}/auth/reset-password/confirm`, () => {
     return HttpResponse.json({ message: 'Password reset successful' });
   }),
 
-  http.post('/auth/logout', () => {
+  http.post(`${API}/auth/logout`, () => {
     return HttpResponse.json({ success: true });
   }),
 
-  http.get('/auth/me', () => {
+  http.get(`${API}/auth/me`, () => {
     return HttpResponse.json(mockGPUser);
   }),
 
-  http.patch('/auth/profile', () => {
+  http.patch(`${API}/auth/profile`, () => {
     return HttpResponse.json(mockGPUser);
   }),
 
   // Chats (GP)
-  http.get('/chats/', ({ request }) => {
+  http.get(`${API}/chats/`, ({ request }) => {
     const url = new URL(request.url);
     let chats = [mockChat, mockChat2];
     const search = url.searchParams.get('search');
@@ -198,101 +201,101 @@ export const handlers = [
     return HttpResponse.json(chats);
   }),
 
-  http.get('/chats/:chatId', ({ params }) => {
+  http.get(`${API}/chats/:chatId`, ({ params }) => {
     return HttpResponse.json({ ...mockChatWithMessages, id: Number(params.chatId) });
   }),
 
-  http.post('/chats/', () => {
+  http.post(`${API}/chats/`, () => {
     return HttpResponse.json(mockChat);
   }),
 
-  http.delete('/chats/:chatId', () => {
+  http.delete(`${API}/chats/:chatId`, () => {
     return new HttpResponse(null, { status: 204 });
   }),
 
-  http.patch('/chats/:chatId', () => {
+  http.patch(`${API}/chats/:chatId`, () => {
     return HttpResponse.json(mockChat);
   }),
 
-  http.post('/chats/:chatId/submit', () => {
+  http.post(`${API}/chats/:chatId/submit`, () => {
     return HttpResponse.json({ ...mockChat, status: 'submitted' });
   }),
 
-  http.post('/chats/:chatId/message', () => {
+  http.post(`${API}/chats/:chatId/message`, () => {
     return HttpResponse.json({ status: 'ok', ai_response: 'AI says hello' } satisfies GPMessageResponse);
   }),
 
   // Specialist
-  http.get('/specialist/queue', () => {
+  http.get(`${API}/specialist/queue`, () => {
     return HttpResponse.json([{ ...mockChat, status: 'submitted' }]);
   }),
 
-  http.get('/specialist/assigned', () => {
+  http.get(`${API}/specialist/assigned`, () => {
     return HttpResponse.json([{ ...mockChat2, status: 'assigned', specialist_id: 2 }]);
   }),
 
-  http.get('/specialist/chats/:chatId', ({ params }) => {
+  http.get(`${API}/specialist/chats/:chatId`, ({ params }) => {
     return HttpResponse.json({ ...mockChatWithMessages, id: Number(params.chatId) });
   }),
 
-  http.post('/specialist/chats/:chatId/assign', () => {
+  http.post(`${API}/specialist/chats/:chatId/assign`, () => {
     return HttpResponse.json({ ...mockChat, status: 'assigned', specialist_id: 2 });
   }),
 
-  http.post('/specialist/chats/:chatId/review', () => {
+  http.post(`${API}/specialist/chats/:chatId/review`, () => {
     return HttpResponse.json({ ...mockChat, status: 'approved' });
   }),
 
-  http.post('/specialist/chats/:chatId/message', () => {
+  http.post(`${API}/specialist/chats/:chatId/message`, () => {
     return HttpResponse.json({ status: 'ok', message_id: 99 });
   }),
 
   // Notifications
-  http.get('/notifications/', () => {
+  http.get(`${API}/notifications/`, () => {
     return HttpResponse.json(mockNotifications);
   }),
 
-  http.patch('/notifications/:id/read', () => {
+  http.patch(`${API}/notifications/:id/read`, () => {
     return HttpResponse.json({ ...mockNotifications[0], is_read: true });
   }),
 
-  http.patch('/notifications/read-all', () => {
+  http.patch(`${API}/notifications/read-all`, () => {
     return HttpResponse.json({ marked_read: 2 });
   }),
 
   // Admin: Users
-  http.get('/admin/users', () => {
+  http.get(`${API}/admin/users`, () => {
     return HttpResponse.json([mockGPUser, mockSpecialistUser, mockAdminUser]);
   }),
 
-  http.get('/admin/users/:userId', ({ params }) => {
+  http.get(`${API}/admin/users/:userId`, ({ params }) => {
     return HttpResponse.json({ ...mockGPUser, id: Number(params.userId) });
   }),
 
-  http.patch('/admin/users/:userId', () => {
+  http.patch(`${API}/admin/users/:userId`, () => {
     return HttpResponse.json(mockGPUser);
   }),
 
-  http.delete('/admin/users/:userId', () => {
+  http.delete(`${API}/admin/users/:userId`, () => {
     return HttpResponse.json({ ...mockGPUser, is_active: false });
   }),
 
   // Admin: Chats
-  http.get('/admin/chats', () => {
+  http.get(`${API}/admin/chats`, () => {
     return HttpResponse.json(mockAdminChats);
   }),
 
-  http.get('/admin/chats/:chatId', ({ params }) => {
+  http.get(`${API}/admin/chats/:chatId`, ({ params }) => {
     return HttpResponse.json({ ...mockChatWithMessages, id: Number(params.chatId) });
   }),
 
   // Admin: Audit Logs
-  http.get('/admin/audit-logs', () => {
+  http.get(`${API}/admin/audit-logs`, () => {
     return HttpResponse.json(mockAuditLogs);
   }),
 
   // Health
-  http.get('/health', () => {
+  http.get(`${API}/health`, () => {
     return HttpResponse.json({ status: 'ok', system: 'healthy' });
   }),
 ];
