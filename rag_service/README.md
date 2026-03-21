@@ -42,7 +42,7 @@ needed, and verifies the NLTK tokenizer data used by ingestion.
 
 The service reads settings from `.env` via the `src/config/` package.
 
-Important groups in [`.env.example`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/.env.example):
+Important groups in [`.env.example`](.env.example):
 
 - Database: `POSTGRES_*`, optional `DATABASE_URL`
 - Embeddings: `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`
@@ -53,13 +53,14 @@ Important groups in [`.env.example`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_s
 - Cloud model: `RUNPOD_*`, `LLM_*`, `CLOUD_LLM_*`
 - Routing: `LLM_ROUTE_THRESHOLD`, `ROUTE_REVISIONS_TO_CLOUD`, `FORCE_CLOUD_LLM`
 - Retry queue: `REDIS_URL`, `RETRY_*`
+- Optional alerting webhook: `LLM_FALLBACK_ALERT_WEBHOOK_URL`, `LLM_FALLBACK_ALERT_TIMEOUT_SECONDS`
 
 If `DATABASE_URL` is blank, the service builds it from the individual
 `POSTGRES_*` settings.
 
 ## Running with Docker Compose
 
-This folder’s [`docker-compose.yml`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/docker-compose.yml) is scoped to the RAG service only:
+This folder's [`docker-compose.yml`](docker-compose.yml) is scoped to the RAG service only:
 
 - `db_vector`
 - `redis`
@@ -99,7 +100,7 @@ Notes:
   instance running on the host machine without having to change the normal
   local `OLLAMA_BASE_URL=http://localhost:11434` setting used outside Docker.
 - For the full product stack (`backend`, `frontend`, `rag_service`, database),
-  use the repo-root [`docker-compose.yml`](/Users/Kavin2/Desktop/Ambience-AI-1.5/docker-compose.yml) instead.
+  use the repo-root [`docker-compose.yml`](../docker-compose.yml) instead.
 
 ## Running without Docker
 
@@ -201,7 +202,7 @@ make test
 make lint
 ```
 
-Tests mirror the `src/` structure under [`tests/`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/tests).
+Tests mirror the `src/` structure under [`tests/`](tests/).
 
 At the time of this cleanup pass:
 
@@ -212,6 +213,6 @@ At the time of this cleanup pass:
 
 ## Notes for maintainers
 
-- The authoritative settings live in [`src/config/__init__.py`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/config/__init__.py).
-- The main app entrypoint is [`src.main:app`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/main.py).
-- [`src/api/ask_routes.py`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/src/api/ask_routes.py) is still live because the app includes the `/ask` router.
+- The authoritative settings live in [`src/config/__init__.py`](src/config/__init__.py).
+- The main app entrypoint is [`src.main:app`](src/main.py).
+- [`src/api/ask_routes.py`](src/api/ask_routes.py) is still live because the app includes the `/ask` router.

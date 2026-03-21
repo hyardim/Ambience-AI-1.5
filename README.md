@@ -13,7 +13,7 @@ rag_service/   RAG ingestion/retrieval/generation service
 ```
 
 For the service-specific setup and file structure, see
-[`rag_service/README.md`](/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service/README.md).
+[`rag_service/README.md`](rag_service/README.md).
 
 ## Running the stack
 
@@ -30,7 +30,7 @@ Main endpoints:
 
 - backend: `http://localhost:8000`
 - rag service: `http://localhost:8001`
-- frontend: `http://localhost:5173`
+- frontend: `http://localhost:3000`
 
 ## Model paths
 
