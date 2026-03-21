@@ -1,8 +1,10 @@
 """Backward-compatible entrypoint for the full clinical RAG service."""
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from . import config as app_config
@@ -27,6 +29,7 @@ from .api.schemas import (
     ReviseRequest,
     SearchResult,
 )
+from .api.security import require_internal_api_key
 from .api.services import (
     filter_chunks,
     log_route_decision,
@@ -71,7 +74,31 @@ def _build_sync_scheduler() -> GuidelineSyncScheduler:
 sync_scheduler = _build_sync_scheduler()
 
 
-@app.post("/guidelines/sync")
+async def start_guideline_sync_scheduler() -> None:
+    sync_scheduler.start()
+
+
+async def stop_guideline_sync_scheduler() -> None:
+    await sync_scheduler.stop()
+
+
+_base_lifespan = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _main_lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
+    await start_guideline_sync_scheduler()
+    try:
+        async with _base_lifespan(app_instance):
+            yield
+    finally:
+        await stop_guideline_sync_scheduler()
+
+
+app.router.lifespan_context = _main_lifespan
+
+
+@app.post("/guidelines/sync", dependencies=[Depends(require_internal_api_key)])
 async def trigger_guideline_sync(
     payload: GuidelineSyncTriggerRequest | None = None,
 ) -> dict[str, Any]:
@@ -86,7 +113,11 @@ async def trigger_guideline_sync(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.get("/guidelines/sync/status", response_model=GuidelineSyncStatusResponse)
+@app.get(
+    "/guidelines/sync/status",
+    response_model=GuidelineSyncStatusResponse,
+    dependencies=[Depends(require_internal_api_key)],
+)
 async def guideline_sync_status() -> GuidelineSyncStatusResponse:
     return GuidelineSyncStatusResponse(**sync_scheduler.status())
 
@@ -105,6 +136,7 @@ __all__ = [
     "RetryJobStatus",
     "ReviseRequest",
     "SearchResult",
+    "_main_lifespan",
     "app",
     "clinical_query",
     "create_retry_job",
@@ -123,6 +155,8 @@ __all__ = [
     "parse_citation_group",
     "retrieve_chunks",
     "revise_clinical_answer",
+    "start_guideline_sync_scheduler",
+    "stop_guideline_sync_scheduler",
     "streaming_generator",
     "sync_scheduler",
     "to_search_result",
