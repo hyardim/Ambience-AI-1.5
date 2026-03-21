@@ -12,9 +12,31 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import pytest
+
 _SCRIPT_PATH = (
     Path(__file__).parent.parent / "scripts" / "workers" / "run_retry_worker.py"
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_stubbed_modules_after_test() -> None:
+    module_names = [
+        "redis",
+        "rq",
+        "src.config",
+        "src.jobs.retry",
+        "run_retry_worker",
+    ]
+    originals = {name: sys.modules.get(name) for name in module_names}
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 def _load_worker_module(
@@ -32,14 +54,15 @@ def _load_worker_module(
     rq_mod.Worker = fake_worker_cls  # type: ignore[attr-defined]
     sys.modules["rq"] = rq_mod
 
-    # Stub src.config and src.retry_queue
+    # Stub src.config and src.jobs.retry
     cfg_mod = ModuleType("src.config")
-    cfg_mod.REDIS_URL = "redis://localhost:6379/0"  # type: ignore[attr-defined]
+    cfg_mod.retry_config = ModuleType("retry_config")  # type: ignore[attr-defined]
+    cfg_mod.retry_config.redis_url = "redis://localhost:6379/0"  # type: ignore[attr-defined]
     sys.modules["src.config"] = cfg_mod
 
-    rq_src = ModuleType("src.retry_queue")
+    rq_src = ModuleType("src.jobs.retry")
     rq_src.QUEUE_NAME = "rag_retry"  # type: ignore[attr-defined]
-    sys.modules["src.retry_queue"] = rq_src
+    sys.modules["src.jobs.retry"] = rq_src
 
     # Force re-load
     sys.modules.pop("run_retry_worker", None)

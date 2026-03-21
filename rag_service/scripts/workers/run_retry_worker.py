@@ -7,17 +7,10 @@ import signal
 from redis import Redis
 from rq import Worker
 
-try:
-    from src.config import retry_config
+from src.config import retry_config
+from src.jobs.retry import QUEUE_NAME
 
-    REDIS_URL = retry_config.redis_url
-except Exception:
-    from src.config import REDIS_URL  # type: ignore[attr-defined,no-redef]
-
-try:
-    from src.jobs.retry import QUEUE_NAME
-except Exception:
-    from src.retry_queue import QUEUE_NAME  # type: ignore[no-redef]
+REDIS_URL = retry_config.redis_url
 
 
 def main() -> None:
