@@ -137,10 +137,33 @@ export interface AssignRequest {
 }
 
 export interface ReviewRequest {
-  action: 'approve' | 'reject' | 'request_changes' | 'manual_response';
+  action: 'approve' | 'reject' | 'request_changes' | 'manual_response' | 'edit_response';
   feedback?: string | null;
   replacement_content?: string | null;
   replacement_sources?: string[] | null;
+  edited_content?: string | null;
+}
+
+export interface RagDocumentHealth {
+  doc_id: string;
+  source_name: string;
+  chunk_count: number;
+  latest_ingestion: string | null;
+}
+
+export interface RagJobSummary {
+  job_id: string;
+  status: string;
+  source_name: string;
+  created_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+export interface RagStatusResponse {
+  status: string;
+  documents: RagDocumentHealth[];
+  recent_jobs: RagJobSummary[];
 }
 
 // ---------------------------------------------------------------------------

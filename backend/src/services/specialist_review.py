@@ -70,7 +70,7 @@ def review(
     if body.action not in ("approve", "reject", "request_changes"):
         raise HTTPException(
             status_code=400,
-            detail="action must be 'approve', 'reject', or 'request_changes' (use per-message review for 'manual_response')",
+            detail="action must be 'approve', 'reject', or 'request_changes' (use per-message review for 'manual_response' or 'edit_response')",
         )
 
     chat = (
@@ -216,6 +216,14 @@ def review_message(
             detail="replacement_content is required for manual_response action",
         )
 
+    if body.action == "edit_response" and (
+        not body.edited_content or not body.edited_content.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="edited_content is required for edit_response action",
+        )
+
     _mark_message(db, target, body)
 
     if body.action == "request_changes":
@@ -244,6 +252,38 @@ def review_message(
             chat_id=chat.id,
         )
         invalidate_notification_caches(chat.user_id)
+    elif body.action == "edit_response":
+        edited_content = (
+            body.edited_content.strip() if body.edited_content is not None else ""
+        )
+        target.content = edited_content
+        target.review_status = "edited"
+        target.review_feedback = body.feedback
+        target.reviewed_at = datetime.now(timezone.utc)
+        if body.replacement_sources:
+            target.citations = _build_manual_citations(body.replacement_sources)
+        db.commit()
+        db.refresh(target)
+        audit_repository.log(
+            db,
+            user_id=specialist.id,
+            action="REVIEW_EDIT_RESPONSE",
+            details=f"Chat {chat_id} msg {message_id} edited by specialist. Feedback: {body.feedback or 'none'}",
+        )
+        notification_repository.create(
+            db,
+            user_id=chat.user_id,
+            type=NotificationType.SPECIALIST_MSG,
+            title="Specialist edited the AI response",
+            body=(
+                f"{specialist.full_name or specialist.email} edited an AI response "
+                f"in '{chat.title}'."
+            ),
+            chat_id=chat.id,
+        )
+        invalidate_notification_caches(chat.user_id)
+        if chat.status != ChatStatus.REVIEWING:
+            chat = chat_repository.update(db, chat, status=ChatStatus.REVIEWING)
     elif body.action == "manual_response":
         replacement_content = (
             body.replacement_content.strip()
@@ -358,6 +398,8 @@ def _mark_message(db: Session, msg: Message, body: ReviewRequest) -> None:
         msg.review_status = "approved"
     elif body.action == "manual_response":
         msg.review_status = "replaced"
+    elif body.action == "edit_response":
+        msg.review_status = "edited"
     else:
         msg.review_status = "rejected"
     msg.review_feedback = body.feedback
@@ -449,12 +491,12 @@ def _do_revise(
         request_kwargs: dict[str, Any] = {}
         if rag_headers:
             request_kwargs["headers"] = rag_headers
-        rag_response = httpx.post(
-            f"{RAG_SERVICE_URL}/revise",
-            json=rag_payload,
-            timeout=RAG_REQUEST_TIMEOUT_SECONDS,
-            **request_kwargs,
-        )
+        with httpx.Client(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
+            rag_response = client.post(
+                f"{RAG_SERVICE_URL}/revise",
+                json=rag_payload,
+                **request_kwargs,
+            )
         rag_response.raise_for_status()
         rag_json = rag_response.json()
         revised_content = rag_json.get("answer", "")

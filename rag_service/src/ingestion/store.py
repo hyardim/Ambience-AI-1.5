@@ -191,6 +191,9 @@ def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
         "section_title": chunk.get("section_title", ""),
         "page_start": chunk.get("page_start", 0),
         "page_end": chunk.get("page_end", 0),
+        "creation_date": citation.get("creation_date", ""),
+        "publish_date": citation.get("publish_date", ""),
+        "last_updated_date": citation.get("last_updated_date", ""),
         "citation": citation,
     }
 

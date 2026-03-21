@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Severity = Literal["low", "medium", "high", "urgent"]
 Gender = Literal["male", "female", "other"]
-ReviewAction = Literal["approve", "reject", "request_changes", "manual_response"]
+ReviewAction = Literal[
+    "approve", "reject", "request_changes", "manual_response", "edit_response"
+]
 
 # ---------------------------------------------------------------------------
 # File attachment
@@ -132,3 +134,4 @@ class ReviewRequest(BaseModel):
     feedback: Optional[str] = Field(default=None, max_length=10_000)
     replacement_content: Optional[str] = Field(default=None, max_length=50_000)
     replacement_sources: Optional[List[str]] = None
+    edited_content: Optional[str] = Field(default=None, max_length=50_000)

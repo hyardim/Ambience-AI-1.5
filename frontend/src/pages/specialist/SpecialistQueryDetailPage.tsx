@@ -45,6 +45,10 @@ export function SpecialistQueryDetailPage() {
   const [manualResponseContent, setManualResponseContent] = useState('');
   const [manualResponseSources, setManualResponseSources] = useState('');
   const [manualResponseFiles, setManualResponseFiles] = useState<File[]>([]);
+  const [showEditResponseModal, setShowEditResponseModal] = useState(false);
+  const [editResponseContent, setEditResponseContent] = useState('');
+  const [editResponseSources, setEditResponseSources] = useState('');
+  const [editResponseFeedback, setEditResponseFeedback] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Which message the current modal action targets
@@ -277,6 +281,38 @@ export function SpecialistQueryDetailPage() {
     }
   };
 
+  const handleEditResponse = async () => {
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
+    setActionLoading(true);
+    setError('');
+    try {
+      const sources = editResponseSources
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      await reviewMessage(
+        currentChat.id,
+        targetMessageId,
+        'edit_response',
+        editResponseFeedback.trim() || undefined,
+        undefined,
+        sources,
+        editResponseContent.trim(),
+      );
+      setShowEditResponseModal(false);
+      setEditResponseContent('');
+      setEditResponseSources('');
+      setEditResponseFeedback('');
+      setReviewTargetMessageId(null);
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to save edited response'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleCloseAndApprove = async () => {
     const currentChat = chat!;
     setActionLoading(true);
@@ -369,6 +405,10 @@ export function SpecialistQueryDetailPage() {
       manualResponseContent={manualResponseContent}
       manualResponseSources={manualResponseSources}
       manualResponseFiles={manualResponseFiles}
+      editResponseContent={editResponseContent}
+      editResponseSources={editResponseSources}
+      editResponseFeedback={editResponseFeedback}
+      showEditResponseModal={showEditResponseModal}
       showApproveConfirm={showApproveConfirm}
       showApproveWithCommentModal={showApproveWithCommentModal}
       showRejectModal={showRejectModal}
@@ -386,6 +426,10 @@ export function SpecialistQueryDetailPage() {
       onManualResponseSourcesChange={setManualResponseSources}
       onManualResponseFilesChange={setManualResponseFiles}
       onManualResponse={handleManualResponse}
+      onEditResponseContentChange={setEditResponseContent}
+      onEditResponseSourcesChange={setEditResponseSources}
+      onEditResponseFeedbackChange={setEditResponseFeedback}
+      onEditResponse={handleEditResponse}
       onSendMessage={handleSendMessage}
       onOpenApproveConfirm={(messageId) => {
         setReviewTargetMessageId(Number(messageId));
@@ -403,6 +447,11 @@ export function SpecialistQueryDetailPage() {
         setReviewTargetMessageId(Number(messageId));
         setShowManualResponseModal(true);
       }}
+      onOpenEditResponse={(messageId, currentContent) => {
+        setReviewTargetMessageId(Number(messageId));
+        setEditResponseContent(currentContent);
+        setShowEditResponseModal(true);
+      }}
       onCloseAndApprove={handleCloseAndApprove}
       onCloseApproveConfirm={() => setShowApproveConfirm(false)}
       onCloseApproveWithComment={() => {
@@ -418,6 +467,12 @@ export function SpecialistQueryDetailPage() {
         setManualResponseContent('');
         setManualResponseSources('');
         setManualResponseFiles([]);
+      }}
+      onCloseEditResponseModal={() => {
+        setShowEditResponseModal(false);
+        setEditResponseContent('');
+        setEditResponseSources('');
+        setEditResponseFeedback('');
       }}
       onOpenCloseConfirm={() => setShowCloseConfirm(true)}
       onCloseCloseConfirm={() => setShowCloseConfirm(false)}

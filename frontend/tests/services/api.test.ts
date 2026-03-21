@@ -7,6 +7,7 @@ import {
   adminGetChat,
   adminGetChats,
   adminGetLogs,
+  adminGetRagStatus,
   adminGetStats,
   adminGetUser,
   adminGetUsers,
@@ -520,6 +521,10 @@ describe('API service', () => {
       await expect(
         adminUploadGuideline(new File(['pdf'], 'guideline.pdf', { type: 'application/pdf' }), 'NICE'),
       ).resolves.toMatchObject({ source_name: 'NICE' });
+    });
+
+    it('fetches RAG pipeline status', async () => {
+      await expect(adminGetRagStatus()).resolves.toMatchObject({ status: 'healthy' });
     });
   });
 

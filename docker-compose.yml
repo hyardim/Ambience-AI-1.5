@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-ambience_knowledge}
     ports:
       - "127.0.0.1:5432:5432"
@@ -101,6 +101,13 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - "no-new-privileges:true"
     logging: *default-logging
     networks:
       - ambience_net
@@ -144,7 +151,6 @@ services:
       - GUIDELINE_SYNC_TIMEOUT_SECONDS=${GUIDELINE_SYNC_TIMEOUT_SECONDS:-900}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
     healthcheck:
       test:
         [
@@ -156,8 +162,9 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    security_opt:
+      - "no-new-privileges:true"
     logging: *default-logging
-
     networks:
       - ambience_net
 
@@ -183,6 +190,8 @@ services:
     command: python scripts/workers/run_retry_worker.py
     stop_signal: SIGTERM
     stop_grace_period: 60s
+    security_opt:
+      - "no-new-privileges:true"
     logging: *default-logging
     networks:
       - ambience_net

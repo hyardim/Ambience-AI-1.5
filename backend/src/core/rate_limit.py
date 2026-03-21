@@ -69,7 +69,9 @@ def _get_redis():
 def _cleanup_local_windows(cutoff: float) -> None:
     """Prune stale in-process rate-limit buckets to avoid unbounded memory growth."""
     stale_keys = [
-        key for key, timestamps in _local_windows.items() if not timestamps or timestamps[-1] <= cutoff
+        key
+        for key, timestamps in _local_windows.items()
+        if not timestamps or timestamps[-1] <= cutoff
     ]
     for key in stale_keys:
         _local_windows.pop(key, None)

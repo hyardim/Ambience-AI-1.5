@@ -659,6 +659,41 @@ def test_get_redis_logs_and_returns_none_on_failure(monkeypatch, caplog):
     assert "falling back to in-process limits" in caplog.text
 
 
+def test_cleanup_local_windows_removes_stale_and_empty_buckets(monkeypatch):
+    import time
+
+    now = time.monotonic()
+    monkeypatch.setattr(
+        rate_limit,
+        "_local_windows",
+        {
+            "stale": [now - 200],
+            "empty": [],
+            "fresh": [now + 100],
+        },
+    )
+    rate_limit._cleanup_local_windows(now)
+    windows = rate_limit._local_windows
+    assert "stale" not in windows
+    assert "empty" not in windows
+    assert "fresh" in windows
+
+
+def test_enforce_inprocess_limit_triggers_periodic_cleanup(monkeypatch):
+    monkeypatch.setattr(rate_limit, "_local_windows", {})
+    monkeypatch.setattr(
+        rate_limit,
+        "_local_cleanup_counter",
+        rate_limit._LOCAL_CLEANUP_INTERVAL - 1,
+    )
+    monkeypatch.setattr(core_config.settings, "RATE_LIMIT_PER_MINUTE", 100)
+
+    rate_limit._enforce_inprocess_limit("test-bucket", 60)
+
+    assert rate_limit._local_cleanup_counter == rate_limit._LOCAL_CLEANUP_INTERVAL
+    assert "test-bucket" in rate_limit._local_windows
+
+
 @pytest.mark.asyncio
 async def test_rag_search_proxy_success(monkeypatch):
     class FakeResponse:

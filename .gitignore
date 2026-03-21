@@ -60,6 +60,8 @@ rag_service/data/debug/
 .pytest_cache/
 /.ruff_cache
 .coverage
+coverage.xml
+**/coverage.xml
 htmlcov/
 coverage/
 **/__pycache__/

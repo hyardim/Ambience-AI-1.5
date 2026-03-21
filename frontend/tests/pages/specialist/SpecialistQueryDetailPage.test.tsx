@@ -94,12 +94,14 @@ vi.mock('@/components/ChatMessage', () => ({
     onApproveWithComment,
     onRequestChanges,
     onManualResponse,
+    onEditResponse,
   }: {
     message: { content: string };
     onApprove?: () => void;
     onApproveWithComment?: () => void;
     onRequestChanges?: () => void;
     onManualResponse?: () => void;
+    onEditResponse?: () => void;
   }) => (
     <div>
       <div>{message.content}</div>
@@ -107,6 +109,7 @@ vi.mock('@/components/ChatMessage', () => ({
       {onApproveWithComment ? <button onClick={onApproveWithComment}>Approve with comment action</button> : null}
       {onRequestChanges ? <button onClick={onRequestChanges}>Request changes action</button> : null}
       {onManualResponse ? <button onClick={onManualResponse}>Manual response action</button> : null}
+      {onEditResponse ? <button onClick={onEditResponse}>Edit response action</button> : null}
     </div>
   ),
 }));
@@ -661,6 +664,124 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/file context was truncated/i)).toBeInTheDocument();
     });
+  });
+
+  it('handles edit response flow with sources and feedback', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'reviewing',
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer to edit',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
+        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' })),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/ai answer to edit/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /edit response action/i }));
+
+    // The modal should be pre-filled with the current content
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('AI answer to edit')).toBeInTheDocument();
+    });
+
+    // Clear existing text and type new content
+    const contentTextarea = screen.getByDisplayValue('AI answer to edit');
+    await user.clear(contentTextarea);
+    await user.type(contentTextarea, 'Edited answer');
+
+    await user.type(screen.getByPlaceholderText(/optional. add one source per line/i), 'NICE CG1');
+    await user.type(screen.getByPlaceholderText(/optional. explain what you changed/i), 'Fixed phrasing');
+    await user.click(screen.getByRole('button', { name: /save edited response/i }));
+  }, 15000);
+
+  it('surfaces edit response errors', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'reviewing',
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
+        HttpResponse.json({ detail: 'Edit failed' }, { status: 500 })),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/ai answer/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /edit response action/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save edited response/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /save edited response/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/edit failed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('resets edit response modal state on cancel', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'reviewing',
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/ai answer/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /edit response action/i }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('AI answer')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByDisplayValue('AI answer')).not.toBeInTheDocument();
   });
 
   it('navigates back from the loaded detail header button', async () => {

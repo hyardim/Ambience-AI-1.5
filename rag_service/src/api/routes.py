@@ -25,6 +25,7 @@ from ..generation.router import select_generation_provider
 from ..ingestion.pipeline import PipelineError, load_sources, run_ingestion
 from ..jobs.retry import RetryJobStatus, create_retry_job, get_retry_job
 from ..retrieval.vector_store import get_source_path_for_doc
+from ..utils.db import db as db_manager
 from ..utils.logger import setup_logger
 from . import services as api_services
 from .citations import MAX_CITATIONS, extract_citation_results
@@ -137,6 +138,42 @@ async def health_check() -> dict[str, Any]:
         "force_cloud_llm": routing_config.force_cloud_llm,
         "active_prompt": ACTIVE_PROMPT,
     }
+
+
+@router.get(
+    "/documents/health",
+    dependencies=[Depends(require_internal_api_key)],
+)
+async def documents_health() -> list[dict[str, Any]]:
+    """Return per-document stats from the rag_chunks table."""
+    conn = db_manager.get_raw_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    doc_id,
+                    metadata->>'source_name' AS source_name,
+                    COUNT(*)                 AS chunk_count,
+                    MAX(updated_at)          AS latest_ingestion
+                FROM rag_chunks
+                GROUP BY doc_id, metadata->>'source_name'
+                ORDER BY latest_ingestion DESC
+                """
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    return [
+        {
+            "doc_id": row[0],
+            "source_name": row[1],
+            "chunk_count": row[2],
+            "latest_ingestion": row[3].isoformat() if row[3] else None,
+        }
+        for row in rows
+    ]
 
 
 @router.post(

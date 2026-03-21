@@ -18,6 +18,7 @@ import {
   ApproveConfirmModal,
   ApproveWithCommentModal,
   CloseApproveModal,
+  EditResponseModal,
   ManualResponseModal,
   RequestChangesModal,
 } from './SpecialistReviewModals';
@@ -49,6 +50,10 @@ interface SpecialistQueryDetailViewProps {
   manualResponseContent: string;
   manualResponseSources: string;
   manualResponseFiles: File[];
+  editResponseContent: string;
+  editResponseSources: string;
+  editResponseFeedback: string;
+  showEditResponseModal: boolean;
   showApproveConfirm: boolean;
   showApproveWithCommentModal: boolean;
   showRejectModal: boolean;
@@ -66,16 +71,22 @@ interface SpecialistQueryDetailViewProps {
   onManualResponseSourcesChange: (value: string) => void;
   onManualResponseFilesChange: (files: File[]) => void;
   onManualResponse: () => void;
+  onEditResponseContentChange: (value: string) => void;
+  onEditResponseSourcesChange: (value: string) => void;
+  onEditResponseFeedbackChange: (value: string) => void;
+  onEditResponse: () => void;
   onSendMessage: (content: string, files?: File[]) => void;
   onOpenApproveConfirm: (messageId: number | string) => void;
   onOpenApproveWithComment: (messageId: number | string) => void;
   onOpenRequestChanges: (messageId: number | string) => void;
   onOpenManualResponse: (messageId: number | string) => void;
+  onOpenEditResponse: (messageId: number | string, currentContent: string) => void;
   onCloseAndApprove: () => void;
   onCloseApproveConfirm: () => void;
   onCloseApproveWithComment: () => void;
   onCloseRejectModal: () => void;
   onCloseManualResponseModal: () => void;
+  onCloseEditResponseModal: () => void;
   onOpenCloseConfirm: () => void;
   onCloseCloseConfirm: () => void;
 }
@@ -105,6 +116,10 @@ export function SpecialistQueryDetailView({
   manualResponseContent,
   manualResponseSources,
   manualResponseFiles,
+  editResponseContent,
+  editResponseSources,
+  editResponseFeedback,
+  showEditResponseModal,
   showApproveConfirm,
   showApproveWithCommentModal,
   showRejectModal,
@@ -122,16 +137,22 @@ export function SpecialistQueryDetailView({
   onManualResponseSourcesChange,
   onManualResponseFilesChange,
   onManualResponse,
+  onEditResponseContentChange,
+  onEditResponseSourcesChange,
+  onEditResponseFeedbackChange,
+  onEditResponse,
   onSendMessage,
   onOpenApproveConfirm,
   onOpenApproveWithComment,
   onOpenRequestChanges,
   onOpenManualResponse,
+  onOpenEditResponse,
   onCloseAndApprove,
   onCloseApproveConfirm,
   onCloseApproveWithComment,
   onCloseRejectModal,
   onCloseManualResponseModal,
+  onCloseEditResponseModal,
   onOpenCloseConfirm,
   onCloseCloseConfirm,
 }: SpecialistQueryDetailViewProps) {
@@ -266,6 +287,7 @@ export function SpecialistQueryDetailView({
                     onApproveWithComment={() => onOpenApproveWithComment(message.id)}
                     onRequestChanges={() => onOpenRequestChanges(message.id)}
                     onManualResponse={() => onOpenManualResponse(message.id)}
+                    onEditResponse={() => onOpenEditResponse(message.id, message.content)}
                     actionLoading={actionLoading}
                   />
                 );
@@ -358,6 +380,19 @@ export function SpecialistQueryDetailView({
         onFilesChange={onManualResponseFilesChange}
         onCancel={onCloseManualResponseModal}
         onConfirm={onManualResponse}
+      />
+
+      <EditResponseModal
+        open={showEditResponseModal}
+        actionLoading={actionLoading}
+        editedContent={editResponseContent}
+        editedSources={editResponseSources}
+        feedback={editResponseFeedback}
+        onContentChange={onEditResponseContentChange}
+        onSourcesChange={onEditResponseSourcesChange}
+        onFeedbackChange={onEditResponseFeedbackChange}
+        onCancel={onCloseEditResponseModal}
+        onConfirm={onEditResponse}
       />
 
       <CloseApproveModal

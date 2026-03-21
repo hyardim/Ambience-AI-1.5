@@ -51,3 +51,22 @@ class AuditLogResponse(BaseModel):
     category: str
     details: Optional[str] = None
     timestamp: datetime
+
+
+class RagDocumentHealth(BaseModel):
+    doc_id: str
+    source_name: Optional[str] = None
+    chunk_count: int
+    latest_ingestion: Optional[datetime] = None
+
+
+class RagJobSummary(BaseModel):
+    pending: int = 0
+    running: int = 0
+    failed: int = 0
+
+
+class RagStatusResponse(BaseModel):
+    service_status: str
+    documents: list[RagDocumentHealth] = []
+    jobs: Optional[RagJobSummary] = None

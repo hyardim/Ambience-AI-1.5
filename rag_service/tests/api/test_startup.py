@@ -213,3 +213,12 @@ def test_init_db_delegates_to_vector_store(monkeypatch: pytest.MonkeyPatch) -> N
     startup.init_db(256)
 
     assert called == [256]
+
+
+def test_validate_internal_api_key_config_skips_in_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.delenv("RAG_INTERNAL_API_KEY", raising=False)
+
+    startup.validate_internal_api_key_config()

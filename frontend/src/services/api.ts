@@ -18,6 +18,7 @@ import type {
   AuditLogResponse,
   ChatUpdateRequest,
   AdminStatsResponse,
+  RagStatusResponse,
   VerificationStatusResponse,
 } from '../types/api';
 import { setOptionalSearchParam } from '../utils/url';
@@ -388,12 +389,14 @@ export async function reviewMessage(
   feedback?: string,
   manualContent?: string,
   manualSources?: string[],
+  editedContent?: string,
 ): Promise<BackendChat> {
   const body: ReviewRequest = {
     action: decision as ReviewRequest['action'],
     feedback: feedback ?? null,
     replacement_content: manualContent ?? null,
     replacement_sources: manualSources ?? null,
+    edited_content: editedContent ?? null,
   };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/messages/${messageId}/review`), {
     method: 'POST',
@@ -602,6 +605,14 @@ export interface IngestionReport {
     skipped: number;
     failed: number;
   };
+}
+
+export async function adminGetRagStatus(options: RequestOptions = {}): Promise<RagStatusResponse> {
+  const res = await apiFetch(apiUrl('/admin/rag/status'), {
+    signal: options.signal,
+    headers: authHeaders(),
+  });
+  return handleResponse<RagStatusResponse>(res);
 }
 
 export async function adminUploadGuideline(file: File, sourceName: string): Promise<IngestionReport> {

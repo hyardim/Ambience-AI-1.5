@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Lock, MessageSquare, PenLine } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Edit2, Lock, MessageSquare, PenLine } from 'lucide-react';
 
 import { filesFromInput } from '../../utils/control';
 
@@ -305,6 +305,98 @@ export function CloseApproveModal({
             className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
           >
             {actionLoading ? 'Closing…' : 'Confirm Close & Approve'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface EditResponseModalProps {
+  open: boolean;
+  actionLoading: boolean;
+  editedContent: string;
+  editedSources: string;
+  feedback: string;
+  onContentChange: (value: string) => void;
+  onSourcesChange: (value: string) => void;
+  onFeedbackChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+export function EditResponseModal({
+  open,
+  actionLoading,
+  editedContent,
+  editedSources,
+  feedback,
+  onContentChange,
+  onSourcesChange,
+  onFeedbackChange,
+  onCancel,
+  onConfirm,
+}: EditResponseModalProps) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="flex items-center gap-3 text-indigo-600 mb-4">
+          <Edit2 className="w-8 h-8" />
+          <h2 className="text-xl font-bold">Edit Response</h2>
+        </div>
+        <p className="text-gray-600 mb-4">
+          Edit the AI-generated response below. Your changes will replace the
+          original content and be sent to the GP.
+        </p>
+        <textarea
+          value={editedContent}
+          onChange={(e) => onContentChange(e.target.value)}
+          rows={6}
+          autoFocus
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+          placeholder="Edit the response..."
+        />
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Sources
+          </label>
+          <textarea
+            value={editedSources}
+            onChange={(e) => onSourcesChange(e.target.value)}
+            rows={4}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+            placeholder="Optional. Add one source per line."
+          />
+        </div>
+        <div className="mt-4 mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Feedback
+          </label>
+          <textarea
+            value={feedback}
+            onChange={(e) => onFeedbackChange(e.target.value)}
+            rows={3}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+            placeholder="Optional. Explain what you changed and why."
+          />
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!editedContent.trim() || actionLoading}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {actionLoading ? 'Saving…' : 'Save Edited Response'}
           </button>
         </div>
       </div>

@@ -16,6 +16,25 @@ from src.services import (
 )
 
 
+def _mock_httpx_client(post_fn):
+    """Create a mock httpx.Client class whose .post delegates to *post_fn*."""
+
+    class _FakeClient:
+        def __init__(self, **_kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            pass
+
+        def post(self, *args, **kwargs):
+            return post_fn(*args, **kwargs)
+
+    return _FakeClient
+
+
 def _user(
     db_session,
     *,
@@ -595,7 +614,7 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
         "citations_used": [{"title": "Doc"}],
     }
     monkeypatch.setattr(
-        specialist_review.httpx, "post", lambda *args, **kwargs: response
+        specialist_review.httpx, "Client", _mock_httpx_client(lambda *args, **kwargs: response)
     )
     monkeypatch.setattr(
         specialist_review.audit_repository,
@@ -650,7 +669,7 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     invalidations = []
 
     monkeypatch.setattr(
-        specialist_review.httpx, "post", lambda *args, **kwargs: response
+        specialist_review.httpx, "Client", _mock_httpx_client(lambda *args, **kwargs: response)
     )
     monkeypatch.setattr(
         specialist_review,
@@ -708,14 +727,14 @@ def test_do_revise_forwards_internal_headers(monkeypatch):
     response.raise_for_status = MagicMock()
     response.json.return_value = {"answer": "revised", "citations_used": []}
 
-    def fake_post(url, json, timeout, headers=None):
-        assert headers == {"X-Internal-API-Key": "k"}
+    def fake_post(url, **kwargs):
+        assert kwargs.get("headers") == {"X-Internal-API-Key": "k"}
         return response
 
     monkeypatch.setattr(
         specialist_review, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
     )
-    monkeypatch.setattr(specialist_review.httpx, "post", fake_post)
+    monkeypatch.setattr(specialist_review.httpx, "Client", _mock_httpx_client(fake_post))
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",
@@ -759,7 +778,7 @@ def test_do_revise_failure_logs_rag_error_and_notifies_user(monkeypatch, db_sess
     def fail_post(*args, **kwargs):
         raise RuntimeError("rag down")
 
-    monkeypatch.setattr(specialist_review.httpx, "post", fail_post)
+    monkeypatch.setattr(specialist_review.httpx, "Client", _mock_httpx_client(fail_post))
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",
@@ -803,6 +822,107 @@ def test_threaded_revision_task_removed_from_specialist_review() -> None:
 
 def test_threaded_revision_task_removed_from_specialist_service() -> None:
     assert not hasattr(specialist_service, "_regenerate_ai_response_task")
+
+
+def test_review_message_edit_response_updates_content_and_status(db_session):
+    owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+    ai_message = _ai_message(db_session, chat)
+
+    response = specialist_service.review_message(
+        db_session,
+        specialist,
+        chat.id,
+        ai_message.id,
+        ReviewRequest(
+            action="edit_response",
+            edited_content="  Edited specialist content  ",
+            feedback="Clarified dosage",
+        ),
+    )
+
+    db_session.refresh(ai_message)
+    assert ai_message.content == "Edited specialist content"
+    assert ai_message.review_status == "edited"
+    assert ai_message.review_feedback == "Clarified dosage"
+    assert ai_message.reviewed_at is not None
+    assert response.status == "reviewing"
+
+
+def test_review_message_edit_response_rejects_missing_content(db_session):
+    owner = _user(db_session, email="gp2@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec2@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    ai_message = _ai_message(db_session, chat)
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review_message(
+            db_session,
+            specialist,
+            chat.id,
+            ai_message.id,
+            ReviewRequest(action="edit_response"),
+        )
+    assert exc.value.status_code == 400
+
+
+def test_review_message_edit_response_rejects_blank_content(db_session):
+    owner = _user(db_session, email="gp3@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec3@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    ai_message = _ai_message(db_session, chat)
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review_message(
+            db_session,
+            specialist,
+            chat.id,
+            ai_message.id,
+            ReviewRequest(action="edit_response", edited_content="   "),
+        )
+    assert exc.value.status_code == 400
+
+
+def test_review_message_edit_response_with_replacement_sources(db_session):
+    owner = _user(db_session, email="gp4@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec4@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    ai_message = _ai_message(db_session, chat)
+
+    specialist_service.review_message(
+        db_session,
+        specialist,
+        chat.id,
+        ai_message.id,
+        ReviewRequest(
+            action="edit_response",
+            edited_content="Updated content with sources",
+            replacement_sources=["NICE CG137", " "],
+        ),
+    )
+
+    db_session.refresh(ai_message)
+    assert ai_message.citations is not None
+    assert ai_message.citations[0]["title"] == "NICE CG137"
 
 
 def test_send_message_rejects_invalid_status(db_session):

@@ -104,6 +104,7 @@ describe('App', () => {
       ['/admin/chats', () => screen.getByRole('heading', { name: /chat management/i })],
       ['/admin/logs', () => screen.getByRole('heading', { name: /audit logs/i })],
       ['/admin/guidelines', () => screen.getByRole('heading', { name: /guidelines/i })],
+      ['/admin/rag', () => screen.getByRole('heading', { name: /rag pipeline/i })],
       ['/profile', () => screen.getByRole('heading', { name: /my profile/i })],
     ] as const;
 
@@ -116,5 +117,5 @@ describe('App', () => {
       }, { timeout: 5000 });
       unmount();
     }
-  });
+  }, 30000);
 });

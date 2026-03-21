@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { LoginResponse, UserProfile, BackendChat, BackendChatWithMessages, GPMessageResponse, NotificationResponse, AdminChatResponse, AuditLogResponse } from '@/types/api';
+import type { LoginResponse, UserProfile, BackendChat, BackendChatWithMessages, GPMessageResponse, NotificationResponse, AdminChatResponse, AuditLogResponse, RagStatusResponse } from '@/types/api';
 import type { AdminStatsResponse } from '@/types/api';
 import type { IngestionReport } from '@/services/api';
 
@@ -168,6 +168,28 @@ export const mockIngestionReport: IngestionReport = {
     skipped: 0,
     failed: 0,
   },
+};
+
+export const mockRagStatus: RagStatusResponse = {
+  status: 'healthy',
+  documents: [
+    {
+      doc_id: 'doc-001',
+      source_name: 'NICE CG1',
+      chunk_count: 42,
+      latest_ingestion: '2025-01-15T10:00:00Z',
+    },
+  ],
+  recent_jobs: [
+    {
+      job_id: 'job-001',
+      status: 'completed',
+      source_name: 'NICE CG1',
+      created_at: '2025-01-15T09:00:00Z',
+      finished_at: '2025-01-15T09:05:00Z',
+      error: null,
+    },
+  ],
 };
 
 export const handlers = [
@@ -392,6 +414,8 @@ export const handlers = [
   http.get('/admin/stats', () => HttpResponse.json(mockAdminStats)),
   http.get('/admin/logs', () => HttpResponse.json(mockAuditLogs)),
   http.post('/admin/guidelines/upload', () => HttpResponse.json(mockIngestionReport)),
+
+  http.get('/admin/rag/status', () => HttpResponse.json(mockRagStatus)),
 
   http.get('/health', () => HttpResponse.json({ status: 'healthy' })),
 ];

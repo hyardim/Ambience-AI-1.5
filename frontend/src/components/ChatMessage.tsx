@@ -1,4 +1,4 @@
-import { FileText, Bot, User, CheckCircle, Clock, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
+import { FileText, Bot, User, CheckCircle, Clock, Edit2, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
 import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
@@ -16,6 +16,8 @@ interface ChatMessageProps {
   onApproveWithComment?: () => void;
   /** Callback when specialist clicks "Manual Response" on this message */
   onManualResponse?: () => void;
+  /** Callback when specialist clicks "Edit" on this message */
+  onEditResponse?: () => void;
   /** Whether an action is currently loading */
   actionLoading?: boolean;
 }
@@ -29,6 +31,7 @@ export function ChatMessage({
   onRequestChanges,
   onApproveWithComment,
   onManualResponse,
+  onEditResponse,
   actionLoading = false,
 }: ChatMessageProps) {
   const toSafeDate = (value: unknown): Date => {
@@ -317,6 +320,14 @@ export function ChatMessage({
                 >
                   <PenLine className="w-4 h-4" />
                   Manual Response
+                </button>
+                <button
+                  onClick={onEditResponse}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit
                 </button>
               </div>
             </div>

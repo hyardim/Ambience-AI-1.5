@@ -317,3 +317,87 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
 
     assert response.answer == "A"
     assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}
+
+
+@pytest.mark.anyio
+async def test_documents_health_returns_per_document_stats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover the /documents/health endpoint (lines 149-168)."""
+    from datetime import datetime, timezone
+
+    ts = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+    class FakeCursor:
+        def execute(self, sql: str) -> None:
+            pass
+
+        def fetchall(self) -> list[tuple[str, str, int, datetime]]:
+            return [
+                ("doc-1", "NICE", 5, ts),
+                ("doc-2", "WHO", 3, None),
+            ]
+
+        def __enter__(self) -> FakeCursor:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+    class FakeConnection:
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(routes.db_manager, "get_raw_connection", FakeConnection)
+
+    result = await routes.documents_health()
+
+    assert result == [
+        {
+            "doc_id": "doc-1",
+            "source_name": "NICE",
+            "chunk_count": 5,
+            "latest_ingestion": ts.isoformat(),
+        },
+        {
+            "doc_id": "doc-2",
+            "source_name": "WHO",
+            "chunk_count": 3,
+            "latest_ingestion": None,
+        },
+    ]
+
+
+@pytest.mark.anyio
+async def test_documents_health_closes_connection_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure the connection is closed even when the query raises."""
+    closed: list[bool] = []
+
+    class FailCursor:
+        def execute(self, sql: str) -> None:
+            raise RuntimeError("db error")
+
+        def __enter__(self) -> FailCursor:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+    class FakeConnection:
+        def cursor(self) -> FailCursor:
+            return FailCursor()
+
+        def close(self) -> None:
+            closed.append(True)
+
+    monkeypatch.setattr(routes.db_manager, "get_raw_connection", FakeConnection)
+
+    with pytest.raises(RuntimeError, match="db error"):
+        await routes.documents_health()
+
+    assert closed == [True]

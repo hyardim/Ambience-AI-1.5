@@ -13,6 +13,7 @@ from src.schemas.admin import (
     AdminChatResponse,
     AdminStatsResponse,
     AuditLogResponse,
+    RagStatusResponse,
     UserUpdateAdmin,
 )
 from src.schemas.auth import UserOut
@@ -39,10 +40,9 @@ async def _read_upload_with_limit(file: UploadFile) -> tuple[bytes, bytes]:
             break
         total_size += len(chunk)
         if total_size > max_size:
-            limit_mb = max_size // (1024 * 1024)
             raise HTTPException(
                 status_code=413,
-                detail=f"File exceeds the {limit_mb} MB limit.",
+                detail="File exceeds the maximum allowed size.",
             )
         if len(signature) < 2048:
             remaining = 2048 - len(signature)
@@ -241,3 +241,47 @@ async def upload_guideline(
         )
 
     return response.json()
+
+
+# ---------------------------------------------------------------------------
+# RAG status
+# ---------------------------------------------------------------------------
+
+
+@router.get("/rag/status", response_model=RagStatusResponse)
+async def get_rag_status(
+    _admin: User = Depends(get_admin_user),
+):
+    rag_headers = build_rag_headers()
+    request_kwargs: dict[str, Any] = {}
+    if rag_headers:
+        request_kwargs["headers"] = rag_headers
+
+    service_status = "unavailable"
+    documents: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            health_resp = await client.get(
+                f"{settings.RAG_SERVICE_URL}/health",
+                **request_kwargs,
+            )
+            if health_resp.status_code == 200:
+                service_status = health_resp.json().get("status", "unknown")
+        except (httpx.ConnectError, httpx.TimeoutException):
+            pass
+
+        try:
+            docs_resp = await client.get(
+                f"{settings.RAG_SERVICE_URL}/documents/health",
+                **request_kwargs,
+            )
+            if docs_resp.status_code == 200:
+                documents = docs_resp.json()
+        except (httpx.ConnectError, httpx.TimeoutException):
+            pass
+
+    return RagStatusResponse(
+        service_status=service_status,
+        documents=documents,
+    )

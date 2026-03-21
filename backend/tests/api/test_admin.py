@@ -9,8 +9,12 @@ Tests for admin endpoints:
   PATCH  /admin/chats/{id}
   DELETE /admin/chats/{id}
   GET    /admin/logs
+  GET    /admin/rag/status
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 
 # ---------------------------------------------------------------------------
 # GET/PATCH/DELETE /admin/users
@@ -160,4 +164,66 @@ class TestAdminLogs:
 
     def test_non_admin_cannot_access_logs(self, client, gp_headers):
         resp = client.get("/admin/logs", headers=gp_headers)
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/rag/status
+# ---------------------------------------------------------------------------
+
+
+class TestAdminRagStatus:
+    def test_rag_status_success(self, client, admin_headers, monkeypatch):
+        monkeypatch.setattr(
+            "src.api.endpoints.admin.build_rag_headers",
+            lambda: {"X-Internal-API-Key": "test-key"},
+        )
+
+        health_response = MagicMock()
+        health_response.status_code = 200
+        health_response.json.return_value = {"status": "healthy"}
+
+        docs_response = MagicMock()
+        docs_response.status_code = 200
+        docs_response.json.return_value = [
+            {"doc_id": "abc123", "source_name": "doc1.pdf", "chunk_count": 5},
+        ]
+
+        async_client_mock = AsyncMock()
+        async_client_mock.get = AsyncMock(
+            side_effect=[health_response, docs_response]
+        )
+        async_client_mock.__aenter__ = AsyncMock(return_value=async_client_mock)
+        async_client_mock.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(
+            httpx, "AsyncClient", return_value=async_client_mock
+        ):
+            resp = client.get("/admin/rag/status", headers=admin_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["service_status"] == "healthy"
+        assert len(data["documents"]) == 1
+
+    def test_rag_status_unavailable(self, client, admin_headers, monkeypatch):
+        async_client_mock = AsyncMock()
+        async_client_mock.get = AsyncMock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+        async_client_mock.__aenter__ = AsyncMock(return_value=async_client_mock)
+        async_client_mock.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(
+            httpx, "AsyncClient", return_value=async_client_mock
+        ):
+            resp = client.get("/admin/rag/status", headers=admin_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["service_status"] == "unavailable"
+        assert data["documents"] == []
+
+    def test_non_admin_cannot_access_rag_status(self, client, gp_headers):
+        resp = client.get("/admin/rag/status", headers=gp_headers)
         assert resp.status_code == 403

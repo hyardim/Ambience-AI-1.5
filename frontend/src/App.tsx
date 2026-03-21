@@ -23,6 +23,7 @@ const AdminUsersPage = lazy(async () => ({ default: (await import('./pages/admin
 const AdminChatsPage = lazy(async () => ({ default: (await import('./pages/admin/AdminChatsPage')).AdminChatsPage }));
 const AdminLogsPage = lazy(async () => ({ default: (await import('./pages/admin/AdminLogsPage')).AdminLogsPage }));
 const AdminGuidelinesPage = lazy(async () => ({ default: (await import('./pages/admin/AdminGuidelinesPage')).AdminGuidelinesPage }));
+const AdminRagPage = lazy(() => import('./pages/admin/AdminRagPage'));
 const ProfilePage = lazy(async () => ({ default: (await import('./pages/ProfilePage')).ProfilePage }));
 
 function App() {
@@ -56,6 +57,7 @@ function App() {
               <Route path="/admin/chats" element={<ProtectedRoute allowedRoles={['admin']}><AdminChatsPage /></ProtectedRoute>} />
               <Route path="/admin/logs" element={<ProtectedRoute allowedRoles={['admin']}><AdminLogsPage /></ProtectedRoute>} />
               <Route path="/admin/guidelines" element={<ProtectedRoute allowedRoles={['admin']}><AdminGuidelinesPage /></ProtectedRoute>} />
+              <Route path="/admin/rag" element={<ProtectedRoute allowedRoles={['admin']}><AdminRagPage /></ProtectedRoute>} />
 
               <Route path="/profile" element={<ProtectedRoute allowedRoles={['gp', 'specialist', 'admin']}><ProfilePage /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />

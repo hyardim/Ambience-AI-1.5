@@ -90,6 +90,22 @@ async def test_chat_repository_async_update(db_session):
     assert updated.status == ChatStatus.SUBMITTED
 
 
+@pytest.mark.asyncio
+async def test_chat_repository_async_get_for_update(db_session):
+    user = _user(db_session)
+    chat = chat_repository.create(db_session, user_id=user.id, title="Locked Chat")
+    async with TestingAsyncSessionLocal() as session:
+        loaded = await chat_repository.async_get_for_update(
+            session, chat.id, user_id=user.id
+        )
+        assert loaded is not None
+        assert loaded.title == "Locked Chat"
+
+    async with TestingAsyncSessionLocal() as session:
+        missing = await chat_repository.async_get_for_update(session, 999999)
+        assert missing is None
+
+
 def test_chat_repository_archive_sets_flag(db_session):
     user = _user(db_session)
     chat = chat_repository.create(db_session, user_id=user.id, title="Chat")
