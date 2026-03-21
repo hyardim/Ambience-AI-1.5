@@ -3,6 +3,7 @@ from typing import Any, Literal, cast
 import httpx
 
 from ..config import (
+    alerting_config,
     cloud_llm_config,
     local_llm_config,
     path_config,
@@ -51,15 +52,30 @@ def _emit_provider_alert(
     fallback_provider: ProviderName | None,
     detail: str,
 ) -> None:
-    append_jsonl(
-        PROVIDER_ALERTS_PATH,
-        {
-            "event": event,
-            "primary_provider": primary_provider,
-            "fallback_provider": fallback_provider,
-            "detail": detail,
-        },
-    )
+    payload = {
+        "event": event,
+        "primary_provider": primary_provider,
+        "fallback_provider": fallback_provider,
+        "detail": detail,
+    }
+    append_jsonl(PROVIDER_ALERTS_PATH, payload)
+    _send_provider_alert_webhook(payload)
+
+
+def _send_provider_alert_webhook(payload: dict[str, Any]) -> None:
+    webhook_url = alerting_config.llm_fallback_alert_webhook_url.strip()
+    if not webhook_url:
+        return
+
+    try:
+        response = httpx.post(
+            webhook_url,
+            json=payload,
+            timeout=alerting_config.llm_fallback_alert_timeout_seconds,
+        )
+        response.raise_for_status()
+    except Exception as exc:
+        logger.warning("Provider alert webhook delivery failed: %s", exc)
 
 
 async def warmup_model(provider: ProviderName = "local") -> None:

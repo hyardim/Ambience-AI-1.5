@@ -27,3 +27,8 @@ class RetryConfig(AppBaseSettings):
     retry_queue_job_timeout_seconds: int = Field(default=180)
     retry_queue_result_ttl_seconds: int = Field(default=60)
     retry_queue_failure_ttl_seconds: int = Field(default=86400)
+
+
+class AlertingConfig(AppBaseSettings):
+    llm_fallback_alert_webhook_url: str = Field(default="")
+    llm_fallback_alert_timeout_seconds: float = Field(default=2.0)

@@ -361,6 +361,81 @@ def test_request_chat_completion_sync_wraps_http_errors(monkeypatch) -> None:
     assert exc_info.value.status_code == 502
 
 
+def test_send_provider_alert_webhook_skips_when_not_configured(monkeypatch) -> None:
+    monkeypatch.setattr(client.alerting_config, "llm_fallback_alert_webhook_url", "")
+
+    called = {"value": False}
+
+    def fake_post(*args, **kwargs):
+        called["value"] = True
+        return object()
+
+    monkeypatch.setattr(client.httpx, "post", fake_post)
+
+    client._send_provider_alert_webhook({"event": "provider_fallback_attempt"})
+
+    assert called["value"] is False
+
+
+def test_send_provider_alert_webhook_posts_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        client.alerting_config,
+        "llm_fallback_alert_webhook_url",
+        "http://localhost:9999/webhook",
+    )
+    monkeypatch.setattr(
+        client.alerting_config,
+        "llm_fallback_alert_timeout_seconds",
+        3.5,
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: float):
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(client.httpx, "post", fake_post)
+
+    payload = {"event": "provider_fallback_attempt", "detail": "timeout"}
+    client._send_provider_alert_webhook(payload)
+
+    assert captured["url"] == "http://localhost:9999/webhook"
+    assert captured["json"] == payload
+    assert captured["timeout"] == 3.5
+
+
+def test_send_provider_alert_webhook_logs_failures(monkeypatch) -> None:
+    monkeypatch.setattr(
+        client.alerting_config,
+        "llm_fallback_alert_webhook_url",
+        "http://localhost:9999/webhook",
+    )
+
+    warnings: list[tuple[str, tuple[object, ...]]] = []
+    monkeypatch.setattr(
+        client.logger,
+        "warning",
+        lambda message, *args: warnings.append((message, args)),
+    )
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: float):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(client.httpx, "post", fake_post)
+
+    client._send_provider_alert_webhook({"event": "provider_fallback_attempt"})
+
+    assert warnings
+    assert "webhook delivery failed" in warnings[0][0]
+
+
 @pytest.mark.anyio
 async def test_generate_local_answer_maps_request_error(monkeypatch):
     request = client.httpx.Request("POST", "http://local")

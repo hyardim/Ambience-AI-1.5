@@ -1,9 +1,18 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    tag: "{{.Name}}"
+
 services:
+
   redis:
     image: redis:7-alpine
     container_name: ambience_rag_redis
     ports:
       - "6379:6379"
+    logging: *default-logging
     networks:
       - ambience_rag_net
 
@@ -28,6 +37,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
   rag_service:
     build:
@@ -46,6 +56,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LOCAL_LLM_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM_FALLBACK_ALERT_WEBHOOK_URL: ${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
+      LLM_FALLBACK_ALERT_TIMEOUT_SECONDS: ${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     ports:
       - "8001:8001"
     volumes:
@@ -56,6 +68,18 @@ services:
       - ./logs:/app/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
     networks:
       - ambience_rag_net
 
@@ -66,7 +90,7 @@ services:
     container_name: ambience_rag_worker
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
       db_vector:
         condition: service_healthy
     env_file:
@@ -76,14 +100,19 @@ services:
       REDIS_URL: redis://redis:6379/0
       OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LOCAL_LLM_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM_FALLBACK_ALERT_WEBHOOK_URL: ${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
+      LLM_FALLBACK_ALERT_TIMEOUT_SECONDS: ${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts
       - ./configs:/app/configs
       - ./logs:/app/logs
     command: python scripts/workers/run_retry_worker.py
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    logging: *default-logging
     networks:
       - ambience_rag_net
 

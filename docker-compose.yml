@@ -1,4 +1,12 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    tag: "{{.Name}}"
+
 services:
+
   mailpit:
     image: axllent/mailpit:latest
     container_name: ambience_mailpit
@@ -6,6 +14,7 @@ services:
     ports:
       - "8025:8025"
       - "1025:1025"
+    logging: *default-logging
     networks:
       - ambience_net
 
@@ -21,6 +30,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    logging: *default-logging
     networks:
       - ambience_net
 
@@ -44,6 +54,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
   # 2. Backend API: Handles Auth, Chats
   backend:
@@ -55,6 +66,7 @@ services:
     volumes:
       # ✅ Fixed: Maps local 'src' to container's '/app/src' for hot-reloading
       - ./backend/src:/app/src
+      - ./backend/logs:/app/logs
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
@@ -87,8 +99,11 @@ services:
     depends_on:
       db_vector:
         condition: service_healthy
+      rag_service:
+        condition: service_healthy
       mailpit:
         condition: service_started
+    logging: *default-logging
     networks:
       - ambience_net
 
@@ -126,6 +141,8 @@ services:
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
       - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY}
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
+      - LLM_FALLBACK_ALERT_WEBHOOK_URL=${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
+      - LLM_FALLBACK_ALERT_TIMEOUT_SECONDS=${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -141,6 +158,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
     networks:
       - ambience_net
@@ -154,13 +172,20 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db_vector:
+        condition: service_healthy
     volumes:
       - ./rag_service/src:/app/src
       - ./rag_service/scripts:/app/scripts
       - ./rag_service/logs:/app/logs
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - LLM_FALLBACK_ALERT_WEBHOOK_URL=${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
+      - LLM_FALLBACK_ALERT_TIMEOUT_SECONDS=${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     command: python scripts/workers/run_retry_worker.py
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
+    logging: *default-logging
     networks:
       - ambience_net
 
@@ -176,6 +201,7 @@ services:
       - ./frontend/vite.config.ts:/app/vite.config.ts  # Include vite config for hot reload
     environment:
       - DOCKER_ENV=true
+    logging: *default-logging
     networks:
       - ambience_net
 

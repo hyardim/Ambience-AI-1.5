@@ -10,7 +10,7 @@ from .llm import (
     build_cloud_llm_config,
     build_local_llm_config,
 )
-from .runtime import LoggingConfig, RetryConfig, RoutingConfig
+from .runtime import AlertingConfig, LoggingConfig, RetryConfig, RoutingConfig
 from .storage import (
     ChunkingConfig,
     DatabaseConfig,
@@ -30,11 +30,13 @@ local_llm_config = build_local_llm_config(generation_config)
 cloud_llm_config = build_cloud_llm_config(llm_config)
 routing_config = RoutingConfig()
 retry_config = RetryConfig()
+alerting_config = AlertingConfig()
 path_config = PathConfig()
 
 __all__ = [
     "COMMON_SETTINGS_CONFIG",
     "PROJECT_ROOT",
+    "AlertingConfig",
     "AppBaseSettings",
     "ChunkingConfig",
     "CloudLLMConfig",
@@ -51,6 +53,7 @@ __all__ = [
     "_default_runpod_api_key",
     "_default_runpod_base_url",
     "_first_non_empty",
+    "alerting_config",
     "build_cloud_llm_config",
     "build_local_llm_config",
     "chunk_config",
