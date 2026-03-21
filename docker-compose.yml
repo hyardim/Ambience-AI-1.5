@@ -68,6 +68,8 @@ services:
       - ./backend/logs:/app/logs
     environment:
       - PYTHONPATH=/app
+      - APP_ENV=${APP_ENV:-development}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - RAG_SERVICE_URL=http://rag_service:8001
       - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:?RAG_INTERNAL_API_KEY must be set}
@@ -80,12 +82,12 @@ services:
       - RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS=${RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS:-900}
       - RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS=${RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS:-5}
       - EMAIL_VERIFICATION_EMAIL_LOG_ONLY=${EMAIL_VERIFICATION_EMAIL_LOG_ONLY:-false}
-      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM=${SMTP_FROM}
-      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-false}
       - REDIS_URL=redis://redis:6379/0
       - CACHE_ENABLED=true
       - PASSWORD_RESET_TOKEN_TTL_MINUTES=${PASSWORD_RESET_TOKEN_TTL_MINUTES:-30}
@@ -96,6 +98,8 @@ services:
       - "127.0.0.1:8000:8000"
     depends_on:
       db_vector:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       rag_service:
         condition: service_healthy

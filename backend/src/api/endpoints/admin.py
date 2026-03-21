@@ -13,6 +13,7 @@ from src.schemas.admin import (
     AdminChatResponse,
     AdminStatsResponse,
     AuditLogResponse,
+    RagDocumentHealth,
     RagStatusResponse,
     UserUpdateAdmin,
 )
@@ -258,7 +259,7 @@ async def get_rag_status(
         request_kwargs["headers"] = rag_headers
 
     service_status = "unavailable"
-    documents: list[dict[str, Any]] = []
+    documents: list[RagDocumentHealth] = []
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
@@ -277,7 +278,11 @@ async def get_rag_status(
                 **request_kwargs,
             )
             if docs_resp.status_code == 200:
-                documents = docs_resp.json()
+                payload = docs_resp.json()
+                if isinstance(payload, list):
+                    documents = [
+                        RagDocumentHealth.model_validate(item) for item in payload
+                    ]
         except (httpx.ConnectError, httpx.TimeoutException):
             pass
 

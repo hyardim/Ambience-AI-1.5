@@ -227,6 +227,32 @@ def validate_settings() -> None:
                 "non-default value in production"
             )
 
+    if _is_production_env():
+        smtp_host = settings.SMTP_HOST.strip()
+        smtp_from = settings.SMTP_FROM.strip()
+        smtp_user = settings.SMTP_USERNAME.strip()
+        smtp_password = settings.SMTP_PASSWORD.strip()
+
+        # Password reset and verification flows can be configured to use real SMTP.
+        # Validate required transport fields up-front to avoid silent delivery failures.
+        email_delivery_required = (
+            not settings.PASSWORD_RESET_EMAIL_LOG_ONLY
+            or (
+                settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION
+                and not settings.EMAIL_VERIFICATION_EMAIL_LOG_ONLY
+            )
+        )
+        if email_delivery_required and (not smtp_host or not smtp_from):
+            raise RuntimeError(
+                "Invalid configuration: SMTP_HOST and SMTP_FROM must be set in "
+                "production when email delivery is enabled"
+            )
+        if smtp_user and not smtp_password:
+            raise RuntimeError(
+                "Invalid configuration: SMTP_PASSWORD must be set when "
+                "SMTP_USERNAME is provided"
+            )
+
     # SSE uses an in-process event bus. Fail fast if multi-worker server
     # settings are configured to avoid silent stream delivery gaps.
     worker_count = os.getenv("WEB_CONCURRENCY") or os.getenv("UVICORN_WORKERS")

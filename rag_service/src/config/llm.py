@@ -62,9 +62,24 @@ def _default_runpod_api_key() -> str | None:
     )
 
 
+def _running_in_docker() -> bool:
+    return os.path.exists("/.dockerenv")
+
+
+def _resolve_local_base_url(generation: GenerationConfig) -> str:
+    explicit_local_base = os.getenv("LOCAL_LLM_BASE_URL")
+    if explicit_local_base:
+        return explicit_local_base
+    if _running_in_docker():
+        docker_override = os.getenv("DOCKER_OLLAMA_BASE_URL")
+        if docker_override:
+            return docker_override
+    return generation.ollama_base_url
+
+
 def build_local_llm_config(generation: GenerationConfig) -> LocalLLMConfig:
     return LocalLLMConfig(
-        base_url=os.getenv("LOCAL_LLM_BASE_URL", generation.ollama_base_url),
+        base_url=_resolve_local_base_url(generation),
         model=os.getenv("LOCAL_LLM_MODEL", generation.ollama_model),
         api_key=os.getenv("LOCAL_LLM_API_KEY", "ollama"),
         max_tokens=int(

@@ -143,3 +143,29 @@ def test_default_runpod_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert _default_runpod_base_url() == "https://pod123-9000.proxy.runpod.net/v1"
     assert _default_runpod_api_key() == "sk-pod123"
+
+
+def test_build_local_llm_config_uses_docker_override_in_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.config import build_local_llm_config, generation_config
+
+    monkeypatch.delenv("LOCAL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("DOCKER_OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    monkeypatch.setattr("src.config.llm._running_in_docker", lambda: True)
+
+    config = build_local_llm_config(generation_config)
+    assert config.base_url == "http://host.docker.internal:11434"
+
+
+def test_build_local_llm_config_prefers_explicit_local_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.config import build_local_llm_config, generation_config
+
+    monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://custom-local:11434")
+    monkeypatch.setenv("DOCKER_OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    monkeypatch.setattr("src.config.llm._running_in_docker", lambda: True)
+
+    config = build_local_llm_config(generation_config)
+    assert config.base_url == "http://custom-local:11434"
