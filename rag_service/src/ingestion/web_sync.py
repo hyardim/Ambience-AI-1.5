@@ -200,12 +200,14 @@ class GuidelineWebSync:
 
                         existing = state_documents.get(key, {})
                         filename_base = _sanitize_filename(document.title)
-                        suffix = hashlib.sha1(document.canonical_url.encode("utf-8")).hexdigest()[:10]
+                        suffix = hashlib.sha1(
+                            document.canonical_url.encode("utf-8")).hexdigest()[:10]
                         destination_dir = _source_directory(
                             document.source_name,
                             document.specialty,
                         )
-                        destination = destination_dir / f"{filename_base}-{suffix}.pdf"
+                        destination = destination_dir / \
+                            f"{filename_base}-{suffix}.pdf"
 
                         existing_etag = existing.get("etag")
                         if existing_etag and document.etag:
@@ -280,7 +282,8 @@ class GuidelineWebSync:
                             summary.errors.append(
                                 f"ingestion failed for {destination.name}: {exc}"
                             )
-                            last_ingest = existing.get("last_successful_ingest")
+                            last_ingest = existing.get(
+                                "last_successful_ingest")
 
                         resolved_content_length = headers.get("content_length")
                         parsed_length = (

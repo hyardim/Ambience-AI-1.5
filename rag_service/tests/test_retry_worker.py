@@ -51,7 +51,8 @@ def _load_worker_module(fake_redis_cls: MagicMock, fake_worker_cls: MagicMock) -
 
     # Stub src.config and src.retry_queue
     cfg_mod = ModuleType("src.config")
-    cfg_mod.REDIS_URL = "redis://localhost:6379/0"  # type: ignore[attr-defined]
+    # type: ignore[attr-defined]
+    cfg_mod.REDIS_URL = "redis://localhost:6379/0"
     sys.modules["src.config"] = cfg_mod
 
     rq_src = ModuleType("src.retry_queue")
@@ -60,7 +61,8 @@ def _load_worker_module(fake_redis_cls: MagicMock, fake_worker_cls: MagicMock) -
 
     # Force re-load
     sys.modules.pop("run_retry_worker", None)
-    spec = importlib.util.spec_from_file_location("run_retry_worker", _SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "run_retry_worker", _SCRIPT_PATH)
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod

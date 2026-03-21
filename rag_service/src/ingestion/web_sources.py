@@ -249,7 +249,8 @@ class SourceDiscoveryClient:
                     break
                 await asyncio.sleep(self._backoff_seconds * attempt)
         if last_error is None:
-            raise RuntimeError("HTTP request failed without a captured exception")
+            raise RuntimeError(
+                "HTTP request failed without a captured exception")
         raise last_error
 
     async def _is_allowed_by_robots(
@@ -281,7 +282,8 @@ class SourceDiscoveryClient:
             if head.status_code >= 400:
                 return None, None, None
             content_length = head.headers.get("Content-Length")
-            parsed_length = int(content_length) if content_length and content_length.isdigit() else None
+            parsed_length = int(
+                content_length) if content_length and content_length.isdigit() else None
             return (
                 head.headers.get("ETag"),
                 head.headers.get("Last-Modified"),
@@ -352,7 +354,8 @@ class SourceDiscoveryClient:
                 if detail.status_code >= 400:
                     continue
 
-                title = _extract_page_title(detail.text) or PathLikeTitle.from_url(candidate)
+                title = _extract_page_title(
+                    detail.text) or PathLikeTitle.from_url(candidate)
                 pdf_links = _extract_pdf_links(detail.text, base_url=candidate)
                 for pdf_link in pdf_links:
                     etag, last_modified, content_length = await self._head_metadata(client, pdf_link)

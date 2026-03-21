@@ -19,7 +19,8 @@ def _response(url: str, text: str = "", status_code: int = 200) -> httpx.Respons
 
 
 def test_normalize_url_removes_fragment_and_keeps_query() -> None:
-    normalized = normalize_url("/a//b/file.pdf?x=1#frag", base_url="https://Example.com")
+    normalized = normalize_url(
+        "/a//b/file.pdf?x=1#frag", base_url="https://Example.com")
     assert normalized == "https://example.com/a/b/file.pdf?x=1"
 
 
@@ -44,7 +45,8 @@ def test_extract_pdf_links_from_detail_page() -> None:
     <a href=\"/guidance/ng193/resources/ra-guideline-pdf-123.pdf\">Download PDF</a>
     <a href=\"/guidance/ng193\">Back</a>
     """
-    links = _extract_pdf_links(html, base_url="https://www.nice.org.uk/guidance/ng193")
+    links = _extract_pdf_links(
+        html, base_url="https://www.nice.org.uk/guidance/ng193")
     assert links == [
         "https://www.nice.org.uk/guidance/ng193/resources/ra-guideline-pdf-123.pdf"
     ]

@@ -46,7 +46,8 @@ class GuidelineSyncScheduler:
             return
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run_loop())
-        logger.info("sync.scheduler.started interval_seconds=%s", self._interval_seconds)
+        logger.info("sync.scheduler.started interval_seconds=%s",
+                    self._interval_seconds)
 
     async def stop(self) -> None:
         if self._task is None:
@@ -62,10 +63,12 @@ class GuidelineSyncScheduler:
         source_names: set[str] | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        self._status["last_started_at"] = datetime.now(timezone.utc).isoformat()
+        self._status["last_started_at"] = datetime.now(
+            timezone.utc).isoformat()
         self._status["running"] = True
         self._status["last_error"] = None
-        logger.info("sync.run.start source_filter=%s dry_run=%s", source_names, dry_run)
+        logger.info("sync.run.start source_filter=%s dry_run=%s",
+                    source_names, dry_run)
         try:
             result = await asyncio.wait_for(
                 self._sync_service.sync_once(
@@ -110,7 +113,8 @@ class GuidelineSyncScheduler:
                 },
             }
         finally:
-            self._status["last_finished_at"] = datetime.now(timezone.utc).isoformat()
+            self._status["last_finished_at"] = datetime.now(
+                timezone.utc).isoformat()
             self._status["running"] = False
             logger.info(
                 "sync.run.end last_error=%s",
@@ -120,7 +124,8 @@ class GuidelineSyncScheduler:
     def status(self) -> dict[str, Any]:
         combined = dict(self._status)
         service_status = self._sync_service.last_status()
-        combined["running"] = bool(combined["running"] or service_status["running"])
+        combined["running"] = bool(
+            combined["running"] or service_status["running"])
         if combined["last_result"] is None:
             combined["last_result"] = service_status.get("last_run")
         return combined

@@ -99,36 +99,48 @@ def _install_stubs() -> None:
     ):
         sys.modules[module_name] = types.ModuleType(module_name)
 
-    sys.modules["src.ingestion.embed"].load_embedder = MagicMock(return_value=MagicMock())
-    sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(return_value=384)
-    sys.modules["src.ingestion.embed"].embed_text = MagicMock(return_value=[[0.1]])
+    sys.modules["src.ingestion.embed"].load_embedder = MagicMock(
+        return_value=MagicMock())
+    sys.modules["src.ingestion.embed"].get_vector_dim = MagicMock(
+        return_value=384)
+    sys.modules["src.ingestion.embed"].embed_text = MagicMock(return_value=[
+                                                              [0.1]])
 
     sys.modules["src.retrieval.vector_store"].init_db = MagicMock()
-    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(return_value=[])
-    sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(return_value=None)
+    sys.modules["src.retrieval.vector_store"].search_similar_chunks = MagicMock(
+        return_value=[])
+    sys.modules["src.retrieval.vector_store"].get_source_path_for_doc = MagicMock(
+        return_value=None)
 
     class ModelGenerationError(Exception):
         retryable = False
 
-    sys.modules["src.generation.client"].generate_answer = MagicMock(return_value="ok")
+    sys.modules["src.generation.client"].generate_answer = MagicMock(
+        return_value="ok")
     sys.modules["src.generation.client"].warmup_model = MagicMock()
     sys.modules["src.generation.client"].ModelGenerationError = ModelGenerationError
 
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"
-    sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(return_value="prompt")
-    sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock(return_value="prompt")
+    sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock(
+        return_value="prompt")
+    sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock(
+        return_value="prompt")
 
     sys.modules["src.generation.router"].select_generation_provider = MagicMock(
-        return_value=MagicMock(provider="local", score=0.1, threshold=0.65, reasons=())
+        return_value=MagicMock(provider="local", score=0.1,
+                               threshold=0.65, reasons=())
     )
 
     sys.modules["src.retry_queue"].RetryJobStatus = str
-    sys.modules["src.retry_queue"].create_retry_job = MagicMock(return_value=("job-1", "queued"))
+    sys.modules["src.retry_queue"].create_retry_job = MagicMock(
+        return_value=("job-1", "queued"))
     sys.modules["src.retry_queue"].get_retry_job = MagicMock(return_value=None)
 
     sys.modules["src.ingestion.pipeline"].PipelineError = Exception
-    sys.modules["src.ingestion.pipeline"].load_sources = MagicMock(return_value={})
-    sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock(return_value={})
+    sys.modules["src.ingestion.pipeline"].load_sources = MagicMock(
+        return_value={})
+    sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock(
+        return_value={})
 
 
 @pytest.fixture()

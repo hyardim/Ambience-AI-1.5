@@ -61,7 +61,8 @@ def test_sync_downloads_missing_document_and_ingests(monkeypatch, tmp_path: Path
         )
 
     monkeypatch.setattr("src.ingestion.web_sync._download_file", fake_download)
-    monkeypatch.setattr("src.ingestion.web_sync._run_ingestion", lambda **kwargs: {})
+    monkeypatch.setattr(
+        "src.ingestion.web_sync._run_ingestion", lambda **kwargs: {})
 
     result = asyncio.run(sync.sync_once(db_url="postgresql://localhost/test"))
     summary = result["summary"]
@@ -148,7 +149,8 @@ def test_sync_downloads_updated_document(monkeypatch, tmp_path: Path) -> None:
         )
 
     monkeypatch.setattr("src.ingestion.web_sync._download_file", fake_download)
-    monkeypatch.setattr("src.ingestion.web_sync._run_ingestion", lambda **kwargs: {})
+    monkeypatch.setattr(
+        "src.ingestion.web_sync._run_ingestion", lambda **kwargs: {})
 
     result = asyncio.run(sync.sync_once(db_url="postgresql://localhost/test"))
     summary = result["summary"]

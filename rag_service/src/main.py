@@ -284,7 +284,8 @@ async def _streaming_generator(
         return
 
     used_indices = _extract_citation_indices(accumulated)
-    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+    sorted_used = sorted(i for i in used_indices if 1 <=
+                         i <= len(citations_retrieved))
     citations_used = [citations_retrieved[i - 1] for i in sorted_used]
     renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
     renumbered_answer = _rewrite_citations(accumulated, renumber_map)
@@ -421,7 +422,8 @@ async def trigger_guideline_sync(payload: GuidelineSyncTriggerRequest | None = N
     request = payload or GuidelineSyncTriggerRequest()
     try:
         result = await sync_scheduler.trigger_once(
-            source_names=set(request.source_names) if request.source_names else None,
+            source_names=set(
+                request.source_names) if request.source_names else None,
             dry_run=request.dry_run,
         )
         return {"status": "ok", **result}
@@ -474,7 +476,8 @@ async def clinical_query(request: QueryRequest):
 @app.post("/answer", response_model=AnswerResponse | RetryAcceptedResponse)
 async def generate_clinical_answer(
     request: AnswerRequest,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key"),
 ):
     """Retrieve supporting chunks, build a grounded prompt, and call Ollama
     for an answer."""
@@ -583,7 +586,8 @@ async def generate_clinical_answer(
                 )
                 return JSONResponse(
                     status_code=202,
-                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                    content=RetryAcceptedResponse(
+                        job_id=job_id, status=status).model_dump(),
                 )
             raise
 
@@ -621,7 +625,8 @@ async def generate_clinical_answer(
 @app.post("/revise", response_model=AnswerResponse | RetryAcceptedResponse)
 async def revise_clinical_answer(
     request: ReviseRequest,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key"),
 ):
     """Re-generate an AI answer incorporating specialist feedback.
 
@@ -721,7 +726,8 @@ async def revise_clinical_answer(
                 )
                 return JSONResponse(
                     status_code=202,
-                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                    content=RetryAcceptedResponse(
+                        job_id=job_id, status=status).model_dump(),
                 )
             raise
 
