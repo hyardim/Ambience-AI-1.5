@@ -242,7 +242,7 @@ GUIDELINE_SYNC_ENABLED = os.getenv("GUIDELINE_SYNC_ENABLED", "false").lower() in
     "on",
 }
 GUIDELINE_SYNC_INTERVAL_MINUTES = int(
-    os.getenv("GUIDELINE_SYNC_INTERVAL_MINUTES", "720")
+    os.getenv("GUIDELINE_SYNC_INTERVAL_MINUTES", "10080")  # default: once per week
 )
 GUIDELINE_SYNC_RUN_ON_STARTUP = os.getenv(
     "GUIDELINE_SYNC_RUN_ON_STARTUP", "true"
