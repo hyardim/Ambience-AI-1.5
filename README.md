@@ -37,6 +37,35 @@ The system follows a decoupled microservices topology:
 * **Provider Fallback:** If the chosen provider fails, the service automatically retries with the other one.
 * **Clinical Safety:** Includes adversarial defense mechanisms and mandatory disclaimer injection.
 
+## Guideline Auto-Sync (RAG Service)
+
+The `rag_service` can continuously scrape and ingest guideline PDFs from:
+
+- NICE musculoskeletal conditions page (mapped to `NICE`)
+- NICE neurological conditions page (mapped to `NICE_NEURO`)
+- BSR guidelines page (mapped to `BSR`)
+
+Enable periodic sync with environment variables (in `rag_service/.env` or compose env):
+
+- `GUIDELINE_SYNC_ENABLED=false`
+- `GUIDELINE_SYNC_INTERVAL_MINUTES=720`
+- `GUIDELINE_SYNC_RUN_ON_STARTUP=true`
+- `GUIDELINE_SYNC_TIMEOUT_SECONDS=900`
+
+Manual operations:
+
+- CLI: `python -m src.ingestion.cli sync-web --log-level INFO`
+- CLI dry-run by source: `python -m src.ingestion.cli sync-web --source NICE --source NICE_NEURO --source BSR --dry-run`
+- API trigger: `POST /guidelines/sync`
+- API status: `GET /guidelines/sync/status`
+
+The sync process is idempotent: unchanged files are skipped, updated files are re-downloaded and re-ingested, and disappeared remote files are marked stale in local sync state (not auto-deleted).
+
+Practical notes:
+
+- `dry_run=true` performs discovery/download checks only and does not ingest into the vector store.
+- A full NICE/NICE_NEURO ingest can take several minutes depending on PDF volume and model speed.
+
 ## Running with RunPod (2x A100 PCIe + vLLM)
 
 ### RunPod pod settings (required)

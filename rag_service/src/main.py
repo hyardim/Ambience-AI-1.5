@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
+from . import config as app_config
 from .config import (
     DATABASE_URL,
     CLOUD_LLM_MODEL,
@@ -29,14 +30,38 @@ from .generation.prompts import (
 from .generation.router import select_generation_provider
 from .ingestion.embed import embed_text, get_vector_dim, load_embedder
 from .ingestion.pipeline import PipelineError, load_sources, run_ingestion
+from .ingestion.web_scheduler import GuidelineSyncScheduler
+from .ingestion.web_sync import GuidelineWebSync
 from .retry_queue import RetryJobStatus, create_retry_job, get_retry_job
 from .retrieval.vector_store import (
     get_source_path_for_doc,
     init_db,
     search_similar_chunks,
 )
+from .utils.logger import setup_logger
 
 app = FastAPI(title="Ambience Med42 RAG Service")
+logger = setup_logger(__name__)
+
+
+def _build_sync_scheduler() -> GuidelineSyncScheduler:
+    return GuidelineSyncScheduler(
+        sync_service=GuidelineWebSync(),
+        db_url=DATABASE_URL,
+        enabled=bool(getattr(app_config, "GUIDELINE_SYNC_ENABLED", False)),
+        interval_minutes=int(
+            getattr(app_config, "GUIDELINE_SYNC_INTERVAL_MINUTES", 720)
+        ),
+        run_on_startup=bool(
+            getattr(app_config, "GUIDELINE_SYNC_RUN_ON_STARTUP", True)
+        ),
+        timeout_seconds=int(
+            getattr(app_config, "GUIDELINE_SYNC_TIMEOUT_SECONDS", 900)
+        ),
+    )
+
+
+sync_scheduler = _build_sync_scheduler()
 
 # Load embedding model once and prepare DB schema (pgvector + tables).
 print("🏥 Loading Embedding Model...")
@@ -69,6 +94,16 @@ async def warmup_ollama():
 
     print(f"🔥 Warming up local model '{LOCAL_LLM_MODEL}'...")
     await warmup_model()
+
+
+@app.on_event("startup")
+async def start_guideline_sync_scheduler() -> None:
+    sync_scheduler.start()
+
+
+@app.on_event("shutdown")
+async def stop_guideline_sync_scheduler() -> None:
+    await sync_scheduler.stop()
 
 
 class QueryRequest(BaseModel):
@@ -249,7 +284,8 @@ async def _streaming_generator(
         return
 
     used_indices = _extract_citation_indices(accumulated)
-    sorted_used = sorted(i for i in used_indices if 1 <= i <= len(citations_retrieved))
+    sorted_used = sorted(i for i in used_indices if 1 <=
+                         i <= len(citations_retrieved))
     citations_used = [citations_retrieved[i - 1] for i in sorted_used]
     renumber_map = {orig: new for new, orig in enumerate(sorted_used, start=1)}
     renumbered_answer = _rewrite_citations(accumulated, renumber_map)
@@ -306,6 +342,20 @@ class RetryJobResponse(BaseModel):
     created_at: str
     updated_at: str
     response: dict[str, Any] | None = None
+
+
+class GuidelineSyncTriggerRequest(BaseModel):
+    source_names: list[str] | None = None
+    dry_run: bool = False
+
+
+class GuidelineSyncStatusResponse(BaseModel):
+    running: bool
+    enabled: bool
+    last_started_at: str | None = None
+    last_finished_at: str | None = None
+    last_error: str | None = None
+    last_result: dict[str, Any] | None = None
 
 
 @app.post("/ingest", response_model=IngestResponse)
@@ -367,6 +417,26 @@ async def health_check():
     }
 
 
+@app.post("/guidelines/sync")
+async def trigger_guideline_sync(payload: GuidelineSyncTriggerRequest | None = None):
+    request = payload or GuidelineSyncTriggerRequest()
+    try:
+        result = await sync_scheduler.trigger_once(
+            source_names=set(
+                request.source_names) if request.source_names else None,
+            dry_run=request.dry_run,
+        )
+        return {"status": "ok", **result}
+    except Exception as exc:
+        logger.exception("sync.endpoint.trigger_failed error=%s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/guidelines/sync/status", response_model=GuidelineSyncStatusResponse)
+async def guideline_sync_status():
+    return GuidelineSyncStatusResponse(**sync_scheduler.status())
+
+
 @app.post("/query", response_model=list[SearchResult])
 async def clinical_query(request: QueryRequest):
     """Embed the query and return the top-k nearest chunks."""
@@ -406,7 +476,8 @@ async def clinical_query(request: QueryRequest):
 @app.post("/answer", response_model=AnswerResponse | RetryAcceptedResponse)
 async def generate_clinical_answer(
     request: AnswerRequest,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key"),
 ):
     """Retrieve supporting chunks, build a grounded prompt, and call Ollama
     for an answer."""
@@ -515,7 +586,8 @@ async def generate_clinical_answer(
                 )
                 return JSONResponse(
                     status_code=202,
-                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                    content=RetryAcceptedResponse(
+                        job_id=job_id, status=status).model_dump(),
                 )
             raise
 
@@ -553,7 +625,8 @@ async def generate_clinical_answer(
 @app.post("/revise", response_model=AnswerResponse | RetryAcceptedResponse)
 async def revise_clinical_answer(
     request: ReviseRequest,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key"),
 ):
     """Re-generate an AI answer incorporating specialist feedback.
 
@@ -653,7 +726,8 @@ async def revise_clinical_answer(
                 )
                 return JSONResponse(
                     status_code=202,
-                    content=RetryAcceptedResponse(job_id=job_id, status=status).model_dump(),
+                    content=RetryAcceptedResponse(
+                        job_id=job_id, status=status).model_dump(),
                 )
             raise
 
