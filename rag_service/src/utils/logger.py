@@ -2,7 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
-from ..config import logging_config
+from .. import config as app_config
 
 
 def setup_logger(name: str = __name__) -> logging.Logger:
@@ -13,7 +13,11 @@ def setup_logger(name: str = __name__) -> logging.Logger:
     if logger.handlers:
         return logger
 
-    logger.setLevel(logging_config.log_level)
+    logging_config = getattr(app_config, "logging_config", None)
+    log_level = getattr(logging_config, "log_level", "INFO")
+    log_file = getattr(logging_config, "log_file", "logs/rag.log")
+
+    logger.setLevel(log_level)
 
     console_format = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -29,11 +33,11 @@ def setup_logger(name: str = __name__) -> logging.Logger:
 
     # Console handler - uses configured log level
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging_config.log_level)
+    console_handler.setLevel(log_level)
     console_handler.setFormatter(console_format)
 
     # File handler - always DEBUG for full verbosity
-    log_path = Path(logging_config.log_file)
+    log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_path)
     file_handler.setLevel(logging.DEBUG)
