@@ -1,8 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route, useLocation } from 'react-router-dom';
+
+const API = 'http://localhost:8000';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders, seedAuth } from '../../test/utils';
 import { GPNewQueryPage } from './GPNewQueryPage';
@@ -115,7 +117,7 @@ describe('GPNewQueryPage', () => {
 
   it('shows error on API failure', async () => {
     server.use(
-      http.post('/chats/', () => {
+      http.post(`${API}/chats/`, () => {
         return HttpResponse.json({ detail: 'Server error' }, { status: 500 });
       }),
     );
