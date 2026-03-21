@@ -45,6 +45,12 @@ What it does:
 - proxies backend API traffic (`/api/`) to the backend container
 - disables buffering on `/api/` for SSE chat streaming reliability
 
+Certificate behavior:
+
+- if `nginx/certs/fullchain.pem` and `nginx/certs/privkey.pem` exist, nginx uses them
+- if cert files are missing and `NGINX_GENERATE_SELF_SIGNED=true`, nginx generates a short-lived self-signed cert at startup
+- for strict production TLS, set `NGINX_GENERATE_SELF_SIGNED=false` and mount real cert files
+
 How it is used:
 
 - the `nginx` service is behind the Compose `production` profile

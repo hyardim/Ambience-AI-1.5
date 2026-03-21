@@ -26,14 +26,18 @@ from src.jobs.state import compute_backoff_seconds, decode_mapping, deserialize
 
 class FakeQueue:
     def __init__(self) -> None:
-        self.enqueued: list[tuple[str, dict[str, Any]]] = []
-        self.enqueued_in: list[tuple[timedelta, str, dict[str, Any]]] = []
+        self.enqueued: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+        self.enqueued_in: list[
+            tuple[timedelta, str, tuple[Any, ...], dict[str, Any]]
+        ] = []
 
-    def enqueue(self, fn_name: str, **kwargs: Any) -> None:
-        self.enqueued.append((fn_name, kwargs))
+    def enqueue(self, fn_name: str, *args: Any, **kwargs: Any) -> None:
+        self.enqueued.append((fn_name, args, kwargs))
 
-    def enqueue_in(self, delay: timedelta, fn_name: str, **kwargs: Any) -> None:
-        self.enqueued_in.append((delay, fn_name, kwargs))
+    def enqueue_in(
+        self, delay: timedelta, fn_name: str, *args: Any, **kwargs: Any
+    ) -> None:
+        self.enqueued_in.append((delay, fn_name, args, kwargs))
 
 
 class FakeRedis:
@@ -185,6 +189,20 @@ def test_idempotency_key_dedup(fake_backend):
 
     assert first_job == second_job
     assert len(queue.enqueued) == 1
+
+
+def test_create_retry_job_enqueues_job_id_as_positional_arg(fake_backend) -> None:
+    redis_conn, queue = fake_backend
+
+    job_id, _ = create_retry_job(
+        request_type="answer", payload=_payload(), connection=redis_conn
+    )
+
+    assert queue.enqueued
+    fn_name, args, kwargs = queue.enqueued[0]
+    assert fn_name == "src.jobs.retry.process_retry_job"
+    assert args == (job_id,)
+    assert kwargs == {}
 
 
 def test_deserialize_handles_none_and_bytes() -> None:

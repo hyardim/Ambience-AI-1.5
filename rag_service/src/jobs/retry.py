@@ -157,7 +157,8 @@ def create_retry_job(
         },
     )
     redis_conn.expire(state_job_key(job_id), retry_config.retry_job_ttl_seconds)
-    queue.enqueue("src.jobs.retry.process_retry_job", job_id=job_id)
+    # Enqueue positional args so RQ always passes job_id into process_retry_job(job_id).
+    queue.enqueue("src.jobs.retry.process_retry_job", job_id)
     append_jsonl(
         RETRY_TELEMETRY_PATH,
         {
@@ -241,7 +242,7 @@ def _requeue_retry_job(
     queue.enqueue_in(
         timedelta(seconds=backoff),
         "src.jobs.retry.process_retry_job",
-        job_id=job_id,
+        job_id,
     )
     update_job_state(
         redis_conn,

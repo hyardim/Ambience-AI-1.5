@@ -129,9 +129,9 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:?RAG_INTERNAL_API_KEY must be set}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL=thewindmom/llama3-med42-8b
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-thewindmom/llama3-med42-8b}
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
-      - LOCAL_LLM_MODEL=thewindmom/llama3-med42-8b
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-thewindmom/llama3-med42-8b}
       - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
       - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY}
@@ -191,14 +191,20 @@ services:
   # In development you can comment this out and access services directly on their ports.
   # In production, place SSL certs in nginx/certs/ and set FRONTEND_BASE_URL to your domain.
   nginx:
-    image: nginx:alpine
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     container_name: ambience_nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/certs:/etc/nginx/certs
+    environment:
+      - NGINX_GENERATE_SELF_SIGNED=${NGINX_GENERATE_SELF_SIGNED:-true}
+      - NGINX_SELF_SIGNED_DAYS=${NGINX_SELF_SIGNED_DAYS:-30}
+      - NGINX_SELF_SIGNED_SUBJECT=${NGINX_SELF_SIGNED_SUBJECT:-/CN=localhost}
     depends_on:
       - frontend
       - backend

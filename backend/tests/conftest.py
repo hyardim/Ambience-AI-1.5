@@ -29,6 +29,7 @@ from src.core.config import settings
 from src.db.base import Base
 from src.db.session import get_async_db, get_db
 from src.services import auth_service
+from src.utils.cache import cache
 
 # SQLite has no native JSONB type. Teach the SQLite type compiler to render
 # JSONB columns as plain JSON so that Base.metadata.create_all() works against
@@ -123,6 +124,10 @@ def default_email_verification_flags(monkeypatch):
 @pytest.fixture()
 def client(db_session, monkeypatch):
     """HTTP test client wired to the file-based test database."""
+
+    # API tests should not share Redis-backed cache state between test cases.
+    monkeypatch.setattr(settings, "CACHE_ENABLED", False)
+    cache._client = None
 
     def override_get_db():
         try:
