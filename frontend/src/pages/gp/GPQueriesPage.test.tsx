@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,6 +6,8 @@ import { Routes, Route } from 'react-router-dom';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders, seedAuth } from '../../test/utils';
 import { GPQueriesPage } from './GPQueriesPage';
+
+const API = 'http://localhost:8000';
 
 function NewQueryStub() {
   return <div>New Query Page</div>;
@@ -70,7 +72,7 @@ describe('GPQueriesPage', () => {
 
     // Override handler to return empty for the search
     server.use(
-      http.get('/chats/', () => {
+      http.get(`${API}/chats/`, () => {
         return HttpResponse.json([]);
       }),
     );
@@ -85,7 +87,7 @@ describe('GPQueriesPage', () => {
 
   it('shows empty state with create button when no chats exist', async () => {
     server.use(
-      http.get('/chats/', () => {
+      http.get(`${API}/chats/`, () => {
         return HttpResponse.json([]);
       }),
     );
@@ -114,7 +116,7 @@ describe('GPQueriesPage', () => {
 
   it('shows error message when API fails', async () => {
     server.use(
-      http.get('/chats/', () => {
+      http.get(`${API}/chats/`, () => {
         return HttpResponse.json({ detail: 'Server error' }, { status: 500 });
       }),
     );
@@ -129,7 +131,7 @@ describe('GPQueriesPage', () => {
   it('retries loading on error retry button click', async () => {
     let callCount = 0;
     server.use(
-      http.get('/chats/', () => {
+      http.get(`${API}/chats/`, () => {
         callCount++;
         if (callCount === 1) {
           return HttpResponse.json({ detail: 'Error' }, { status: 500 });

@@ -41,7 +41,7 @@ export function GPQueriesPage() {
   const [dateTo, setDateTo] = useState('');
   const [tab, setTab] = useState<TabKey>('submitted');
   const [showFilters, setShowFilters] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasActiveFilters = !!(specialty || dateFrom || dateTo);
 
@@ -85,7 +85,9 @@ export function GPQueriesPage() {
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
-    clearTimeout(debounceRef.current);
+    if (debounceRef.current !== null) {
+      clearTimeout(debounceRef.current);
+    }
     debounceRef.current = setTimeout(() => {
       fetchChats(buildFilters(value));
     }, 300);

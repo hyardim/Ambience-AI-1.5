@@ -1,7 +1,10 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach, beforeAll, afterAll } from 'vitest';
+import { afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { server } from './mocks/server';
+
+// Keep API calls aligned with MSW absolute handlers during tests.
+vi.stubEnv('VITE_API_URL', 'http://localhost:8000');
 
 // Start MSW server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
@@ -14,7 +17,10 @@ afterEach(() => {
 });
 
 // Clean up after all tests
-afterAll(() => server.close());
+afterAll(() => {
+  server.close();
+  vi.unstubAllEnvs();
+});
 
 // Stub window.confirm to always return true (override per-test as needed)
 Object.defineProperty(window, 'confirm', {

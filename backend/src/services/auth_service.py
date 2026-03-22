@@ -416,9 +416,30 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
 
 
 def _ensure_auth_token_tables(db: Session) -> None:
-    db.execute(
-        text(
-            """
+    dialect_name = db.bind.dialect.name if db.bind is not None else ""
+    if dialect_name == "sqlite":
+        password_reset_sql = """
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash VARCHAR NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+        email_verification_sql = """
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash VARCHAR NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+    else:
+        password_reset_sql = """
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -427,12 +448,8 @@ def _ensure_auth_token_tables(db: Session) -> None:
                 used_at TIMESTAMP,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
             )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
+        """
+        email_verification_sql = """
             CREATE TABLE IF NOT EXISTS email_verification_tokens (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -441,9 +458,10 @@ def _ensure_auth_token_tables(db: Session) -> None:
                 used_at TIMESTAMP,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
             )
-            """
-        )
-    )
+        """
+
+    db.execute(text(password_reset_sql))
+    db.execute(text(email_verification_sql))
     db.execute(
         text(
             "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_created "

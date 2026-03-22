@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import {
@@ -35,6 +35,8 @@ import {
   healthCheck,
 } from './api';
 
+const API = 'http://localhost:8000';
+
 describe('API service', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -51,13 +53,13 @@ describe('API service', () => {
 
     it('throws on invalid credentials', async () => {
       server.use(
-        http.post('/auth/login', () => {
+        http.post(`${API}/auth/login`, () => {
           return HttpResponse.json({ detail: 'Invalid credentials' }, { status: 401 });
         }),
       );
       // 401 triggers the session-expiry path; override to plain 400 for this test
       server.use(
-        http.post('/auth/login', () => {
+        http.post(`${API}/auth/login`, () => {
           return HttpResponse.json({ detail: 'Bad creds' }, { status: 400 });
         }),
       );
@@ -321,7 +323,7 @@ describe('API service', () => {
   describe('handleResponse error paths', () => {
     it('throws with parsed detail message on non-ok JSON response', async () => {
       server.use(
-        http.get('/health', () => {
+        http.get(`${API}/health`, () => {
           return HttpResponse.json({ detail: 'Server error' }, { status: 500 });
         }),
       );
@@ -330,7 +332,7 @@ describe('API service', () => {
 
     it('throws with raw text when response is not JSON', async () => {
       server.use(
-        http.get('/health', () => {
+        http.get(`${API}/health`, () => {
           return new HttpResponse('Something broke', { status: 500 });
         }),
       );
@@ -341,7 +343,7 @@ describe('API service', () => {
       localStorage.setItem('access_token', 'tok');
 
       server.use(
-        http.get('/chats/', () => {
+        http.get(`${API}/chats/`, () => {
           return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
         }),
       );

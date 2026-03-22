@@ -7,6 +7,8 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders, seedAuth } from '../../test/utils';
 import { AdminUsersPage } from './AdminUsersPage';
 
+const API = 'http://localhost:8000';
+
 function renderAdminUsers() {
   seedAuth({ role: 'admin', username: 'Admin User' });
   return renderWithProviders(
@@ -54,7 +56,7 @@ describe('AdminUsersPage', () => {
 
   it('shows error message on load failure', async () => {
     server.use(
-      http.get('/admin/users', () => {
+      http.get(`${API}/admin/users`, () => {
         return HttpResponse.json({ detail: 'Forbidden' }, { status: 403 });
       }),
     );
@@ -135,7 +137,7 @@ describe('AdminUsersPage', () => {
 
   it('shows no users message when list is empty', async () => {
     server.use(
-      http.get('/admin/users', () => {
+      http.get(`${API}/admin/users`, () => {
         return HttpResponse.json([]);
       }),
     );

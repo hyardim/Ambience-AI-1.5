@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Paperclip, X } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { createChat, sendMessage, uploadChatFile } from '../../services/api';
+import { createChat, uploadChatFile } from '../../services/api';
 import type { Severity } from '../../types';
 
 export function GPNewQueryPage() {

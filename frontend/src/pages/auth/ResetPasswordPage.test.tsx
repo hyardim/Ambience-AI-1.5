@@ -7,6 +7,8 @@ import { renderWithProviders } from '../../test/utils';
 import { server } from '../../test/mocks/server';
 import { ResetPasswordPage } from './ResetPasswordPage';
 
+const API = 'http://localhost:8000';
+
 function LoginStub() {
   return <div>Login Page</div>;
 }
@@ -60,7 +62,7 @@ describe('ResetPasswordPage', () => {
 
   it('shows safe invalid-token error message', async () => {
     server.use(
-      http.post('/auth/reset-password/confirm', () => {
+      http.post(`${API}/auth/reset-password/confirm`, () => {
         return HttpResponse.json({ detail: 'Invalid or expired reset token' }, { status: 400 });
       }),
     );

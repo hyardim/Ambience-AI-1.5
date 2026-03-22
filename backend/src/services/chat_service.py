@@ -59,6 +59,9 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
         title=data.title,
         specialty=data.specialty,
         severity=data.severity,
+        patient_age=data.patient_age,
+        patient_gender=data.patient_gender,
+        patient_notes=data.patient_notes,
         patient_context=patient_context,
     )
     audit_repository.log(

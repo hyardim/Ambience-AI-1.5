@@ -4,7 +4,9 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { AuthProvider, useAuth } from './AuthContext';
-import { mockLoginResponse } from '../test/mocks/handlers';
+import { secureStorage } from '../utils/secureStorage';
+
+const API = 'http://localhost:8000';
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return <AuthProvider>{children}</AuthProvider>;
@@ -54,8 +56,8 @@ describe('AuthContext', () => {
     expect(role).toBe('gp');
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.token).toBe('mock-jwt-token');
-    expect(localStorage.getItem('access_token')).toBe('mock-jwt-token');
-    expect(localStorage.getItem('user_role')).toBe('gp');
+    expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
+    expect(secureStorage.getItem('user_role')).toBe('gp');
   });
 
   it('register() updates state and localStorage', async () => {
@@ -80,23 +82,24 @@ describe('AuthContext', () => {
 
     expect(screen.getByTestId('loading')).toHaveTextContent('false');
 
-    let role: string | undefined;
+    let registerResult: { role: string | null; requiresEmailVerification: boolean; message: string } | undefined;
     await act(async () => {
-      role = await registerFn({
+      registerResult = await registerFn({
         email: 'new@example.com',
         password: 'pass',
         role: 'gp',
       });
     });
 
-    expect(role).toBe('gp');
+    expect(registerResult?.role).toBe('gp');
+    expect(registerResult?.requiresEmailVerification).toBe(false);
     expect(authState.isAuthenticated).toBe(true);
-    expect(localStorage.getItem('access_token')).toBe('mock-jwt-token');
+    expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
   });
 
   it('login() rejects on API failure', async () => {
     server.use(
-      http.post('/auth/login', () => {
+      http.post(`${API}/auth/login`, () => {
         return HttpResponse.json({ detail: 'Invalid credentials' }, { status: 400 });
       }),
     );

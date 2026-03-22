@@ -8,9 +8,6 @@ import { Header } from './Header';
 function ProfileStub() {
   return <div>Profile Page</div>;
 }
-function QueriesStub() {
-  return <div>Queries Page</div>;
-}
 function LoginStub() {
   return <div>Login</div>;
 }

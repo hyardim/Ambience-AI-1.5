@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useChatStream, type StreamPhase } from './useChatStream';
+import { useChatStream } from './useChatStream';
 import type { Message } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -87,9 +87,8 @@ describe('useChatStream', () => {
       }),
     );
 
-    let connectPromise: Promise<void>;
     act(() => {
-      connectPromise = result.current.connectStream(1);
+      result.current.connectStream(1);
     });
 
     // Simulate connection opening

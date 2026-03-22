@@ -67,12 +67,18 @@ def create(
     title: str = "New Chat",
     specialty: Optional[str] = None,
     severity: Optional[str] = None,
+    patient_age: Optional[int] = None,
+    patient_gender: Optional[str] = None,
+    patient_notes: Optional[str] = None,
     patient_context: Optional[dict] = None,
 ) -> Chat:
     chat = Chat(
         title=title,
         specialty=specialty,
         severity=severity,
+        patient_age=patient_age,
+        patient_gender=patient_gender,
+        patient_notes=patient_notes,
         patient_context=patient_context,
         user_id=user_id,
         status=ChatStatus.OPEN,

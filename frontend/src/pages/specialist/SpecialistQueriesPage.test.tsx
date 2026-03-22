@@ -7,6 +7,8 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders, seedAuth } from '../../test/utils';
 import { SpecialistQueriesPage } from './SpecialistQueriesPage';
 
+const API = 'http://localhost:8000';
+
 function QueryDetailStub() {
   return <div>Specialist Query Detail</div>;
 }
@@ -71,7 +73,7 @@ describe('SpecialistQueriesPage', () => {
 
   it('shows error on API failure', async () => {
     server.use(
-      http.get('/specialist/queue', () => {
+      http.get(`${API}/specialist/queue`, () => {
         return HttpResponse.json({ detail: 'Error' }, { status: 500 });
       }),
     );
@@ -109,7 +111,7 @@ describe('SpecialistQueriesPage', () => {
 
   it('shows empty state for assigned tab with no chats', async () => {
     server.use(
-      http.get('/specialist/assigned', () => {
+      http.get(`${API}/specialist/assigned`, () => {
         return HttpResponse.json([]);
       }),
     );

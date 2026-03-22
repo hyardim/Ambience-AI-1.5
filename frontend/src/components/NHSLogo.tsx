@@ -5,7 +5,7 @@ export function NHSLogo({ className = '' }: { className?: string }) {
     <Link to="/" className={`flex items-center ${className}`}>
       <div className="bg-[#005eb8] px-3 py-1 rounded">
         <svg width="370.61" height="150" version="1.1" viewBox="0 0 370.61 150" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
-            <rect width="370.61" height="150" fill="#005eb8" stroke-width="3.75"/>
+            <rect width="370.61" height="150" fill="#005eb8" strokeWidth="3.75"/>
             <g transform="scale(3.75)" fill="#fff">
             <path d="m9.66 3.86h10.75l6.59 22.33h0.1l4.52-22.33h8.12l-6.83 32.2h-10.7l-6.74-22.28h-0.09l-4.47 22.28h-8.12z"/>
             <path d="m42.91 3.86h8.63l-2.54 12.32h10.2l2.54-12.32h8.63l-6.69 32.2h-8.68l2.86-13.79h-10.15l-2.86 13.79h-8.62z"/>

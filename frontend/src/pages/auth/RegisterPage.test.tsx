@@ -7,6 +7,8 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/utils';
 import { RegisterPage } from './RegisterPage';
 
+const API = 'http://localhost:8000';
+
 function GPStub() {
   return <div>GP Page</div>;
 }
@@ -117,7 +119,7 @@ describe('RegisterPage', () => {
 
   it('shows API error on registration failure', async () => {
     server.use(
-      http.post('/auth/register', () => {
+      http.post(`${API}/auth/register`, () => {
         return HttpResponse.json({ detail: 'Email already exists' }, { status: 400 });
       }),
     );
@@ -153,7 +155,7 @@ describe('RegisterPage', () => {
 
   it('shows verification message when backend requires email verification', async () => {
     server.use(
-      http.post('/auth/register', () => {
+      http.post(`${API}/auth/register`, () => {
         return HttpResponse.json({
           user: {
             id: 4,

@@ -7,6 +7,8 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/utils';
 import { VerifyEmailPage } from './VerifyEmailPage';
 
+const API = 'http://localhost:8000';
+
 function LoginStub() {
   return <div>Login Page</div>;
 }
@@ -45,7 +47,7 @@ describe('VerifyEmailPage', () => {
 
   it('shows invalid token error state', async () => {
     server.use(
-      http.post('/auth/verify-email/confirm', () => {
+      http.post(`${API}/auth/verify-email/confirm`, () => {
         return HttpResponse.json({ detail: 'Invalid or expired verification token' }, { status: 400 });
       }),
     );

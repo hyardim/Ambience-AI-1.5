@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,6 +6,8 @@ import { Routes, Route } from 'react-router-dom';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders, seedAuth } from '../../test/utils';
 import { LoginPage } from './LoginPage';
+
+const API = 'http://localhost:8000';
 
 function GPStub() {
   return <div>GP Queries Page</div>;
@@ -104,7 +106,7 @@ describe('LoginPage', () => {
 
   it('navigates to specialist page for specialist role', async () => {
     server.use(
-      http.post('/auth/login', () => {
+      http.post(`${API}/auth/login`, () => {
         return HttpResponse.json({
           access_token: 'tok',
           token_type: 'bearer',
@@ -139,7 +141,7 @@ describe('LoginPage', () => {
 
   it('navigates to admin page for admin role', async () => {
     server.use(
-      http.post('/auth/login', () => {
+      http.post(`${API}/auth/login`, () => {
         return HttpResponse.json({
           access_token: 'tok',
           token_type: 'bearer',
@@ -174,7 +176,7 @@ describe('LoginPage', () => {
 
   it('shows error message on login failure', async () => {
     server.use(
-      http.post('/auth/login', () => {
+      http.post(`${API}/auth/login`, () => {
         return HttpResponse.json({ detail: 'Account locked' }, { status: 400 });
       }),
     );
@@ -244,7 +246,7 @@ describe('LoginPage', () => {
 
   it('shows resend verification guidance when login is blocked for unverified email', async () => {
     server.use(
-      http.post('/auth/login', () => {
+      http.post(`${API}/auth/login`, () => {
         return HttpResponse.json(
           { detail: 'Please verify your email before logging in. You can request a new verification email.' },
           { status: 403 },
