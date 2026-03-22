@@ -21,8 +21,16 @@ class Message(Base):
         Index("ix_messages_sender", "sender"),
         Index("ix_messages_created_at", "created_at"),
         Index("ix_messages_chat_created_at", "chat_id", "created_at"),
-        Index("ix_messages_chat_sender_review_created_at", "chat_id", "sender", "review_status", "created_at"),
-        Index("ix_messages_chat_sender_generating", "chat_id", "sender", "is_generating"),
+        Index(
+            "ix_messages_chat_sender_review_created_at",
+            "chat_id",
+            "sender",
+            "review_status",
+            "created_at",
+        ),
+        Index(
+            "ix_messages_chat_sender_generating", "chat_id", "sender", "is_generating"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

@@ -679,7 +679,7 @@ async def test_rag_search_proxy_success(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def post(self, url, json):
+        async def post(self, url, json=None, **kwargs):
             assert url.endswith("/query")
             assert json["query"] == "query"
             assert json["specialty"] == "neurology"
@@ -704,7 +704,7 @@ async def test_rag_search_proxy_connection_error(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def post(self, url, json):
+        async def post(self, url, json=None, **kwargs):
             raise httpx.ConnectError("boom")
 
     monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
@@ -725,7 +725,7 @@ async def test_rag_search_proxy_timeout(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def post(self, url, json):
+        async def post(self, url, json=None, **kwargs):
             raise httpx.TimeoutException("slow")
 
     monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
@@ -750,7 +750,7 @@ async def test_rag_search_proxy_non_200(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def post(self, url, json):
+        async def post(self, url, json=None, **kwargs):
             return FakeResponse()
 
     monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)

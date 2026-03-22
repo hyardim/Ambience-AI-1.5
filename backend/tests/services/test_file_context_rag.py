@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 def _fake_rag_factory(captured: dict):
     """Return a fake httpx.post that records the RAG payload and returns a stub response."""
 
-    def _fake(url, json, timeout):
+    def _fake(url, json, timeout=None, **kwargs):
         captured.update(json)
         m = MagicMock()
         m.raise_for_status = MagicMock()

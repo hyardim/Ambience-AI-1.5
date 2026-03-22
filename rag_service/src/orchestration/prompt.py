@@ -13,7 +13,7 @@ def build_system_prompt() -> str:
 def format_context(context: list[CitedResult]) -> str:
     if not context:
         return ""
-
+   
     blocks: list[str] = []
     for idx, item in enumerate(context, start=1):
         citation = item.citation

@@ -206,7 +206,8 @@ describe('ChatMessage', () => {
     render(<ChatMessage message={aiMessage} />);
 
     expect(screen.getAllByText('Source')).toHaveLength(2);
-    expect(screen.getByRole('link', { name: 'Source' })).toHaveAttribute('href', 'http://localhost:8001/docs/doc-1');
+    // Citations without source_url render as plain text, not links
+    expect(screen.queryByRole('link', { name: 'Source' })).toBeNull();
   });
 
   it('renders review badges, feedback, and specialist actions', async () => {

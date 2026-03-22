@@ -12,9 +12,7 @@ from src.db.models.common import utc_now
 class EmailVerificationToken(Base):
     __tablename__ = "email_verification_tokens"
     __table_args__ = (
-        UniqueConstraint(
-            "token_hash", name="email_verification_tokens_token_hash_key"
-        ),
+        UniqueConstraint("token_hash", name="email_verification_tokens_token_hash_key"),
         Index("ix_email_verification_tokens_user_created", "user_id", "created_at"),
         Index("ix_email_verification_tokens_expiry_used", "expires_at", "used_at"),
         Index(
@@ -32,9 +30,7 @@ class EmailVerificationToken(Base):
         nullable=False,
         index=True,
     )
-    token_hash: Mapped[str] = mapped_column(
-        String, nullable=False, index=True
-    )
+    token_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True

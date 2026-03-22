@@ -43,8 +43,8 @@ class MessageCreate(MessageBase):
 
 class CitationResponse(BaseModel):
     doc_id: Optional[str] = None
-    title: str
-    source_name: str
+    title: Optional[str] = None
+    source_name: Optional[str] = None
     specialty: Optional[str] = None
     section_path: Optional[str | List[str]] = None
     page_start: Optional[int] = None

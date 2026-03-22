@@ -142,7 +142,7 @@ class TestPatientContextRAGPayload:
 
         captured = {}
 
-        def fake_rag(url, json, timeout):
+        def fake_rag(url, json, timeout=None, **kwargs):
             captured.update(json)
             m = MagicMock()
             m.raise_for_status = MagicMock()
@@ -177,7 +177,7 @@ class TestPatientContextRAGPayload:
         ).json()
         captured = {}
 
-        def fake_rag(url, json, timeout):
+        def fake_rag(url, json, timeout=None, **kwargs):
             captured.update(json)
             m = MagicMock()
             m.raise_for_status = MagicMock()
@@ -212,7 +212,7 @@ class TestPatientContextRAGPayload:
         second_payload = {}
         call_count = {"value": 0}
 
-        def fake_rag(url, json, timeout):
+        def fake_rag(url, json, timeout=None, **kwargs):
             del url, timeout
             call_count["value"] += 1
             if call_count["value"] == 2:

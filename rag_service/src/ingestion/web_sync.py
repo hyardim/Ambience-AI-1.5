@@ -285,6 +285,7 @@ class GuidelineWebSync:
                                 input_path=destination,
                                 source_name=document.source_name,
                                 db_url=db_url,
+                                source_url=document.canonical_url,
                             )
                             summary.ingest_succeeded_count += 1
                             last_ingest = now

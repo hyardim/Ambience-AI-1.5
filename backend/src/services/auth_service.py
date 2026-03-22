@@ -62,14 +62,16 @@ def _get_auth_redis():
         return None
     try:
         import redis
+
         _auth_redis_client = redis.Redis.from_url(
-            settings.REDIS_URL, decode_responses=True, socket_connect_timeout=2,
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=2,
         )
         _auth_redis_client.ping()
     except Exception as exc:
         logger.warning(
-            "Auth rate limiter: Redis unavailable (%s) — "
-            "using in-process fallback",
+            "Auth rate limiter: Redis unavailable (%s) — using in-process fallback",
             exc,
         )
         _auth_redis_client = None
@@ -82,7 +84,9 @@ def _utcnow() -> datetime:
 
 
 def _redis_rate_limited(
-    redis_key: str, window_seconds: int, max_attempts: int,
+    redis_key: str,
+    window_seconds: int,
+    max_attempts: int,
 ) -> bool | None:
     """Check and increment a rate-limit counter in Redis.
 
@@ -525,5 +529,3 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
 
 def refresh(user: User) -> AuthResponse:
     return _make_auth_response(user)
-
-

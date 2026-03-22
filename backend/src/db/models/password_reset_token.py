@@ -30,9 +30,7 @@ class PasswordResetToken(Base):
         nullable=False,
         index=True,
     )
-    token_hash: Mapped[str] = mapped_column(
-        String, nullable=False, index=True
-    )
+    token_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True

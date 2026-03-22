@@ -29,11 +29,24 @@ TITLE_FONT_SIZE_THRESHOLD = 18
 def _derive_source_url(source_info: dict[str, Any]) -> str:
     """Return a per-document source URL when we can infer it from the filename.
 
+    If the provided source_url already points to a specific page (has a path
+    beyond ``/``), return it as-is — this covers URLs passed from web sync.
+
     For NICE PDFs named like NG128.pdf, generate https://www.nice.org.uk/guidance/ng128.
     Otherwise fall back to the provided source_url if present.
     """
 
     provided = source_info.get("source_url", "") or ""
+
+    # If the URL already has a meaningful path (e.g. from web sync canonical_url),
+    # keep it — it's more specific than anything we can infer.
+    if provided:
+        from urllib.parse import urlparse
+
+        path = urlparse(provided).path.strip("/")
+        if path:  # has a real path, not just "https://www.nice.org.uk/"
+            return provided
+
     source_path = Path(source_info.get("source_path", ""))
     stem = source_path.stem.lower()
 

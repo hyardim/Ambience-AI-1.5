@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import date
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -135,7 +136,7 @@ class TestConfigureLogLevel:
 def test_module_entrypoint_invokes_main() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "src.ingestion.cli", "--help"],
-        cwd="/Users/Kavin2/Desktop/Ambience-AI-1.5/rag_service",
+        cwd=str(Path(__file__).resolve().parents[2]),
         capture_output=True,
         text=True,
         check=False,

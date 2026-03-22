@@ -8,7 +8,8 @@ ENUM_VALUE_CONFIG = {
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    # DB columns use TIMESTAMP WITHOUT TIME ZONE, so return naive UTC.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UserRole(enum.Enum):

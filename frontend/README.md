@@ -22,7 +22,11 @@ cp .env.example .env
 npm run dev
 ```
 
-By default the frontend expects the backend at `http://localhost:8000`.
+By default, keep `VITE_API_URL` empty so requests use Vite proxy routes
+(`/auth`, `/chats`, etc.). This avoids CORS issues in Docker/local dev.
+
+Set `VITE_API_URL=http://localhost:8000` only when you intentionally want direct
+cross-origin requests to the backend.
 
 ## Commands
 

@@ -54,7 +54,10 @@ def _get_redis():
     if _redis_client is not None:
         return _redis_client
     now = time.monotonic()
-    if _redis_init_attempted and (now - _redis_last_attempt_time) < _REDIS_RETRY_INTERVAL:
+    if (
+        _redis_init_attempted
+        and (now - _redis_last_attempt_time) < _REDIS_RETRY_INTERVAL
+    ):
         return None
     _redis_init_attempted = True
     _redis_last_attempt_time = now

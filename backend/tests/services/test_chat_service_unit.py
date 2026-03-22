@@ -284,7 +284,7 @@ async def test_async_generate_ai_response_falls_back_to_async_client_post(
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def post(self, url, json):
+        async def post(self, url, json=None, **kwargs):
             return FakeAsyncResponse()
 
     monkeypatch.setattr(chat_service.httpx, "AsyncClient", FakeAsyncClient)
@@ -569,7 +569,7 @@ async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        def stream(self, method, url, json):
+        def stream(self, method, url, json=None, **kwargs):
             return FakeStreamResponse()
 
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", FakeSessionFactory())
@@ -660,7 +660,7 @@ async def test_async_generate_ai_response_streaming_error_chunk_falls_back(
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        def stream(self, method, url, json):
+        def stream(self, method, url, json=None, **kwargs):
             return FakeStreamResponse()
 
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", lambda: FakeDB())

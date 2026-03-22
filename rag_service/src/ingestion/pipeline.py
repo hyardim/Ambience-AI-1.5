@@ -370,6 +370,7 @@ def run_ingestion(
     since: date | None = None,
     max_files: int | None = None,
     write_debug_artifacts: bool = False,
+    source_url: str | None = None,
 ) -> dict[str, Any]:
     """
     Discover PDFs, run pipeline per file, return summary report.
@@ -399,6 +400,10 @@ def run_ingestion(
             f"Check configs/sources.yaml."
         )
     source_info = sources[source_name]
+
+    # Override source_url with per-document URL when provided (e.g. from web sync)
+    if source_url:
+        source_info = {**source_info, "source_url": source_url}
 
     ingestion_config = load_ingestion_config(config_path)
     chunking_config = _resolve_chunking_config(ingestion_config)

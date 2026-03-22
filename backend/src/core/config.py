@@ -235,12 +235,9 @@ def validate_settings() -> None:
 
         # Password reset and verification flows can be configured to use real SMTP.
         # Validate required transport fields up-front to avoid silent delivery failures.
-        email_delivery_required = (
-            not settings.PASSWORD_RESET_EMAIL_LOG_ONLY
-            or (
-                settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION
-                and not settings.EMAIL_VERIFICATION_EMAIL_LOG_ONLY
-            )
+        email_delivery_required = not settings.PASSWORD_RESET_EMAIL_LOG_ONLY or (
+            settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION
+            and not settings.EMAIL_VERIFICATION_EMAIL_LOG_ONLY
         )
         if email_delivery_required and (not smtp_host or not smtp_from):
             raise RuntimeError(

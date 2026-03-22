@@ -167,10 +167,22 @@ class TestInferFromPath:
         assert result["source_name"] == "Others"
 
 
-def test_derive_source_url_builds_nice_guidance_link() -> None:
+def test_derive_source_url_keeps_specific_url() -> None:
+    """When the provided URL already has a meaningful path, keep it as-is."""
     source_url = _derive_source_url(
         {
-            "source_url": "https://www.nice.org.uk/somewhere",
+            "source_url": "https://www.nice.org.uk/guidance/ng100",
+            "source_path": "data/raw/neurology/NICE/NG128.pdf",
+        }
+    )
+    assert source_url == "https://www.nice.org.uk/guidance/ng100"
+
+
+def test_derive_source_url_builds_nice_guidance_link() -> None:
+    """When the URL is just the base domain, infer from NG### filename."""
+    source_url = _derive_source_url(
+        {
+            "source_url": "https://www.nice.org.uk",
             "source_path": "data/raw/neurology/NICE/NG128.pdf",
         }
     )
