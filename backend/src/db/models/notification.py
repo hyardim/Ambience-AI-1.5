@@ -20,6 +20,8 @@ class Notification(Base):
     __table_args__ = (
         Index("ix_notifications_user_id", "user_id"),
         Index("ix_notifications_is_read", "is_read"),
+        Index("ix_notifications_user_created_at", "user_id", "created_at"),
+        Index("ix_notifications_user_read_created_at", "user_id", "is_read", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

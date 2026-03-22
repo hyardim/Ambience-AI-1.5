@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from src.api.citations import parse_citation_group, rewrite_citations
+from src.config import retry_config
 from src.generation.client import ModelGenerationError
 from src.jobs.responses import (
     build_answer_response,
@@ -394,9 +395,11 @@ def test_create_retry_job_without_identifier_still_queues(
     assert len(queue.enqueued) == 1
 
 
-def test_process_retry_job_marks_failed_on_unexpected_exception(
+def test_process_retry_job_requeues_on_unexpected_exception(
     fake_backend, monkeypatch
 ):
+    """Unexpected exceptions are now retried (requeued) on the first attempt
+    instead of being permanently failed."""
     redis_conn, _ = fake_backend
     job_id, _ = create_retry_job(
         request_type="answer", payload=_payload(), connection=redis_conn
@@ -408,6 +411,33 @@ def test_process_retry_job_marks_failed_on_unexpected_exception(
     monkeypatch.setattr("src.jobs.retry.generate_answer", explode)
 
     process_retry_job(job_id)
+    state = get_retry_job(job_id, connection=redis_conn)
+
+    assert state is not None
+    # First attempt requeues the job rather than failing permanently.
+    assert state["status"] == RetryJobStatus.QUEUED.value
+    assert state["last_error"] == "unexpected"
+
+
+def test_process_retry_job_fails_on_unexpected_exception_after_max_attempts(
+    fake_backend, monkeypatch
+):
+    """After exhausting all retry attempts, unexpected exceptions cause
+    permanent failure."""
+    redis_conn, _ = fake_backend
+    job_id, _ = create_retry_job(
+        request_type="answer", payload=_payload(), connection=redis_conn
+    )
+
+    async def explode(*args, **kwargs):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr("src.jobs.retry.generate_answer", explode)
+
+    # Exhaust all retry attempts
+    for _ in range(retry_config.retry_max_attempts):
+        process_retry_job(job_id)
+
     state = get_retry_job(job_id, connection=redis_conn)
 
     assert state is not None

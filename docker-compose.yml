@@ -94,6 +94,7 @@ services:
       - FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS=${FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS:-900}
       - FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS=${FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS:-5}
       - PASSWORD_RESET_EMAIL_LOG_ONLY=${PASSWORD_RESET_EMAIL_LOG_ONLY:-false}
+      - PASSWORD_RESET_TOKEN_PEPPER=${PASSWORD_RESET_TOKEN_PEPPER}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -187,10 +188,23 @@ services:
       - ./rag_service/src:/app/src
       - ./rag_service/scripts:/app/scripts
       - ./rag_service/logs:/app/logs
+      - ./rag_service/data:/app/data
+      - ./rag_service/configs:/app/configs
     environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db_vector:5432/${POSTGRES_DB:-ambience_knowledge}
       - REDIS_URL=redis://redis:6379/0
+      - RAG_INTERNAL_API_KEY=${RAG_INTERNAL_API_KEY:?RAG_INTERNAL_API_KEY must be set}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-thewindmom/llama3-med42-8b}
+      - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-thewindmom/llama3-med42-8b}
+      - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL}
+      - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
+      - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY}
       - LLM_FALLBACK_ALERT_WEBHOOK_URL=${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
       - LLM_FALLBACK_ALERT_TIMEOUT_SECONDS=${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: python scripts/workers/run_retry_worker.py
     stop_signal: SIGTERM
     stop_grace_period: 60s

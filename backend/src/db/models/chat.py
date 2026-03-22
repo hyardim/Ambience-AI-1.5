@@ -33,6 +33,11 @@ class Chat(Base):
         Index("ix_chats_status", "status"),
         Index("ix_chats_specialty", "specialty"),
         Index("ix_chats_created_at", "created_at"),
+        Index("ix_chats_user_created_at", "user_id", "created_at"),
+        Index("ix_chats_status_created_at", "status", "created_at"),
+        Index("ix_chats_user_archived_created_at", "user_id", "is_archived", "created_at"),
+        Index("ix_chats_status_specialty_created_at", "status", "specialty", "created_at"),
+        Index("ix_chats_specialist_status_assigned_at", "specialist_id", "status", "assigned_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

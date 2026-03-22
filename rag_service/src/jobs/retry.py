@@ -387,7 +387,40 @@ def process_retry_job(job_id: str) -> None:
             last_error,
         )
     except Exception as exc:
-        _mark_job_failed(redis_conn, job_id, last_error=str(exc))
+        last_error = str(exc)
+        # Treat unexpected errors as retryable (e.g. transient Redis/network
+        # failures, JSON serialization hiccups) rather than permanently
+        # failing the job on the first occurrence.
+        if next_attempt < retry_config.retry_max_attempts:
+            backoff = _requeue_retry_job(
+                redis_conn,
+                job_id,
+                next_attempt=next_attempt,
+                last_error=last_error,
+            )
+            append_jsonl(
+                RETRY_TELEMETRY_PATH,
+                {
+                    "event": "unexpected_requeue",
+                    "job_id": job_id,
+                    "request_type": request_type,
+                    "attempt": next_attempt,
+                    "status": RetryJobStatus.QUEUED.value,
+                    "backoff_seconds": backoff,
+                    "error": last_error,
+                },
+            )
+            logger.warning(
+                "retry_unexpected_requeue job_id=%s attempt=%s "
+                "backoff_seconds=%s error=%s",
+                job_id,
+                next_attempt,
+                backoff,
+                last_error,
+            )
+            return
+
+        _mark_job_failed(redis_conn, job_id, last_error=last_error)
         append_jsonl(
             RETRY_TELEMETRY_PATH,
             {
@@ -396,7 +429,7 @@ def process_retry_job(job_id: str) -> None:
                 "request_type": request_type,
                 "attempt": next_attempt,
                 "status": RetryJobStatus.FAILED.value,
-                "error": str(exc),
+                "error": last_error,
             },
         )
         logger.exception(

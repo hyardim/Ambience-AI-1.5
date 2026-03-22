@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 _redis_init_attempted = False
+_redis_last_attempt_time: float = 0.0
+_REDIS_RETRY_INTERVAL = 30.0  # seconds between reconnection attempts
 _local_windows: dict[str, list[float]] = {}
 _local_windows_lock = threading.Lock()
 _local_cleanup_counter = 0
@@ -43,11 +45,19 @@ def _request_subject(request: Request) -> str:
 
 
 def _get_redis():
-    """Lazy-initialise a synchronous Redis client for rate limiting."""
-    global _redis_client, _redis_init_attempted
-    if _redis_init_attempted:
+    """Lazy-initialise a synchronous Redis client for rate limiting.
+
+    Retries connection periodically if the initial attempt failed, so the
+    rate limiter recovers when Redis comes back online.
+    """
+    global _redis_client, _redis_init_attempted, _redis_last_attempt_time
+    if _redis_client is not None:
         return _redis_client
+    now = time.monotonic()
+    if _redis_init_attempted and (now - _redis_last_attempt_time) < _REDIS_RETRY_INTERVAL:
+        return None
     _redis_init_attempted = True
+    _redis_last_attempt_time = now
     if not settings.CACHE_ENABLED:
         return None
     try:
@@ -116,17 +126,20 @@ async def rate_limit_dependency(request: Request) -> None:
     key = f"ratelimit:{bucket_key}"
 
     try:
-        current = client.get(key)
-        if current is not None and int(current) >= settings.RATE_LIMIT_PER_MINUTE:
+        # Atomic: increment first, then check. Use a Lua script to
+        # set the TTL only when the key is new (NX-style expire) so
+        # the sliding window is not reset on every request.
+        count = client.incr(key)
+        # Only set expiry on the first request in a window (count == 1)
+        # so subsequent requests don't extend the window.
+        if count == 1:
+            client.expire(key, window)
+        if count > settings.RATE_LIMIT_PER_MINUTE:
             ttl = client.ttl(key)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"Rate limit exceeded. Try again in {max(ttl, 1)} seconds.",
             )
-        pipe = client.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, window)
-        pipe.execute()
     except HTTPException:
         raise
     except Exception as exc:

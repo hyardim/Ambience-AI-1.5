@@ -425,36 +425,22 @@ def test_validate_settings_rejects_empty_password_reset_pepper_in_production(
 async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
     calls = []
 
-    class FakePipe:
+    class FakeRedis:
         def incr(self, key):
             calls.append(("incr", key))
-            return self
+            return 2  # second request in window – expire should NOT be called
 
         def expire(self, key, ttl):
             calls.append(("expire", key, ttl))
-            return self
-
-        def execute(self):
-            calls.append(("execute",))
-            return None
-
-    class FakeRedis:
-        def get(self, key):
-            assert key == "ratelimit:anon:127.0.0.1"
-            return "1"
-
-        def pipeline(self):
-            return FakePipe()
 
     monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
     request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
     await rate_limit.rate_limit_dependency(request)
 
+    # Atomic incr is called; expire is NOT called because count > 1
     assert calls == [
         ("incr", "ratelimit:anon:127.0.0.1"),
-        ("expire", "ratelimit:anon:127.0.0.1", 60),
-        ("execute",),
     ]
 
 
@@ -462,23 +448,13 @@ async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
 async def test_rate_limit_dependency_keys_by_session_and_ip(monkeypatch):
     seen = {}
 
-    class FakePipe:
+    class FakeRedis:
         def incr(self, key):
             seen["key"] = key
-            return self
+            return 1  # first request
 
         def expire(self, key, ttl):
-            return self
-
-        def execute(self):
-            return None
-
-    class FakeRedis:
-        def get(self, key):
-            return None
-
-        def pipeline(self):
-            return FakePipe()
+            pass
 
     monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
     request = SimpleNamespace(
@@ -497,23 +473,13 @@ async def test_rate_limit_dependency_keys_by_session_and_ip(monkeypatch):
 async def test_rate_limit_dependency_uses_access_cookie_subject(monkeypatch):
     seen = {}
 
-    class FakePipe:
+    class FakeRedis:
         def incr(self, key):
             seen["key"] = key
-            return self
+            return 1
 
         def expire(self, key, ttl):
-            return self
-
-        def execute(self):
-            return None
-
-    class FakeRedis:
-        def get(self, key):
-            return None
-
-        def pipeline(self):
-            return FakePipe()
+            pass
 
     monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
     request = SimpleNamespace(
@@ -531,8 +497,9 @@ async def test_rate_limit_dependency_uses_access_cookie_subject(monkeypatch):
 @pytest.mark.asyncio
 async def test_rate_limit_dependency_blocks_when_limit_reached(monkeypatch):
     class FakeRedis:
-        def get(self, key):
-            return str(core_config.settings.RATE_LIMIT_PER_MINUTE)
+        def incr(self, key):
+            # Return count exceeding the limit
+            return core_config.settings.RATE_LIMIT_PER_MINUTE + 1
 
         def ttl(self, key):
             return 12
@@ -550,7 +517,7 @@ async def test_rate_limit_dependency_blocks_when_limit_reached(monkeypatch):
 @pytest.mark.asyncio
 async def test_rate_limit_dependency_degrades_gracefully_on_redis_error(monkeypatch):
     class FakeRedis:
-        def get(self, key):
+        def incr(self, key):
             raise RuntimeError("redis down")
 
     monkeypatch.setattr(rate_limit, "_local_windows", {})

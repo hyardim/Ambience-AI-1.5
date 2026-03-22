@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from types import SimpleNamespace
 
 import pytest
@@ -252,3 +253,30 @@ def test_get_verification_status_returns_payload(db_session):
 
     assert result["email"] == user.email
     assert result["email_verified"] == user.email_verified
+
+
+def test_is_rate_limited_falls_back_when_redis_command_errors(monkeypatch):
+    class BrokenRedis:
+        def incr(self, _key):
+            raise RuntimeError("redis write failed")
+
+    monkeypatch.setattr(auth_service, "_get_auth_redis", lambda: BrokenRedis())
+    attempts: dict[str, list] = defaultdict(list)
+
+    first = auth_service._is_rate_limited(
+        key="limit@example.com",
+        redis_prefix="forgot_pw",
+        attempts=attempts,
+        window_seconds=60,
+        max_attempts=1,
+    )
+    second = auth_service._is_rate_limited(
+        key="limit@example.com",
+        redis_prefix="forgot_pw",
+        attempts=attempts,
+        window_seconds=60,
+        max_attempts=1,
+    )
+
+    assert first is False
+    assert second is True

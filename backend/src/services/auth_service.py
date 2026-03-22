@@ -1,19 +1,16 @@
+import hashlib
 import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import cast
 from urllib.parse import quote
 
 from fastapi import HTTPException, status
-from sqlalchemy import Table
 from sqlalchemy.orm import Session
 
 from src.core import security
 from src.core.config import settings
 from src.db.models import User, UserRole
-from src.db.models.email_verification_token import EmailVerificationToken
-from src.db.models.password_reset_token import PasswordResetToken
 from src.repositories import (
     audit_repository,
     email_verification_repository,
@@ -45,9 +42,38 @@ GENERIC_VERIFY_SUCCESS_MESSAGE = {"message": "Email verified successfully"}
 SAFE_INVALID_RESET_TOKEN_MESSAGE = "Invalid or expired reset token"
 SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE = "Invalid or expired verification token"
 
+# In-process fallback rate-limit dicts (used only when Redis is unavailable).
 _forgot_password_attempts: dict[str, list[datetime]] = defaultdict(list)
 _resend_verification_attempts: dict[str, list[datetime]] = defaultdict(list)
 logger = logging.getLogger(__name__)
+
+# Lazy-loaded sync Redis client for auth rate limiting.
+_auth_redis_client = None
+_auth_redis_attempted = False
+
+
+def _get_auth_redis():
+    """Return a sync Redis client, or None if unavailable."""
+    global _auth_redis_client, _auth_redis_attempted
+    if _auth_redis_attempted:
+        return _auth_redis_client
+    _auth_redis_attempted = True
+    if not settings.CACHE_ENABLED:
+        return None
+    try:
+        import redis
+        _auth_redis_client = redis.Redis.from_url(
+            settings.REDIS_URL, decode_responses=True, socket_connect_timeout=2,
+        )
+        _auth_redis_client.ping()
+    except Exception as exc:
+        logger.warning(
+            "Auth rate limiter: Redis unavailable (%s) — "
+            "using in-process fallback",
+            exc,
+        )
+        _auth_redis_client = None
+    return _auth_redis_client
 
 
 def _utcnow() -> datetime:
@@ -55,13 +81,44 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _redis_rate_limited(
+    redis_key: str, window_seconds: int, max_attempts: int,
+) -> bool | None:
+    """Check and increment a rate-limit counter in Redis.
+
+    Uses the same atomic INCR pattern as the global rate limiter: increment
+    first, set TTL only on the first request so the window is not reset.
+    """
+    client = _get_auth_redis()
+    if client is None:
+        return None  # caller will fall through to in-process check
+
+    try:
+        count = client.incr(redis_key)
+        if count == 1:
+            client.expire(redis_key, window_seconds)
+        return count > max_attempts
+    except Exception as exc:
+        logger.warning("Auth rate-limit Redis error: %s", exc)
+        return None  # fall through to in-process
+
+
 def _is_rate_limited(
     *,
     key: str,
+    redis_prefix: str,
     attempts: dict[str, list[datetime]],
     window_seconds: int,
     max_attempts: int,
 ) -> bool:
+    # Hash the email so we don't store PII in Redis keys.
+    hashed = hashlib.sha256(key.lower().encode()).hexdigest()[:16]
+    redis_key = f"auth_rl:{redis_prefix}:{hashed}"
+    redis_limited = _redis_rate_limited(redis_key, window_seconds, max_attempts)
+    if redis_limited is not None:
+        return redis_limited
+
+    # In-process fallback (single-worker only).
     now = _utcnow()
     window_start = now - timedelta(seconds=window_seconds)
     bucket = attempts[key.lower()]
@@ -75,6 +132,7 @@ def _is_rate_limited(
 def _is_forgot_password_rate_limited(email: str) -> bool:
     return _is_rate_limited(
         key=email,
+        redis_prefix="forgot_pw",
         attempts=_forgot_password_attempts,
         window_seconds=settings.FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS,
         max_attempts=settings.FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS,
@@ -84,6 +142,7 @@ def _is_forgot_password_rate_limited(email: str) -> bool:
 def _is_resend_verification_rate_limited(email: str) -> bool:
     return _is_rate_limited(
         key=email,
+        redis_prefix="resend_verify",
         attempts=_resend_verification_attempts,
         window_seconds=settings.RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS,
         max_attempts=settings.RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS,
@@ -117,7 +176,7 @@ def _make_auth_response(user: User) -> AuthResponse:
 
 
 def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
-    _ensure_auth_token_tables(db)
+
     email_verification_repository.invalidate_active_for_user(
         db, user_id=user.id, now=now
     )
@@ -342,7 +401,7 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
         return GENERIC_FORGOT_PASSWORD_MESSAGE
 
     now = _utcnow()
-    _ensure_auth_token_tables(db)
+
     password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
 
     raw_token = security.generate_password_reset_token()
@@ -399,6 +458,10 @@ def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) ->
         hashed_password=security.get_password_hash(payload.new_password),
         session_version=user.session_version + 1,
     )
+    # Invalidate ALL active reset tokens for this user so that unused
+    # tokens from earlier requests cannot be replayed after the password
+    # has already been changed.
+    password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
     password_reset_repository.mark_as_used(db, token_row, used_at=now)
     audit_repository.log(
         db,
@@ -464,11 +527,3 @@ def refresh(user: User) -> AuthResponse:
     return _make_auth_response(user)
 
 
-def _ensure_auth_token_tables(db: Session) -> None:
-    bind = db.get_bind()
-    tables = [
-        cast(Table, PasswordResetToken.__table__),
-        cast(Table, EmailVerificationToken.__table__),
-    ]
-    PasswordResetToken.metadata.create_all(bind=bind, tables=tables, checkfirst=True)
-    db.commit()

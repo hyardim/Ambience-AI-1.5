@@ -81,6 +81,17 @@ async def ingest_guideline(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Only PDF files are supported.")
 
+    # Enforce a maximum upload size (50 MB) to prevent OOM during ingestion.
+    max_ingest_size = 50 * 1024 * 1024
+    if file.size is not None and file.size > max_ingest_size:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"File too large ({file.size} bytes). "
+                f"Maximum is {max_ingest_size} bytes."
+            ),
+        )
+
     sources_path = path_config.root / "configs" / "sources.yaml"
     sources = load_sources(sources_path)
     if source_name not in sources:

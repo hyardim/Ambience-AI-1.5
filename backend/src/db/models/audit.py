@@ -19,6 +19,8 @@ class AuditLog(Base):
         Index("ix_audit_logs_user_id", "user_id"),
         Index("ix_audit_logs_action", "action"),
         Index("ix_audit_logs_timestamp", "timestamp"),
+        Index("ix_audit_logs_user_timestamp", "user_id", "timestamp"),
+        Index("ix_audit_logs_action_timestamp", "action", "timestamp"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

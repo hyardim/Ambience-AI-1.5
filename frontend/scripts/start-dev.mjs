@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 function run(command, args, { inherit = false } = {}) {
@@ -30,6 +30,17 @@ function runOrThrow(command, args) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+// Forward VITE_* environment variables from Docker (process.env) into a
+// .env.local file so Vite's import.meta.env picks them up.  Vite only reads
+// VITE_* vars from .env files, not from the process environment.
+const viteEnvLines = Object.entries(process.env)
+  .filter(([key]) => key.startsWith("VITE_"))
+  .map(([key, value]) => `${key}=${value}`);
+if (viteEnvLines.length > 0) {
+  writeFileSync(".env.local", viteEnvLines.join("\n") + "\n");
+  console.log(`Wrote ${viteEnvLines.length} VITE_* env var(s) to .env.local`);
 }
 
 if (existsSync("node_modules/esbuild/package.json")) {

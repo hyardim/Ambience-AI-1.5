@@ -319,8 +319,10 @@ async def generate_answer(
                 response = await _call_local_model(prompt, max_tokens=max_tokens)
 
             if not response.strip():
-                raise RuntimeError(
-                    f"{current_provider.capitalize()} model returned an empty response"
+                raise ProviderRequestError(
+                    f"{current_provider.capitalize()} model returned an empty response",
+                    provider=current_provider,
+                    retryable=True,
                 )
 
             if index > 1:

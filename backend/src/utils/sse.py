@@ -68,11 +68,15 @@ class _ChatEventBus:
     # Async API (use from coroutines on the main event loop)
     # ------------------------------------------------------------------
 
+    _MAX_SUBSCRIBER_QUEUE_SIZE = 256
+
     async def subscribe(self, chat_id: int) -> asyncio.Queue[SSEEvent | None]:
         async with self._lock:
             if self._loop is None:
                 self._loop = asyncio.get_running_loop()
-            q: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+            q: asyncio.Queue[SSEEvent | None] = asyncio.Queue(
+                maxsize=self._MAX_SUBSCRIBER_QUEUE_SIZE,
+            )
             self._subscribers.setdefault(chat_id, []).append(q)
             # Replay buffered events only while a stream is currently active.
             # Completed streams are already persisted in the database; replaying
@@ -204,17 +208,31 @@ class _ChatEventBus:
 chat_event_bus = _ChatEventBus()
 
 
+_SSE_IDLE_TIMEOUT = 300  # seconds — drop idle connections to prevent subscriber leaks
+
+
 async def sse_event_generator(
     chat_id: int,
 ) -> AsyncGenerator[str, None]:
     """Async generator that yields SSE-formatted strings for a chat.
 
     Use with ``StreamingResponse(sse_event_generator(chat_id), media_type="text/event-stream")``.
+
+    Includes an idle timeout so that connections dropped without a clean close
+    (e.g. network failure) are eventually cleaned up rather than leaking
+    subscriber queues indefinitely.
     """
     q = await chat_event_bus.subscribe(chat_id)
     try:
         while True:
-            event = await q.get()
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=_SSE_IDLE_TIMEOUT)
+            except asyncio.TimeoutError:
+                # Send a keep-alive comment to detect dead connections.
+                # If the client has disconnected, the write will fail and
+                # the generator will be closed, triggering unsubscribe.
+                yield ": keep-alive\n\n"
+                continue
             if event is None:
                 # Sentinel – stream finished
                 break
