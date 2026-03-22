@@ -19,6 +19,28 @@ if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 
 target_metadata = Base.metadata
+managed_tables = set(target_metadata.tables.keys())
+
+
+def include_object(object_, name, type_, reflected, compare_to):
+    """Limit autogenerate/check to backend-managed tables only."""
+    if type_ == "table":
+        if reflected and name not in managed_tables:
+            return False
+        if not reflected and name not in managed_tables:
+            return False
+
+    table_name = None
+    table = getattr(object_, "table", None)
+    if table is not None:
+        table_name = table.name
+    elif type_ == "table":
+        table_name = name
+
+    if table_name and table_name not in managed_tables:
+        return False
+
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -29,6 +51,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -47,6 +70,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

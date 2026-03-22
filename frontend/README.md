@@ -31,7 +31,7 @@ By default the frontend expects the backend at `http://localhost:8000`.
 - `npm run lint` - run ESLint
 - `npm run test` - run Vitest once
 - `npm run test:coverage` - run tests with coverage
-- `npm run test:e2e` - run Playwright tests
+- `npm run test:e2e` - run Playwright browser tests against the frontend app (API routes are mocked in `e2e/app.spec.ts`)
 
 ## Test layout
 
@@ -48,3 +48,4 @@ Tests live in [`tests/`] and mirror the source structure:
 
 - API calls are configured through `VITE_API_URL`
 - coverage output is generated under `coverage/` and is ignored by git
+- Playwright e2e tests are UI-journey tests with mocked backend responses; use backend/rag_service tests plus live smoke checks for full-stack validation

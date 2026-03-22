@@ -395,9 +395,7 @@ def test_create_retry_job_without_identifier_still_queues(
     assert len(queue.enqueued) == 1
 
 
-def test_process_retry_job_requeues_on_unexpected_exception(
-    fake_backend, monkeypatch
-):
+def test_process_retry_job_requeues_on_unexpected_exception(fake_backend, monkeypatch):
     """Unexpected exceptions are now retried (requeued) on the first attempt
     instead of being permanently failed."""
     redis_conn, _ = fake_backend
