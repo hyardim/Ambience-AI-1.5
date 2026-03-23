@@ -76,6 +76,10 @@ export default defineConfig({
         target: backendUrl,
         changeOrigin: true,
       },
+      '/documents': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
     },
   },
 })
