@@ -7,8 +7,10 @@ import numpy as np
 import psycopg2
 import psycopg2.extras
 from pgvector.psycopg2 import register_vector
+from psycopg2.extensions import connection as PsycopgConnection
 from pydantic import BaseModel
 
+from ..config import db_config
 from ..utils.db import db
 from ..utils.logger import setup_logger
 from .query import EMBEDDING_DIMENSIONS, RetrievalError
@@ -93,21 +95,30 @@ def vector_search(
 
     logger.debug(f"Running vector search, top_k={top_k}, filters={filters}")
 
+    use_pool = db_url is None or db_url == db_config.database_url
     try:
-        conn = psycopg2.connect(db_url) if db_url else db.get_raw_connection()
-    except Exception as e:
-        raise RetrievalError(
-            stage="VECTOR_SEARCH",
-            query="",
-            message=f"DB connection failed: {e}",
-        ) from e
-
-    try:
-        register_vector(conn)
-        psycopg2.extras.register_default_jsonb(conn)
-        results = _run_query(
-            conn, query_embedding, top_k, specialty, source_name, doc_type
-        )
+        if use_pool:
+            with db.raw_connection() as conn:
+                register_vector(conn)
+                psycopg2.extras.register_default_jsonb(conn)
+                results = _run_query(
+                    conn, query_embedding, top_k, specialty, source_name, doc_type
+                )
+        else:
+            direct_conn: PsycopgConnection = psycopg2.connect(db_url)
+            try:
+                register_vector(direct_conn)
+                psycopg2.extras.register_default_jsonb(direct_conn)
+                results = _run_query(
+                    direct_conn,
+                    query_embedding,
+                    top_k,
+                    specialty,
+                    source_name,
+                    doc_type,
+                )
+            finally:
+                direct_conn.close()
     except RetrievalError:
         raise
     except Exception as e:
@@ -116,8 +127,6 @@ def vector_search(
             query="",
             message=f"Vector search failed: {e}",
         ) from e
-    finally:
-        conn.close()
 
     return results
 

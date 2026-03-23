@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import src.retrieval.vector_store as vector_store
@@ -15,30 +16,32 @@ def make_conn(row: tuple | None):
     return conn, cur
 
 
+@contextmanager
+def yield_conn(conn):
+    yield conn
+
+
 def test_get_source_path_for_doc_returns_value() -> None:
     conn, cur = make_conn(("/data/raw/neurology/test.pdf",))
-    with patch("src.retrieval.vector_store.get_conn", return_value=conn):
+    with patch.object(vector_store.db, "raw_connection", return_value=yield_conn(conn)):
         result = vector_store.get_source_path_for_doc("doc123")
     cur.execute.assert_called_once()
-    conn.close.assert_called_once()
     assert result == "/data/raw/neurology/test.pdf"
 
 
 def test_get_source_path_for_doc_returns_none_when_null() -> None:
     conn, cur = make_conn((None,))
-    with patch("src.retrieval.vector_store.get_conn", return_value=conn):
+    with patch.object(vector_store.db, "raw_connection", return_value=yield_conn(conn)):
         result = vector_store.get_source_path_for_doc("doc123")
     cur.execute.assert_called_once()
-    conn.close.assert_called_once()
     assert result is None
 
 
 def test_get_source_path_for_doc_handles_absent_row() -> None:
     conn, cur = make_conn(None)
-    with patch("src.retrieval.vector_store.get_conn", return_value=conn):
+    with patch.object(vector_store.db, "raw_connection", return_value=yield_conn(conn)):
         result = vector_store.get_source_path_for_doc("doc123")
     cur.execute.assert_called_once()
-    conn.close.assert_called_once()
     assert result is None
 
 

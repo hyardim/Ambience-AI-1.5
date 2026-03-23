@@ -19,7 +19,7 @@ function renderRagPage() {
 }
 
 describe('AdminRagPage', () => {
-  it('shows loading spinner then renders documents and jobs', async () => {
+  it('shows loading spinner then renders documents and job summary', async () => {
     renderRagPage();
 
     // Loading spinner should be visible initially
@@ -33,9 +33,9 @@ describe('AdminRagPage', () => {
     expect(screen.getAllByText('NICE CG1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('42')).toBeInTheDocument();
 
-    expect(screen.getByText(/recent jobs/i)).toBeInTheDocument();
-    expect(screen.getByText('job-001')).toBeInTheDocument();
-    expect(screen.getByText('completed')).toBeInTheDocument();
+    expect(screen.getByText(/job summary/i)).toBeInTheDocument();
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('pending')).toBeInTheDocument();
     expect(screen.getByText(/healthy/i)).toBeInTheDocument();
   });
 
@@ -71,9 +71,9 @@ describe('AdminRagPage', () => {
     server.use(
       http.get('/admin/rag/status', () =>
         HttpResponse.json({
-          status: 'degraded',
+          service_status: 'degraded',
           documents: [],
-          recent_jobs: [],
+          jobs: null,
         })),
     );
 
@@ -83,25 +83,16 @@ describe('AdminRagPage', () => {
       expect(screen.getByText(/degraded/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/no indexed documents/i)).toBeInTheDocument();
-    expect(screen.getByText(/no recent jobs/i)).toBeInTheDocument();
+    expect(screen.getByText(/no job summary available/i)).toBeInTheDocument();
   });
 
-  it('shows unknown health status and job errors', async () => {
+  it('shows unknown health status and failed job count', async () => {
     server.use(
       http.get('/admin/rag/status', () =>
         HttpResponse.json({
-          status: 'offline',
+          service_status: 'offline',
           documents: [],
-          recent_jobs: [
-            {
-              job_id: 'job-err',
-              status: 'failed',
-              source_name: 'Bad source',
-              created_at: '2025-01-15T09:00:00Z',
-              finished_at: null,
-              error: 'Timeout',
-            },
-          ],
+          jobs: { pending: 0, running: 0, failed: 3 },
         })),
     );
 
@@ -110,15 +101,15 @@ describe('AdminRagPage', () => {
     await waitFor(() => {
       expect(screen.getByText('offline')).toBeInTheDocument();
     });
-    expect(screen.getByText('Timeout')).toBeInTheDocument();
     expect(screen.getByText('failed')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('shows dash for null timestamps', async () => {
     server.use(
       http.get('/admin/rag/status', () =>
         HttpResponse.json({
-          status: 'healthy',
+          service_status: 'healthy',
           documents: [
             {
               doc_id: 'doc-null',
@@ -127,7 +118,7 @@ describe('AdminRagPage', () => {
               latest_ingestion: null,
             },
           ],
-          recent_jobs: [],
+          jobs: { pending: 0, running: 0, failed: 0 },
         })),
     );
 
@@ -140,31 +131,22 @@ describe('AdminRagPage', () => {
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 
-  it('applies unknown status badge class for unknown job status', async () => {
+  it('shows job counters when provided', async () => {
     server.use(
       http.get('/admin/rag/status', () =>
         HttpResponse.json({
-          status: 'healthy',
+          service_status: 'healthy',
           documents: [],
-          recent_jobs: [
-            {
-              job_id: 'job-x',
-              status: 'custom_status',
-              source_name: 'X',
-              created_at: '2025-01-15T09:00:00Z',
-              finished_at: null,
-              error: null,
-            },
-          ],
+          jobs: { pending: 2, running: 1, failed: 4 },
         })),
     );
 
     renderRagPage();
 
     await waitFor(() => {
-      expect(screen.getByText('custom_status')).toBeInTheDocument();
+      expect(screen.getByText('running')).toBeInTheDocument();
     });
-    // Job error column shows — when null
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
   });
 });

@@ -6,8 +6,11 @@ from typing import Any
 import psycopg2
 import psycopg2.extras
 from psycopg2 import errors as pg_errors
+from psycopg2.extensions import connection as PsycopgConnection
 from pydantic import BaseModel
 
+from ..config import db_config
+from ..utils.db import db
 from ..utils.logger import setup_logger
 from .query import RetrievalError
 
@@ -87,18 +90,23 @@ def keyword_search(
 
     logger.debug(f"Running keyword search, top_k={top_k}, filters={filters}")
 
+    use_pool = db_url == db_config.database_url
     try:
-        conn = psycopg2.connect(db_url)
-    except Exception as e:
-        raise RetrievalError(
-            stage="KEYWORD_SEARCH",
-            query=query,
-            message=f"DB connection failed: {e}",
-        ) from e
-
-    try:
-        psycopg2.extras.register_default_jsonb(conn)
-        results = _run_query(conn, query, top_k, specialty, source_name, doc_type)
+        if use_pool:
+            with db.raw_connection() as conn:
+                psycopg2.extras.register_default_jsonb(conn)
+                results = _run_query(
+                    conn, query, top_k, specialty, source_name, doc_type
+                )
+        else:
+            direct_conn: PsycopgConnection = psycopg2.connect(db_url)
+            try:
+                psycopg2.extras.register_default_jsonb(direct_conn)
+                results = _run_query(
+                    direct_conn, query, top_k, specialty, source_name, doc_type
+                )
+            finally:
+                direct_conn.close()
     except RetrievalError:
         raise
     except pg_errors.UndefinedColumn as e:
@@ -116,8 +124,6 @@ def keyword_search(
             query=query,
             message=f"Keyword search failed: {e}",
         ) from e
-    finally:
-        conn.close()
 
     return results
 

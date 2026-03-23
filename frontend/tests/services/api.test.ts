@@ -538,7 +538,9 @@ describe('API service', () => {
     });
 
     it('fetches RAG pipeline status', async () => {
-      await expect(adminGetRagStatus()).resolves.toMatchObject({ status: 'healthy' });
+      await expect(adminGetRagStatus()).resolves.toMatchObject({
+        service_status: 'healthy',
+      });
     });
   });
 

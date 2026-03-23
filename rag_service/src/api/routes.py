@@ -169,24 +169,20 @@ async def health_check() -> dict[str, Any]:
 )
 async def documents_health() -> list[dict[str, Any]]:
     """Return per-document stats from the rag_chunks table."""
-    conn = db_manager.get_raw_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    doc_id,
-                    metadata->>'source_name' AS source_name,
-                    COUNT(*)                 AS chunk_count,
-                    MAX(updated_at)          AS latest_ingestion
-                FROM rag_chunks
-                GROUP BY doc_id, metadata->>'source_name'
-                ORDER BY latest_ingestion DESC
-                """
-            )
-            rows = cur.fetchall()
-    finally:
-        conn.close()
+    with db_manager.raw_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                doc_id,
+                metadata->>'source_name' AS source_name,
+                COUNT(*)                 AS chunk_count,
+                MAX(updated_at)          AS latest_ingestion
+            FROM rag_chunks
+            GROUP BY doc_id, metadata->>'source_name'
+            ORDER BY latest_ingestion DESC
+            """
+        )
+        rows = cur.fetchall()
 
     return [
         {

@@ -152,18 +152,15 @@ export interface RagDocumentHealth {
 }
 
 export interface RagJobSummary {
-  job_id: string;
-  status: string;
-  source_name: string;
-  created_at: string;
-  finished_at: string | null;
-  error: string | null;
+  pending: number;
+  running: number;
+  failed: number;
 }
 
 export interface RagStatusResponse {
-  status: string;
+  service_status: string;
   documents: RagDocumentHealth[];
-  recent_jobs: RagJobSummary[];
+  jobs?: RagJobSummary | null;
 }
 
 // ---------------------------------------------------------------------------

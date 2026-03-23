@@ -8,7 +8,9 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.sql
 from pgvector.psycopg2 import register_vector
+from psycopg2.extensions import connection as PsycopgConnection
 
+from ..config import db_config
 from ..utils.db import db
 from ..utils.logger import setup_logger
 
@@ -59,38 +61,22 @@ def store_chunks(
         "failed": n_failed,
     }
 
-    conn = psycopg2.connect(db_url) if db_url else db.get_raw_connection()
-    try:
-        register_vector(conn)
-        psycopg2.extras.register_default_jsonb(conn)
-
-        # Delete ALL existing chunks for this doc_id before inserting new ones.
-        # This prevents orphaned chunks from previous versions remaining in the
-        # database when chunk IDs change across re-ingestion runs.
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s", (doc_id,))
-            deleted = cur.rowcount
-            if deleted:
-                logger.info(
-                    f"Deleted {deleted} existing chunks for doc_id={doc_id} "
-                    f"before re-ingestion"
-                )
-
-        for chunk in eligible:
-            chunk_id = chunk.get("chunk_id", "")
-            try:
-                _begin_savepoint(conn, chunk_id)
-                action = _upsert_chunk(conn, chunk, doc_id, doc_version)
-                _release_savepoint(conn, chunk_id)
-                report[action] += 1
-                logger.debug(f"Chunk {chunk_id}: {action}")
-            except Exception as e:
-                report["failed"] += 1
-                logger.warning(f"Chunk {chunk_id} failed to write: {e}")
-                _rollback_to_savepoint(conn, chunk_id)
-        conn.commit()
-    finally:
-        conn.close()
+    use_pool = db_url is None or db_url == db_config.database_url
+    if use_pool:
+        with db.raw_connection() as conn:
+            register_vector(conn)
+            psycopg2.extras.register_default_jsonb(conn)
+            _store_chunks_with_connection(conn, eligible, doc_id, doc_version, report)
+    else:
+        direct_conn: PsycopgConnection = psycopg2.connect(db_url)
+        try:
+            register_vector(direct_conn)
+            psycopg2.extras.register_default_jsonb(direct_conn)
+            _store_chunks_with_connection(
+                direct_conn, eligible, doc_id, doc_version, report
+            )
+        finally:
+            direct_conn.close()
 
     logger.info(
         f"Store report: inserted={report['inserted']} "
@@ -99,6 +85,38 @@ def store_chunks(
         f"failed={report['failed']}"
     )
     return report
+
+
+def _store_chunks_with_connection(
+    conn: Any,
+    eligible: list[dict[str, Any]],
+    doc_id: str,
+    doc_version: str,
+    report: dict[str, int],
+) -> None:
+    """Write eligible chunks using an already-open connection."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s", (doc_id,))
+        deleted = cur.rowcount
+        if deleted:
+            logger.info(
+                f"Deleted {deleted} existing chunks for doc_id={doc_id} "
+                f"before re-ingestion"
+            )
+
+    for chunk in eligible:
+        chunk_id = chunk.get("chunk_id", "")
+        try:
+            _begin_savepoint(conn, chunk_id)
+            action = _upsert_chunk(conn, chunk, doc_id, doc_version)
+            _release_savepoint(conn, chunk_id)
+            report[action] += 1
+            logger.debug(f"Chunk {chunk_id}: {action}")
+        except Exception as e:
+            report["failed"] += 1
+            logger.warning(f"Chunk {chunk_id} failed to write: {e}")
+            _rollback_to_savepoint(conn, chunk_id)
+    conn.commit()
 
 
 def _upsert_chunk(

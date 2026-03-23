@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from typing import cast
 
-import psycopg2
+from psycopg2.extensions import connection as PsycopgConnection
+from psycopg2.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -23,6 +26,7 @@ class DatabaseManager:
     def __init__(self) -> None:
         self._engine: Engine | None = None
         self._session_local: sessionmaker[Session] | None = None
+        self._raw_pool: ThreadedConnectionPool | None = None
 
     @property
     def engine(self) -> Engine:
@@ -49,9 +53,36 @@ class DatabaseManager:
         """Get a SQLAlchemy session for standard operations."""
         return cast(Session, self.SessionLocal())
 
-    def get_raw_connection(self) -> psycopg2.extensions.connection:
-        """Get a raw psycopg2 connection for vector search queries."""
-        return psycopg2.connect(db_config.database_url)
+    @property
+    def raw_pool(self) -> ThreadedConnectionPool:
+        if self._raw_pool is None:
+            self._raw_pool = ThreadedConnectionPool(
+                minconn=1,
+                maxconn=10,
+                dsn=db_config.database_url,
+            )
+        return self._raw_pool
+
+    def get_raw_connection(self) -> PsycopgConnection:
+        """Get a pooled raw psycopg2 connection for vector search queries."""
+        return cast(PsycopgConnection, self.raw_pool.getconn())
+
+    def release_raw_connection(self, conn: PsycopgConnection) -> None:
+        """Return a pooled raw connection back to the pool."""
+        try:
+            self.raw_pool.putconn(conn)
+        except Exception:
+            with suppress(Exception):
+                conn.close()
+
+    @contextmanager
+    def raw_connection(self) -> Iterator[PsycopgConnection]:
+        """Yield a pooled psycopg2 connection and return it safely afterwards."""
+        conn = self.get_raw_connection()
+        try:
+            yield conn
+        finally:
+            self.release_raw_connection(conn)
 
     def test_connection(self) -> bool:
         """Test database is reachable."""
