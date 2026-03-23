@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Loader2, CheckCircle, XCircle, AlertTriangle, Clock, Activity } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetRagStatus } from '../../services/api';
 import type { RagStatusResponse } from '../../types/api';
 import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 
-const STATUS_BADGE: Record<string, string> = {
-  completed: 'text-green-700 bg-green-50 border-green-200',
-  running:   'text-blue-700 bg-blue-50 border-blue-200',
-  pending:   'text-amber-700 bg-amber-50 border-amber-200',
-  failed:    'text-red-700 bg-red-50 border-red-200',
-};
-
-function statusBadgeClass(status: string): string {
-  return STATUS_BADGE[status] ?? 'text-gray-700 bg-gray-50 border-gray-200';
-}
 
 const formatTimestamp = (iso: string | null) => {
   if (!iso) return '—';
@@ -25,11 +15,11 @@ const formatTimestamp = (iso: string | null) => {
 };
 
 function HealthBadge({ status }: { status: string }) {
-  if (status === 'healthy') {
+  if (status === 'healthy' || status === 'ready') {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
         <CheckCircle className="w-4 h-4" />
-        Healthy
+        {status === 'ready' ? 'Ready' : 'Healthy'}
       </span>
     );
   }
@@ -87,7 +77,7 @@ export default function AdminRagPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-gray-900">RAG Pipeline</h1>
-            {data && <HealthBadge status={data.status} />}
+            {data && <HealthBadge status={data.service_status} />}
           </div>
           <button
             onClick={fetchStatus}
@@ -142,39 +132,34 @@ export default function AdminRagPage() {
               )}
             </div>
 
-            {/* Recent Jobs */}
+            {/* Job Counts */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-sm font-medium text-gray-700 mb-4">Recent Jobs</h2>
-              {data.recent_jobs.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-12">No recent jobs</p>
+              <h2 className="text-sm font-medium text-gray-700 mb-4">Ingestion Jobs</h2>
+              {!data.jobs ? (
+                <p className="text-sm text-gray-400 text-center py-8">No job data available</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-left text-gray-500">
-                        <th className="pb-2 pr-4 font-medium">Job ID</th>
-                        <th className="pb-2 pr-4 font-medium">Status</th>
-                        <th className="pb-2 pr-4 font-medium">Source</th>
-                        <th className="pb-2 pr-4 font-medium">Created</th>
-                        <th className="pb-2 font-medium">Error</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.recent_jobs.map((job) => (
-                        <tr key={job.job_id} className="text-gray-700">
-                          <td className="py-2.5 pr-4 font-mono text-xs">{job.job_id}</td>
-                          <td className="py-2.5 pr-4">
-                            <span className={`inline-block text-xs font-semibold rounded-full border px-2 py-0.5 ${statusBadgeClass(job.status)}`}>
-                              {job.status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 pr-4">{job.source_name}</td>
-                          <td className="py-2.5 pr-4 text-gray-500 text-xs">{formatTimestamp(job.created_at)}</td>
-                          <td className="py-2.5 text-xs text-red-600 max-w-xs truncate">{job.error ?? '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-100 rounded-lg">
+                    <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-2xl font-bold text-amber-700">{data.jobs.pending}</p>
+                      <p className="text-xs text-amber-600">Pending</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <Activity className="w-5 h-5 text-blue-600 shrink-0" />
+                    <div>
+                      <p className="text-2xl font-bold text-blue-700">{data.jobs.running}</p>
+                      <p className="text-xs text-blue-600">Running</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-lg">
+                    <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                    <div>
+                      <p className="text-2xl font-bold text-red-700">{data.jobs.failed}</p>
+                      <p className="text-xs text-red-600">Failed</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

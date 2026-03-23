@@ -171,7 +171,7 @@ export const mockIngestionReport: IngestionReport = {
 };
 
 export const mockRagStatus: RagStatusResponse = {
-  status: 'healthy',
+  service_status: 'healthy',
   documents: [
     {
       doc_id: 'doc-001',
@@ -180,16 +180,11 @@ export const mockRagStatus: RagStatusResponse = {
       latest_ingestion: '2025-01-15T10:00:00Z',
     },
   ],
-  recent_jobs: [
-    {
-      job_id: 'job-001',
-      status: 'completed',
-      source_name: 'NICE CG1',
-      created_at: '2025-01-15T09:00:00Z',
-      finished_at: '2025-01-15T09:05:00Z',
-      error: null,
-    },
-  ],
+  jobs: {
+    pending: 2,
+    running: 1,
+    failed: 0,
+  },
 };
 
 export const handlers = [
