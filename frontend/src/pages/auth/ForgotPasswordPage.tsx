@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { forgotPassword } from '../../services/api';
+import { getErrorMessage } from '../../utils/errors';
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -24,7 +25,7 @@ export function ForgotPasswordPage() {
       const response = await forgotPassword(email);
       setSuccessMessage(response.message);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(getErrorMessage(err, 'Failed to send reset email. Please try again.'));
     } finally {
       setSubmitting(false);
     }

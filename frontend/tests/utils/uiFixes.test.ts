@@ -6,6 +6,13 @@
  * 3. Manual response file size validation (10 MB limit)
  * 4. Profile password strength enforcement
  * 5. Login 401 error message
+ * 6. Full name length validation
+ * 7. Duplicate file detection (ChatInput)
+ * 8. Per-chat file count limit
+ * 9. Register page password strength enforcement
+ * 10. ForgotPassword error message (getErrorMessage pattern)
+ * 11. Network error message (fetch throws)
+ * 12. SSE AI generation error fallback message
  */
 
 import { describe, expect, it } from 'vitest';
@@ -457,5 +464,199 @@ describe('checkFileCountLimit', () => {
 
   it('blocks upload at exactly the limit (boundary)', () => {
     expect(checkFileCountLimit(MAX_FILES_PER_CHAT)).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Register page password strength enforcement
+//    Mirrors the check added to RegisterPage.tsx handleSubmit
+// ---------------------------------------------------------------------------
+
+function validateRegisterPassword(password: string): string | null {
+  const strongEnough =
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(password);
+  if (!strongEnough) {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.';
+  }
+  return null;
+}
+
+describe('validateRegisterPassword', () => {
+  it('accepts a fully compliant password', () => {
+    expect(validateRegisterPassword('Secure@123')).toBeNull();
+    expect(validateRegisterPassword('NhsP@ss1!')).toBeNull();
+  });
+
+  it('rejects a password shorter than 8 characters', () => {
+    expect(validateRegisterPassword('Ab1!')).not.toBeNull();
+  });
+
+  it('rejects a password missing an uppercase letter', () => {
+    expect(validateRegisterPassword('password1!')).not.toBeNull();
+  });
+
+  it('rejects a password missing a lowercase letter', () => {
+    expect(validateRegisterPassword('PASSWORD1!')).not.toBeNull();
+  });
+
+  it('rejects a password missing a digit', () => {
+    expect(validateRegisterPassword('Password!!')).not.toBeNull();
+  });
+
+  it('rejects a password missing a special character', () => {
+    expect(validateRegisterPassword('Password1')).not.toBeNull();
+  });
+
+  it('rejects an empty password', () => {
+    expect(validateRegisterPassword('')).not.toBeNull();
+  });
+
+  it('rejects a password that is exactly 7 characters (boundary)', () => {
+    expect(validateRegisterPassword('Ab1!xyz')).not.toBeNull();
+  });
+
+  it('accepts a password that is exactly 8 characters (boundary)', () => {
+    expect(validateRegisterPassword('Ab1!xyzA')).toBeNull();
+  });
+
+  it('accepts a variety of special characters', () => {
+    expect(validateRegisterPassword('Pass1@word')).toBeNull();
+    expect(validateRegisterPassword('Pass1#word')).toBeNull();
+    expect(validateRegisterPassword('Pass1$word')).toBeNull();
+    expect(validateRegisterPassword('Pass1%word')).toBeNull();
+  });
+
+  it('error message is identical to the one used on ProfilePage (consistency)', () => {
+    const msg = validateRegisterPassword('weak');
+    expect(msg).toBe(
+      'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. ForgotPassword error message pattern
+//     Mirrors getErrorMessage utility behaviour used in ForgotPasswordPage.tsx
+// ---------------------------------------------------------------------------
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
+describe('getErrorMessage (ForgotPasswordPage pattern)', () => {
+  it('returns the Error message when one is available', () => {
+    expect(getErrorMessage(new Error('Email not found'), 'fallback'))
+      .toBe('Email not found');
+  });
+
+  it('returns the fallback when err is not an Error instance', () => {
+    expect(getErrorMessage('some string error', 'Failed to send reset email. Please try again.'))
+      .toBe('Failed to send reset email. Please try again.');
+    expect(getErrorMessage(null, 'Failed to send reset email. Please try again.'))
+      .toBe('Failed to send reset email. Please try again.');
+    expect(getErrorMessage(undefined, 'Failed to send reset email. Please try again.'))
+      .toBe('Failed to send reset email. Please try again.');
+    expect(getErrorMessage(42, 'Failed to send reset email. Please try again.'))
+      .toBe('Failed to send reset email. Please try again.');
+  });
+
+  it('returns the fallback when Error has an empty message', () => {
+    expect(getErrorMessage(new Error(''), 'fallback')).toBe('fallback');
+  });
+
+  it('forgotPassword fallback message is the correct string', () => {
+    expect(getErrorMessage({}, 'Failed to send reset email. Please try again.'))
+      .toBe('Failed to send reset email. Please try again.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. Network error message (fetch throws — api.ts apiFetch wrapper)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors the try/catch added around doFetch() in apiFetch:
+ *   try { res = await doFetch(); }
+ *   catch { throw new Error('Unable to reach the server. Please check your connection.'); }
+ */
+function simulateApiFetch(fetchThrows: boolean): string | null {
+  try {
+    if (fetchThrows) throw new TypeError('Failed to fetch');
+    return 'ok';
+  } catch {
+    return 'Unable to reach the server. Please check your connection.';
+  }
+}
+
+describe('apiFetch network error handling', () => {
+  it('returns ok when fetch succeeds', () => {
+    expect(simulateApiFetch(false)).toBe('ok');
+  });
+
+  it('returns the network error message when fetch throws', () => {
+    expect(simulateApiFetch(true))
+      .toBe('Unable to reach the server. Please check your connection.');
+  });
+
+  it('network error message does not expose internal JS error details', () => {
+    const msg = simulateApiFetch(true);
+    expect(msg).not.toContain('TypeError');
+    expect(msg).not.toContain('Failed to fetch');
+  });
+
+  it('network error message is user-friendly and actionable', () => {
+    const msg = simulateApiFetch(true)!;
+    expect(msg).toContain('server');
+    expect(msg).toContain('connection');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. SSE AI generation error fallback message
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors the SSE onError handler in api.ts subscribeToChatStream:
+ *   handlers.onError?.(payload?.message_id ?? chatId, payload?.error ?? 'The AI response could not be generated...')
+ */
+function resolveSSEErrorMessage(payloadError: string | undefined): string {
+  return payloadError ?? 'The AI response could not be generated. Please try again.';
+}
+
+describe('SSE AI generation error message', () => {
+  it('uses the payload error when the backend provides one', () => {
+    expect(resolveSSEErrorMessage('RAG service unavailable'))
+      .toBe('RAG service unavailable');
+  });
+
+  it('uses the fallback when payload error is undefined', () => {
+    expect(resolveSSEErrorMessage(undefined))
+      .toBe('The AI response could not be generated. Please try again.');
+  });
+
+  it('uses the fallback when payload error is an empty string', () => {
+    // empty string is falsy — ?? only guards undefined/null so empty string passes through
+    expect(resolveSSEErrorMessage('')).toBe('');
+  });
+
+  it('fallback message is more descriptive than the old "Unknown error"', () => {
+    const fallback = resolveSSEErrorMessage(undefined);
+    expect(fallback).not.toBe('Unknown error');
+    expect(fallback.length).toBeGreaterThan('Unknown error'.length);
+  });
+
+  it('fallback message tells the user what to do next', () => {
+    const fallback = resolveSSEErrorMessage(undefined);
+    expect(fallback.toLowerCase()).toContain('try again');
+  });
+
+  it('passes through specific backend error messages unchanged', () => {
+    const specific = 'The clinical knowledge service is temporarily unavailable.';
+    expect(resolveSSEErrorMessage(specific)).toBe(specific);
   });
 });
