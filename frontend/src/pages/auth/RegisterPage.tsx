@@ -52,17 +52,6 @@ export function RegisterPage() {
       return;
     }
 
-    const strongEnough =
-      formData.password.length >= 8 &&
-      /[A-Z]/.test(formData.password) &&
-      /[a-z]/.test(formData.password) &&
-      /\d/.test(formData.password) &&
-      /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(formData.password);
-    if (!strongEnough) {
-      setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const result = await register({

@@ -77,12 +77,7 @@ async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Pr
       ...requestInit,
     });
 
-  let res: Response;
-  try {
-    res = await doFetch();
-  } catch {
-    throw new Error('Unable to reach the server. Please check your connection.');
-  }
+  let res = await doFetch();
   if (res.status === 401 && !skipAuthRefresh) {
     const refreshed = await refreshSessionRequest();
     if (refreshed) {
@@ -728,7 +723,7 @@ export function subscribeToChatStream(
     const payload = parsePayload<{ message_id?: number; error?: string }>(
       event as MessageEvent<string>,
     );
-    handlers.onError?.(payload?.message_id ?? chatId, payload?.error ?? 'The AI response could not be generated. Please try again.');
+    handlers.onError?.(payload?.message_id ?? chatId, payload?.error ?? 'Unknown error');
     closeSource();
   });
 
