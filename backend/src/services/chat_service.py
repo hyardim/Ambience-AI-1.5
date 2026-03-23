@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Any, Optional, Protocol
 
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.db.models import Chat, ChatStatus, Message, User
+from src.db.models import Chat, ChatStatus, FileAttachment, Message, User
 from src.db.session import AsyncSessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
@@ -58,6 +59,19 @@ UPLOAD_DIR = chat_uploads.UPLOAD_DIR
 logger = logging.getLogger(__name__)
 
 
+def _validate_rag_response(rag_json: Any) -> dict:
+    """Validate that a RAG service response is a dict with an 'answer' string.
+
+    Returns the validated dict, or raises ValueError if the shape is wrong.
+    """
+    if not isinstance(rag_json, dict):
+        raise ValueError(f"Expected dict from RAG service, got {type(rag_json).__name__}")
+    answer = rag_json.get("answer")
+    if answer is not None and not isinstance(answer, str):
+        raise ValueError(f"Expected 'answer' to be a string, got {type(answer).__name__}")
+    return rag_json
+
+
 def _invalidate_specialist_caches(
     *,
     specialty: str | None = None,
@@ -75,6 +89,16 @@ def _invalidate_specialist_caches(
 
 
 def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
+    """Create a new chat with optional patient context.
+
+    Args:
+        db: Database session.
+        user: The GP user creating the chat.
+        data: Chat creation payload including title, specialty, and patient info.
+
+    Returns:
+        The newly created chat as a ChatResponse.
+    """
     patient_context = {
         k: v
         for k, v in {
@@ -121,6 +145,22 @@ def list_chats(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> list[ChatResponse]:
+    """List chats belonging to a user with optional filters and pagination.
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        skip: Number of records to skip for pagination.
+        limit: Maximum number of records to return.
+        status: Optional chat status filter.
+        specialty: Optional specialty filter.
+        search: Optional free-text search term.
+        date_from: Optional ISO-8601 start date filter.
+        date_to: Optional ISO-8601 end date filter.
+
+    Returns:
+        A list of ChatResponse objects matching the criteria.
+    """
     if status:
         try:
             ChatStatus(status)
@@ -183,6 +223,19 @@ def list_chats(
 
 
 def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
+    """Retrieve a single chat with all its messages and file attachments.
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        chat_id: Primary key of the chat.
+
+    Returns:
+        The chat details including messages and files.
+
+    Raises:
+        HTTPException: If the chat is not found.
+    """
     cache_key = cache_keys.chat_detail(user.id, chat_id)
     cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_detail")
     if cached is not None:
@@ -226,6 +279,20 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
 def update_chat(
     db: Session, user: User, chat_id: int, payload: ChatUpdate
 ) -> ChatResponse:
+    """Update editable metadata on a chat (title, specialty, severity, status).
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        chat_id: Primary key of the chat.
+        payload: Fields to update.
+
+    Returns:
+        The updated ChatResponse.
+
+    Raises:
+        HTTPException: If the chat is not found or is no longer editable.
+    """
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -272,9 +339,19 @@ def update_chat(
 
 
 def archive_chat(db: Session, user: User, chat_id: int) -> None:
+    """Archive a chat and remove associated file attachments from disk."""
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Clean up uploaded files from the filesystem before archiving
+    attachments = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).all()
+    for att in attachments:
+        if att.file_path and os.path.exists(att.file_path):
+            try:
+                os.remove(att.file_path)
+            except OSError:
+                logger.warning("Failed to remove file %s for chat %s", att.file_path, chat_id)
 
     chat_repository.archive(db, chat)
     audit_repository.log(
@@ -319,6 +396,17 @@ async def upload_file(
     chat_id: int,
     file: UploadFile,
 ) -> FileAttachmentResponse:
+    """Upload a file attachment to an existing chat.
+
+    Args:
+        db: Database session.
+        user: The uploading user.
+        chat_id: Target chat primary key.
+        file: The uploaded file from the request.
+
+    Returns:
+        Metadata about the persisted file attachment.
+    """
     chat_uploads.UPLOAD_DIR = UPLOAD_DIR
     attachment = await upload_chat_file(db, user, chat_id, file)
 
@@ -342,20 +430,39 @@ async def upload_file(
 async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) -> None:
     """Generate an AI response using async HTTP + async DB.
 
+    Includes a concurrency guard: if another generation is already in
+    progress for this chat (``is_generating=True``), the call is skipped.
+
     Publishes SSE lifecycle events so connected clients receive real-time
     updates.  The flow:
-      1. Create a placeholder message with ``is_generating=True``.
-      2. Publish ``stream_start``.
-      3. Call the RAG service with streaming enabled.
-      4. Publish cumulative ``content`` events as tokens arrive.
-      5. Finalise the message (content, citations, ``is_generating=False``).
-      6. Publish ``complete`` with citations.
-      7. Close the chat's event bus so SSE clients disconnect cleanly.
+      1. Check for an existing in-progress generation; bail out if found.
+      2. Create a placeholder message with ``is_generating=True``.
+      3. Publish ``stream_start``.
+      4. Call the RAG service with streaming enabled.
+      5. Publish cumulative ``content`` events as tokens arrive.
+      6. Finalise the message (content, citations, ``is_generating=False``).
+      7. Publish ``complete`` with citations.
+      8. Close the chat's event bus so SSE clients disconnect cleanly.
     """
     async with AsyncSessionLocal() as db:
         try:
-            chat = await chat_repository.async_get(db, chat_id)
+            chat = await chat_repository.async_get_for_update(db, chat_id)
             if not chat:
+                return
+
+            # Concurrency guard: skip if another generation is already running
+            existing = (
+                await db.execute(
+                    select(Message).where(
+                        Message.chat_id == chat_id,
+                        Message.is_generating == True,  # noqa: E712
+                    )
+                )
+            )
+            if existing.scalars().first() is not None:
+                logger.info(
+                    "Skipping AI generation for chat %s – already generating", chat_id
+                )
                 return
 
             # 1. Placeholder message
@@ -416,7 +523,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                             **request_kwargs_inline,
                         )
                         rag_response.raise_for_status()
-                        rag_json = rag_response.json()
+                        rag_json = _validate_rag_response(rag_response.json())
                     except Exception:
                         # Compatibility for tests that patch AsyncClient.post.
                         async with httpx.AsyncClient(
@@ -432,7 +539,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                                 **request_kwargs_fallback,
                             )
                             rag_response.raise_for_status()
-                            rag_json = rag_response.json()
+                            rag_json = _validate_rag_response(rag_response.json())
 
                     ai_content = rag_json.get("answer", "")
                     citations = _select_rag_citations(rag_json)
@@ -598,6 +705,20 @@ async def async_send_message(
     chat_id: int,
     content: str,
 ) -> dict:
+    """Send a user message and trigger asynchronous AI response generation.
+
+    Args:
+        db: Async database session.
+        user: The GP user sending the message.
+        chat_id: Target chat primary key.
+        content: The message text.
+
+    Returns:
+        A dict indicating the message was sent and AI generation has started.
+
+    Raises:
+        HTTPException: If the chat is not found or not in a messageable state.
+    """
     if hasattr(db, "execute"):
         chat = await chat_repository.async_get_for_update(db, chat_id, user_id=user.id)
     else:
@@ -656,6 +777,19 @@ async def async_send_message(
 
 
 def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
+    """Transition an OPEN chat to SUBMITTED status for specialist review.
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        chat_id: Primary key of the chat.
+
+    Returns:
+        The updated ChatResponse.
+
+    Raises:
+        HTTPException: If the chat is not found or not in OPEN status.
+    """
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Clock, Loader2, RefreshCw } from 'lucide-react';
+import { Search, Filter, Clock, RefreshCw } from 'lucide-react';
 import { Header } from '../../components/Header';
+import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/useAuth';
 import { getSpecialistQueue, getAssignedChats } from '../../services/api';
@@ -170,8 +171,8 @@ export function SpecialistQueriesPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <LoadingSkeleton lines={5} />
           </div>
         )}
 

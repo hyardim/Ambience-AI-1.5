@@ -89,6 +89,11 @@ def test_get_refresh_cookie_reads_cookie():
     assert security._get_refresh_cookie(request) == "refresh-token"
 
 
+def test_request_path_falls_back_to_scope_path():
+    request = SimpleNamespace(url=None, scope={"path": "/fallback-path"})
+    assert security._request_path(request) == "/fallback-path"
+
+
 def test_hash_and_verify_password_reset_token_round_trip(monkeypatch):
     monkeypatch.setattr(settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
     token = "reset-token"
@@ -159,6 +164,30 @@ def test_resolve_user_from_token_rejects_session_version_mismatch(db_session):
     assert exc.value.status_code == 401
 
 
+def test_resolve_user_from_token_rejects_inactive_user(db_session):
+    from src.db.models import User
+
+    user = User(
+        email="inactive@example.com",
+        hashed_password="hash",
+        full_name="Inactive User",
+        role=UserRole.GP,
+        specialty=None,
+        is_active=False,
+        session_version=0,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = security.create_access_token_for_user(user)
+
+    with pytest.raises(HTTPException) as exc:
+        security._resolve_user_from_token(db_session, token, expected_type="access")
+
+    assert exc.value.status_code == 403
+    assert "deactivated" in exc.value.detail.lower()
+
+
 def test_get_current_user_from_cookie_or_header_rejects_missing_token(db_session):
     request = SimpleNamespace(cookies={})
     with pytest.raises(HTTPException) as exc:
@@ -220,6 +249,39 @@ def test_get_current_user_from_cookie_or_header_accepts_bearer_token(db_session)
         bearer_token=token,
     )
     assert resolved.email == user.email
+
+
+def test_get_current_user_from_cookie_or_header_rejects_cookie_only_unsafe_request(
+    db_session,
+):
+    from src.db.models import User
+
+    user = User(
+        email="cookie-only@example.com",
+        hashed_password="hash",
+        full_name="Cookie User",
+        role=UserRole.GP,
+        specialty=None,
+        is_active=True,
+        session_version=0,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = security.create_access_token_for_user(user)
+    request = SimpleNamespace(
+        method="POST",
+        url=SimpleNamespace(path="/api/v1/chats/1/message"),
+        cookies={settings.ACCESS_COOKIE_NAME: token},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        security.get_current_user_from_cookie_or_header(
+            request=request,
+            db=db_session,
+            bearer_token=None,
+        )
+    assert exc.value.status_code == 403
 
 
 def test_get_user_from_access_token_returns_user(db_session):

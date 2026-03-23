@@ -70,6 +70,24 @@ describe('ProfilePage', () => {
     });
   });
 
+  it('validates missing new password and minimum password length', async () => {
+    renderProfile();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/current password/i)).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/current password/i), 'oldpass');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(screen.getAllByText(/new password is required/i).length).toBeGreaterThan(0);
+
+    await user.type(screen.getByLabelText(/^New Password$/i), 'short');
+    await user.type(screen.getByLabelText(/^Confirm New Password$/i), 'short');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(screen.getAllByText(/password must be at least 8 characters/i).length).toBeGreaterThan(0);
+  });
+
   it('shows specialist specialty field, toggles passwords, and navigates back', async () => {
     server.use(http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)));
     seedAuth({ role: 'specialist', username: 'Dr Specialist' });

@@ -54,24 +54,15 @@ async def ask_route(
     payload: AskRequest,
 ) -> AskResponse:
     try:
-        advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
-        if callable(advanced_retriever):
-            retrieved = advanced_retriever(
-                query=payload.query,
-                top_k=payload.top_k,
-                specialty=payload.specialty,
-                source_name=payload.source_name,
-                doc_type=payload.doc_type,
-                score_threshold=payload.score_threshold,
-                expand_query=payload.expand_query,
-            )
-        else:
-            # Backward-compatible fallback for minimal service stubs.
-            retrieved = api_services.retrieve_chunks(
-                payload.query,
-                top_k=payload.top_k,
-                specialty=payload.specialty,
-            )
+        retrieved = api_services.retrieve_chunks_advanced(
+            query=payload.query,
+            top_k=payload.top_k,
+            specialty=payload.specialty,
+            source_name=payload.source_name,
+            doc_type=payload.doc_type,
+            score_threshold=payload.score_threshold,
+            expand_query=payload.expand_query,
+        )
         response = await _generate_answer_from_retrieval(
             query=payload.query,
             max_tokens=1024,

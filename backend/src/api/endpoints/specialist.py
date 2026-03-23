@@ -43,6 +43,16 @@ def get_chat_detail(
     return specialist_service.get_chat_detail(db, specialist, chat_id)
 
 
+@router.delete("/chats/{chat_id}/assign", response_model=ChatResponse)
+def unassign_chat(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    specialist: User = Depends(get_specialist_user),
+):
+    """Unassign the current specialist from a chat."""
+    return specialist_service.unassign(db, specialist, chat_id)
+
+
 @router.post("/chats/{chat_id}/assign", response_model=ChatResponse)
 def assign_specialist(
     chat_id: int,

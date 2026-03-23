@@ -261,6 +261,7 @@ def retrieve(
 
 
 def _ms(start: float) -> int:
+    """Convert elapsed perf_counter seconds to integer milliseconds."""
     return int((time.perf_counter() - start) * 1000)
 
 
@@ -269,6 +270,13 @@ def _maybe_write_artifacts(
     query_hash: str,
     artifacts: dict[str, Any],
 ) -> None:
+    """Write per-stage retrieval artifacts to disk when debug mode is enabled.
+
+    Args:
+        enabled: Whether debug artifact writing is turned on.
+        query_hash: Short MD5 hash of the query, used as the output directory name.
+        artifacts: Mapping of stage label to serialisable data.
+    """
     if not enabled:
         return
     out_dir = DEBUG_ARTIFACT_DIR / query_hash

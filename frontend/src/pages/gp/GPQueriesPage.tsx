@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Loader2, Filter, X } from 'lucide-react';
+import { Plus, Search, Archive, Filter, X } from 'lucide-react';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
+import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/useAuth';
 import { getChats, deleteChat } from '../../services/api';
@@ -66,6 +67,11 @@ export function GPQueriesPage() {
 
   const fetchChats = useCallback(
     async (filters?: ChatListFilters) => {
+      // Validate date range before fetching
+      if (dateFrom && dateTo && dateFrom > dateTo) {
+        setError('Start date must be before end date');
+        return;
+      }
       requestControllerRef.current?.abort();
       const controller = new AbortController();
       requestControllerRef.current = controller;
@@ -82,7 +88,7 @@ export function GPQueriesPage() {
         setLoading(false);
       }
     },
-    [buildFilters],
+    [buildFilters, dateFrom, dateTo],
   );
 
   useEffect(() => {
@@ -112,13 +118,19 @@ export function GPQueriesPage() {
     );
   };
 
+  /**
+   * Archives a consultation with optimistic removal.
+   * Restores the previous state on failure so the item reappears.
+   */
   const handleArchive = async (e: React.MouseEvent, chatId: number) => {
     e.stopPropagation();
     if (!confirm('Archive this consultation? It will be hidden from your list but the record will be preserved.')) return;
+    const prevChats = chats;
+    setChats(prev => prev.filter(c => c.id !== chatId));
     try {
       await deleteChat(chatId);
-      setChats(prev => prev.filter(c => c.id !== chatId));
     } catch {
+      setChats(prevChats);
       setError('Failed to archive consultation');
     }
   };
@@ -290,8 +302,8 @@ export function GPQueriesPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <LoadingSkeleton lines={5} />
           </div>
         )}
 

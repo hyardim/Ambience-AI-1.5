@@ -51,23 +51,23 @@ def rerank(
     top_k: int = 10,
     model_name: str = embed_config.reranker_model,
 ) -> list[RankedResult]:
-    """
-    Rerank fused candidates using a cross-encoder model.
+    """Rerank fused candidates using a cross-encoder model.
 
     Scores each (query, chunk_text) pair using a cross-encoder, normalises
     logits to [0, 1] via sigmoid, and returns the top_k results by score.
 
+    If the cross-encoder model fails to load **or** fails during scoring, a
+    WARNING is logged and the results are returned in their existing (fusion)
+    order with ``rerank_score=0.0`` so the pipeline degrades gracefully.
+
     Args:
-        query: Raw query string
-        results: Fused candidates from reciprocal_rank_fusion / apply_filters
-        top_k: Maximum number of results to return
-        model_name: HuggingFace cross-encoder model identifier
+        query: Raw query string.
+        results: Fused candidates from reciprocal_rank_fusion / apply_filters.
+        top_k: Maximum number of results to return.
+        model_name: HuggingFace cross-encoder model identifier.
 
     Returns:
-        List of RankedResult ordered by rerank_score descending
-
-    Raises:
-        RetrievalError: If the model fails to load
+        List of RankedResult ordered by rerank_score descending.
     """
     if not results:
         return []
@@ -88,7 +88,27 @@ def rerank(
 
     logger.debug(f'Reranking {len(results)} candidates for query: "{query}"')
 
-    model = _load_model(model_name)
+    try:
+        model = _load_model(model_name)
+    except (RetrievalError, Exception) as e:
+        logger.warning(
+            "Cross-encoder model failed to load (%s); returning results in "
+            "their current (fusion) order without reranking.",
+            e,
+        )
+        return [
+            RankedResult(
+                chunk_id=r.chunk_id,
+                doc_id=r.doc_id,
+                text=r.text,
+                rerank_score=0.0,
+                rrf_score=r.rrf_score,
+                vector_score=r.vector_score,
+                keyword_rank=r.keyword_rank,
+                metadata=r.metadata,
+            )
+            for r in results[:top_k]
+        ]
 
     pairs = [(query, result.text) for result in results]
 
@@ -99,11 +119,24 @@ def rerank(
         logits = model.predict(pairs)
         elapsed_ms = (time.perf_counter() - start) * 1000
     except Exception as e:
-        raise RetrievalError(
-            stage="RERANK",
-            query=query,
-            message=f"Cross-encoder scoring failed: {e}",
-        ) from e
+        logger.warning(
+            "Cross-encoder scoring failed (%s); returning results in their "
+            "current order without reranking.",
+            e,
+        )
+        return [
+            RankedResult(
+                chunk_id=r.chunk_id,
+                doc_id=r.doc_id,
+                text=r.text,
+                rerank_score=0.0,
+                rrf_score=r.rrf_score,
+                vector_score=r.vector_score,
+                keyword_rank=r.keyword_rank,
+                metadata=r.metadata,
+            )
+            for r in results[:top_k]
+        ]
 
     ranked: list[RankedResult] = []
 

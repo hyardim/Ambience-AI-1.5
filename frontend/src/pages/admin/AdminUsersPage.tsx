@@ -136,6 +136,8 @@ export function AdminUsersPage() {
         )}
 
         {/* User Table */}
+        {/* Intentionally no delete action — users are deactivated (not deleted)
+            to preserve audit trail and data integrity */}
         {!loading && (
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <table className="w-full">

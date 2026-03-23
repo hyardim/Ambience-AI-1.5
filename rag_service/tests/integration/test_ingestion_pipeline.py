@@ -278,6 +278,8 @@ def test_store_chunks_to_vector_db(monkeypatch):
     actions = iter(["inserted", "updated"])
 
     class _FakeCursor:
+        rowcount = 0
+
         def __enter__(self):
             return self
 

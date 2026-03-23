@@ -7,6 +7,11 @@ interface ProtectedRouteProps {
   allowedRoles?: UserRole[];
 }
 
+/**
+ * Guards a route so only authenticated users with the correct role can access it.
+ * Redirects to /login when unauthenticated, or to /access-denied when the
+ * user's role is missing or not in the allowedRoles list.
+ */
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, role } = useAuth();
   const location = useLocation();
@@ -23,7 +28,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && role && !allowedRoles.includes(role)) {
+  if (allowedRoles && (!role || !allowedRoles.includes(role))) {
     return (
       <Navigate
         to="/access-denied"

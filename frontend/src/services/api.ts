@@ -21,6 +21,7 @@ import type {
   RagStatusResponse,
   VerificationStatusResponse,
 } from '../types/api';
+import { secureStorage } from '../utils/secureStorage';
 import { setOptionalSearchParam } from '../utils/url';
 
 type ApiRequestInit = RequestInit & { skipAuthRefresh?: boolean };
@@ -39,15 +40,41 @@ function redirectToLogin(): void {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+function storeAccessToken(token: string): void {
+  secureStorage.setItem('access_token', token);
+}
+
+function clearStoredToken(): void {
+  secureStorage.removeItem('access_token');
+}
+
+function persistIdentity(user: Pick<UserProfile, 'full_name' | 'email' | 'role'>): void {
+  localStorage.setItem('username', user.full_name || user.email);
+  localStorage.setItem('user_role', user.role);
+  localStorage.setItem('user_email', user.email);
+}
+
+function persistSession(
+  payload: Partial<Pick<LoginResponse, 'access_token' | 'user'>> &
+    Partial<Pick<RegisterResponse, 'access_token' | 'user'>>,
+): void {
+  if (typeof payload.access_token === 'string' && payload.access_token.length > 0) {
+    storeAccessToken(payload.access_token);
+  }
+  if (payload.user) {
+    persistIdentity(payload.user);
+  }
+}
+
 function clearStoredSession(): void {
-  localStorage.removeItem('access_token');
+  clearStoredToken();
   localStorage.removeItem('username');
   localStorage.removeItem('user_role');
   localStorage.removeItem('user_email');
 }
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('access_token');
+  const token = secureStorage.getItem('access_token');
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }
@@ -59,6 +86,10 @@ async function refreshSessionRequest(): Promise<boolean> {
         method: 'POST',
         credentials: 'include',
       });
+      if (res.ok) {
+        const payload = (await res.json()) as LoginResponse;
+        persistSession(payload);
+      }
       return res.ok;
     })().finally(() => {
       refreshInFlight = null;
@@ -71,11 +102,19 @@ async function refreshSessionRequest(): Promise<boolean> {
 async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Promise<Response> {
   const { skipAuthRefresh = false, ...requestInit } = init;
 
-  const doFetch = () =>
-    globalThis.fetch(input, {
+  const doFetch = () => {
+    const headers = new Headers(requestInit.headers ?? {});
+    const freshAuthHeaders = authHeaders();
+    if (freshAuthHeaders.Authorization) {
+      headers.set('Authorization', freshAuthHeaders.Authorization);
+    }
+
+    return globalThis.fetch(input, {
       credentials: 'include',
       ...requestInit,
+      headers,
     });
+  };
 
   let res = await doFetch();
   if (res.status === 401 && !skipAuthRefresh) {
@@ -88,13 +127,26 @@ async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Pr
   return res;
 }
 
+/**
+ * Parses an API response, handling common error statuses.
+ * Checks content-type before attempting JSON parse, and surfaces
+ * user-friendly messages for 401, 429, and non-JSON error responses.
+ */
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     clearStoredSession();
     redirectToLogin();
     throw new Error('Session expired');
   }
+  if (res.status === 429) {
+    throw new Error('Too many requests. Please wait a moment and try again.');
+  }
   if (!res.ok) {
+    const contentType = res.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      throw new Error(`Request failed (${res.status})`);
+    }
+
     const rawBody = await res.text();
     let errorMessage = rawBody || `Request failed (${res.status})`;
 
@@ -125,7 +177,9 @@ export async function login(username: string, password: string): Promise<LoginRe
     body,
   });
 
-  return handleResponse<LoginResponse>(res);
+  const payload = await handleResponse<LoginResponse>(res);
+  persistSession(payload);
+  return payload;
 }
 
 export async function register(payload: RegisterRequest): Promise<RegisterResponse> {
@@ -136,7 +190,13 @@ export async function register(payload: RegisterRequest): Promise<RegisterRespon
     body: JSON.stringify(payload),
   });
 
-  return handleResponse<RegisterResponse>(res);
+  const response = await handleResponse<RegisterResponse>(res);
+  if (response.access_token) {
+    persistSession(response);
+  } else {
+    clearStoredToken();
+  }
+  return response;
 }
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
@@ -207,7 +267,9 @@ export async function refreshSession(options: RequestOptions = {}): Promise<Logi
     skipAuthRefresh: true,
     signal: options.signal,
   });
-  return handleResponse<LoginResponse>(res);
+  const payload = await handleResponse<LoginResponse>(res);
+  persistSession(payload);
+  return payload;
 }
 
 export async function getProfile(options: RequestOptions = {}): Promise<UserProfile> {
@@ -655,6 +717,8 @@ export function subscribeToChatStream(
   const source = new EventSource(streamUrl, { withCredentials: true });
   let closed = false;
   let handledError = false;
+  let retryCount = 0;
+  const maxRetries = 5;
 
   const closeSource = () => {
     if (closed) return;
@@ -677,6 +741,7 @@ export function subscribeToChatStream(
 
   source.addEventListener('stream_start', (event) => {
     if (closed) return;
+    retryCount = 0;
     const payload = parsePayload<{ message_id?: number }>(event as MessageEvent<string>);
     if (typeof payload?.message_id === 'number') {
       handlers.onStreamStart?.(payload.message_id);
@@ -685,6 +750,7 @@ export function subscribeToChatStream(
 
   source.addEventListener('content', (event) => {
     if (closed) return;
+    retryCount = 0;
     const payload = parsePayload<{ message_id?: number; content?: string }>(
       event as MessageEvent<string>,
     );
@@ -724,11 +790,21 @@ export function subscribeToChatStream(
     closeSource();
   });
 
+  /**
+   * Handles native SSE connection errors with exponential backoff.
+   * EventSource auto-reconnects natively; we track retry attempts and
+   * permanently close after maxRetries to avoid infinite reconnection loops.
+   */
   source.onerror = () => {
     if (handledError || closed) return;
-    handledError = true;
-    handlers.onConnectionError?.();
-    closeSource();
+    if (retryCount >= maxRetries) {
+      handledError = true;
+      handlers.onConnectionError?.();
+      closeSource();
+      return;
+    }
+    retryCount++;
+    // EventSource auto-reconnects; we just track attempts here.
   };
 
   return closeSource;

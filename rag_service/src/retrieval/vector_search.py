@@ -9,6 +9,7 @@ import psycopg2.extras
 from pgvector.psycopg2 import register_vector
 from pydantic import BaseModel
 
+from ..utils.db import db
 from ..utils.logger import setup_logger
 from .query import EMBEDDING_DIMENSIONS, RetrievalError
 
@@ -35,29 +36,33 @@ class VectorSearchResult(BaseModel):
 
 def vector_search(
     query_embedding: list[float],
-    db_url: str,
+    db_url: str | None = None,
     top_k: int = 20,
     specialty: str | None = None,
     source_name: str | None = None,
     doc_type: str | None = None,
 ) -> list[VectorSearchResult]:
-    """
-    Retrieve top-k most similar chunks via pgvector cosine similarity.
+    """Retrieve top-k most similar chunks via pgvector cosine similarity.
+
+    Uses the shared :class:`DatabaseManager` connection pool by default.  An
+    explicit *db_url* can still be passed (e.g. in tests) in which case a
+    one-off connection is created instead.
 
     Args:
-        query_embedding: Normalised query vector
-        db_url: Postgres connection string
-        top_k: Maximum number of results to return
-        specialty: Optional metadata filter
-        source_name: Optional metadata filter
-        doc_type: Optional metadata filter
+        query_embedding: Normalised query vector.
+        db_url: Optional Postgres connection string.  When ``None`` the global
+            ``DatabaseManager`` pool is used.
+        top_k: Maximum number of results to return.
+        specialty: Optional metadata filter.
+        source_name: Optional metadata filter.
+        doc_type: Optional metadata filter.
 
     Returns:
-        List of VectorSearchResult ordered by similarity descending
+        List of VectorSearchResult ordered by similarity descending.
 
     Raises:
         RetrievalError: On DB connection failure, missing pgvector extension,
-                        invalid embedding dimensions, or invalid top_k
+                        invalid embedding dimensions, or invalid top_k.
     """
     if len(query_embedding) != EMBEDDING_DIMENSIONS:
         raise RetrievalError(
@@ -89,7 +94,7 @@ def vector_search(
     logger.debug(f"Running vector search, top_k={top_k}, filters={filters}")
 
     try:
-        conn = psycopg2.connect(db_url)
+        conn = psycopg2.connect(db_url) if db_url else db.get_raw_connection()
     except Exception as e:
         raise RetrievalError(
             stage="VECTOR_SEARCH",

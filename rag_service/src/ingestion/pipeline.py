@@ -401,7 +401,7 @@ def run_ingestion(
         )
     source_info = sources[source_name]
 
-    # Override source_url with per-document URL when provided (e.g. from web sync)
+    # Allow callers to override the citation URL for a specific ingestion run.
     if source_url:
         source_info = {**source_info, "source_url": source_url}
 

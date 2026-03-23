@@ -55,6 +55,10 @@ export default function AdminDashboardPage() {
   const [error, setError] = useState('');
   const requestControllerRef = useRef<AbortController | null>(null);
 
+  /**
+   * Fetches dashboard stats and RAG logs independently using Promise.allSettled
+   * so that a failure in one request does not prevent the other from rendering.
+   */
   const fetchStats = async () => {
     requestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -62,16 +66,24 @@ export default function AdminDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [statsResponse, ragLogResponse] = await Promise.all([
+      const [statsResult, ragLogResult] = await Promise.allSettled([
         adminGetStats({ signal: controller.signal }),
         adminGetLogs({ category: 'RAG', limit: 8 }, { signal: controller.signal }),
       ]);
-      setStats(statsResponse);
-      setRagLogs(ragLogResponse);
-    } catch (err) {
-      ifNotAbortError(err, () => {
-        setError(getErrorMessage(err, 'Failed to load stats'));
-      });
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value);
+      } else {
+        ifNotAbortError(statsResult.reason, () => {
+          setError(getErrorMessage(statsResult.reason, 'Failed to load stats'));
+        });
+      }
+      if (ragLogResult.status === 'fulfilled') {
+        setRagLogs(ragLogResult.value);
+      } else {
+        ifNotAbortError(ragLogResult.reason, () => {
+          setError(prev => prev ? prev : getErrorMessage(ragLogResult.reason, 'Failed to load RAG logs'));
+        });
+      }
     } finally {
       setLoading(false);
     }

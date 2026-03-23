@@ -442,4 +442,21 @@ describe('GPQueriesPage', () => {
     });
   });
 
+  it('shows a validation error when the start date is after the end date', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/my consultations/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /filter/i }));
+    await user.type(screen.getByLabelText(/from date/i), '2025-12-31');
+    await user.type(screen.getByLabelText(/to date/i), '2025-01-01');
+
+    await waitFor(() => {
+      expect(screen.getByText(/start date must be before end date/i)).toBeInTheDocument();
+    });
+  });
+
 });

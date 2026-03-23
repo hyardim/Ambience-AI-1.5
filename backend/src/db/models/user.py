@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.db.base import Base
 from src.db.models.common import ENUM_VALUE_CONFIG, UserRole
@@ -40,15 +40,26 @@ class User(Base):
     session_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     chats: Mapped[list[Chat]] = relationship(
-        "Chat", back_populates="owner", foreign_keys="[Chat.user_id]"
+        "Chat",
+        back_populates="owner",
+        foreign_keys="[Chat.user_id]",
+        cascade="all, delete-orphan",
     )
     assigned_chats: Mapped[list[Chat]] = relationship(
-        "Chat", back_populates="specialist", foreign_keys="[Chat.specialist_id]"
+        "Chat",
+        back_populates="specialist",
+        foreign_keys="[Chat.specialist_id]",
     )
-    audit_logs: Mapped[list[AuditLog]] = relationship("AuditLog", back_populates="user")
+    audit_logs: Mapped[list[AuditLog]] = relationship(
+        "AuditLog", back_populates="user", cascade="all, delete-orphan"
+    )
     files: Mapped[list[FileAttachment]] = relationship(
-        "FileAttachment", back_populates="uploader"
+        "FileAttachment", back_populates="uploader", cascade="all, delete-orphan"
     )
     notifications: Mapped[list[Notification]] = relationship(
-        "Notification", back_populates="user"
+        "Notification", back_populates="user", cascade="all, delete-orphan"
     )
+
+    @validates("email")
+    def _normalise_email(self, _key: str, value: str) -> str:
+        return value.strip().lower()

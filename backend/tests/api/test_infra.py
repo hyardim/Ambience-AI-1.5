@@ -4,15 +4,21 @@ import sys
 import types
 import warnings
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from src.api import deps, router
 from src.api.endpoints import health, rag
-from src.app.main import create_app
+from src.app.main import (
+    _cleanup_stale_generations,
+    _lifespan,
+    _purge_expired_tokens,
+    create_app,
+)
 from src.core import config as core_config
 from src.core import rate_limit
 from src.db.models import UserRole
@@ -59,6 +65,105 @@ def test_create_app_builds_fastapi_app(monkeypatch):
     assert response.headers["Strict-Transport-Security"] == (
         "max-age=63072000; includeSubDomains"
     )
+
+
+@pytest.mark.anyio
+async def test_purge_expired_tokens_executes_cleanup_queries(monkeypatch):
+    db = MagicMock()
+    monkeypatch.setattr("src.db.session.SessionLocal", lambda: db)
+
+    await _purge_expired_tokens()
+
+    assert db.execute.call_count == 2
+    assert db.commit.call_count == 1
+    db.rollback.assert_not_called()
+    db.close.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_purge_expired_tokens_rolls_back_on_outer_failure(monkeypatch, caplog):
+    db = MagicMock()
+    db.commit.side_effect = RuntimeError("commit failed")
+    monkeypatch.setattr("src.db.session.SessionLocal", lambda: db)
+
+    with caplog.at_level("ERROR"):
+        await _purge_expired_tokens()
+
+    db.rollback.assert_called_once()
+    db.close.assert_called_once()
+    assert "Failed to purge expired tokens on startup" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_purge_expired_tokens_ignores_individual_table_failures(monkeypatch):
+    db = MagicMock()
+    calls = {"count": 0}
+
+    def fake_execute(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("missing table")
+        return None
+
+    db.execute.side_effect = fake_execute
+    monkeypatch.setattr("src.db.session.SessionLocal", lambda: db)
+
+    await _purge_expired_tokens()
+
+    assert db.execute.call_count == 2
+    db.commit.assert_called_once()
+    db.rollback.assert_not_called()
+    db.close.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_cleanup_stale_generations_logs_reset_count(monkeypatch, caplog):
+    db = MagicMock()
+    query = db.query.return_value
+    filtered = query.filter.return_value
+    filtered.update.return_value = 3
+    monkeypatch.setattr("src.db.session.SessionLocal", lambda: db)
+
+    with caplog.at_level("INFO"):
+        await _cleanup_stale_generations()
+
+    db.commit.assert_called_once()
+    db.rollback.assert_not_called()
+    db.close.assert_called_once()
+    assert "Reset 3 stale is_generating messages on startup" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_cleanup_stale_generations_rolls_back_on_failure(monkeypatch, caplog):
+    db = MagicMock()
+    db.query.side_effect = RuntimeError("query failed")
+    monkeypatch.setattr("src.db.session.SessionLocal", lambda: db)
+
+    with caplog.at_level("ERROR"):
+        await _cleanup_stale_generations()
+
+    db.rollback.assert_called_once()
+    db.close.assert_called_once()
+    assert "Failed to clean up stale generating messages" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_lifespan_runs_startup_maintenance(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_purge() -> None:
+        calls.append("purge")
+
+    async def fake_cleanup() -> None:
+        calls.append("cleanup")
+
+    monkeypatch.setattr("src.app.main._purge_expired_tokens", fake_purge)
+    monkeypatch.setattr("src.app.main._cleanup_stale_generations", fake_cleanup)
+
+    async with _lifespan(FastAPI()):
+        calls.append("inside")
+
+    assert calls == ["purge", "cleanup", "inside"]
 
 
 def test_main_exposes_app(monkeypatch):
@@ -798,6 +903,15 @@ def test_get_current_user_obj_raises_401_when_user_missing(monkeypatch):
     assert exc.value.status_code == 401
 
 
+def test_get_current_user_obj_rejects_inactive_user(monkeypatch):
+    user = SimpleNamespace(role=UserRole.GP, is_active=False)
+    monkeypatch.setattr(deps.user_repository, "get_by_email", lambda db, email: user)
+    with pytest.raises(HTTPException) as exc:
+        deps.get_current_user_obj(db=object(), email="inactive@example.com")
+    assert exc.value.status_code == 403
+    assert "deactivated" in exc.value.detail.lower()
+
+
 def test_get_admin_user_raises_401_when_user_missing(monkeypatch):
     monkeypatch.setattr(deps.user_repository, "get_by_email", lambda db, email: None)
     with pytest.raises(HTTPException) as exc:
@@ -813,7 +927,7 @@ def test_get_specialist_user_raises_401_when_user_missing(monkeypatch):
 
 
 def test_get_admin_user_rejects_wrong_role(monkeypatch):
-    user = SimpleNamespace(role=UserRole.GP)
+    user = SimpleNamespace(role=UserRole.GP, is_active=True)
     monkeypatch.setattr(deps.user_repository, "get_by_email", lambda db, email: user)
     with pytest.raises(HTTPException) as exc:
         deps.get_admin_user(db=object(), email="gp@example.com")
@@ -821,11 +935,59 @@ def test_get_admin_user_rejects_wrong_role(monkeypatch):
 
 
 def test_get_specialist_user_rejects_wrong_role(monkeypatch):
-    user = SimpleNamespace(role=UserRole.ADMIN)
+    user = SimpleNamespace(role=UserRole.ADMIN, is_active=True)
     monkeypatch.setattr(deps.user_repository, "get_by_email", lambda db, email: user)
     with pytest.raises(HTTPException) as exc:
         deps.get_specialist_user(db=object(), email="admin@example.com")
     assert exc.value.status_code == 403
+
+
+def test_validate_settings_rejects_missing_smtp_password_when_username_is_set(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(
+        core_config.settings,
+        "RAG_INTERNAL_API_KEY",
+        "a-very-strong-rag-internal-key-value",
+    )
+    monkeypatch.setattr(core_config.settings, "SMTP_HOST", "smtp.example.com")
+    monkeypatch.setattr(core_config.settings, "SMTP_FROM", "noreply@example.com")
+    monkeypatch.setattr(core_config.settings, "SMTP_USERNAME", "mailer")
+    monkeypatch.setattr(core_config.settings, "SMTP_PASSWORD", "")
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_EMAIL_LOG_ONLY", False)
+    monkeypatch.setattr(
+        core_config.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False
+    )
+
+    with pytest.raises(RuntimeError, match="SMTP_PASSWORD"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_admin_logs_rejects_invalid_date_range(client, admin_headers):
+    response = client.get(
+        "/admin/logs?date_from=2026-03-23T10:00:00&date_to=2026-03-22T10:00:00",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 400
+    assert "date_from must be before date_to" in response.json()["detail"]
 
 
 def test_stream_endpoint_rejects_query_token_auth(client, created_chat):

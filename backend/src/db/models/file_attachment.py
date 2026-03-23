@@ -28,7 +28,7 @@ class FileAttachment(Base):
         Integer, ForeignKey("chats.id"), nullable=False
     )
     uploader_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
     chat: Mapped[Chat | None] = relationship("Chat", back_populates="files")

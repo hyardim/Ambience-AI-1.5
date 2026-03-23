@@ -5,7 +5,7 @@ import json
 import pytest
 
 from src.api.schemas import SearchResult
-from src.api.streaming import streaming_generator
+from src.api.streaming import ndjson_done_only, streaming_generator
 
 
 @pytest.mark.anyio
@@ -125,3 +125,21 @@ async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> Non
     assert lines[0]["type"] == "error"
     assert "model crashed" in lines[0]["error"]
     assert events == ["Streaming generation failed"]
+
+
+@pytest.mark.anyio
+async def test_ndjson_done_only_emits_done_payload() -> None:
+    lines = []
+
+    async for line in ndjson_done_only("Final answer"):
+        lines.append(json.loads(line.strip()))
+
+    assert lines == [
+        {
+            "type": "done",
+            "answer": "Final answer",
+            "citations_used": [],
+            "citations_retrieved": [],
+            "citations": [],
+        }
+    ]

@@ -87,4 +87,21 @@ describe('ErrorBoundary', () => {
       value: originalLocation,
     });
   });
+
+  it('handles non-Error unhandled promise rejections', () => {
+    const boundary = new ErrorBoundary({ children: <div>child</div> });
+    const setState = vi.fn();
+    boundary.setState = setState as typeof boundary.setState;
+
+    boundary.handleUnhandledRejection({
+      reason: 'plain rejection',
+    } as PromiseRejectionEvent);
+
+    expect(setState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasError: true,
+        error: expect.objectContaining({ message: 'plain rejection' }),
+      }),
+    );
+  });
 });

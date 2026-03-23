@@ -28,13 +28,13 @@ class Notification(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     type: Mapped[NotificationType] = mapped_column(
         SQLEnum(NotificationType, **ENUM_VALUE_CONFIG), nullable=False
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
-    body: Mapped[str | None] = mapped_column(String, nullable=True)
+    body: Mapped[str | None] = mapped_column(String, nullable=True, server_default="")
     chat_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("chats.id", ondelete="SET NULL"), nullable=True
     )

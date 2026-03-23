@@ -78,3 +78,5 @@ coverage/
 nginx/certs/*.pem
 nginx/certs/*.key
 !nginx/certs/.gitkeep
+
+.claude

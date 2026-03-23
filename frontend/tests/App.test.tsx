@@ -26,12 +26,12 @@ describe('App', () => {
     unmount();
   });
 
-  it('falls back unknown routes to the landing page', async () => {
+  it('falls back unknown routes to the 404 page', async () => {
     window.history.pushState({}, '', '/does-not-exist');
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/AI-powered clinical decision support/i)).toBeInTheDocument();
+      expect(screen.getByText(/page not found/i)).toBeInTheDocument();
     }, { timeout: 5000 });
   });
 

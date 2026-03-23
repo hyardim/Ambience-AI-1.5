@@ -93,6 +93,21 @@ def test_refresh_returns_auth_response(db_session):
     assert result.access_token
 
 
+def test_register_normalizes_email_before_storage(db_session, monkeypatch):
+    monkeypatch.setattr(auth_service.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
+
+    result = auth_service.register(
+        db_session,
+        UserRegister(
+            email="Mixed.Case@Example.com ",
+            password="StrongPass1!",
+            role="gp",
+        ),
+    )
+
+    assert result.user.email == "mixed.case@example.com"
+
+
 @pytest.mark.parametrize(
     "password",
     [

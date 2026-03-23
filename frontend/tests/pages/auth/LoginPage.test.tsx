@@ -67,7 +67,7 @@ describe('LoginPage', () => {
 
     fireEvent.submit(screen.getByRole('button', { name: /login/i }).closest('form')!);
 
-    expect(screen.getByText(/please enter your email/i)).toBeInTheDocument();
+    expect(screen.getByText(/email is required/i)).toBeInTheDocument();
   });
 
   it('fills demo credentials when the button is clicked', async () => {
@@ -191,6 +191,41 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Account locked')).toBeInTheDocument();
+    });
+  });
+
+  it('maps invalid, deactivated, and rate-limited login errors to friendly messages', async () => {
+    const user = userEvent.setup();
+
+    server.use(
+      http.post('/auth/login', () => HttpResponse.json({ detail: 'Incorrect email or password' }, { status: 400 })),
+    );
+    renderLogin();
+
+    await user.type(screen.getByLabelText(/username/i), 'bad@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'wrong');
+    await user.click(screen.getByRole('button', { name: /login/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/invalid email or password/i)).toBeInTheDocument();
+    });
+
+    server.use(
+      http.post('/auth/login', () => HttpResponse.json({ detail: 'Account deactivated' }, { status: 403 })),
+    );
+    await user.click(screen.getByRole('button', { name: /login/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/^Account deactivated$/i)).toBeInTheDocument();
+    });
+
+    server.use(
+      http.post('/auth/login', () => HttpResponse.json({ detail: 'Too many attempts' }, { status: 429 })),
+    );
+    await user.click(screen.getByRole('button', { name: /login/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/too many attempts, please wait/i)).toBeInTheDocument();
     });
   });
 

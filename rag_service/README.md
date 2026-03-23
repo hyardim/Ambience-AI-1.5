@@ -16,7 +16,7 @@ src/
 ├── orchestration/   # Retrieve-then-generate pipeline helpers
 ├── retrieval/       # Vector, keyword, fusion, rerank, and citation assembly
 ├── utils/           # Shared DB and logging utilities
-└── main.py          # Thin app entrypoint / compatibility export
+└── main.py          # Thin compatibility entrypoint / public re-export
 ```
 
 ## Prerequisites

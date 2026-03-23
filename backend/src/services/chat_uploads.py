@@ -8,8 +8,8 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.db.models import FileAttachment, User
-from src.repositories import audit_repository, chat_repository
+from src.db.models import Chat, FileAttachment, User
+from src.repositories import audit_repository
 from src.services.cache_invalidation import invalidate_chat_related_async
 from src.utils.cache import cache, cache_keys
 
@@ -35,7 +35,14 @@ def sanitise_filename(raw: str) -> str:
 
 
 def validate_upload_extension(filename: str) -> None:
-    """Raise 415 if the file extension is not in the allow-list."""
+    """Raise 415 if the file extension is not in the allow-list.
+
+    Args:
+        filename: The sanitised filename to check.
+
+    Raises:
+        HTTPException: If the extension is not in ALLOWED_UPLOAD_EXTENSIONS.
+    """
     ext = PurePosixPath(filename).suffix.lower()
     if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         raise HTTPException(
@@ -61,7 +68,16 @@ def validate_upload_content(
     content_type: str | None,
     sample: bytes,
 ) -> None:
-    """Validate file content using signatures/text heuristics, not extension alone."""
+    """Validate file content using magic-byte signatures and text heuristics.
+
+    Args:
+        filename: The sanitised filename (used to determine expected format).
+        content_type: The MIME type declared by the client, if any.
+        sample: The first few kilobytes of the file for signature detection.
+
+    Raises:
+        HTTPException: If the content does not match the declared file type.
+    """
     ext = PurePosixPath(filename).suffix.lower()
     lowered = sample[:SIGNATURE_SAMPLE_BYTES]
 
@@ -134,9 +150,24 @@ async def upload_chat_file(
     chat_id: int,
     file: UploadFile,
 ) -> FileAttachment:
+    """Upload a file to a chat with row-level locking, deduplication, and size limits.
+
+    Args:
+        db: Database session.
+        user: The user performing the upload.
+        chat_id: Target chat primary key.
+        file: The uploaded file from the request.
+
+    Returns:
+        The persisted FileAttachment ORM instance.
+
+    Raises:
+        HTTPException: If the chat is not found, the user lacks permission,
+            the file type is disallowed, or the per-chat file limit is reached.
+    """
     from src.core.chat_policy import can_upload_to_chat
 
-    chat = chat_repository.get(db, chat_id)
+    chat = db.query(Chat).filter(Chat.id == chat_id).with_for_update().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
@@ -153,8 +184,12 @@ async def upload_chat_file(
     safe_name = sanitise_filename(file.filename or "upload")
     validate_upload_extension(safe_name)
 
+    # The chat row lock above serialises uploads per chat, so the count check
+    # and insert stay consistent even when there are currently zero files.
     existing_count = (
-        db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
+        db.query(FileAttachment)
+        .filter(FileAttachment.chat_id == chat_id)
+        .count()
     )
     if existing_count >= MAX_FILES_PER_CHAT:
         raise HTTPException(
@@ -164,7 +199,17 @@ async def upload_chat_file(
 
     dest_dir = UPLOAD_DIR / str(chat_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Deduplicate filenames: append _1, _2, ... if the name already exists
     dest_path = dest_dir / safe_name
+    if dest_path.exists():
+        stem = Path(safe_name).stem
+        suffix = Path(safe_name).suffix
+        counter = 1
+        while dest_path.exists():
+            safe_name = f"{stem}_{counter}{suffix}"
+            dest_path = dest_dir / safe_name
+            counter += 1
 
     try:
         file_size, signature = await _stream_upload_to_path(file, dest_path)

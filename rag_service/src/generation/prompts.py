@@ -1,16 +1,75 @@
+import re
+
 from ..config import generation_config
 
 MAX_CHARS_PER_CHUNK = 1200
+_MAX_INPUT_LENGTH = 10_000
+
+# Patterns that look like prompt-injection attempts or role impersonation.
+_INJECTION_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"ignore\s+(all\s+)?previous\s+instructions", re.IGNORECASE),
+    re.compile(r"disregard\s+(all\s+)?(prior|previous|above)\s+", re.IGNORECASE),
+    re.compile(r"^system\s*:", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^assistant\s*:", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^human\s*:", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"<\|?(system|im_start|im_end)\|?>", re.IGNORECASE),
+    re.compile(r"\[INST\]|\[/INST\]", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+(a|an|in)\b", re.IGNORECASE),
+    re.compile(r"new\s+instructions?\s*:", re.IGNORECASE),
+]
+
+
+def _sanitize_input(text: str, *, max_length: int = _MAX_INPUT_LENGTH) -> str:
+    """Sanitize user-supplied text before inserting it into a prompt.
+
+    * Strips control characters (except newlines and tabs).
+    * Removes substrings matching known prompt-injection patterns.
+    * Truncates to *max_length* characters to prevent context-window abuse.
+    """
+    if not text:
+        return ""
+    # Remove ASCII control chars except \n (0x0A) and \t (0x09).
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    for pattern in _INJECTION_PATTERNS:
+        cleaned = pattern.sub("", cleaned)
+    # Collapse runs of whitespace that the removals may have left.
+    cleaned = re.sub(r"[ \t]{3,}", "  ", cleaned)
+    return cleaned[:max_length].strip()
 
 
 def _truncate_chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> str:
+    """Truncate chunk text to *max_chars*, preferring a sentence boundary.
+
+    Tries to break at the last ``'. '`` before the limit.  Falls back to a
+    word boundary (last space), and finally to a hard cut if neither is found
+    in a reasonable range.
+    """
     cleaned = text.strip()
     if len(cleaned) <= max_chars:
         return cleaned
-    return cleaned[: max_chars - 14].rstrip() + " …[truncated]"
+
+    suffix = " …[truncated]"
+    budget = max_chars - len(suffix)
+    candidate = cleaned[:budget]
+
+    # Prefer sentence boundary (period + space).
+    sentence_end = candidate.rfind(". ")
+    if sentence_end > budget // 2:
+        return candidate[: sentence_end + 1] + suffix
+
+    # Fall back to word boundary.
+    word_end = candidate.rfind(" ")
+    if word_end > budget // 2:
+        return candidate[:word_end] + suffix
+
+    return candidate.rstrip() + suffix
 
 
 PROMPT_VARIANTS = {"new", "original"}
+# NOTE: ACTIVE_PROMPT is resolved **once at import time** from
+# ``generation_config.prompt_variant``.  This is intentional -- reading the
+# config on every call would add overhead for a value that should not change
+# at runtime.  **A process restart is required** to pick up a new variant.
 ACTIVE_PROMPT = (
     generation_config.prompt_variant
     if generation_config.prompt_variant in PROMPT_VARIANTS
@@ -124,24 +183,41 @@ def _format_context(chunks: list[dict]) -> str:
 
 
 def _format_patient_context(patient_context: dict | None) -> str:
-    """Render patient demographics block, or empty string when not provided."""
+    """Render patient demographics block, or empty string when not provided.
+
+    Free-text fields (notes, conversation_history) are sanitized to prevent
+    prompt injection via patient context.
+    """
     if not patient_context:
         return ""
     parts = []
     if patient_context.get("age"):
-        parts.append(f"Age: {patient_context['age']}")
+        age = _sanitize_input(str(patient_context["age"]), max_length=20)
+        parts.append(f"Age: {age}")
     if patient_context.get("gender"):
-        parts.append(f"Gender: {patient_context['gender'].capitalize()}")
+        gender = _sanitize_input(
+            patient_context["gender"], max_length=50
+        ).capitalize()
+        parts.append(f"Gender: {gender}")
     if patient_context.get("specialty"):
-        parts.append(f"Specialty: {patient_context['specialty'].capitalize()}")
+        spec = _sanitize_input(
+            patient_context["specialty"], max_length=100
+        ).capitalize()
+        parts.append(f"Specialty: {spec}")
     if patient_context.get("severity"):
-        parts.append(f"Severity: {patient_context['severity'].capitalize()}")
+        sev = _sanitize_input(
+            patient_context["severity"], max_length=50
+        ).capitalize()
+        parts.append(f"Severity: {sev}")
     header = "  |  ".join(parts)
-    notes = patient_context.get("notes", "")
+    notes = _sanitize_input(patient_context.get("notes", ""))
     block = "PATIENT CONTEXT\n" + header
     if notes:
         block += f"\nClinical notes: {notes}"
-    conversation_history = patient_context.get("conversation_history", "")
+    conversation_history = _sanitize_input(
+        patient_context.get("conversation_history", ""),
+        max_length=_MAX_INPUT_LENGTH,
+    )
     if conversation_history:
         block += f"\n\nRECENT CHAT HISTORY\n{conversation_history}"
     return block
@@ -154,6 +230,16 @@ def build_grounded_prompt(
     file_context: str | None = None,
     evidence_note: str | None = None,
 ) -> str:
+    """Build the main RAG prompt from a question, chunks, and context.
+
+    All user-supplied text (question, patient_context values, file_context) is
+    sanitized to strip injection patterns and control characters before being
+    inserted into the prompt.
+    """
+    question = _sanitize_input(question)
+    if file_context:
+        file_context = _sanitize_input(file_context, max_length=_MAX_INPUT_LENGTH * 2)
+
     context_block = _format_context(chunks)
     has_context = bool(chunks)
     has_files = bool(file_context)
@@ -189,21 +275,26 @@ def build_revision_prompt(
     file_context: str | None = None,
     evidence_note: str | None = None,
 ) -> str:
-    """Revise a previous answer based on specialist feedback, grounded in context."""
+    """Revise a previous answer based on specialist feedback, grounded in context.
+
+    User-supplied strings are sanitized before prompt assembly.
+    """
+    original_question = _sanitize_input(original_question)
+    specialist_feedback = _sanitize_input(specialist_feedback)
+    if file_context:
+        file_context = _sanitize_input(file_context, max_length=_MAX_INPUT_LENGTH * 2)
     context_block = _format_context(chunks)
     has_context = bool(chunks)
 
+    # Use the same active prompt variant as the initial generation so
+    # citation and sourcing rules stay consistent across revisions.
+    base_instructions = _active_instructions()
     instructions = (
-        "You are a cautious clinical assistant. A medical specialist has reviewed "
-        "your previous answer and requested changes. Revise your response "
-        "according to the specialist's feedback while staying grounded in the "
-        "provided context.\n\n"
-        "Rules:\n"
-        "- Use only the provided context passages to support your revised answer.\n"
-        "- Cite supporting passages with the bracket numbers given in the "
-        "context (e.g., [1], [2]) and only cite passages you actually use.\n"
-        "- Do NOT use bracket numbers for uploaded documents — cite them as "
-        "'Uploaded document' instead.\n"
+        f"{base_instructions}\n\n"
+        "A medical specialist has reviewed your previous answer and requested "
+        "changes. Revise your response according to the specialist's feedback "
+        "while staying grounded in the provided context.\n\n"
+        "Additional revision rules:\n"
         "- Address every point raised in the specialist's feedback.\n"
         "- Do not fabricate information or cite sources that are not provided.\n"
         "- Keep the response concise and factual."

@@ -203,7 +203,7 @@ async def test_async_generate_ai_response_returns_when_chat_missing(monkeypatch)
     close_chat = AsyncMock()
     monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", close_chat)
     monkeypatch.setattr(
-        chat_service.chat_repository, "async_get", AsyncMock(return_value=None)
+        chat_service.chat_repository, "async_get_for_update", AsyncMock(return_value=None)
     )
 
     await chat_service._async_generate_ai_response(999, 1, "hello")
@@ -368,9 +368,16 @@ async def test_async_generate_ai_response_streaming_forwards_internal_headers(
         specialist_id=None,
     )
 
+    class FakeScalars:
+        def first(self):
+            return None
+
+        def __iter__(self):
+            return iter([])
+
     class FakeResult:
         def scalars(self):
-            return []
+            return FakeScalars()
 
     class FakeDB:
         bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
@@ -416,7 +423,9 @@ async def test_async_generate_ai_response_streaming_forwards_internal_headers(
 
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", lambda: FakeDB())
     monkeypatch.setattr(
-        chat_service.chat_repository, "async_get", AsyncMock(return_value=fake_chat)
+        chat_service.chat_repository,
+        "async_get_for_update",
+        AsyncMock(return_value=fake_chat),
     )
     monkeypatch.setattr(
         chat_service.message_repository,
@@ -520,9 +529,16 @@ async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done
         specialist_id=None,
     )
 
+    class FakeScalars:
+        def first(self):
+            return None
+
+        def __iter__(self):
+            return iter([])
+
     class FakeResult:
         def scalars(self):
-            return []
+            return FakeScalars()
 
     class FakeDB:
         bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
@@ -574,7 +590,9 @@ async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done
 
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", FakeSessionFactory())
     monkeypatch.setattr(
-        chat_service.chat_repository, "async_get", AsyncMock(return_value=fake_chat)
+        chat_service.chat_repository,
+        "async_get_for_update",
+        AsyncMock(return_value=fake_chat),
     )
     monkeypatch.setattr(
         chat_service.message_repository,
@@ -618,9 +636,16 @@ async def test_async_generate_ai_response_streaming_error_chunk_falls_back(
         specialist_id=None,
     )
 
+    class FakeScalars:
+        def first(self):
+            return None
+
+        def __iter__(self):
+            return iter([])
+
     class FakeResult:
         def scalars(self):
-            return []
+            return FakeScalars()
 
     class FakeDB:
         bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
@@ -665,7 +690,9 @@ async def test_async_generate_ai_response_streaming_error_chunk_falls_back(
 
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", lambda: FakeDB())
     monkeypatch.setattr(
-        chat_service.chat_repository, "async_get", AsyncMock(return_value=fake_chat)
+        chat_service.chat_repository,
+        "async_get_for_update",
+        AsyncMock(return_value=fake_chat),
     )
     monkeypatch.setattr(
         chat_service.message_repository,

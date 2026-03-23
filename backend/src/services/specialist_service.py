@@ -12,6 +12,7 @@ from src.services.specialist_queries import (
     get_assigned,
     get_chat_detail,
     get_queue,
+    unassign,
 )
 from src.services.specialist_review import (
     _do_revise,
@@ -34,6 +35,7 @@ __all__ = [
     "review",
     "review_message",
     "send_message",
+    "unassign",
     "_build_manual_citations",
     "_do_revise",
     "_invalidate_admin_chat_caches",

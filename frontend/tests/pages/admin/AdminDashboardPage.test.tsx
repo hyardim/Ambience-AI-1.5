@@ -92,6 +92,28 @@ describe('AdminDashboardPage', () => {
     });
   });
 
+  it('shows rag log failure without hiding successful stats', async () => {
+    server.use(
+      http.get('/admin/stats', () => HttpResponse.json({
+        total_ai_responses: 4,
+        rag_grounded_responses: 2,
+        active_consultations: 1,
+        active_users_by_role: { gp: 1, specialist: 1, admin: 1 },
+        chats_by_status: { open: 1 },
+        chats_by_specialty: { neurology: 1 },
+        daily_ai_queries: [],
+      })),
+      http.get('/admin/logs', () => HttpResponse.json({ detail: 'RAG logs unavailable' }, { status: 500 })),
+    );
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText(/total ai responses/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/rag logs unavailable|failed to load rag logs/i)).toBeInTheDocument();
+  });
+
   it('renders query and log fallbacks for partially empty datasets', async () => {
     server.use(
       http.get('/admin/stats', () => HttpResponse.json({

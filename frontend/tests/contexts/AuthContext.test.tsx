@@ -6,6 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { useAuth } from '@/contexts/useAuth';
 import type { RegisterRequest } from '@/types/api';
 import * as api from '@/services/api';
+import { secureStorage } from '@/utils/secureStorage';
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -53,6 +54,7 @@ describe('AuthContext', () => {
     expect(result.current.token).toBe('mock-jwt-token');
     expect(result.current.username).toBe('Stored User');
     expect(result.current.role).toBe('gp');
+    expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
   });
 
   it('falls back to loading profile when refresh fails but session is still valid', async () => {
@@ -322,6 +324,7 @@ describe('AuthContext', () => {
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.token).toBe('mock-jwt-token');
     expect(localStorage.getItem('user_role')).toBe('gp');
+    expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
   });
 
   it('register() updates state and localStorage', async () => {
@@ -351,6 +354,7 @@ describe('AuthContext', () => {
     });
     expect(result.current.isAuthenticated).toBe(true);
     expect(localStorage.getItem('user_email')).toBe('new@example.com');
+    expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
   });
 
   it('register() falls back to email when full_name is missing', async () => {
@@ -453,6 +457,7 @@ describe('AuthContext', () => {
     expect(result.current.token).toBeNull();
     expect(localStorage.getItem('username')).toBeNull();
     expect(localStorage.getItem('user_role')).toBeNull();
+    expect(secureStorage.getItem('access_token')).toBeNull();
   });
 
   it('logout() still clears local state when api logout fails', async () => {

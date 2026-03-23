@@ -43,6 +43,16 @@ describe('ForgotPasswordPage', () => {
     expect(screen.getByText(/email is required/i)).toBeInTheDocument();
   });
 
+  it('shows error when email format is invalid', async () => {
+    renderForgotPassword();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/email address/i), 'invalid-email');
+    fireEvent.submit(screen.getByRole('button', { name: /send reset link/i }).closest('form')!);
+
+    expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
+  });
+
   it('calls forgotPassword API on submit and shows success message', async () => {
     renderForgotPassword();
     const user = userEvent.setup();
@@ -70,7 +80,7 @@ describe('ForgotPasswordPage', () => {
     await user.click(screen.getByRole('button', { name: /send reset link/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/rate limit exceeded/i)).toBeInTheDocument();
+      expect(screen.getByText(/too many requests/i)).toBeInTheDocument();
     });
   });
 

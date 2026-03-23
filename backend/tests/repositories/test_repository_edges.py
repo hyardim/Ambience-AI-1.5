@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.db.models import AuditLog, ChatStatus, User, UserRole
-from src.repositories import audit_repository, chat_repository
+from src.repositories import audit_repository, chat_repository, user_repository
 from tests.conftest import TestingAsyncSessionLocal
 
 
@@ -111,3 +111,11 @@ def test_chat_repository_archive_sets_flag(db_session):
     chat = chat_repository.create(db_session, user_id=user.id, title="Chat")
     chat_repository.archive(db_session, chat)
     assert chat.is_archived is True
+
+
+def test_user_repository_update_normalises_email(db_session):
+    user = _user(db_session)
+
+    updated = user_repository.update(db_session, user, email=" Mixed.Case@Example.com ")
+
+    assert updated.email == "mixed.case@example.com"

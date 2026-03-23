@@ -10,7 +10,7 @@ class NotificationResponse(BaseModel):
     id: int
     type: str
     title: str
-    body: Optional[str] = None
+    body: str = ""
     chat_id: Optional[int] = None
     is_read: bool
     created_at: datetime

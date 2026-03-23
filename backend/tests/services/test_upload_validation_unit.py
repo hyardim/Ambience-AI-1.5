@@ -1,7 +1,8 @@
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 from src.services import chat_service, chat_uploads, rag_context, specialist_review
 
@@ -53,3 +54,60 @@ def test_file_context_wrapper_functions_remain_backwards_compatible():
     assert chat_service._build_file_context_result(fake_chat).file_context is None
     assert specialist_review._build_file_context(fake_chat) is None
     assert specialist_review._build_file_context_result(fake_chat).file_context is None
+
+
+@pytest.mark.asyncio
+async def test_upload_chat_file_deduplicates_existing_filename(
+    db_session, monkeypatch, tmp_path
+):
+    from src.db.models import Chat, FileAttachment, User, UserRole
+
+    owner = User(
+        email="upload-owner@example.com",
+        hashed_password="hash",
+        full_name="Upload Owner",
+        role=UserRole.GP,
+        is_active=True,
+    )
+    db_session.add(owner)
+    db_session.commit()
+    db_session.refresh(owner)
+
+    chat = Chat(user_id=owner.id, title="Upload Chat")
+    db_session.add(chat)
+    db_session.commit()
+    db_session.refresh(chat)
+
+    upload_dir = tmp_path / str(chat.id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    existing_path = upload_dir / "report.txt"
+    existing_path.write_text("existing")
+
+    monkeypatch.setattr(chat_uploads, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(chat_uploads.audit_repository, "log", lambda *args, **kwargs: None)
+
+    async def _noop_delete_pattern(*args, **kwargs):
+        return None
+
+    async def _noop_invalidate(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(chat_uploads.cache, "delete_pattern", _noop_delete_pattern)
+    monkeypatch.setattr(chat_uploads, "invalidate_chat_related_async", _noop_invalidate)
+
+    upload = UploadFile(
+        filename="report.txt",
+        file=BytesIO(b"fresh content"),
+        headers={"content-type": "text/plain"},
+    )
+
+    attachment = await chat_uploads.upload_chat_file(
+        db_session,
+        owner,
+        chat.id,
+        upload,
+    )
+
+    assert attachment.filename == "report_1.txt"
+    assert (upload_dir / "report_1.txt").read_text() == "fresh content"
+    assert db_session.query(FileAttachment).count() == 1

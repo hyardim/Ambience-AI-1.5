@@ -18,20 +18,24 @@ logger = setup_logger(__name__)
 def store_chunks(
     embedded_doc: dict[str, Any], db_url: str | None = None
 ) -> dict[str, Any]:
-    """
-    Persist embedded chunks into Postgres + pgvector.
+    """Persist embedded chunks into Postgres + pgvector.
+
+    Before inserting, **all** existing chunks for the document are deleted to
+    prevent orphaned rows from prior versions whose chunk IDs may differ.
 
     Args:
         embedded_doc: EmbeddedDocument dict from embed.py
+        db_url: Optional explicit database URL (used in tests).
 
     Returns:
-        Report dict with inserted, updated, skipped, failed counts
+        Report dict with inserted, updated, skipped, failed counts.
 
     Processing steps:
         1. Filter out failed chunks (embedding_status != "success")
         2. Connect to Postgres via db.get_raw_connection()
-        3. For each chunk: determine upsert case and execute
-        4. Return report
+        3. Delete existing chunks for the doc_id
+        4. For each chunk: insert
+        5. Return report
     """
     chunks = embedded_doc.get("chunks", [])
     doc_meta = embedded_doc.get("doc_meta", {})
@@ -59,6 +63,19 @@ def store_chunks(
     try:
         register_vector(conn)
         psycopg2.extras.register_default_jsonb(conn)
+
+        # Delete ALL existing chunks for this doc_id before inserting new ones.
+        # This prevents orphaned chunks from previous versions remaining in the
+        # database when chunk IDs change across re-ingestion runs.
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s", (doc_id,))
+            deleted = cur.rowcount
+            if deleted:
+                logger.info(
+                    f"Deleted {deleted} existing chunks for doc_id={doc_id} "
+                    f"before re-ingestion"
+                )
+
         for chunk in eligible:
             chunk_id = chunk.get("chunk_id", "")
             try:

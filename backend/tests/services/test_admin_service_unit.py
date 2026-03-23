@@ -68,29 +68,38 @@ def test_get_user_not_found(db_session):
     assert exc.value.status_code == 404
 
 
+def _admin(db_session):
+    return _user(db_session, email="admin@example.com", role=UserRole.ADMIN)
+
+
 def test_update_user_not_found(db_session):
+    admin = _admin(db_session)
     with pytest.raises(HTTPException) as exc:
-        admin_service.update_user(db_session, 999, UserUpdateAdmin(full_name="X"))
+        admin_service.update_user(db_session, 999, UserUpdateAdmin(full_name="X"), current_user=admin)
     assert exc.value.status_code == 404
 
 
 def test_update_user_rejects_invalid_role(db_session):
+    admin = _admin(db_session)
     user = _user(db_session, email="user@example.com", role=UserRole.GP)
     with pytest.raises(HTTPException) as exc:
         admin_service.update_user(
             db_session,
             user.id,
             UserUpdateAdmin(role="ghost"),
+            current_user=admin,
         )
     assert exc.value.status_code == 400
 
 
 def test_update_user_updates_optional_fields(db_session):
+    admin = _admin(db_session)
     user = _user(db_session, email="user@example.com", role=UserRole.GP)
     updated = admin_service.update_user(
         db_session,
         user.id,
         UserUpdateAdmin(full_name="Updated", specialty="neurology", is_active=False),
+        current_user=admin,
     )
     assert updated.full_name == "Updated"
     assert updated.specialty == "neurology"
@@ -98,8 +107,9 @@ def test_update_user_updates_optional_fields(db_session):
 
 
 def test_deactivate_user_not_found(db_session):
+    admin = _admin(db_session)
     with pytest.raises(HTTPException) as exc:
-        admin_service.deactivate_user(db_session, 999)
+        admin_service.deactivate_user(db_session, 999, current_user=admin)
     assert exc.value.status_code == 404
 
 

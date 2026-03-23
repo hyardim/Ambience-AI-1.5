@@ -57,6 +57,25 @@ def select_generation_provider(
     prompt_length_chars: int | None = None,
     threshold: float | None = None,
 ) -> RouteDecision:
+    """Route a generation request to the local or cloud LLM provider.
+
+    Scores the request across four dimensions -- complexity, prompt size,
+    clinical risk, and retrieval ambiguity -- and compares the aggregate
+    against a configurable threshold.  When ``force_cloud_llm`` is set in
+    the routing config, the cloud provider is returned unconditionally.
+
+    Args:
+        query: The user's clinical question.
+        retrieved_chunks: Top retrieval results (used for ambiguity scoring).
+        severity: Optional clinical severity label (e.g. "urgent").
+        is_revision: Whether this is a revision flow (feedback loop).
+        prompt_length_chars: Character length of the assembled prompt.
+        threshold: Override for the default routing threshold.
+
+    Returns:
+        A frozen ``RouteDecision`` containing the chosen provider, score,
+        threshold, and a tuple of human-readable reason strings.
+    """
     resolved_threshold = (
         routing_config.llm_route_threshold if threshold is None else threshold
     )
@@ -106,6 +125,11 @@ def select_generation_provider(
 
 
 def _score_complexity(query: str) -> tuple[float, list[str]]:
+    """Score query complexity based on length, sentence count, and terminology.
+
+    Returns:
+        Tuple of (score contribution, list of reason strings).
+    """
     query_lower = query.lower()
     reasons: list[str] = []
     score = 0.0
@@ -131,6 +155,14 @@ def _score_complexity(query: str) -> tuple[float, list[str]]:
 
 
 def _score_prompt_size(prompt_length_chars: int | None) -> tuple[float, list[str]]:
+    """Score based on assembled prompt character length.
+
+    Long prompts typically contain more context and benefit from a more
+    capable cloud model.
+
+    Returns:
+        Tuple of (score contribution, list of reason strings).
+    """
     if prompt_length_chars is None or prompt_length_chars <= 0:
         return 0.0, []
 
@@ -148,6 +180,11 @@ def _score_prompt_size(prompt_length_chars: int | None) -> tuple[float, list[str
 
 
 def _score_risk(query: str, severity: str | None) -> tuple[float, list[str]]:
+    """Score clinical risk based on severity label and risk-related terminology.
+
+    Returns:
+        Tuple of (score contribution, list of reason strings).
+    """
     query_lower = query.lower()
     reasons: list[str] = []
     score = 0.0

@@ -2,7 +2,16 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_admin_user
@@ -96,7 +105,7 @@ def update_user(
     db: Session = Depends(get_db),
     _admin: User = Depends(get_admin_user),
 ):
-    return admin_service.update_user(db, user_id, payload)
+    return admin_service.update_user(db, user_id, payload, current_user=_admin)
 
 
 @router.delete("/users/{user_id}", response_model=UserOut)
@@ -105,7 +114,7 @@ def deactivate_user(
     db: Session = Depends(get_db),
     _admin: User = Depends(get_admin_user),
 ):
-    return admin_service.deactivate_user(db, user_id)
+    return admin_service.deactivate_user(db, user_id, current_user=_admin)
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +128,8 @@ def list_all_chats(
     specialty: Optional[str] = None,
     user_id: Optional[int] = None,
     specialist_id: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     _admin: User = Depends(get_admin_user),
 ):
@@ -176,10 +185,12 @@ def list_audit_logs(
     user_id: Optional[int] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
-    limit: int = 200,
+    limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     _admin: User = Depends(get_admin_user),
 ):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(400, "date_from must be before date_to")
     return admin_service.list_audit_logs(
         db,
         action=action,

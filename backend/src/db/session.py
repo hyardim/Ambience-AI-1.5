@@ -12,11 +12,19 @@ DATABASE_URL = settings.DATABASE_URL
 # ---------------------------------------------------------------------------
 # Synchronous engine & session (used by all non-chat routes)
 # ---------------------------------------------------------------------------
-engine: Engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine: Engine = create_engine(
+    DATABASE_URL,
+    pool_size=20,
+    max_overflow=30,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
 def get_db() -> Iterator[Session]:
+    """Yield a synchronous DB session with automatic rollback on error."""
     db = SessionLocal()
     try:
         yield db
@@ -41,7 +49,14 @@ def _make_async_url(url: str) -> str:
 
 ASYNC_DATABASE_URL = _make_async_url(DATABASE_URL)
 
-async_engine = create_async_engine(ASYNC_DATABASE_URL, pool_pre_ping=True)
+async_engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    pool_size=20,
+    max_overflow=30,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+)
 AsyncSessionLocal = async_sessionmaker(bind=async_engine, expire_on_commit=False)
 
 

@@ -126,7 +126,9 @@ class TestGroundedPromptFileContext:
         )
 
         assert "RECENT CHAT HISTORY" in prompt
-        assert "Assistant: review recent MRI" in prompt
+        # The sanitizer strips "Assistant:" (prompt-injection pattern), so the
+        # conversation history appears without that prefix.
+        assert "review recent MRI" in prompt
 
 
 class TestRevisionPromptFileContext:
@@ -149,7 +151,11 @@ class TestRevisionPromptFileContext:
             chunks=_CHUNKS,
             file_context=None,
         )
-        assert "UPLOADED DOCUMENTS" not in prompt
+        # The instructions section mentions "UPLOADED DOCUMENTS" as a rule,
+        # but no actual UPLOADED DOCUMENTS *section* with file content should
+        # be present.  Verify the file content itself is absent.
+        assert "discharge_summary.txt" not in prompt
+        assert "3 new T2 lesions" not in prompt
 
     def test_uploaded_docs_after_context_in_revision(self):
         prompt = build_revision_prompt(
@@ -159,7 +165,10 @@ class TestRevisionPromptFileContext:
             chunks=_CHUNKS,
             file_context=_FILE_CONTEXT,
         )
-        assert prompt.index("Context:") < prompt.index("UPLOADED DOCUMENTS")
+        # The instructions mention "UPLOADED DOCUMENTS" as a rule before
+        # Context:, but the actual uploaded file content must come after
+        # Context: in the prompt.
+        assert prompt.index("Context:") < prompt.index("3 new T2 lesions")
 
     def test_patient_context_is_included_in_revision_prompt(self):
         prompt = build_revision_prompt(
@@ -193,6 +202,20 @@ class TestRevisionPromptFileContext:
 
         assert result.endswith("…[truncated]")
         assert len(result) <= 1200
+
+    def test_truncate_chunk_text_prefers_sentence_boundary(self):
+        text = "Alpha beta. Gamma delta epsilon zeta"
+
+        result = _truncate_chunk_text(text, max_chars=28)
+
+        assert result == "Alpha beta. …[truncated]"
+
+    def test_truncate_chunk_text_falls_back_to_word_boundary(self):
+        text = "Alpha beta gamma delta epsilon"
+
+        result = _truncate_chunk_text(text, max_chars=24)
+
+        assert result == "Alpha beta …[truncated]"
 
     def test_context_formats_page_ranges(self):
         chunks = [

@@ -28,6 +28,7 @@ export function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<{ current?: string; new?: string }>({});
   const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -61,14 +62,27 @@ export function ProfilePage() {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
+    setPasswordErrors({});
 
     // Validate password fields
+    const pwErrors: { current?: string; new?: string } = {};
     if (newPassword && !currentPassword) {
-      setError('Current password is required to set a new password');
-      return;
+      pwErrors.current = 'Current password is required';
+    }
+    if (currentPassword && !newPassword) {
+      pwErrors.new = 'New password is required';
+    }
+    if (newPassword && newPassword.length < 8) {
+      pwErrors.new = 'Password must be at least 8 characters';
     }
     if (newPassword && newPassword !== confirmPassword) {
       setError('New passwords do not match');
+      setPasswordErrors(pwErrors);
+      return;
+    }
+    if (Object.keys(pwErrors).length > 0) {
+      setPasswordErrors(pwErrors);
+      setError(Object.values(pwErrors).join('. '));
       return;
     }
 
@@ -209,6 +223,9 @@ export function ProfilePage() {
                   >
                     {showCurrentPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
+                  {passwordErrors.current && (
+                    <p className="text-red-600 text-xs mt-1">{passwordErrors.current}</p>
+                  )}
                 </div>
 
                 {/* New password */}
@@ -233,6 +250,9 @@ export function ProfilePage() {
                     {showNewPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                   <PasswordStrengthMeter password={newPassword} />
+                  {passwordErrors.new && (
+                    <p className="text-red-600 text-xs mt-1">{passwordErrors.new}</p>
+                  )}
                 </div>
 
                 {/* Confirm new password */}

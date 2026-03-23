@@ -88,7 +88,7 @@ export function useChatStream(
 
   const [phase, setPhase] = useState<StreamPhase>('idle');
   const cleanupRef = useRef<(() => void) | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard against calling setPhase after unmount
   const mountedRef = useRef(true);
 
@@ -100,7 +100,7 @@ export function useChatStream(
       cleanupRef.current?.();
       cleanupRef.current = null;
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
     };
@@ -112,26 +112,38 @@ export function useChatStream(
       cleanupRef.current?.();
       cleanupRef.current = null;
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
       if (mountedRef.current) setPhase('idle');
     };
   }, [chatId]);
 
-  // ── Polling logic ─────────────────────────────────────────────────────
+  // ── Polling logic (exponential backoff) ──────────────────────────────
+  const pollDelayRef = useRef(pollInterval);
+
+  /**
+   * Starts polling with exponential backoff.
+   * Each successive poll increases the delay by 1.5x, capping at 30 seconds.
+   */
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return; // already polling
     if (!mountedRef.current) return;
     setPhase('fallback_polling');
-    pollTimerRef.current = setInterval(() => {
-      void onRefresh();
-    }, pollInterval);
+    pollDelayRef.current = pollInterval;
+    const poll = () => {
+      void onRefresh().then(() => {
+        if (!mountedRef.current) return;
+        pollDelayRef.current = Math.min(pollDelayRef.current * 1.5, 30000);
+        pollTimerRef.current = setTimeout(poll, pollDelayRef.current);
+      });
+    };
+    pollTimerRef.current = setTimeout(poll, pollDelayRef.current);
   }, [onRefresh, pollInterval]);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
+      clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
     if (mountedRef.current) setPhase('idle');
@@ -183,7 +195,7 @@ export function useChatStream(
             setPhase('streaming');
             // Stop polling if it was running (e.g. reconnect scenario)
             if (pollTimerRef.current) {
-              clearInterval(pollTimerRef.current);
+              clearTimeout(pollTimerRef.current);
               pollTimerRef.current = null;
             }
             // Insert placeholder AI message if not already present

@@ -17,17 +17,63 @@ from src.db.session import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+_SAFE_HTTP_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
+_UNSAFE_BEARER_EXEMPT_PATH_PREFIXES = (
+    "/auth/login",
+    "/auth/register",
+    "/auth/logout",
+    "/auth/refresh",
+    "/auth/forgot-password",
+    "/auth/reset-password/confirm",
+    "/auth/resend-verification",
+    "/auth/verify-email/confirm",
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/logout",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password/confirm",
+    "/api/v1/auth/resend-verification",
+    "/api/v1/auth/verify-email/confirm",
+)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain-text password against a bcrypt hash.
+
+    Args:
+        plain_password: The plain-text password to check.
+        hashed_password: The stored bcrypt hash.
+
+    Returns:
+        True if the password matches, False otherwise.
+    """
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
+    """Hash a plain-text password using bcrypt.
+
+    Args:
+        password: The plain-text password to hash.
+
+    Returns:
+        The bcrypt hash string.
+    """
     return pwd_context.hash(password)
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | bool:
+    """Look up a user by email and verify their password.
+
+    Args:
+        db: Database session.
+        email: The user's email address.
+        password: The plain-text password to verify.
+
+    Returns:
+        The User object on success, or False if credentials are invalid.
+    """
     user = db.query(User).filter(User.email == email).first()
     if not user:
         return False
@@ -52,6 +98,15 @@ def _encode_token(
 def create_access_token(
     data: dict[str, Any], expires_delta: Optional[timedelta] = None
 ) -> str:
+    """Create a signed JWT access token.
+
+    Args:
+        data: Claims to embed in the token (must include ``sub``).
+        expires_delta: Custom expiration duration; defaults to config value.
+
+    Returns:
+        The encoded JWT string.
+    """
     return _encode_token(
         data,
         token_type="access",
@@ -63,6 +118,15 @@ def create_access_token(
 def create_refresh_token(
     data: dict[str, Any], expires_delta: Optional[timedelta] = None
 ) -> str:
+    """Create a signed JWT refresh token.
+
+    Args:
+        data: Claims to embed in the token (must include ``sub``).
+        expires_delta: Custom expiration duration; defaults to config value.
+
+    Returns:
+        The encoded JWT string.
+    """
     return _encode_token(
         data,
         token_type="refresh",
@@ -72,6 +136,14 @@ def create_refresh_token(
 
 
 def create_access_token_for_user(user: User) -> str:
+    """Create an access token pre-populated with the user's claims.
+
+    Args:
+        user: The authenticated user.
+
+    Returns:
+        The encoded JWT access token string.
+    """
     return create_access_token(
         {
             "sub": user.email,
@@ -82,6 +154,14 @@ def create_access_token_for_user(user: User) -> str:
 
 
 def create_refresh_token_for_user(user: User) -> str:
+    """Create a refresh token pre-populated with the user's claims.
+
+    Args:
+        user: The authenticated user.
+
+    Returns:
+        The encoded JWT refresh token string.
+    """
     return create_refresh_token(
         {
             "sub": user.email,
@@ -143,6 +223,17 @@ def _decode_token_payload(token: str) -> dict[str, Any]:
 
 
 def decode_token(token: str) -> str:
+    """Decode a JWT access token and return the subject email.
+
+    Args:
+        token: The encoded JWT string.
+
+    Returns:
+        The email address from the token's ``sub`` claim.
+
+    Raises:
+        HTTPException: If the token is invalid, expired, or not an access token.
+    """
     try:
         payload = _decode_token_payload(token)
     except JWTError as exc:
@@ -172,6 +263,42 @@ def _get_request_token(request: Request, bearer_token: str | None) -> str | None
     return None
 
 
+def _request_path(request: Request) -> str:
+    url = getattr(request, "url", None)
+    path = getattr(url, "path", None)
+    if isinstance(path, str):
+        return path
+    scope = getattr(request, "scope", None)
+    if isinstance(scope, dict):
+        scope_path = scope.get("path")
+        if isinstance(scope_path, str):
+            return scope_path
+    return ""
+
+
+def _enforce_bearer_header_for_unsafe_cookie_auth(
+    request: Request,
+    bearer_token: str | None,
+) -> None:
+    """Reject unsafe cookie-only requests to mitigate CSRF-style form submissions."""
+    method = str(getattr(request, "method", "GET")).upper()
+    if method in _SAFE_HTTP_METHODS:
+        return
+
+    path = _request_path(request)
+    if any(path.startswith(prefix) for prefix in _UNSAFE_BEARER_EXEMPT_PATH_PREFIXES):
+        return
+
+    if bearer_token:
+        return
+
+    if request.cookies.get(settings.ACCESS_COOKIE_NAME):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="State-changing requests must include a bearer token",
+        )
+
+
 def _get_refresh_cookie(request: Request) -> str | None:
     return request.cookies.get(settings.REFRESH_COOKIE_NAME)
 
@@ -198,6 +325,7 @@ def _resolve_user_from_token(
     *,
     expected_type: str,
 ) -> User:
+    """Decode a JWT, look up the user, and verify active status and session version."""
     try:
         payload = _decode_token_payload(token)
         email, session_version = _validate_payload(payload, expected_type=expected_type)
@@ -207,6 +335,11 @@ def _resolve_user_from_token(
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise _credentials_exception()
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account deactivated",
+        )
     if session_version is not None and user.session_version != session_version:
         raise _credentials_exception()
     return user
@@ -217,6 +350,14 @@ def get_current_user(
     db: Session = Depends(get_db),
     bearer_token: str | None = Depends(oauth2_scheme),
 ) -> str:
+    """FastAPI dependency that extracts and returns the current user's email.
+
+    Reads the JWT from the Authorization header or the access cookie.
+
+    Raises:
+        HTTPException: If no valid token is present or the user is inactive.
+    """
+    _enforce_bearer_header_for_unsafe_cookie_auth(request, bearer_token)
     token = _get_request_token(request, bearer_token)
     if not token:
         raise _credentials_exception()
@@ -229,6 +370,14 @@ def get_current_user_from_cookie_or_header(
     db: Session = Depends(get_db),
     bearer_token: str | None = Depends(oauth2_scheme),
 ) -> User:
+    """FastAPI dependency that returns the full User model for the current session.
+
+    Reads the JWT from the Authorization header or the access cookie.
+
+    Raises:
+        HTTPException: If no valid token is present or the user is inactive.
+    """
+    _enforce_bearer_header_for_unsafe_cookie_auth(request, bearer_token)
     token = _get_request_token(request, bearer_token)
     if not token:
         raise _credentials_exception()
@@ -236,6 +385,11 @@ def get_current_user_from_cookie_or_header(
 
 
 def get_refresh_user(request: Request, db: Session = Depends(get_db)) -> User:
+    """FastAPI dependency that resolves a user from the refresh-token cookie.
+
+    Raises:
+        HTTPException: If no refresh cookie is present or the token is invalid.
+    """
     token = _get_refresh_cookie(request)
     if not token:
         raise _credentials_exception()
@@ -243,12 +397,31 @@ def get_refresh_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 
 def get_user_from_access_token(db: Session, token: str) -> User:
+    """Resolve a User from a raw access-token string.
+
+    Args:
+        db: Database session.
+        token: The encoded JWT access token.
+
+    Returns:
+        The authenticated User object.
+
+    Raises:
+        HTTPException: If the token is invalid or the user is inactive.
+    """
     return _resolve_user_from_token(db, token, expected_type="access")
 
 
 def set_auth_cookies(
     response: Response, *, access_token: str, refresh_token: str
 ) -> None:
+    """Set HTTP-only access and refresh token cookies on the response.
+
+    Args:
+        response: The outgoing HTTP response.
+        access_token: The JWT access token value.
+        refresh_token: The JWT refresh token value.
+    """
     cookie_common: dict[str, Any] = {
         "httponly": True,
         "secure": settings.COOKIE_SECURE,
@@ -271,6 +444,11 @@ def set_auth_cookies(
 
 
 def clear_auth_cookies(response: Response) -> None:
+    """Remove access and refresh token cookies from the response.
+
+    Args:
+        response: The outgoing HTTP response.
+    """
     cookie_common: dict[str, Any] = {
         "domain": settings.COOKIE_DOMAIN,
         "path": "/",

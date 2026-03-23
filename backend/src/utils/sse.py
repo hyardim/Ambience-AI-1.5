@@ -24,16 +24,24 @@ import asyncio
 import json
 import logging
 import threading
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
 
+_REPLAY_BUFFER_TTL_SECONDS = 600  # Remove replay entries older than 10 minutes
+_REPLAY_BUFFER_MAX_SIZE = 1000  # Maximum number of chats tracked in the replay buffer
+
+
 @dataclass
 class SSEEvent:
+    """A single Server-Sent Event with an event type and JSON payload."""
+
     event: str  # stream_start | content | complete | error
     data: dict[str, Any]
+    created_at: float = field(default_factory=time.monotonic)
 
     def encode(self) -> str:
         """Format as an SSE text frame."""
@@ -168,7 +176,11 @@ class _ChatEventBus:
     # ------------------------------------------------------------------
 
     def _update_buffer(self, chat_id: int, event: SSEEvent) -> None:
-        """Update the per-chat replay buffer (called under a lock)."""
+        """Update the per-chat replay buffer (called under a lock).
+
+        Enforces a TTL and max-size limit to prevent unbounded memory growth.
+        Expired entries and entries beyond the max size are pruned periodically.
+        """
         if event.event == "stream_start":
             self._active_streams.add(chat_id)
             self._stream_start[chat_id] = event
@@ -177,6 +189,32 @@ class _ChatEventBus:
             self._last_content[chat_id] = event
         elif event.event in ("complete", "error"):
             self._active_streams.discard(chat_id)
+
+        # Periodic cleanup: expire old entries and enforce max buffer size
+        self._cleanup_expired_buffers()
+
+    def _cleanup_expired_buffers(self) -> None:
+        """Remove replay buffer entries older than TTL and enforce max size."""
+        now = time.monotonic()
+        expired_ids = []
+        for cid, evt in list(self._stream_start.items()):
+            if cid not in self._active_streams and (now - evt.created_at) > _REPLAY_BUFFER_TTL_SECONDS:
+                expired_ids.append(cid)
+        for cid in expired_ids:
+            self._stream_start.pop(cid, None)
+            self._last_content.pop(cid, None)
+
+        # Enforce max size by removing oldest non-active entries
+        if len(self._stream_start) > _REPLAY_BUFFER_MAX_SIZE:
+            inactive = [
+                (cid, evt) for cid, evt in self._stream_start.items()
+                if cid not in self._active_streams
+            ]
+            inactive.sort(key=lambda x: x[1].created_at)
+            excess = len(self._stream_start) - _REPLAY_BUFFER_MAX_SIZE
+            for cid, _ in inactive[:excess]:
+                self._stream_start.pop(cid, None)
+                self._last_content.pop(cid, None)
 
     def _clear_buffer(self, chat_id: int) -> None:
         """Drop replay state for a chat once streaming is done/closed."""

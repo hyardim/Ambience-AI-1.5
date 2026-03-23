@@ -203,6 +203,26 @@ class TestSpecialistAssign:
         assert resp.status_code == 403
         assert "specialty" in resp.json()["detail"].lower()
 
+    def test_unassign_success(
+        self, client, specialist_headers, submitted_chat, registered_specialist
+    ):
+        specialist_id = registered_specialist["user"]["id"]
+        assign_resp = client.post(
+            f"/specialist/chats/{submitted_chat['id']}/assign",
+            json={"specialist_id": specialist_id},
+            headers=specialist_headers,
+        )
+        assert assign_resp.status_code == 200
+
+        resp = client.delete(
+            f"/specialist/chats/{submitted_chat['id']}/assign",
+            headers=specialist_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "submitted"
+        assert data["specialist_id"] is None
+
 
 # ---------------------------------------------------------------------------
 # POST /specialist/chats/{id}/review

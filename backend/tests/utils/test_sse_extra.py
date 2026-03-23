@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
@@ -172,3 +173,103 @@ async def test_unsubscribe_clears_terminal_replay_state_when_no_subscribers():
     assert 22 not in bus._stream_start
     assert 22 not in bus._last_content
     assert 22 not in bus._active_streams
+
+
+def test_cleanup_expired_buffers_removes_only_inactive_expired_entries():
+    bus = _ChatEventBus()
+    stale_time = time.monotonic() - (sse._REPLAY_BUFFER_TTL_SECONDS + 10)
+    active_time = time.monotonic()
+    bus._stream_start[1] = SSEEvent(
+        event="stream_start",
+        data={"message_id": 1},
+        created_at=stale_time,
+    )
+    bus._last_content[1] = SSEEvent(
+        event="content",
+        data={"content": "stale"},
+        created_at=stale_time,
+    )
+    bus._stream_start[2] = SSEEvent(
+        event="stream_start",
+        data={"message_id": 2},
+        created_at=active_time,
+    )
+    bus._last_content[2] = SSEEvent(
+        event="content",
+        data={"content": "active"},
+        created_at=active_time,
+    )
+    bus._active_streams.add(2)
+
+    bus._cleanup_expired_buffers()
+
+    assert 1 not in bus._stream_start
+    assert 1 not in bus._last_content
+    assert 2 in bus._stream_start
+    assert 2 in bus._last_content
+
+
+def test_cleanup_expired_buffers_enforces_max_size_for_inactive_entries(monkeypatch):
+    bus = _ChatEventBus()
+    monkeypatch.setattr(sse, "_REPLAY_BUFFER_MAX_SIZE", 1)
+    old_time = time.monotonic() - 100
+    new_time = time.monotonic()
+    bus._stream_start[1] = SSEEvent(
+        event="stream_start",
+        data={"message_id": 1},
+        created_at=old_time,
+    )
+    bus._last_content[1] = SSEEvent(
+        event="content",
+        data={"content": "first"},
+        created_at=old_time,
+    )
+    bus._stream_start[2] = SSEEvent(
+        event="stream_start",
+        data={"message_id": 2},
+        created_at=new_time,
+    )
+    bus._last_content[2] = SSEEvent(
+        event="content",
+        data={"content": "second"},
+        created_at=new_time,
+    )
+
+    bus._cleanup_expired_buffers()
+
+    assert 1 not in bus._stream_start
+    assert 2 in bus._stream_start
+
+
+@pytest.mark.asyncio
+async def test_sse_event_generator_emits_keep_alive_on_idle_timeout(monkeypatch):
+    queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+    await queue.put(None)
+    unsubscribed = []
+    call_count = 0
+    original_wait_for = sse.asyncio.wait_for
+
+    async def fake_subscribe(chat_id):
+        return queue
+
+    async def fake_unsubscribe(chat_id, q):
+        unsubscribed.append((chat_id, q))
+
+    async def fake_wait_for(awaitable, timeout):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            awaitable.close()
+            raise asyncio.TimeoutError
+        return await original_wait_for(awaitable, timeout)
+
+    monkeypatch.setattr(sse.chat_event_bus, "subscribe", fake_subscribe)
+    monkeypatch.setattr(sse.chat_event_bus, "unsubscribe", fake_unsubscribe)
+    monkeypatch.setattr(sse.asyncio, "wait_for", fake_wait_for)
+
+    frames = []
+    async for frame in sse.sse_event_generator(15):
+        frames.append(frame)
+
+    assert frames == [": keep-alive\n\n"]
+    assert unsubscribed and unsubscribed[0][0] == 15

@@ -1,0 +1,8 @@
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _set_test_env(monkeypatch):
+    """Bypass API-key auth for API tests by clearing the key and marking env as test."""
+    monkeypatch.delenv("RAG_INTERNAL_API_KEY", raising=False)
+    monkeypatch.setenv("RAG_ENV", "test")

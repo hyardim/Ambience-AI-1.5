@@ -25,6 +25,7 @@ const AdminLogsPage = lazy(async () => ({ default: (await import('./pages/admin/
 const AdminGuidelinesPage = lazy(async () => ({ default: (await import('./pages/admin/AdminGuidelinesPage')).AdminGuidelinesPage }));
 const AdminRagPage = lazy(() => import('./pages/admin/AdminRagPage'));
 const ProfilePage = lazy(async () => ({ default: (await import('./pages/ProfilePage')).ProfilePage }));
+const NotFoundPage = lazy(async () => ({ default: (await import('./pages/NotFoundPage')).NotFoundPage }));
 
 function App() {
   return (
@@ -60,7 +61,7 @@ function App() {
               <Route path="/admin/rag" element={<ProtectedRoute allowedRoles={['admin']}><AdminRagPage /></ProtectedRoute>} />
 
               <Route path="/profile" element={<ProtectedRoute allowedRoles={['gp', 'specialist', 'admin']}><ProfilePage /></ProtectedRoute>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>
         </Router>

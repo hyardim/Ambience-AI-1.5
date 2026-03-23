@@ -39,6 +39,7 @@ from src.services.specialist_shared import (
     _build_manual_citations,
 )
 from src.utils.cache import cache, cache_keys
+from src.utils.sse import SSEEvent, chat_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,11 @@ def _build_file_context_result(chat: Chat) -> FileContextBuildResult:
 def review(
     db: Session, specialist: User, chat_id: int, body: ReviewRequest
 ) -> ChatResponse:
+    """Process a review action on a chat.
+
+    Validates that the chat is in ASSIGNED or REVIEWING status before
+    allowing any review action. Rejects approve/reject while AI is generating.
+    """
     if body.action not in ("approve", "reject", "request_changes"):
         raise HTTPException(
             status_code=400,
@@ -180,6 +186,10 @@ def review_message(
     message_id: int,
     body: ReviewRequest,
 ) -> ChatResponse:
+    """Review a specific AI message within a chat.
+
+    Validates chat is in ASSIGNED or REVIEWING status before proceeding.
+    """
     chat = (
         db.query(Chat)
         .filter(Chat.id == chat_id, Chat.specialist_id == specialist.id)
@@ -333,6 +343,7 @@ def review_message(
 
 
 def send_message(db: Session, specialist: User, chat_id: int, content: str) -> dict:
+    """Send a specialist message in a chat. Content is pre-validated by MessageCreate schema."""
     chat = (
         db.query(Chat)
         .filter(Chat.id == chat_id, Chat.specialist_id == specialist.id)
@@ -426,6 +437,7 @@ def _mark_last_ai_message(db: Session, chat_id: int, body: ReviewRequest) -> Non
 def _regenerate_ai_response(
     db: Session, chat: Chat, feedback: Optional[str]
 ) -> Message:
+    """Request a revised AI response via the RAG service and publish SSE events."""
     messages = message_repository.list_for_chat(db, chat.id)
     user_messages = [m for m in messages if m.sender == "user"]
     ai_messages = [m for m in messages if m.sender == "ai"]
@@ -473,6 +485,7 @@ def _do_revise(
     file_context: str | None,
     file_context_truncated: bool,
 ) -> None:
+    """Call the RAG /revise endpoint, update the placeholder, and emit SSE events."""
     revision_failed = False
     rag_payload = {
         "original_query": original_query,
@@ -499,7 +512,11 @@ def _do_revise(
             )
         rag_response.raise_for_status()
         rag_json = rag_response.json()
+        if not isinstance(rag_json, dict):
+            raise ValueError(f"Expected dict from RAG /revise, got {type(rag_json).__name__}")
         revised_content = rag_json.get("answer", "")
+        if not isinstance(revised_content, str):
+            raise ValueError(f"Expected 'answer' string from RAG, got {type(revised_content).__name__}")
         citations = _select_rag_citations(rag_json) or []
     except Exception as exc:
         logger.warning("RAG /revise failed for chat %s: %s", placeholder.chat_id, exc)
@@ -515,6 +532,33 @@ def _do_revise(
     placeholder.is_generating = False
     db.commit()
     db.refresh(placeholder)
+
+    # Publish SSE events so connected clients receive the revised response
+    chat_event_bus.publish_threadsafe(
+        placeholder.chat_id,
+        SSEEvent(
+            event="content",
+            data={
+                "chat_id": placeholder.chat_id,
+                "message_id": placeholder.id,
+                "content": revised_content,
+            },
+        ),
+    )
+    chat_event_bus.publish_threadsafe(
+        placeholder.chat_id,
+        SSEEvent(
+            event="complete",
+            data={
+                "chat_id": placeholder.chat_id,
+                "message_id": placeholder.id,
+                "content": revised_content,
+                "citations": citations,
+            },
+        ),
+    )
+    chat_event_bus.close_chat_threadsafe(placeholder.chat_id)
+
     chat = db.query(Chat).filter(Chat.id == placeholder.chat_id).first()
 
     if chat:

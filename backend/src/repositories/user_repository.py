@@ -1,13 +1,19 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.db.models import User, UserRole
 
 
+def _normalise_email(email: str) -> str:
+    return email.lower().strip()
+
+
 def get_by_email(db: Session, email: str) -> Optional[User]:
-    return db.query(User).filter(User.email == email).first()
+    """Look up a user by email using case-insensitive matching."""
+    return db.query(User).filter(func.lower(User.email) == _normalise_email(email)).first()
 
 
 def get_by_id(db: Session, user_id: int) -> Optional[User]:
@@ -26,7 +32,7 @@ def create(
     email_verified_at: Optional[datetime] = None,
 ) -> User:
     user = User(
-        email=email,
+        email=_normalise_email(email),
         hashed_password=hashed_password,
         full_name=full_name,
         role=role,
@@ -42,6 +48,8 @@ def create(
 
 def update(db: Session, user: User, **fields) -> User:
     for key, value in fields.items():
+        if key == "email" and isinstance(value, str):
+            value = _normalise_email(value)
         setattr(user, key, value)
     db.commit()
     db.refresh(user)

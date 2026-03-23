@@ -62,6 +62,38 @@ describe('secureStorage', () => {
     encryptSpy.mockRestore();
   });
 
+  it('warns when encrypted writes fail', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const setItemSpy = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Quota exceeded');
+    });
+
+    secureStorage.setItem('write-fail', 'value');
+
+    expect(warnSpy).toHaveBeenCalledWith('localStorage write failed:', expect.any(Error));
+
+    setItemSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('warns when fallback plain-text writes fail', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const encryptSpy = vi.spyOn(CryptoJS.AES, 'encrypt').mockImplementation(() => {
+      throw new Error('Encryption failed');
+    });
+    const setItemSpy = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Quota exceeded');
+    });
+
+    secureStorage.setItem('fallback-write-fail', 'value');
+
+    expect(warnSpy).toHaveBeenCalledWith('localStorage write failed:', expect.any(Error));
+
+    setItemSpy.mockRestore();
+    encryptSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
   it('falls back to raw value when decryption throws', () => {
     const decryptSpy = vi.spyOn(CryptoJS.AES, 'decrypt').mockImplementation(() => {
       throw new Error('Decryption failed');

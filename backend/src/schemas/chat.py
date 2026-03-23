@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Shared types
@@ -12,6 +12,21 @@ Gender = Literal["male", "female", "other"]
 ReviewAction = Literal[
     "approve", "reject", "request_changes", "manual_response", "edit_response"
 ]
+
+# ---------------------------------------------------------------------------
+# Patient context validation
+# ---------------------------------------------------------------------------
+
+
+class PatientContext(BaseModel):
+    """Validated shape for the patient_context JSONB field on chats."""
+
+    age: Optional[int] = Field(default=None, ge=0, le=150)
+    gender: Optional[Gender] = None
+    specialty: Optional[str] = None
+    severity: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=5000)
+
 
 # ---------------------------------------------------------------------------
 # File attachment
@@ -34,7 +49,18 @@ class FileAttachmentResponse(BaseModel):
 
 
 class MessageBase(BaseModel):
+    """Base schema for message content with whitespace validation."""
+
     content: str = Field(min_length=1, max_length=50_000)
+
+    @field_validator("content")
+    @classmethod
+    def content_not_blank(cls, v: str) -> str:
+        """Strip whitespace and reject empty/whitespace-only messages."""
+        v = v.strip()
+        if not v:
+            raise ValueError("Message content must not be empty or whitespace-only")
+        return v
 
 
 class MessageCreate(MessageBase):

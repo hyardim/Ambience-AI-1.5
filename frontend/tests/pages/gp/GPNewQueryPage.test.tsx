@@ -217,6 +217,21 @@ describe('GPNewQueryPage', () => {
     expect(screen.getByText(/please select urgency/i)).toBeInTheDocument();
   });
 
+  it('validates an out-of-range patient age', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+    const form = screen.getByRole('button', { name: /submit consultation/i }).closest('form');
+
+    await user.type(screen.getByLabelText(/consultation title/i), 'Test');
+    fireEvent.change(screen.getByLabelText(/patient age/i), { target: { value: '200' } });
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
+    await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
+    await user.type(screen.getByLabelText(/clinical question/i), 'Question');
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(screen.getByText(/age must be between 0 and 150/i)).toBeInTheDocument();
+  });
+
   it('uploads files during submission and shows fallback error when creation fails', async () => {
     server.use(
       http.post('/chats/', () => HttpResponse.json({ detail: 'broken' }, { status: 500 })),

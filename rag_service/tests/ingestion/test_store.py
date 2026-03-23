@@ -8,6 +8,7 @@ import pytest
 from src.ingestion.store import (
     _build_metadata,
     _metadata_equals,
+    _rollback_to_savepoint,
     _upsert_chunk,
     store_chunks,
 )
@@ -337,6 +338,7 @@ class TestStoreChunks:
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
             patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
+            pytest.raises(Exception, match="connection dropped"),
         ):
             store_chunks(doc)
         conn.close.assert_called_once()
@@ -352,3 +354,15 @@ class TestStoreChunks:
             report = store_chunks(doc)
         mock_conn.assert_not_called()
         assert report["failed"] == 3
+
+
+def test_rollback_to_savepoint_falls_back_to_connection_rollback() -> None:
+    conn = MagicMock()
+    cur = MagicMock()
+    cur.execute.side_effect = Exception("savepoint missing")
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    _rollback_to_savepoint(conn, "chunk-1")
+
+    conn.rollback.assert_called_once()

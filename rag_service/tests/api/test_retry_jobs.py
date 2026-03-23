@@ -20,6 +20,7 @@ _STUBBED_MODULES = [
     "pgvector.sqlalchemy",
     "pgvector.psycopg2",
     "psycopg2",
+    "psycopg2.extensions",
     "psycopg2.extras",
     "psycopg2.errors",
     "sqlalchemy",
@@ -33,6 +34,7 @@ _STUBBED_MODULES = [
     "nltk.tokenize",
     "fitz",
     "src.config",
+    "src.utils.db",
     "src.ingestion.embed",
     "src.ingestion.pipeline",
     "src.retrieval.vector_store",
@@ -44,6 +46,8 @@ _STUBBED_MODULES = [
     "src.orchestration.pipeline",
     "src.retrieval.query",
     "src.api.services",
+    "src.api.streaming",
+    "src.generation.router",
     "src.api.app",
     "src.api.routes",
     "src.api.ask_routes",
@@ -107,15 +111,23 @@ def _install_stubs() -> None:
     _make_stub("pgvector")
     _make_stub("pgvector.sqlalchemy")
     _make_stub("pgvector.psycopg2")
-    _make_stub("psycopg2")
+    psycopg2_mod = _make_stub("psycopg2")
+    psycopg2_mod.connect = MagicMock()  # type: ignore[attr-defined]
+    psycopg2_extensions = _make_stub("psycopg2.extensions")
+    psycopg2_extensions.connection = MagicMock  # type: ignore[attr-defined]
     _make_stub("psycopg2.extras")
     _make_stub("psycopg2.errors")
-    _make_stub("sqlalchemy")
-    _make_stub("sqlalchemy.orm")
+    sa = _make_stub("sqlalchemy")
+    sa.create_engine = MagicMock()  # type: ignore[attr-defined]
+    sa.text = MagicMock()  # type: ignore[attr-defined]
+    sa_orm = _make_stub("sqlalchemy.orm")
+    sa_orm.Session = MagicMock  # type: ignore[attr-defined]
+    sa_orm.sessionmaker = MagicMock(return_value=MagicMock())  # type: ignore[attr-defined]
     _make_stub("sqlalchemy.pool")
     _make_stub("sqlalchemy.dialects")
     _make_stub("sqlalchemy.dialects.postgresql")
-    _make_stub("sqlalchemy.engine")
+    sa_engine = _make_stub("sqlalchemy.engine")
+    sa_engine.Engine = MagicMock  # type: ignore[attr-defined]
 
     tqdm_mod = _make_stub("tqdm")
     tqdm_mod.tqdm = lambda it, **kw: it  # type: ignore[assignment]
@@ -160,7 +172,11 @@ def _install_stubs() -> None:
         retry_max_attempts=3,
         retry_backoff_seconds=10,
         retry_backoff_multiplier=2,
+        retry_max_backoff_seconds=300,
         retry_job_ttl_seconds=86400,
+        retry_queue_job_timeout_seconds=180,
+        retry_queue_result_ttl_seconds=60,
+        retry_queue_failure_ttl_seconds=86400,
     )
     fake_config.logging_config = types.SimpleNamespace(
         log_level="INFO",
@@ -184,7 +200,29 @@ def _install_stubs() -> None:
     path_config = MagicMock()
     path_config.root = Path("/app")
     fake_config.path_config = path_config
+    fake_config.embed_config = types.SimpleNamespace(
+        embedding_model="all-MiniLM-L6-v2",
+        embedding_dimension=384,
+        query_max_tokens=1024,
+        reranker_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    )
+    fake_config.alerting_config = types.SimpleNamespace(
+        llm_fallback_alert_webhook_url="",
+        llm_fallback_alert_timeout_seconds=2.0,
+    )
+    fake_config.vector_config = types.SimpleNamespace(
+        hnsw_m=16,
+        hnsw_ef_construction=64,
+    )
+    fake_config.chunk_config = types.SimpleNamespace(
+        chunk_size=450,
+        chunk_overlap=100,
+    )
     sys.modules["src.config"] = fake_config
+
+    fake_utils_db = _make_stub("src.utils.db")
+    fake_db_manager = MagicMock()
+    fake_utils_db.db = fake_db_manager  # type: ignore[attr-defined]
 
     for module_name in (
         "src.ingestion.embed",
@@ -198,6 +236,8 @@ def _install_stubs() -> None:
         "src.orchestration.pipeline",
         "src.retrieval.query",
         "src.api.services",
+        "src.api.streaming",
+        "src.generation.router",
     ):
         _make_stub(module_name)
 
@@ -280,6 +320,7 @@ def _install_stubs() -> None:
 
     fake_api_services = sys.modules["src.api.services"]
     fake_api_services.retrieve_chunks = MagicMock(return_value=[])
+    fake_api_services.retrieve_chunks_advanced = MagicMock(return_value=[])
     fake_api_services.filter_chunks = MagicMock(
         side_effect=lambda _query, retrieved: retrieved
     )
@@ -288,6 +329,24 @@ def _install_stubs() -> None:
     fake_api_services.low_evidence_note = MagicMock(return_value=None)
     fake_api_services.log_route_decision = MagicMock()
     fake_api_services.to_search_result = MagicMock(side_effect=_fake_to_search_result)
+
+    import json as _json
+
+    async def _fake_ndjson_done_only(answer: str, citations: list | None = None):
+        yield _json.dumps(
+            {
+                "type": "done",
+                "answer": answer,
+                "citations_used": citations or [],
+            }
+        ) + "\n"
+
+    fake_streaming = sys.modules["src.api.streaming"]
+    fake_streaming.streaming_generator = MagicMock()
+    fake_streaming.ndjson_done_only = _fake_ndjson_done_only
+
+    fake_router = sys.modules["src.generation.router"]
+    fake_router.select_generation_provider = MagicMock()
 
 
 def _restore_modules(originals: dict[str, types.ModuleType | None]) -> None:
@@ -299,7 +358,8 @@ def _restore_modules(originals: dict[str, types.ModuleType | None]) -> None:
 
 
 @pytest.fixture
-def main_module():
+def main_module(monkeypatch):
+    monkeypatch.setenv("RAG_ENV", "test")
     originals = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
     _install_stubs()
     sys.modules.pop("src.api.routes", None)

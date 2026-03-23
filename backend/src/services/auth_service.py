@@ -207,6 +207,8 @@ def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
 
 
 def login(db: Session, email: str, password: str) -> AuthResponse:
+    """Authenticate a user by email and password, returning tokens on success."""
+    email = email.lower().strip()
     user = user_repository.get_by_email(db, email)
     if not user or not security.verify_password(password, user.hashed_password):
         raise HTTPException(
@@ -231,6 +233,8 @@ def login(db: Session, email: str, password: str) -> AuthResponse:
 
 
 def register(db: Session, payload: UserRegister) -> RegisterResponse:
+    """Register a new user account with normalized email."""
+    payload.email = payload.email.lower().strip()
     if user_repository.get_by_email(db, payload.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -373,6 +377,18 @@ def confirm_email_verification(
 
 
 def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
+    """Initiate a password-reset flow by emailing a one-time reset link.
+
+    Always returns a generic message regardless of whether the email exists
+    to prevent user enumeration.
+
+    Args:
+        db: Database session.
+        payload: Request containing the user's email address.
+
+    Returns:
+        A generic acknowledgement dict.
+    """
     if _is_forgot_password_rate_limited(payload.email):
         return GENERIC_FORGOT_PASSWORD_MESSAGE
 
@@ -438,6 +454,23 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
 
 
 def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) -> dict:
+    """Complete a password reset by verifying the token and updating the password.
+
+    Validates the reset token, enforces password policy, prevents reuse of
+    the current password, and invalidates all outstanding reset tokens for
+    the user.
+
+    Args:
+        db: Database session.
+        payload: Request containing the reset token and new password.
+
+    Returns:
+        A generic success dict.
+
+    Raises:
+        HTTPException: If the token is invalid, the account is deactivated,
+            or the new password fails validation.
+    """
     now = _utcnow()
     token_hash = security.hash_password_reset_token(payload.token)
     token_row = password_reset_repository.get_valid_by_hash(
@@ -456,6 +489,10 @@ def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) ->
         raise HTTPException(status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
 
     _validate_password(payload.new_password)
+    if security.verify_password(payload.new_password, user.hashed_password):
+        raise HTTPException(
+            status_code=400, detail="New password must be different from current password"
+        )
     user_repository.update(
         db,
         user,
@@ -528,4 +565,12 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
 
 
 def refresh(user: User) -> AuthResponse:
+    """Issue a fresh access token for an already-authenticated user.
+
+    Args:
+        user: The user resolved from a valid refresh token.
+
+    Returns:
+        An AuthResponse with a new access token.
+    """
     return _make_auth_response(user)

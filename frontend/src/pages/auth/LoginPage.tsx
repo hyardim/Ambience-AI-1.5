@@ -12,11 +12,13 @@ function routeForRole(role: UserRole | null): string {
   return '/gp/queries';
 }
 
+/** Login page with field-level validation and contextual API error messages. */
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -28,13 +30,20 @@ export function LoginPage() {
     }
   }, [isAuthenticated, navigate, role]);
 
+  /**
+   * Validates fields and submits login credentials.
+   * Maps API status codes to user-friendly field-level error messages.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setUnverifiedEmail('');
 
-    if (!email || !password) {
-      setError('Please enter your email/username and password');
+    const errors: { email?: string; password?: string } = {};
+    if (!email) errors.email = 'Email is required';
+    if (!password) errors.password = 'Password is required';
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -44,7 +53,16 @@ export function LoginPage() {
       navigate(routeForRole(loggedInRole));
     } catch (err) {
       const message = getErrorMessage(err, 'Incorrect username or password');
-      setError(message);
+      // Map well-known status codes to user-friendly messages
+      if (message.includes('401') || message.toLowerCase().includes('incorrect') || message.toLowerCase().includes('invalid')) {
+        setError('Invalid email or password');
+      } else if (message.includes('403') || message.toLowerCase().includes('deactivated') || message.toLowerCase().includes('disabled')) {
+        setError('Account deactivated');
+      } else if (message.includes('429') || message.toLowerCase().includes('too many')) {
+        setError('Too many attempts, please wait');
+      } else {
+        setError(message);
+      }
       if (message.toLowerCase().includes('verify your email')) {
         setUnverifiedEmail(email);
       }
@@ -109,11 +127,12 @@ export function LoginPage() {
                   type="text"
                   id="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setFieldErrors(prev => ({ ...prev, email: undefined })); }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Enter your username or email"
                   required
                 />
+                {fieldErrors.email && <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>}
               </div>
 
               <div>
@@ -125,7 +144,7 @@ export function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     id="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setFieldErrors(prev => ({ ...prev, password: undefined })); }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent pr-12"
                     placeholder="Enter your password"
                     required
@@ -138,6 +157,7 @@ export function LoginPage() {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {fieldErrors.password && <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>}
               </div>
 
               <div className="text-right">

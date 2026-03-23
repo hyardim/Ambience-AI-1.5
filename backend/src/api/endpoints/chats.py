@@ -41,8 +41,8 @@ def create_chat(
 
 @router.get("/", response_model=List[ChatResponse])
 def list_chats(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
     status: Optional[str] = None,
     specialty: Optional[str] = None,
     search: Optional[str] = Query(None, max_length=200),

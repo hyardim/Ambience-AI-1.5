@@ -148,33 +148,6 @@ def test_ask_unexpected_failure(monkeypatch) -> None:
     assert resp.json()["detail"] == "Internal server error"
 
 
-def test_ask_fallback_when_advanced_not_callable(monkeypatch) -> None:
-    """Backward-compatible fallback (line 65)."""
-    app = create_app()
-
-    monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
-        None,
-    )
-    monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks",
-        lambda query, top_k, specialty: [{"text": "ctx", "score": 0.9, "metadata": {}}],
-    )
-
-    async def fake_generate(**kwargs):
-        return _make_response()
-
-    monkeypatch.setattr(
-        "src.api.ask_routes._generate_answer_from_retrieval",
-        fake_generate,
-    )
-    client = TestClient(app)
-
-    resp = client.post("/ask", json={"query": "q", "top_k": 3})
-    assert resp.status_code == 200
-    assert resp.json()["answer"] == "answer"
-
-
 def test_ask_non_answer_response_type(monkeypatch) -> None:
     """Line 84: when response is not AnswerResponse type."""
     app = create_app()

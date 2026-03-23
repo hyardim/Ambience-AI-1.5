@@ -71,6 +71,40 @@ describe('RegisterPage', () => {
     expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
   });
 
+  it('shows field validation errors for missing names, invalid email, and short password', async () => {
+    renderRegister();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/email address/i), 'invalid-email');
+    await user.type(screen.getByLabelText(/^password$/i), 'short');
+    fireEvent.submit(screen.getByRole('button', { name: /create account/i }).closest('form')!);
+
+    expect(screen.getByText(/first name is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/last name is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
+    expect(screen.getByText(/password must be at least 8 characters/i)).toBeInTheDocument();
+  });
+
+  it('shows field validation errors when email and password are missing', async () => {
+    renderRegister();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/first name/i), 'John');
+    await user.type(screen.getByLabelText(/last name/i), 'Doe');
+    fireEvent.submit(screen.getByRole('button', { name: /create account/i }).closest('form')!);
+
+    expect(screen.getByText(/email is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/^password is required$/i)).toBeInTheDocument();
+  });
+
   it('shows specialty field when specialist role is selected', async () => {
     renderRegister();
     const user = userEvent.setup();
@@ -100,7 +134,7 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/confirm password/i), 'pass123');
     fireEvent.submit(screen.getByRole('button', { name: /create account/i }).closest('form')!);
 
-    expect(screen.getByText(/please select a specialty/i)).toBeInTheDocument();
+    expect(screen.getByText(/specialty is required/i)).toBeInTheDocument();
   });
 
   it('registers successfully and navigates to GP page', async () => {

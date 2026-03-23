@@ -27,33 +27,66 @@ TITLE_FONT_SIZE_THRESHOLD = 18
 
 
 def _derive_source_url(source_info: dict[str, Any]) -> str:
-    """Return a per-document source URL when we can infer it from the filename.
+    """Return a per-document source URL, building a guideline link when possible.
 
-    If the provided source_url already points to a specific page (has a path
-    beyond ``/``), return it as-is — this covers URLs passed from web sync.
+    Resolution order:
+    1. If the provided ``source_url`` already has a meaningful path (not just
+       the domain root), keep it as the caller-specified canonical citation URL.
+    2. Try to extract a NICE guideline code from the filename or doc metadata
+       and construct ``https://www.nice.org.uk/guidance/{code}``.
+    3. Fall back to the provided ``source_url`` (may be empty).
 
-    For NICE PDFs named like NG128.pdf, generate https://www.nice.org.uk/guidance/ng128.
-    Otherwise fall back to the provided source_url if present.
+    Supported NICE guideline code prefixes: NG, CG, QS, TA, PH, MPG, IPG, DG,
+    HST, MTG, ES, ECD, SC (case-insensitive).
     """
+    from urllib.parse import urlparse
 
     provided = source_info.get("source_url", "") or ""
 
-    # If the URL already has a meaningful path (e.g. from web sync canonical_url),
-    # keep it — it's more specific than anything we can infer.
+    # If the URL already has a meaningful path, keep it.
     if provided:
-        from urllib.parse import urlparse
-
         path = urlparse(provided).path.strip("/")
-        if path:  # has a real path, not just "https://www.nice.org.uk/"
+        if path:
             return provided
 
     source_path = Path(source_info.get("source_path", ""))
     stem = source_path.stem.lower()
 
-    if "nice.org.uk" in provided and stem.startswith("ng") and stem[2:].isdigit():
-        return f"https://www.nice.org.uk/guidance/{stem}"
+    # Match well-known NICE guideline code prefixes in the filename stem.
+    nice_prefixes = (
+        "ng", "cg", "qs", "ta", "ph", "mpg", "ipg", "dg", "hst", "mtg",
+        "es", "ecd", "sc",
+    )
+    guide_code = _extract_nice_code(stem, nice_prefixes)
+
+    # Also attempt extraction from the raw filename when the stem contains
+    # extra suffixes (e.g. ``ng128-abc1234abcd.pdf``).
+    if guide_code is None:
+        guide_code = _extract_nice_code(
+            source_path.name.lower().split("-")[0], nice_prefixes
+        )
+
+    if guide_code is not None:
+        return f"https://www.nice.org.uk/guidance/{guide_code}"
 
     return provided
+
+
+def _extract_nice_code(
+    text: str, prefixes: tuple[str, ...]
+) -> str | None:
+    """Extract a NICE guideline code (e.g. 'ng128') from *text*.
+
+    Returns the lowercased code if *text* starts with a known prefix followed
+    by digits, otherwise ``None``.
+    """
+    import re
+
+    for prefix in prefixes:
+        match = re.match(rf"^({re.escape(prefix)}\d+)", text)
+        if match:
+            return match.group(1)
+    return None
 
 
 class MetadataValidationError(Exception):

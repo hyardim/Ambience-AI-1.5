@@ -4,6 +4,7 @@ import { getProfile, login as apiLogin, logout as apiLogout, refreshSession, reg
 import type { RegisterRequest, UserProfile } from '../types/api';
 import type { UserRole } from '../types';
 import { isAbortError } from '../utils/errors';
+import { secureStorage } from '../utils/secureStorage';
 import { AuthContext } from './auth-context';
 
 interface AuthState {
@@ -44,7 +45,7 @@ function persistIdentity(user: Pick<UserProfile, 'full_name' | 'email' | 'role'>
 }
 
 function clearIdentity(): void {
-  localStorage.removeItem('access_token');
+  secureStorage.removeItem('access_token');
   localStorage.removeItem('username');
   localStorage.removeItem('user_email');
   localStorage.removeItem('user_role');
@@ -64,7 +65,7 @@ function buildStateFromUser(user: Pick<UserProfile, 'full_name' | 'email' | 'rol
 export function AuthProvider({ children }: { children: ReactNode }) {
   const storedIdentity = readStoredIdentity();
   const [state, setState] = useState<AuthState>({
-    token: null,
+    token: secureStorage.getItem('access_token'),
     ...storedIdentity,
     isLoading: storedIdentity.isAuthenticated,
   });

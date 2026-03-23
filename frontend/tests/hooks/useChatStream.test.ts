@@ -340,7 +340,7 @@ describe('useChatStream', () => {
 
   // ── Polling ────────────────────────────────────────────────────────
 
-  it('polls at the specified interval in fallback_polling phase', () => {
+  it('polls with exponential backoff in fallback_polling phase', async () => {
     const { result } = renderHook(() =>
       useChatStream(wrapper.setMessages, {
         chatId: 1,
@@ -355,12 +355,19 @@ describe('useChatStream', () => {
 
     expect(result.current.phase).toBe('fallback_polling');
 
-    act(() => {
-      vi.advanceTimersByTime(3000);
+    // First poll fires at 1000ms
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await (vi.runAllTicsAsync ? vi.runAllTicsAsync() : Promise.resolve());
     });
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
 
-    // Should have called refresh 3 times (at 1s, 2s, 3s)
-    expect(mockRefresh).toHaveBeenCalledTimes(3);
+    // Second poll fires at 1500ms (1000 * 1.5) after the first
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+      await (vi.runAllTicsAsync ? vi.runAllTicsAsync() : Promise.resolve());
+    });
+    expect(mockRefresh).toHaveBeenCalledTimes(2);
   });
 
   it('stops polling when stopPolling is called', () => {

@@ -642,6 +642,7 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
 
 def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     placeholder = SimpleNamespace(
+        id=100,
         chat_id=5,
         content="",
         citations=None,
@@ -686,6 +687,16 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
         "log",
         lambda *args, **kwargs: None,
     )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "publish_threadsafe",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "close_chat_threadsafe",
+        lambda *args, **kwargs: None,
+    )
 
     specialist_review._do_revise(
         FakeDB(),
@@ -705,6 +716,7 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
 
 def test_do_revise_forwards_internal_headers(monkeypatch):
     placeholder = SimpleNamespace(
+        id=101,
         chat_id=5,
         content="",
         citations=None,
@@ -738,6 +750,16 @@ def test_do_revise_forwards_internal_headers(monkeypatch):
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "publish_threadsafe",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "close_chat_threadsafe",
         lambda *args, **kwargs: None,
     )
 

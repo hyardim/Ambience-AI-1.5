@@ -17,7 +17,13 @@ PROVIDER_ALERTS_PATH = path_config.logs / "provider_alerts.jsonl"
 
 
 class ProviderRequestError(RuntimeError):
-    """Provider-specific generation failure with retry metadata."""
+    """Provider-specific generation failure with retry metadata.
+
+    Attributes:
+        provider: Which provider ("local" or "cloud") raised the error.
+        retryable: Whether the caller should attempt a retry or fallback.
+        status_code: HTTP status code when available, else None.
+    """
 
     def __init__(
         self,
@@ -34,7 +40,12 @@ class ProviderRequestError(RuntimeError):
 
 
 class ModelGenerationError(RuntimeError):
-    """Raised when both primary and fallback model providers fail."""
+    """Raised when both primary and fallback model providers fail.
+
+    Attributes:
+        retryable: True only if every individual provider error was retryable,
+            signalling that an async retry job may succeed later.
+    """
 
     def __init__(self, message: str, *, retryable: bool) -> None:
         super().__init__(message)
@@ -269,6 +280,24 @@ async def request_chat_completion(
     temperature: float,
     timeout_seconds: float,
 ) -> str:
+    """Send an async chat-completion request to an OpenAI-compatible endpoint.
+
+    Args:
+        provider: Label used for error attribution ("local" or "cloud").
+        base_url: Base URL of the OpenAI-compatible API.
+        api_key: Bearer token for the API (may be empty for local).
+        model: Model identifier string.
+        messages: Chat messages in OpenAI format.
+        max_tokens: Maximum tokens to generate.
+        temperature: Sampling temperature.
+        timeout_seconds: HTTP request timeout.
+
+    Returns:
+        The assistant's response text, stripped of leading/trailing whitespace.
+
+    Raises:
+        ProviderRequestError: On any HTTP-level failure.
+    """
     payload = {
         "model": model,
         "messages": messages,
@@ -304,7 +333,23 @@ async def generate_answer(
     max_tokens: int | None = None,
     provider: ProviderName = "local",
 ) -> str:
-    """Generate an answer using the selected provider with fallback."""
+    """Generate an answer using the selected provider with automatic fallback.
+
+    Tries the *primary* provider first; on failure, falls back to the
+    alternate provider.  If both fail, raises ``ModelGenerationError``.
+
+    Args:
+        prompt: Fully assembled prompt string (including grounded context).
+        max_tokens: Optional cap on generated tokens; defaults to each
+            provider's configured maximum.
+        provider: Starting provider ("local" or "cloud").
+
+    Returns:
+        Non-empty answer string from whichever provider succeeded.
+
+    Raises:
+        ModelGenerationError: When both primary and fallback providers fail.
+    """
     attempts: list[str] = []
     attempt_errors: list[ProviderRequestError] = []
 
@@ -322,7 +367,7 @@ async def generate_answer(
                 raise ProviderRequestError(
                     f"{current_provider.capitalize()} model returned an empty response",
                     provider=current_provider,
-                    retryable=True,
+                    retryable=False,  # empty content is not a transient error
                 )
 
             if index > 1:

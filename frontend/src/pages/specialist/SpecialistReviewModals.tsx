@@ -21,10 +21,10 @@ export function ApproveConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="approve-confirm-title">
         <div className="flex items-center gap-3 text-[#007f3b] mb-4">
           <CheckCircle className="w-8 h-8" />
-          <h2 className="text-xl font-bold">Approve Response</h2>
+          <h2 id="approve-confirm-title" className="text-xl font-bold">Approve Response</h2>
         </div>
         <p className="text-gray-600 mb-6">
           By approving, you confirm that the AI-generated response is clinically accurate
@@ -73,10 +73,10 @@ export function ApproveWithCommentModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="approve-comment-title">
         <div className="flex items-center gap-3 text-[var(--nhs-blue)] mb-4">
           <MessageSquare className="w-8 h-8" />
-          <h2 className="text-xl font-bold">Approve with Comment</h2>
+          <h2 id="approve-comment-title" className="text-xl font-bold">Approve with Comment</h2>
         </div>
         <p className="text-gray-600 mb-4">
           Your comment will be sent as a message to the GP before the consultation is approved.
@@ -132,10 +132,10 @@ export function RequestChangesModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="request-changes-title">
         <div className="flex items-center gap-3 text-amber-600 mb-4">
           <AlertTriangle className="w-8 h-8" />
-          <h2 className="text-xl font-bold">Request Changes</h2>
+          <h2 id="request-changes-title" className="text-xl font-bold">Request Changes</h2>
         </div>
         <p className="text-gray-600 mb-4">
           Please describe what changes are needed to the AI response:
@@ -144,6 +144,7 @@ export function RequestChangesModal({
           value={rejectReason}
           onChange={(e) => onChange(e.target.value)}
           rows={4}
+          autoFocus
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none mb-6"
           placeholder="Describe the required changes..."
         />
@@ -198,10 +199,10 @@ export function ManualResponseModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="manual-response-title">
         <div className="flex items-center gap-3 text-purple-600 mb-4">
           <PenLine className="w-8 h-8" />
-          <h2 className="text-xl font-bold">Manual Response</h2>
+          <h2 id="manual-response-title" className="text-xl font-bold">Manual Response</h2>
         </div>
         <p className="text-gray-600 mb-4">
           The AI response will be rejected. Type your replacement response below —
@@ -283,10 +284,10 @@ export function CloseApproveModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="close-approve-title">
         <div className="flex items-center gap-3 text-[#007f3b] mb-4">
           <Lock className="w-8 h-8" />
-          <h2 className="text-xl font-bold">Close &amp; Approve Consultation</h2>
+          <h2 id="close-approve-title" className="text-xl font-bold">Close &amp; Approve Consultation</h2>
         </div>
         <p className="text-gray-600 mb-6">
           This will close the consultation and mark it as approved. The GP will be
@@ -343,10 +344,10 @@ export function EditResponseModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="edit-response-title">
         <div className="flex items-center gap-3 text-indigo-600 mb-4">
           <Edit2 className="w-8 h-8" />
-          <h2 className="text-xl font-bold">Edit Response</h2>
+          <h2 id="edit-response-title" className="text-xl font-bold">Edit Response</h2>
         </div>
         <p className="text-gray-600 mb-4">
           Edit the AI-generated response below. Your changes will replace the

@@ -24,7 +24,9 @@ class AuditLog(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE")
+    )
     action: Mapped[str | None] = mapped_column(String)
     details: Mapped[str | None] = mapped_column(String, nullable=True)
     timestamp: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)

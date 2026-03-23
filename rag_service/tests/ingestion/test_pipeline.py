@@ -1178,6 +1178,45 @@ class TestRunIngestion:
         assert summary["files_scanned"] == 0
         assert summary["files_succeeded"] == 0
 
+    def test_source_url_override_is_passed_to_pipeline(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "test.pdf"
+        pdf.touch()
+        seen: dict[str, object] = {}
+
+        def _fake_run_pipeline(**kwargs):
+            seen["source_info"] = kwargs["source_info"]
+            return {
+                "chunks": 1,
+                "embeddings_succeeded": 1,
+                "embeddings_failed": 0,
+                "db": {"inserted": 1, "updated": 0, "skipped": 0, "failed": 0},
+            }
+
+        with (
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch("src.ingestion.pipeline.discover_pdfs", return_value=[pdf]),
+            patch(
+                "src.ingestion.pipeline.run_pipeline",
+                side_effect=_fake_run_pipeline,
+            ),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.root = tmp_path
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                source_url="https://example.org/guidance/ng1",
+                db_url=None,
+                dry_run=True,
+            )
+
+        assert summary["files_succeeded"] == 1
+        assert seen["source_info"]["source_url"] == "https://example.org/guidance/ng1"
+
     def test_successful_run_increments_counts(self, tmp_path: Path) -> None:
         pdf = tmp_path / "test.pdf"
         pdf.touch()

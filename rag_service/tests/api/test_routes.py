@@ -90,6 +90,7 @@ def test_ingest_guideline_wraps_unexpected_errors(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    monkeypatch.setenv("RAG_ENV", "test")
     client = TestClient(app, raise_server_exceptions=False)
     monkeypatch.setattr(routes, "path_config", SimpleNamespace(root=tmp_path))
     monkeypatch.setattr(
@@ -111,6 +112,30 @@ def test_ingest_guideline_wraps_unexpected_errors(
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Ingestion error"
+
+
+@pytest.mark.anyio
+async def test_ingest_guideline_rejects_oversized_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(routes, "path_config", SimpleNamespace(root=tmp_path))
+    monkeypatch.setattr(
+        routes,
+        "load_sources",
+        lambda path: {"NICE": {"specialty": "neurology"}},
+    )
+
+    oversized_file = SimpleNamespace(
+        filename="guide.pdf",
+        size=(50 * 1024 * 1024) + 1,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await routes.ingest_guideline(oversized_file, "NICE")
+
+    assert exc_info.value.status_code == 422
+    assert "File too large" in str(exc_info.value.detail)
 
 
 @pytest.mark.anyio

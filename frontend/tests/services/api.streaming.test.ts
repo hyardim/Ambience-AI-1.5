@@ -140,12 +140,15 @@ describe('subscribeToChatStream', () => {
     expect(es.closed).toBe(true);
   });
 
-  it('calls onConnectionError on EventSource native error', () => {
+  it('calls onConnectionError after max retries on EventSource native error', () => {
     const onConnectionError = vi.fn();
     subscribeToChatStream(1, { onConnectionError });
 
     const es = MockEventSource.instances[0];
-    es._triggerError();
+    // Trigger errors up to maxRetries (5) + 1 to exceed the threshold
+    for (let i = 0; i <= 5; i++) {
+      es._triggerError();
+    }
 
     expect(onConnectionError).toHaveBeenCalled();
     expect(es.closed).toBe(true);

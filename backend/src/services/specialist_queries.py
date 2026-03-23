@@ -107,9 +107,17 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
 def assign(
     db: Session, specialist: User, chat_id: int, body: AssignRequest
 ) -> ChatResponse:
-    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    """Assign a specialist to a chat with row-level locking to prevent races."""
+    chat = db.query(Chat).filter(Chat.id == chat_id).with_for_update().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Double-check the chat hasn't been assigned by another specialist
+    if chat.specialist_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Chat has already been assigned to a specialist",
+        )
 
     if chat.status != ChatStatus.SUBMITTED:
         raise HTTPException(
@@ -153,6 +161,53 @@ def assign(
         chat_id=chat.id,
     )
     invalidate_notification_caches(chat.user_id)
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat_id),
+        user_id=specialist.id,
+        resource="chat_detail",
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
+    )
+    invalidate_specialist_lists_sync(
+        specialty=chat.specialty,
+        specialist_id=specialist.id,
+    )
+    invalidate_admin_chat_caches_sync(chat.id)
+    invalidate_admin_stats_sync()
+    return chat_to_response(chat)
+
+
+def unassign(db: Session, specialist: User, chat_id: int) -> ChatResponse:
+    """Allow a specialist to unassign themselves from a chat.
+
+    Only works if the chat hasn't been approved/rejected yet.
+    """
+    chat = db.query(Chat).filter(Chat.id == chat_id).with_for_update().first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if chat.specialist_id != specialist.id:
+        raise HTTPException(status_code=403, detail="Not assigned to this chat")
+    if chat.status in (ChatStatus.APPROVED, ChatStatus.REJECTED):
+        raise HTTPException(
+            status_code=400, detail="Cannot unassign from a completed review"
+        )
+
+    chat = chat_repository.update(
+        db,
+        chat,
+        specialist_id=None,
+        status=ChatStatus.SUBMITTED,
+        assigned_at=None,
+    )
+    audit_repository.log(
+        db,
+        user_id=specialist.id,
+        action="UNASSIGN_SPECIALIST",
+        details=f"Specialist #{specialist.id} unassigned from chat {chat_id}",
+    )
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id),
         user_id=specialist.id,

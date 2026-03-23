@@ -7,7 +7,8 @@ import { resendVerificationEmail } from '../../services/api';
 
 export function ResendVerificationPage() {
   const [searchParams] = useSearchParams();
-  const defaultEmail = useMemo(() => searchParams.get('email') ?? '', [searchParams]);
+  const emailParam = searchParams.get('email');
+  const defaultEmail = useMemo(() => emailParam ?? '', [emailParam]);
 
   const [email, setEmail] = useState(defaultEmail);
   const [submitting, setSubmitting] = useState(false);

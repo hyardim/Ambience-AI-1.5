@@ -35,6 +35,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     content: Mapped[str | None] = mapped_column(Text)
+    # Legacy column — retained for backward compatibility with existing data
     role: Mapped[str | None] = mapped_column(String, nullable=True)
     sender: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)

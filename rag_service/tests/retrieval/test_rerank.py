@@ -157,20 +157,23 @@ class TestRerank:
         output = rerank(QUERY, [])
         assert output == []
 
-    def test_model_load_failure_raises_retrieval_error(self):
-        with (
-            patch(
-                "src.retrieval.rerank._load_model",
-                side_effect=RetrievalError(
-                    stage="RERANK",
-                    query=QUERY,
-                    message="Failed to load model",
-                ),
+    def test_model_load_failure_degrades_gracefully(self):
+        """When the cross-encoder model fails to load, rerank() returns results
+        in their existing fusion order with rerank_score=0.0 instead of raising."""
+        results = [make_fused_result("c1"), make_fused_result("c2")]
+        with patch(
+            "src.retrieval.rerank._load_model",
+            side_effect=RetrievalError(
+                stage="RERANK",
+                query=QUERY,
+                message="Failed to load model",
             ),
-            pytest.raises(RetrievalError) as exc_info,
         ):
-            rerank(QUERY, [make_fused_result("c1")])
-        assert exc_info.value.stage == "RERANK"
+            output = rerank(QUERY, results)
+        assert len(output) == 2
+        assert all(r.rerank_score == 0.0 for r in output)
+        assert output[0].chunk_id == "c1"
+        assert output[1].chunk_id == "c2"
 
     def test_single_pair_scoring_failure_assigns_zero_score(self):
         results = [make_fused_result("c1"), make_fused_result("c2")]
@@ -234,16 +237,18 @@ class TestRerank:
                 rerank(QUERY, results)
         mock_cls.assert_not_called()
 
-    def test_scoring_failure_raises_retrieval_error(self):
+    def test_scoring_failure_degrades_gracefully(self):
+        """When cross-encoder scoring fails, rerank() returns results in their
+        existing fusion order with rerank_score=0.0 instead of raising."""
+        results = [make_fused_result("c1"), make_fused_result("c2")]
         mock_model = MagicMock()
         mock_model.predict.side_effect = Exception("predict failed")
-        with (
-            patch("src.retrieval.rerank._load_model", return_value=mock_model),
-            pytest.raises(RetrievalError) as exc_info,
-        ):
-            rerank(QUERY, [make_fused_result("c1")])
-        assert exc_info.value.stage == "RERANK"
-        assert "scoring" in exc_info.value.message.lower()
+        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
+            output = rerank(QUERY, results)
+        assert len(output) == 2
+        assert all(r.rerank_score == 0.0 for r in output)
+        assert output[0].chunk_id == "c1"
+        assert output[1].chunk_id == "c2"
 
     def test_zero_top_k_raises_retrieval_error(self):
         with pytest.raises(RetrievalError) as exc_info:

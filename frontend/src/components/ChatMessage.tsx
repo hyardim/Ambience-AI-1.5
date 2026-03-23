@@ -34,7 +34,12 @@ export function ChatMessage({
   onEditResponse,
   actionLoading = false,
 }: ChatMessageProps) {
-  const toSafeDate = (value: unknown): Date => {
+  /**
+   * Attempts to parse an unknown value into a valid Date.
+   * Returns null when the value cannot be parsed, so callers can
+   * display an "Unknown time" fallback instead of silently using now.
+   */
+  const toSafeDate = (value: unknown): Date | null => {
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
       return value;
     }
@@ -46,11 +51,14 @@ export function ChatMessage({
       }
     }
 
-    return new Date();
+    return null;
   };
 
+  /** Formats a timestamp for display, returning "Unknown time" for invalid dates. */
   const formatTime = (value: unknown) => {
     const date = toSafeDate(value);
+    if (!date) return 'Unknown time';
+
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
     const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -83,7 +91,7 @@ export function ChatMessage({
   const reviewStatus = message.reviewStatus;
 
   const renderCitations = () => {
-    const citations = message.citations || [];
+    const citations = message.citations ?? [];
     if (citations.length === 0) return null;
 
     const formatSection = (c: Citation) => {

@@ -142,7 +142,7 @@ describe('ChatMessage', () => {
     expect(screen.getByText('Guideline C')).toBeInTheDocument();
   });
 
-  it('falls back to current time when timestamp cannot be parsed', () => {
+  it('falls back to "Unknown time" when timestamp cannot be parsed', () => {
     const invalidTimestampMessage: Message = {
       ...baseMessage,
       timestamp: ({ bad: true } as unknown) as Date,
@@ -150,7 +150,7 @@ describe('ChatMessage', () => {
 
     render(<ChatMessage message={invalidTimestampMessage} />);
 
-    expect(screen.getByText(/sent today at/i)).toBeInTheDocument();
+    expect(screen.getByText(/unknown time/i)).toBeInTheDocument();
   });
 
   it('accepts ISO timestamp strings and formats them safely', () => {
@@ -172,7 +172,7 @@ describe('ChatMessage', () => {
 
     render(<ChatMessage message={invalidStringTimestampMessage} />);
 
-    expect(screen.getByText(/sent today at/i)).toBeInTheDocument();
+    expect(screen.getByText(/unknown time/i)).toBeInTheDocument();
   });
 
   it('renders citations without document dates or document links', () => {

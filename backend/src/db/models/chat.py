@@ -58,7 +58,7 @@ class Chat(Base):
     severity: Mapped[str | None] = mapped_column(String, nullable=True)
     patient_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     specialist_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -69,7 +69,7 @@ class Chat(Base):
         DateTime, default=utc_now, onupdate=utc_now
     )
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
     owner: Mapped[User | None] = relationship(

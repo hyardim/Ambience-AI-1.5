@@ -12,7 +12,6 @@ from .llm import (
 )
 from .runtime import (
     AlertingConfig,
-    GuidelineSyncConfig,
     LoggingConfig,
     RetryConfig,
     RoutingConfig,
@@ -37,21 +36,10 @@ cloud_llm_config = build_cloud_llm_config(llm_config)
 routing_config = RoutingConfig()
 retry_config = RetryConfig()
 alerting_config = AlertingConfig()
-guideline_sync_config = GuidelineSyncConfig()
 path_config = PathConfig()
-
-# Backward-compatible module constants consumed by app startup code.
-GUIDELINE_SYNC_ENABLED = guideline_sync_config.guideline_sync_enabled
-GUIDELINE_SYNC_INTERVAL_MINUTES = guideline_sync_config.guideline_sync_interval_minutes
-GUIDELINE_SYNC_RUN_ON_STARTUP = guideline_sync_config.guideline_sync_run_on_startup
-GUIDELINE_SYNC_TIMEOUT_SECONDS = guideline_sync_config.guideline_sync_timeout_seconds
 
 __all__ = [
     "COMMON_SETTINGS_CONFIG",
-    "GUIDELINE_SYNC_ENABLED",
-    "GUIDELINE_SYNC_INTERVAL_MINUTES",
-    "GUIDELINE_SYNC_RUN_ON_STARTUP",
-    "GUIDELINE_SYNC_TIMEOUT_SECONDS",
     "PROJECT_ROOT",
     "AlertingConfig",
     "AppBaseSettings",
@@ -60,7 +48,6 @@ __all__ = [
     "DatabaseConfig",
     "EmbeddingConfig",
     "GenerationConfig",
-    "GuidelineSyncConfig",
     "LLMConfig",
     "LocalLLMConfig",
     "LoggingConfig",
@@ -79,7 +66,6 @@ __all__ = [
     "db_config",
     "embed_config",
     "generation_config",
-    "guideline_sync_config",
     "llm_config",
     "local_llm_config",
     "logging_config",

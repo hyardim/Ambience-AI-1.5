@@ -25,30 +25,52 @@ export function RegisterPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { register } = useAuth();
 
+  /** Clears field-level error on change and updates form state. */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
     }));
+    setFieldErrors(prev => ({ ...prev, [e.target.name]: '' }));
   };
 
+  /**
+   * Validates all registration fields and submits the form.
+   * Sets per-field errors for missing or invalid values.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
 
+    const errors: Record<string, string> = {};
+    if (!formData.firstName.trim()) errors.firstName = 'First name is required';
+    if (!formData.lastName.trim()) errors.lastName = 'Last name is required';
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    }
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
+      errors.confirmPassword = 'Passwords do not match';
+    }
+    if (formData.role === 'specialist' && !formData.specialty) {
+      errors.specialty = 'Specialty is required for specialists';
     }
 
-    if (formData.role === 'specialist' && !formData.specialty) {
-      setError('Please select a specialty');
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -121,6 +143,7 @@ export function RegisterPage() {
                     placeholder="John"
                     required
                   />
+                  {fieldErrors.firstName && <p className="text-sm text-red-600 mt-1">{fieldErrors.firstName}</p>}
                 </div>
                 <div>
                   <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
@@ -136,6 +159,7 @@ export function RegisterPage() {
                     placeholder="Smith"
                     required
                   />
+                  {fieldErrors.lastName && <p className="text-sm text-red-600 mt-1">{fieldErrors.lastName}</p>}
                 </div>
               </div>
 
@@ -153,6 +177,7 @@ export function RegisterPage() {
                   placeholder="john.smith@nhs.uk"
                   required
                 />
+                {fieldErrors.email && <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>}
               </div>
 
               <div>
@@ -176,7 +201,7 @@ export function RegisterPage() {
               {formData.role === 'specialist' && (
                 <div>
                   <label htmlFor="specialty" className="block text-sm font-medium text-gray-700 mb-2">
-                    Specialty
+                    Specialty <span className="text-red-500">*</span>
                   </label>
                   <select
                     id="specialty"
@@ -190,6 +215,7 @@ export function RegisterPage() {
                     <option value="neurology">Neurology</option>
                     <option value="rheumatology">Rheumatology</option>
                   </select>
+                  {fieldErrors.specialty && <p className="text-sm text-red-600 mt-1">{fieldErrors.specialty}</p>}
                 </div>
               )}
 
@@ -217,6 +243,7 @@ export function RegisterPage() {
                   </button>
                 </div>
                 <PasswordStrengthMeter password={formData.password} />
+                {fieldErrors.password && <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>}
               </div>
 
               <div>
@@ -233,6 +260,7 @@ export function RegisterPage() {
                   placeholder="Confirm your password"
                   required
                 />
+                {fieldErrors.confirmPassword && <p className="text-sm text-red-600 mt-1">{fieldErrors.confirmPassword}</p>}
               </div>
 
               <button

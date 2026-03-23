@@ -30,6 +30,7 @@ export function GPNewQueryPage() {
     }));
   };
 
+  /** Validates required fields and creates a new consultation with optional file attachments. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -41,6 +42,12 @@ export function GPNewQueryPage() {
 
     if (!formData.patientAge) {
       setError('Please enter the patient\'s age.');
+      return;
+    }
+
+    const parsedAge = parseInt(formData.patientAge, 10);
+    if (isNaN(parsedAge) || parsedAge < 0 || parsedAge > 150) {
+      setError('Age must be between 0 and 150');
       return;
     }
 
@@ -124,8 +131,10 @@ export function GPNewQueryPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Brief description of your clinical question"
+                  maxLength={200}
                   required
                 />
+                <span className={`text-xs ${formData.title.length > 180 ? 'text-red-500' : 'text-gray-400'}`}>{formData.title.length}/200</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -212,7 +221,9 @@ export function GPNewQueryPage() {
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none"
                   placeholder="Relevant comorbidities, current medications, allergies, recent investigations..."
+                  maxLength={2000}
                 />
+                <span className={`text-xs ${formData.patientNotes.length > 1800 ? 'text-red-500' : 'text-gray-400'}`}>{formData.patientNotes.length}/2000</span>
               </div>
 
               <div>
@@ -236,6 +247,7 @@ export function GPNewQueryPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Attach files <span className="text-gray-400 font-normal">(optional — PDFs or text files)</span>
                 </label>
+                <p className="text-xs text-gray-500 mb-2">Max 3MB per file · PDF, TXT, MD, DOC, DOCX</p>
                 <label className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                   <Paperclip className="w-4 h-4" />
                   Choose files

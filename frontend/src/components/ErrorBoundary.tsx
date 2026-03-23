@@ -11,6 +11,11 @@ interface State {
   error: Error | null;
 }
 
+/**
+ * Catches both React render errors (via getDerivedStateFromError) and
+ * unhandled promise rejections (via a global window listener) so that
+ * the entire app does not white-screen on unexpected failures.
+ */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -20,6 +25,24 @@ export class ErrorBoundary extends Component<Props, State> {
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
+
+  componentDidMount(): void {
+    window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
+  }
+
+  componentWillUnmount(): void {
+    window.removeEventListener('unhandledrejection', this.handleUnhandledRejection);
+  }
+
+  /** Catches unhandled promise rejections globally and surfaces them in the error UI. */
+  handleUnhandledRejection = (event: PromiseRejectionEvent): void => {
+    const error =
+      event.reason instanceof Error
+        ? event.reason
+        : new Error(String(event.reason ?? 'Unhandled promise rejection'));
+    console.error('ErrorBoundary caught unhandled rejection:', error);
+    this.setState({ hasError: true, error });
+  };
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('ErrorBoundary caught:', error, info.componentStack);

@@ -32,10 +32,3 @@ class RetryConfig(AppBaseSettings):
 class AlertingConfig(AppBaseSettings):
     llm_fallback_alert_webhook_url: str = Field(default="")
     llm_fallback_alert_timeout_seconds: float = Field(default=2.0)
-
-
-class GuidelineSyncConfig(AppBaseSettings):
-    guideline_sync_enabled: bool = Field(default=False)
-    guideline_sync_interval_minutes: int = Field(default=10080)
-    guideline_sync_run_on_startup: bool = Field(default=True)
-    guideline_sync_timeout_seconds: int = Field(default=900)

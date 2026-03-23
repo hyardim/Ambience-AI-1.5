@@ -46,6 +46,7 @@ import {
   updateProfile,
   uploadChatFile,
 } from '@/services/api';
+import { secureStorage } from '@/utils/secureStorage';
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -104,6 +105,7 @@ describe('API service', () => {
       const data = await login('gp@example.com', 'password123');
       expect(data.access_token).toBe('mock-jwt-token');
       expect(data.user.email).toBe('gp@example.com');
+      expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
     });
 
     it('surfaces non-401 login failures', async () => {
@@ -124,6 +126,7 @@ describe('API service', () => {
       const resetResponse = await forgotPassword('new@example.com');
 
       expect(loginResponse.access_token).toBe('mock-jwt-token');
+      expect(secureStorage.getItem('access_token')).toBe('mock-jwt-token');
       expect(resetResponse.message).toMatch(/password reset link/i);
     });
 
@@ -154,7 +157,7 @@ describe('API service', () => {
     });
 
     it('adds bearer auth header when access token exists', async () => {
-      localStorage.setItem('access_token', 'jwt-abc');
+      secureStorage.setItem('access_token', 'jwt-abc');
       server.use(
         http.get('/auth/me', ({ request }) => {
           expect(request.headers.get('authorization')).toBe('Bearer jwt-abc');
@@ -176,7 +179,7 @@ describe('API service', () => {
       server.use(
         http.get('/auth/me', () => new HttpResponse('Plain failure', { status: 500 })),
       );
-      await expect(getProfile()).rejects.toThrow('Plain failure');
+      await expect(getProfile()).rejects.toThrow('Request failed (500)');
 
       localStorage.setItem('username', 'Dr GP');
       localStorage.setItem('user_role', 'gp');
@@ -216,11 +219,12 @@ describe('API service', () => {
             },
           }),
         ),
-        http.get('/auth/me', () => {
+        http.get('/auth/me', ({ request }) => {
           meCalls += 1;
           if (meCalls === 1) {
             return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
           }
+          expect(request.headers.get('authorization')).toBe('Bearer refreshed-token');
           return HttpResponse.json({
             id: 1,
             email: 'gp@example.com',
@@ -234,6 +238,7 @@ describe('API service', () => {
 
       await expect(getProfile()).resolves.toMatchObject({ email: 'gp@example.com' });
       expect(meCalls).toBe(2);
+      expect(secureStorage.getItem('access_token')).toBe('refreshed-token');
     });
 
     it('shares one refresh request across concurrent 401 responses', async () => {
@@ -538,7 +543,7 @@ describe('API service', () => {
         http.get('/health', () => new HttpResponse('Something broke', { status: 500 })),
       );
 
-      await expect(healthCheck()).rejects.toThrow('Something broke');
+      await expect(healthCheck()).rejects.toThrow('Request failed (500)');
     });
 
     it('clears session storage on 401 responses', async () => {
@@ -651,6 +656,7 @@ describe('API service', () => {
     it('refreshes the session', async () => {
       const result = await refreshSession();
       expect(result.access_token).toBeTruthy();
+      expect(secureStorage.getItem('access_token')).toBe(result.access_token);
     });
   });
 
