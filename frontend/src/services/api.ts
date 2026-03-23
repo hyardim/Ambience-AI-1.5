@@ -127,13 +127,11 @@ async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Pr
   return res;
 }
 
-/**
- * Parses an API response, handling common error statuses.
- * Checks content-type before attempting JSON parse, and surfaces
- * user-friendly messages for 401, 429, and non-JSON error responses.
- */
-async function handleResponse<T>(res: Response): Promise<T> {
+async function handleResponse<T>(res: Response, url?: string): Promise<T> {
   if (res.status === 401) {
+    if (url?.includes('/auth/login')) {
+      throw new Error('Incorrect email or password');
+    }
     clearStoredSession();
     redirectToLogin();
     throw new Error('Session expired');
@@ -177,9 +175,9 @@ export async function login(username: string, password: string): Promise<LoginRe
     body,
   });
 
-  const payload = await handleResponse<LoginResponse>(res);
-  persistSession(payload);
-  return payload;
+  const response = await handleResponse<LoginResponse>(res, '/auth/login');
+  persistSession(response);
+  return response;
 }
 
 export async function register(payload: RegisterRequest): Promise<RegisterResponse> {
