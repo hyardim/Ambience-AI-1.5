@@ -23,8 +23,12 @@ Before first run, create a root `.env` from the example and set real secrets:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
 ```
+
+The backend container runs its own startup preparation step on boot, so local
+development does not require separate migration or demo-user seed commands in
+the common case.
 
 Main endpoints:
 
@@ -56,6 +60,7 @@ How it is used:
 - the `nginx` service is behind the Compose `production` profile
 - it is not started by default during local development
 - local dev usually accesses `frontend:3000` and `backend:8000` directly
+- the default local stack does not require nginx at all
 
 Start with nginx enabled:
 

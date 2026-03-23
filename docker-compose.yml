@@ -107,12 +107,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rag_service:
-        condition: service_healthy
       mailpit:
         condition: service_started
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -155,10 +153,6 @@ services:
       - LLM_ROUTE_THRESHOLD=${LLM_ROUTE_THRESHOLD:-0.65}
       - LLM_FALLBACK_ALERT_WEBHOOK_URL=${LLM_FALLBACK_ALERT_WEBHOOK_URL:-}
       - LLM_FALLBACK_ALERT_TIMEOUT_SECONDS=${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
-      - GUIDELINE_SYNC_ENABLED=${GUIDELINE_SYNC_ENABLED:-false}
-      - GUIDELINE_SYNC_INTERVAL_MINUTES=${GUIDELINE_SYNC_INTERVAL_MINUTES:-10080}
-      - GUIDELINE_SYNC_RUN_ON_STARTUP=${GUIDELINE_SYNC_RUN_ON_STARTUP:-true}
-      - GUIDELINE_SYNC_TIMEOUT_SECONDS=${GUIDELINE_SYNC_TIMEOUT_SECONDS:-900}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -171,7 +165,8 @@ services:
         ]
       interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 90s
     security_opt:
       - "no-new-privileges:true"
     logging: *default-logging
