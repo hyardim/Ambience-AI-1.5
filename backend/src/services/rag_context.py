@@ -60,9 +60,10 @@ def build_conversation_history_from_messages(
 
     history_lines: list[str] = []
     total_chars = 0
-    # Walk backwards from the most recent message so we keep the tail.
+    # Walk backwards from the most recent message so we keep the tail while
+    # ignoring any persisted fallback/error AI messages.
     for message in reversed(messages[-limit:]):
-        if not message.content:
+        if not message.content or getattr(message, "is_error", False):
             continue
         speaker = {
             "user": "GP",

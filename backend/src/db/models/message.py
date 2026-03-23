@@ -45,6 +45,9 @@ class Message(Base):
     is_generating: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    is_error: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     review_status: Mapped[str | None] = mapped_column(String, nullable=True)
     review_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

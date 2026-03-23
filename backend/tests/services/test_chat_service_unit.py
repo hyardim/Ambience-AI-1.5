@@ -189,6 +189,19 @@ def test_build_conversation_history_ignores_empty_messages():
     assert history == "GP: Hello\nSpecialist: Done"
 
 
+def test_build_conversation_history_skips_error_messages_and_keeps_recent_tail():
+    messages = [
+        Message(content="Older note", sender="user"),
+        Message(content="Fallback error", sender="ai", is_error=True),
+        Message(content="Recent guidance", sender="ai"),
+    ]
+    history = chat_service._build_conversation_history_from_messages(
+        messages,
+        token_budget=5,
+    )
+    assert history == "AI: Recent guidance"
+
+
 def test_select_rag_citations_prefers_citations_used():
     assert chat_service._select_rag_citations(
         {"citations_used": [1], "citations": [2]}
