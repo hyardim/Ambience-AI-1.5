@@ -22,6 +22,13 @@ DEFAULT_BACKOFF_SECONDS = 1.0
 MAX_NICE_CRAWL_DEPTH = 2
 MAX_NICE_CRAWL_PAGES = 120
 
+_NICE_PDF_SLUG_RE = re.compile(r"-pdf-\d+$")
+
+
+def _is_pdf_url(url: str) -> bool:
+    """Return True for direct .pdf URLs and NICE's -pdf-XXXXXXX slug pattern."""
+    return url.lower().endswith(".pdf") or bool(_NICE_PDF_SLUG_RE.search(url))
+
 NICE_GUIDELINE_PATH_RE = re.compile(
     r"^/guidance/(ng|cg|qs|ta|ipg|mtg|dg|hst|es)\d+",
     re.IGNORECASE,
@@ -336,7 +343,7 @@ class SourceDiscoveryClient:
 
             discovered: dict[str, DiscoveredDocument] = {}
             for candidate in candidate_links:
-                if candidate.lower().endswith(".pdf"):
+                if _is_pdf_url(candidate):
                     title = PathLikeTitle.from_url(candidate)
                     etag, last_modified, content_length = await self._head_metadata(
                         client, candidate
@@ -414,7 +421,7 @@ class SourceDiscoveryClient:
                 guideline_links.add(guideline_url)
 
             for pdf_url in _extract_pdf_links(html, base_url=normalized_page):
-                if pdf_url.lower().endswith(".pdf"):
+                if _is_pdf_url(pdf_url):
                     direct_pdf_links.add(pdf_url)
 
             if depth >= MAX_NICE_CRAWL_DEPTH:

@@ -229,7 +229,10 @@ class GuidelineWebSync:
                             )
 
                         is_missing = not existing
-                        needs_download = is_missing or not header_unchanged
+                        source_url_changed = (
+                            existing.get("doc_url") != document.doc_url
+                        )
+                        needs_download = is_missing or not header_unchanged or source_url_changed
 
                         if not needs_download:
                             summary.skipped_unchanged_count += 1
@@ -285,7 +288,7 @@ class GuidelineWebSync:
                                 input_path=destination,
                                 source_name=document.source_name,
                                 db_url=db_url,
-                                source_url=document.canonical_url,
+                                source_url=document.doc_url,
                             )
                             summary.ingest_succeeded_count += 1
                             last_ingest = now

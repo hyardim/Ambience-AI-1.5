@@ -88,8 +88,11 @@ async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Pr
   return res;
 }
 
-async function handleResponse<T>(res: Response): Promise<T> {
+async function handleResponse<T>(res: Response, url?: string): Promise<T> {
   if (res.status === 401) {
+    if (url?.includes('/auth/login')) {
+      throw new Error('Incorrect email or password');
+    }
     clearStoredSession();
     redirectToLogin();
     throw new Error('Session expired');
@@ -125,7 +128,7 @@ export async function login(username: string, password: string): Promise<LoginRe
     body,
   });
 
-  return handleResponse<LoginResponse>(res);
+  return handleResponse<LoginResponse>(res, '/auth/login');
 }
 
 export async function register(payload: RegisterRequest): Promise<RegisterResponse> {

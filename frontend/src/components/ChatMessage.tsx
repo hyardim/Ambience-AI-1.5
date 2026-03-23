@@ -115,7 +115,11 @@ export function ChatMessage({
             const page = formatPage(c);
             const section = formatSection(c);
             const docDate = formatDate(c);
-            const href = c.source_url || undefined;
+            const href = c.source_url
+              ? c.page_start
+                ? `${c.source_url}#page=${c.page_start}`
+                : c.source_url
+              : undefined;
             return (
               <div key={idx} className="text-sm text-gray-800 flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">

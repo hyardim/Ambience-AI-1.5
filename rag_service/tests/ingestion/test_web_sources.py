@@ -14,6 +14,7 @@ from src.ingestion.web_sources import (
     _extract_nice_subcategory_links,
     _extract_page_title,
     _extract_pdf_links,
+    _is_pdf_url,
     _likely_guideline_link,
     normalize_url,
 )
@@ -45,6 +46,65 @@ def test_extract_candidate_links_for_nice() -> None:
     assert "https://www.nice.org.uk/guidance/ng193" in links
     assert "https://cdn.example.com/file.pdf" in links
     assert all("/about" not in link for link in links)
+
+
+def test_is_pdf_url_detects_extension_and_nice_slug() -> None:
+    # Standard .pdf extension
+    assert _is_pdf_url("https://example.com/file.pdf") is True
+    assert _is_pdf_url("https://example.com/FILE.PDF") is True
+    # NICE slug pattern: ends with -pdf-<digits>
+    assert _is_pdf_url(
+        "https://www.nice.org.uk/guidance/ng71/resources/parkinsons-disease-in-adults-pdf-1837629189061"
+    ) is True
+    assert _is_pdf_url(
+        "https://www.nice.org.uk/guidance/ng226/resources/osteoarthritis-in-over-16s-pdf-66143839026373"
+    ) is True
+    # Non-PDF URLs
+    assert _is_pdf_url("https://www.nice.org.uk/guidance/ng71") is False
+    assert _is_pdf_url("https://www.nice.org.uk/guidance/ng71/resources") is False
+
+
+def test_discover_source_finds_nice_pdf_slug_url(monkeypatch) -> None:
+    """NICE guidelines use -pdf-XXXXXXX slugs instead of .pdf extensions."""
+    source = WEB_SOURCES["nice-musculoskeletal"]
+    discovery = SourceDiscoveryClient(retries=1)
+
+    listing_html = "<a href='/guidance/ng71'>Parkinson's guideline</a>"
+    detail_html = """
+    <html><head><title>Parkinson's disease in adults</title></head>
+    <body>
+    <a href='/guidance/ng71/resources/parkinsons-disease-in-adults-pdf-1837629189061'>PDF</a>
+    </body></html>
+    """
+
+    async def fake_request(
+        client: httpx.AsyncClient, method: str, url: str
+    ) -> httpx.Response:
+        if "musculoskeletal-conditions" in url and method == "GET":
+            return _response(url, listing_html)
+        if url.endswith("/guidance/ng71") and method == "GET":
+            return _response(url, detail_html)
+        return _response(url)
+
+    async def fake_robots(client: httpx.AsyncClient, url: str) -> bool:
+        return True
+
+    async def fake_head(
+        client: httpx.AsyncClient, url: str
+    ) -> tuple[str | None, str | None, int | None]:
+        return ("etag-pk", "Wed, 01 Jan 2025 00:00:00 GMT", 99999)
+
+    monkeypatch.setattr(discovery, "_request", fake_request)
+    monkeypatch.setattr(discovery, "_is_allowed_by_robots", fake_robots)
+    monkeypatch.setattr(discovery, "_head_metadata", fake_head)
+
+    docs = asyncio.run(discovery.discover_source(source))
+
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc.canonical_url == "https://www.nice.org.uk/guidance/ng71"
+    assert doc.doc_url.endswith("parkinsons-disease-in-adults-pdf-1837629189061")
+    assert doc.doc_url != doc.canonical_url
 
 
 def test_extract_pdf_links_from_detail_page() -> None:
