@@ -42,6 +42,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
   return (
     <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4 sm:p-6">
+      <p className="text-xs text-gray-400 mb-2">For best results, ask specific clinical questions about a condition or treatment.</p>
       {files.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {files.map((file, index) => (

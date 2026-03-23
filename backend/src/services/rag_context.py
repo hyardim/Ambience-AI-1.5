@@ -41,7 +41,7 @@ def build_conversation_history_from_messages(
 
     history_lines: list[str] = []
     for message in messages[-limit:]:
-        if not message.content:
+        if not message.content or getattr(message, "is_error", False):
             continue
         speaker = {
             "user": "GP",

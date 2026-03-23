@@ -402,6 +402,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
             rag_details = f"query_len={len(content)} error=unknown"
             ai_content = ""
             citations = None
+            rag_failed = False
             try:
                 if settings.INLINE_AI_TASKS:
                     try:
@@ -492,6 +493,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                     "Please try again shortly or contact support if the issue persists."
                 )
                 citations = None
+                rag_failed = True
                 rag_details = f"query_len={len(content)} error={type(exc).__name__}"
 
             await audit_repository.async_log(
@@ -519,6 +521,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                 content=ai_content,
                 citations=citations,
                 is_generating=False,
+                is_error=rag_failed,
             )
 
             await audit_repository.async_log(
