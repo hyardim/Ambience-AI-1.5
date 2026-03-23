@@ -168,31 +168,11 @@ def test_list_all_chats_returns_owner_and_specialist_identifiers(db_session):
     assert result[0]["specialist_identifier"] == f"specialist_{specialist.id}"
 
 
-def test_get_any_chat_returns_cached_payload(monkeypatch, db_session):
-    monkeypatch.setattr(
-        admin_service.cache,
-        "get_sync",
-        lambda key, **kwargs: {
-            "id": 1,
-            "title": "Cached",
-            "status": "open",
-            "specialty": "neurology",
-            "severity": None,
-            "patient_age": None,
-            "patient_gender": None,
-            "patient_notes": None,
-            "specialist_id": None,
-            "assigned_at": None,
-            "reviewed_at": None,
-            "review_feedback": None,
-            "created_at": "2024-01-01T00:00:00",
-            "user_id": 1,
-            "messages": [],
-            "files": [],
-        },
-    )
-    response = admin_service.get_any_chat(db_session, 1)
-    assert response.title == "Cached"
+def test_get_any_chat_reads_fresh_payload(db_session):
+    owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
+    chat = _chat(db_session, owner)
+    response = admin_service.get_any_chat(db_session, chat.id)
+    assert response.title == "Chat"
 
 
 def test_get_any_chat_not_found(db_session):

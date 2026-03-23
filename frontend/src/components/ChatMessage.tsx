@@ -101,10 +101,10 @@ export function ChatMessage({
     };
 
     const formatPage = (c: Citation) => {
-      if (c.page_start && c.page_end && c.page_start !== c.page_end) {
+      if (c.page_start != null && c.page_end != null && c.page_start !== c.page_end) {
         return `pages ${c.page_start}-${c.page_end}`;
       }
-      if (c.page_start) return `page ${c.page_start}`;
+      if (c.page_start != null) return `page ${c.page_start}`;
       return null;
     };
 
@@ -123,10 +123,11 @@ export function ChatMessage({
             const page = formatPage(c);
             const section = formatSection(c);
             const docDate = formatDate(c);
-            const href = c.source_url
-              ? c.page_start
-                ? `${c.source_url}#page=${c.page_start}`
-                : c.source_url
+            const targetUrl = c.document_url || c.source_url;
+            const href = targetUrl
+              ? c.page_start != null
+                ? `${targetUrl}#page=${c.page_start}`
+                : targetUrl
               : undefined;
             return (
               <div key={idx} className="text-sm text-gray-800 flex flex-col gap-0.5">

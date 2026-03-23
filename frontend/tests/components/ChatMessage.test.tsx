@@ -112,6 +112,47 @@ describe('ChatMessage', () => {
     expect(screen.getByText(/published 2024-01-01/i)).toBeInTheDocument();
   });
 
+  it('prefers the exact in-app document link over the generic source URL', () => {
+    const aiMessage: Message = {
+      ...baseMessage,
+      senderType: 'ai',
+      citations: [
+        {
+          title: 'Guideline A',
+          source_name: 'NICE',
+          document_url: '/documents/doc-1',
+          source_url: 'https://www.nice.org.uk',
+          page_start: 3,
+        },
+      ],
+    };
+
+    render(<ChatMessage message={aiMessage} />);
+
+    expect(screen.getByRole('link', { name: 'Guideline A' })).toHaveAttribute(
+      'href',
+      '/documents/doc-1#page=3',
+    );
+  });
+
+  it('renders page zero citations when the page number is explicitly zero', () => {
+    const aiMessage: Message = {
+      ...baseMessage,
+      senderType: 'ai',
+      citations: [
+        {
+          title: 'Guideline Zero',
+          source_name: 'NICE',
+          page_start: 0,
+        },
+      ],
+    };
+
+    render(<ChatMessage message={aiMessage} />);
+
+    expect(screen.getByText(/nice • page 0/i)).toBeInTheDocument();
+  });
+
   it('renders fallback citation variants and human timestamps', () => {
     const olderAiMessage: Message = {
       ...baseMessage,

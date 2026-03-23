@@ -460,6 +460,43 @@ describe('SpecialistQueryDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /send specialist small file/i }));
   });
 
+  it('still sends specialist messages when one uploaded file fails', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'reviewing',
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/chats/:chatId/files', () =>
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+      http.post('/specialist/chats/:chatId/message', () =>
+        HttpResponse.json({ status: 'ok', message_id: 199 })),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/ai answer/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /send specialist small file/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/message sent, but some files failed to upload/i)).toBeInTheDocument();
+    });
+  });
+
   it('renders empty consultations, supports canceling confirmation modals, and navigates back from not-found state', async () => {
     server.use(
       http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),

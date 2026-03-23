@@ -344,6 +344,42 @@ def chunk_section_group(
     i = 0
     while i < len(sentence_block_pairs):
         sentence, block = sentence_block_pairs[i]
+        sentence_tokens = count_tokens(sentence)
+
+        # If a single sentence exceeds the chunk budget, emit any pending
+        # content first, then emit the oversized sentence on its own. This
+        # avoids getting stuck retrying the same sentence forever when
+        # overlap text is already present.
+        if sentence_tokens > max_chunk_tokens:
+            if current_pairs:
+                chunk = _build_text_chunk(
+                    sentences=[
+                        current_sentence for current_sentence, _ in current_pairs
+                    ],
+                    contributing_blocks=[
+                        current_block for _, current_block in current_pairs
+                    ],
+                    doc_meta=doc_meta,
+                    chunk_index=chunk_index,
+                )
+                if chunk:
+                    chunks.append(chunk)
+                    chunk_index += 1
+                current_pairs = []
+                continue
+
+            chunk = _build_text_chunk(
+                sentences=[sentence],
+                contributing_blocks=[block],
+                doc_meta=doc_meta,
+                chunk_index=chunk_index,
+            )
+            if chunk:
+                chunks.append(chunk)
+                chunk_index += 1
+            i += 1
+            continue
+
         candidate_pairs = [*current_pairs, (sentence, block)]
         candidate = [current_sentence for current_sentence, _ in candidate_pairs]
         candidate_tokens = count_tokens(" ".join(candidate))
@@ -366,7 +402,15 @@ def chunk_section_group(
                 overlap_tokens=overlap_tokens,
             )
             overlap_count = len(overlap_sentences)
-            current_pairs = current_pairs[-overlap_count:] if overlap_count > 0 else []
+            if overlap_count >= len(current_pairs):
+                # If overlap would preserve the whole emitted chunk, the next
+                # iteration cannot make progress and can loop forever under
+                # tighter chunk budgets. Drop overlap in that case.
+                current_pairs = []
+            else:
+                current_pairs = (
+                    current_pairs[-overlap_count:] if overlap_count > 0 else []
+                )
         else:
             current_pairs.append((sentence, block))
             i += 1

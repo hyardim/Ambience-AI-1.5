@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import fitz  # PyMuPDF
 import yaml
@@ -26,21 +28,24 @@ VALID_DOC_TYPES = {
 TITLE_FONT_SIZE_THRESHOLD = 18
 
 
-def _derive_source_url(source_info: dict[str, Any]) -> str:
-    """Return a per-document source URL, building a guideline link when possible.
+def _derive_source_url(
+    source_info: dict[str, Any],
+    *,
+    pdf_metadata: dict[str, Any] | None = None,
+    resolved_title: str | None = None,
+) -> str:
+    """Return the best public source URL available for a document.
 
     Resolution order:
     1. If the provided ``source_url`` already has a meaningful path (not just
        the domain root), keep it as the caller-specified canonical citation URL.
-    2. Try to extract a NICE guideline code from the filename or doc metadata
+    2. Try to extract a NICE guideline code from the filename or document title
        and construct ``https://www.nice.org.uk/guidance/{code}``.
     3. Fall back to the provided ``source_url`` (may be empty).
 
     Supported NICE guideline code prefixes: NG, CG, QS, TA, PH, MPG, IPG, DG,
     HST, MTG, ES, ECD, SC (case-insensitive).
     """
-    from urllib.parse import urlparse
-
     provided = source_info.get("source_url", "") or ""
 
     # If the URL already has a meaningful path, keep it.
@@ -63,8 +68,21 @@ def _derive_source_url(source_info: dict[str, Any]) -> str:
     # extra suffixes (e.g. ``ng128-abc1234abcd.pdf``).
     if guide_code is None:
         guide_code = _extract_nice_code(
-            source_path.name.lower().split("-")[0], nice_prefixes
+            source_path.name.lower().split("-")[0],
+            nice_prefixes,
         )
+
+    title_candidates = [
+        str(pdf_metadata.get("title", "")).strip() if pdf_metadata else "",
+        (resolved_title or "").strip(),
+    ]
+    if guide_code is None:
+        for candidate in title_candidates:
+            if not candidate:
+                continue
+            guide_code = _extract_nice_code(candidate.lower(), nice_prefixes)
+            if guide_code is not None:
+                break
 
     if guide_code is not None:
         return f"https://www.nice.org.uk/guidance/{guide_code}"
@@ -83,9 +101,121 @@ def _extract_nice_code(
     import re
 
     for prefix in prefixes:
-        match = re.match(rf"^({re.escape(prefix)}\d+)", text)
+        match = re.search(rf"\b({re.escape(prefix)}\d+)\b", text)
         if match:
             return match.group(1)
+    return None
+
+
+def _resolve_document_dates(
+    source_info: dict[str, Any],
+    pdf_metadata: dict[str, Any],
+    table_aware_doc: dict[str, Any] | None = None,
+) -> tuple[str, str, str]:
+    """Return creation, publish, and last-updated dates for a document.
+
+    ``publish_date`` and ``last_updated_date`` prefer explicit source metadata
+    when present. If the source metadata is absent, PDF metadata is used first,
+    then document front-matter date extraction as a best-effort fallback so
+    citations do not silently lose all document dates.
+    """
+
+    creation_date = str(pdf_metadata.get("creationDate", "") or "")
+    mod_date = str(pdf_metadata.get("modDate", "") or "")
+    extracted_dates = _extract_document_dates_from_text(table_aware_doc)
+    publish_date = str(
+        source_info.get("publish_date", "")
+        or creation_date
+        or extracted_dates.get("publish_date", "")
+    )
+    last_updated_date = str(
+        source_info.get("last_updated_date", "")
+        or mod_date
+        or extracted_dates.get("last_updated_date", "")
+        or publish_date
+    )
+    return creation_date, publish_date, last_updated_date
+
+
+def _extract_document_dates_from_text(
+    table_aware_doc: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Best-effort extract publication/update dates from front-matter text.
+
+    Many NICE PDFs print reliable dates on the first page even when the embedded
+    PDF metadata is blank. We inspect the first few pages/blocks and look for
+    source-agnostic labels such as ``Published`` or ``Last updated``.
+    """
+    if not table_aware_doc:
+        return {}
+
+    front_matter = _build_front_matter_text(table_aware_doc)
+    if not front_matter:
+        return {}
+
+    published = _extract_labeled_date(
+        front_matter,
+        (
+            "published",
+            "date published",
+            "publication date",
+            "issue date",
+        ),
+    )
+    last_updated = _extract_labeled_date(
+        front_matter,
+        (
+            "last updated",
+            "updated",
+            "date updated",
+            "reviewed",
+            "review date",
+        ),
+    )
+    return {
+        "publish_date": published or "",
+        "last_updated_date": last_updated or "",
+    }
+
+
+def _build_front_matter_text(
+    table_aware_doc: dict[str, Any],
+    *,
+    max_pages: int = 3,
+) -> str:
+    """Collect normalized text from the first few document pages."""
+    pages = table_aware_doc.get("pages", []) or []
+    parts: list[str] = []
+    for page in pages[:max_pages]:
+        for block in page.get("blocks", []) or []:
+            text = str(block.get("text", "") or "").strip()
+            if text:
+                parts.append(text)
+    return "\n".join(parts)
+
+
+def _extract_labeled_date(text: str, labels: tuple[str, ...]) -> str | None:
+    """Extract and normalize the first human-readable date after known labels."""
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    match = re.search(
+        rf"(?im)\b(?:{label_pattern})\b\s*[:\-]\s*([0-9]{{1,2}}\s+[A-Za-z]+\s+[0-9]{{4}})",
+        text,
+    )
+    if not match:
+        return None
+    return _parse_human_date(match.group(1))
+
+
+def _parse_human_date(value: str) -> str | None:
+    """Parse dates like '15 January 2019' into ISO format."""
+    from datetime import datetime
+
+    cleaned = " ".join(value.replace("\u2011", "-").replace("\u2013", "-").split())
+    for fmt in ("%d %B %Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(cleaned, fmt).date().isoformat()
+        except ValueError:
+            continue
     return None
 
 
@@ -206,8 +336,17 @@ def attach_metadata(
     title = extract_title(table_aware_doc, pdf_metadata, source_info)
 
     # Step 7: create doc_meta
+    creation_date, publish_date, last_updated_date = _resolve_document_dates(
+        source_info,
+        pdf_metadata,
+        table_aware_doc,
+    )
     # Derive a more specific source_url when possible (e.g., NICE NG### PDFs).
-    inferred_url = _derive_source_url(source_info)
+    inferred_url = _derive_source_url(
+        source_info,
+        pdf_metadata=pdf_metadata,
+        resolved_title=title,
+    )
 
     doc_meta: dict[str, Any] = {
         "doc_id": doc_id,
@@ -219,9 +358,9 @@ def attach_metadata(
         "specialty": source_info["specialty"],
         "author_org": source_info.get("author_org", ""),
         "source_url": inferred_url,
-        "creation_date": pdf_metadata.get("creationDate", ""),
-        "publish_date": source_info.get("publish_date", ""),
-        "last_updated_date": source_info.get("last_updated_date", ""),
+        "creation_date": creation_date,
+        "publish_date": publish_date,
+        "last_updated_date": last_updated_date,
         "ingestion_date": date.today().isoformat(),
     }
 

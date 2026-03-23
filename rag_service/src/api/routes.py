@@ -55,6 +55,17 @@ logger = setup_logger(__name__)
 router = APIRouter()
 
 
+def _cloud_available() -> bool:
+    try:
+        from ..config.llm import cloud_llm_is_configured
+
+        return cloud_llm_is_configured(cloud_llm_config)
+    except Exception:
+        base_url = str(getattr(cloud_llm_config, "base_url", "")).strip().lower()
+        api_key = str(getattr(cloud_llm_config, "api_key", "")).strip().lower()
+        return bool(base_url and api_key and "example.invalid" not in base_url)
+
+
 def _no_evidence_response(stream: bool) -> AnswerResponse | StreamingResponse:
     if stream:
         return StreamingResponse(
@@ -145,6 +156,7 @@ async def health_check() -> dict[str, Any]:
         "status": "ready",
         "local_model": local_llm_config.model,
         "cloud_model": cloud_llm_config.model,
+        "cloud_available": _cloud_available(),
         "route_threshold": routing_config.llm_route_threshold,
         "force_cloud_llm": routing_config.force_cloud_llm,
         "active_prompt": ACTIVE_PROMPT,

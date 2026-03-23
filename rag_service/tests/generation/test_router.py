@@ -17,7 +17,8 @@ def test_select_generation_provider_routes_simple_queries_local() -> None:
     assert decision.score < decision.threshold
 
 
-def test_select_generation_provider_routes_risky_queries_cloud() -> None:
+def test_select_generation_provider_routes_risky_queries_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     decision = select_generation_provider(
         query=(
             "A patient has sudden vision loss and progressive weakness. "
@@ -32,7 +33,8 @@ def test_select_generation_provider_routes_risky_queries_cloud() -> None:
     assert "severity_urgent" in decision.reasons
 
 
-def test_select_generation_provider_routes_revisions_cloud() -> None:
+def test_select_generation_provider_routes_revisions_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     decision = select_generation_provider(
         query="Please revise the treatment plan.",
         retrieved_chunks=[{"score": 0.61}, {"score": 0.59}],
@@ -45,11 +47,57 @@ def test_select_generation_provider_routes_revisions_cloud() -> None:
 
 def test_select_generation_provider_force_cloud(monkeypatch) -> None:
     monkeypatch.setattr(router.routing_config, "force_cloud_llm", True)
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
 
     decision = select_generation_provider(query="q", retrieved_chunks=[])
 
     assert decision.provider == "cloud"
     assert decision.reasons == ("force_cloud_llm",)
+
+
+def test_select_generation_provider_falls_back_local_when_cloud_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: False)
+
+    decision = select_generation_provider(
+        query=(
+            "A patient has sudden vision loss and progressive weakness. "
+            "What investigations and urgent management steps are recommended?"
+        ),
+        retrieved_chunks=[{"score": 0.33}, {"score": 0.31}, {"score": 0.29}],
+        severity="urgent",
+    )
+
+    assert decision.provider == "local"
+    assert "cloud_unavailable" in decision.reasons
+
+
+def test_select_generation_provider_revision_stays_local_when_cloud_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: False)
+
+    decision = select_generation_provider(
+        query="Please revise the treatment plan.",
+        retrieved_chunks=[{"score": 0.61}, {"score": 0.59}],
+        is_revision=True,
+    )
+
+    assert decision.provider == "local"
+    assert "revision_flow" not in decision.reasons
+
+
+def test_select_generation_provider_force_cloud_falls_back_when_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router.routing_config, "force_cloud_llm", True)
+    monkeypatch.setattr(router, "_cloud_available", lambda: False)
+
+    decision = select_generation_provider(query="q", retrieved_chunks=[])
+
+    assert decision.provider == "local"
+    assert decision.reasons == ("force_cloud_llm", "cloud_unavailable")
 
 
 def test_select_generation_provider_scores_ambiguity_and_complexity() -> None:
@@ -74,7 +122,8 @@ def test_select_generation_provider_scores_emergency_severity() -> None:
     assert "severity_emergency" in decision.reasons
 
 
-def test_select_generation_provider_routes_large_prompts_cloud() -> None:
+def test_select_generation_provider_routes_large_prompts_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     decision = select_generation_provider(
         query="What is migraine guidance?",
         retrieved_chunks=[{"score": 0.72}, {"score": 0.66}, {"score": 0.51}],
@@ -132,7 +181,10 @@ def test_score_ambiguity_moderate_branches() -> None:
     assert "moderate_top_gap" in reasons
 
 
-def test_select_generation_provider_routes_cloud_when_score_equals_threshold() -> None:
+def test_select_generation_provider_routes_cloud_when_score_equals_threshold(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     decision = select_generation_provider(
         query="Simple question",
         retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],

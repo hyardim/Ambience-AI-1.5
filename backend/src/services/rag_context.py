@@ -136,8 +136,12 @@ def build_file_context_result(
 
 
 def select_rag_citations(payload: dict) -> list | None:
-    for key in ("citations_used", "citations"):
+    first_empty_list: list | None = None
+    for key in ("citations_used", "citations", "citations_retrieved"):
         value = payload.get(key)
         if isinstance(value, list):
-            return value
-    return None
+            if value:
+                return value
+            if first_empty_list is None:
+                first_empty_list = value
+    return first_empty_list

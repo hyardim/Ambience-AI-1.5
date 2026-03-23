@@ -501,6 +501,96 @@ class TestChunkSectionGroup:
         assert len(chunks) > 1
         assert any("block-a" in chunk["block_uids"] for chunk in chunks[:2])
 
+    def test_oversized_sentence_after_overlap_does_not_loop_forever(self) -> None:
+        blocks = [
+            make_block(text="Lead sentence. Follow up sentence.", block_uid="block-a"),
+            make_block(text="Oversized sentence placeholder.", block_uid="block-b"),
+        ]
+
+        with (
+            patch(
+                "src.ingestion.chunk.split_into_sentences",
+                side_effect=[
+                    ["Lead sentence.", "Follow up sentence."],
+                    ["Oversized sentence placeholder."],
+                ],
+            ),
+            patch(
+                "src.ingestion.chunk.count_tokens",
+                side_effect=lambda text: (
+                    900
+                    if text == "Oversized sentence placeholder."
+                    else 5
+                    if text in {"Lead sentence.", "Follow up sentence."}
+                    else 10
+                    if text == "Lead sentence. Follow up sentence."
+                    else 910
+                    if text == (
+                        "Lead sentence. Follow up sentence. "
+                        "Oversized sentence placeholder."
+                    )
+                    else 905
+                    if text == "Follow up sentence. Oversized sentence placeholder."
+                    else 1
+                ),
+            ),
+        ):
+            chunks, _ = chunk_section_group(
+                blocks,
+                make_doc_meta(),
+                0,
+                [],
+                max_chunk_tokens=100,
+                overlap_tokens=10,
+            )
+
+        assert len(chunks) == 2
+        assert chunks[0]["text"] == "Lead sentence. Follow up sentence."
+        assert chunks[1]["text"] == "Oversized sentence placeholder."
+        assert chunks[1]["token_count"] == 900
+        assert chunks[1]["block_uids"] == ["block-b"]
+
+    def test_overlap_that_would_preserve_whole_chunk_is_dropped(self) -> None:
+        blocks = [
+            make_block(text="First. Second.", block_uid="block-a"),
+            make_block(text="Third.", block_uid="block-b"),
+        ]
+
+        with (
+            patch(
+                "src.ingestion.chunk.split_into_sentences",
+                side_effect=[
+                    ["First.", "Second."],
+                    ["Third."],
+                ],
+            ),
+            patch(
+                "src.ingestion.chunk.count_tokens",
+                side_effect=lambda text: (
+                    20
+                    if text in {"First.", "Second."}
+                    else 5
+                    if text == "Third."
+                    else 40
+                    if text == "First. Second."
+                    else 45
+                    if text == "First. Second. Third."
+                    else 1
+                ),
+            ),
+        ):
+            chunks, _ = chunk_section_group(
+                blocks,
+                make_doc_meta(),
+                0,
+                [],
+                max_chunk_tokens=40,
+                overlap_tokens=100,
+            )
+
+        assert [chunk["text"] for chunk in chunks] == ["First. Second.", "Third."]
+        assert chunks[1]["block_uids"] == ["block-b"]
+
     def test_page_start_page_end_set(self) -> None:
         blocks = [
             make_block(text="Page one.", block_uid="u1", page_number=3),

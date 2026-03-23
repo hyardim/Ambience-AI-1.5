@@ -906,6 +906,119 @@ async def test_rag_search_proxy_forwards_internal_headers(monkeypatch):
     assert result == {"ok": True}
 
 
+@pytest.mark.asyncio
+async def test_rag_document_proxy_success(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+        content = b"%PDF-1.4"
+        headers = {
+            "content-type": "application/pdf",
+            "content-disposition": 'inline; filename="guide.pdf"',
+        }
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, headers=None):
+            assert url.endswith("/docs/doc-1")
+            assert headers == {"X-Internal-API-Key": "k"}
+            return FakeResponse()
+
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr(
+        "src.api.endpoints.rag.build_rag_headers",
+        lambda: {"X-Internal-API-Key": "k"},
+    )
+
+    response = await rag.fetch_rag_document("doc-1", current_user="user@nhs.uk")
+
+    assert response.media_type == "application/pdf"
+    assert response.body == b"%PDF-1.4"
+    assert response.headers["content-disposition"] == 'inline; filename="guide.pdf"'
+
+
+@pytest.mark.asyncio
+async def test_rag_document_proxy_not_found(monkeypatch):
+    class FakeResponse:
+        status_code = 404
+        content = b""
+        headers = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, headers=None):
+            return FakeResponse()
+
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
+
+    with pytest.raises(HTTPException) as exc:
+        await rag.fetch_rag_document("doc-404", current_user="user@nhs.uk")
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "Document not found."
+
+
+@pytest.mark.asyncio
+async def test_rag_document_proxy_connection_error(monkeypatch):
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, headers=None):
+            raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
+
+    with pytest.raises(HTTPException) as exc:
+        await rag.fetch_rag_document("doc-1", current_user="user@nhs.uk")
+
+    assert exc.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_rag_document_proxy_timeout(monkeypatch):
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, headers=None):
+            raise httpx.TimeoutException("slow")
+
+    monkeypatch.setattr("src.api.endpoints.rag.httpx.AsyncClient", FakeClient)
+
+    with pytest.raises(HTTPException) as exc:
+        await rag.fetch_rag_document("doc-1", current_user="user@nhs.uk")
+
+    assert exc.value.status_code == 504
+
+
 def test_get_current_user_obj_raises_401_when_user_missing(monkeypatch):
     monkeypatch.setattr(deps.user_repository, "get_by_email", lambda db, email: None)
     with pytest.raises(HTTPException) as exc:

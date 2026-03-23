@@ -1,5 +1,6 @@
 import type { BackendMessage } from '../types/api';
 import type { Message, Citation } from '../types';
+import { apiUrl } from '../services/api';
 
 type RawCitation = Record<string, unknown> & {
   metadata?: Record<string, unknown>;
@@ -43,6 +44,7 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
         section_path: readSectionPath(sectionPath),
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
         page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
+        document_url: typeof docId === 'string' ? apiUrl(`/documents/${docId}`) : undefined,
         source_url: readString(citation.source_url) || readString(meta.source_url),
         creation_date: typeof creationDate === 'string' ? creationDate : undefined,
         publish_date: typeof publishDate === 'string' ? publishDate : undefined,

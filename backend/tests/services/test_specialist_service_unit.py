@@ -151,32 +151,21 @@ def test_get_assigned_uses_cache(monkeypatch, db_session):
     assert result[0].status == "assigned"
 
 
-def test_get_chat_detail_uses_cache(monkeypatch, db_session):
-    monkeypatch.setattr(
-        specialist_service.cache,
-        "get_sync",
-        lambda *args, **kwargs: {
-            "id": 1,
-            "title": "Cached",
-            "status": "reviewing",
-            "specialty": "neurology",
-            "severity": None,
-            "patient_age": None,
-            "patient_gender": None,
-            "patient_notes": None,
-            "specialist_id": 2,
-            "assigned_at": None,
-            "reviewed_at": None,
-            "review_feedback": None,
-            "created_at": "2024-01-01T00:00:00",
-            "user_id": 1,
-            "messages": [],
-            "files": [],
-        },
+def test_get_chat_detail_reads_fresh_state(db_session):
+    owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
     )
-    specialist = SimpleNamespace(id=2)
-    result = specialist_service.get_chat_detail(db_session, specialist, 1)
-    assert result.title == "Cached"
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+    _ai_message(db_session, chat)
+
+    result = specialist_service.get_chat_detail(db_session, specialist, chat.id)
+
+    assert result.title == "Chat"
+    assert len(result.messages) == 1
 
 
 def test_invalidate_specialist_lists_without_specialist_id(monkeypatch):

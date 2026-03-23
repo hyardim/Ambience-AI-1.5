@@ -9,6 +9,7 @@ from .llm import (
     _first_non_empty,
     build_cloud_llm_config,
     build_local_llm_config,
+    cloud_llm_is_configured,
 )
 from .runtime import (
     AlertingConfig,
@@ -63,6 +64,7 @@ __all__ = [
     "build_local_llm_config",
     "chunk_config",
     "cloud_llm_config",
+    "cloud_llm_is_configured",
     "db_config",
     "embed_config",
     "generation_config",

@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 
 from src.core.config import settings
 from src.core.security import get_current_user
@@ -52,3 +53,51 @@ async def search_clinical_guidelines(
         )
 
     return response.json()
+
+
+@router.get("/documents/{doc_id}")
+async def fetch_rag_document(
+    doc_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Proxy a stored RAG source document through the authenticated backend."""
+    async with httpx.AsyncClient(
+        timeout=settings.RAG_REQUEST_TIMEOUT_SECONDS
+    ) as client:
+        try:
+            response = await client.get(
+                f"{settings.RAG_SERVICE_URL}/docs/{doc_id}",
+                headers=build_rag_headers(),
+            )
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="RAG service is unavailable.",
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="RAG request timed out.",
+            ) from exc
+
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="RAG service request failed.",
+        )
+
+    headers = {}
+    content_type = response.headers.get("content-type")
+    if content_type:
+        headers["Content-Type"] = content_type
+    content_disposition = response.headers.get("content-disposition")
+    if content_disposition:
+        headers["Content-Disposition"] = content_disposition
+
+    return Response(
+        content=response.content,
+        media_type=content_type or "application/pdf",
+        headers=headers,
+    )

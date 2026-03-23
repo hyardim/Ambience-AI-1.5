@@ -260,6 +260,50 @@ describe('GPNewQueryPage', () => {
     });
   });
 
+  it('creates the consultation even when one attachment upload fails', async () => {
+    captureLocationState.mockClear();
+    let uploadCount = 0;
+    server.use(
+      http.post('/chats/:chatId/files', () => {
+        uploadCount += 1;
+        if (uploadCount === 2) {
+          return HttpResponse.json({ detail: 'Too many files' }, { status: 422 });
+        }
+        return HttpResponse.json({ id: uploadCount, filename: `file-${uploadCount}.pdf` });
+      }),
+    );
+
+    renderNewQuery();
+    const user = userEvent.setup({ applyAccept: false });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /submit consultation/i })).toBeInTheDocument();
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File(['a'], 'one.pdf', { type: 'application/pdf' }),
+      new File(['b'], 'two.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await user.type(screen.getByLabelText(/consultation title/i), 'Headache inquiry');
+    await user.type(screen.getByLabelText(/patient age/i), '42');
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
+    await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
+    await user.type(screen.getByLabelText(/clinical question/i), 'Patient has persistent headaches');
+    await user.click(screen.getByRole('button', { name: /submit consultation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Query Detail')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(captureLocationState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ draftMessage: 'Patient has persistent headaches' }),
+      );
+    });
+  });
+
   it('uploads and removes attached files before creating a consultation', async () => {
     renderNewQuery();
     const user = userEvent.setup({ applyAccept: false });

@@ -30,7 +30,7 @@ export interface RequestOptions {
 }
 let refreshInFlight: Promise<boolean> | null = null;
 
-function apiUrl(path: string): string {
+export function apiUrl(path: string): string {
   const base = import.meta.env.VITE_API_URL || '';
   return `${base}${path}`;
 }

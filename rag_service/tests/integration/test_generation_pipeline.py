@@ -20,7 +20,8 @@ async def test_router_selects_local_for_chunks_only():
 
 
 @pytest.mark.asyncio
-async def test_router_selects_cloud_for_file_context():
+async def test_router_selects_cloud_for_file_context(monkeypatch):
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     # Large prompt length emulates file-context-heavy prompts.
     decision = router.select_generation_provider(
         query="Complex question",

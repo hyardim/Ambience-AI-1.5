@@ -23,6 +23,15 @@ export function GPNewQueryPage() {
     message: ''
   });
 
+  const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [`${files[index]?.name ?? 'Unknown file'}: ${result.reason instanceof Error ? result.reason.message : 'Upload failed'}`]
+        : [],
+    );
+    return failures;
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
@@ -76,7 +85,15 @@ export function GPNewQueryPage() {
 
       // 2. Upload any attached files now that we have a chat ID
       if (attachedFiles.length > 0) {
-        await Promise.all(attachedFiles.map(f => uploadChatFile(chat.id, f)));
+        const uploadResults = await Promise.allSettled(
+          attachedFiles.map((file) => uploadChatFile(chat.id, file)),
+        );
+        const failures = formatUploadFailures(uploadResults, attachedFiles);
+        if (failures.length > 0) {
+          setError(
+            `Consultation created, but some files failed to upload: ${failures.join(' | ')}`,
+          );
+        }
       }
 
       // 3. Navigate to the detail page immediately, passing the draft message
@@ -254,7 +271,7 @@ export function GPNewQueryPage() {
                   <input
                     type="file"
                     multiple
-                    accept=".pdf,.txt"
+                    accept=".pdf,.txt,.md,.doc,.docx"
                     className="hidden"
                     onChange={(e) => {
                       if (!e.target.files) return;

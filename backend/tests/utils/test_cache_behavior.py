@@ -82,38 +82,54 @@ def test_list_chats_cache_miss_sets_cache(monkeypatch):
     assert captured["set"] is True
 
 
-def test_get_chat_cache_hit_skips_db(monkeypatch):
-    cached = {
-        "id": 3,
-        "title": "Cached Detail",
-        "status": "open",
-        "specialty": None,
-        "severity": None,
-        "patient_age": None,
-        "patient_gender": None,
-        "patient_notes": None,
-        "specialist_id": None,
-        "assigned_at": None,
-        "reviewed_at": None,
-        "review_feedback": None,
-        "created_at": "2024-01-01T00:00:00",
-        "user_id": 5,
-        "messages": [],
-        "files": [],
-    }
-
-    def fake_get_sync(*_args, **_kwargs):
-        return cached
-
-    def fake_get(*_args, **_kwargs):
-        raise AssertionError("repo should not be called when cache hits")
-
-    monkeypatch.setattr(chat_service.cache, "get_sync", fake_get_sync)
-    monkeypatch.setattr(chat_service.chat_repository, "get", fake_get)
+def test_get_chat_reads_repo_even_if_cache_contains_stale_detail(monkeypatch):
+    monkeypatch.setattr(
+        chat_service.cache,
+        "get_sync",
+        lambda *_args, **_kwargs: {
+            "id": 3,
+            "title": "Cached Detail",
+            "status": "open",
+            "specialty": None,
+            "severity": None,
+            "patient_age": None,
+            "patient_gender": None,
+            "patient_notes": None,
+            "specialist_id": None,
+            "assigned_at": None,
+            "reviewed_at": None,
+            "review_feedback": None,
+            "created_at": "2024-01-01T00:00:00",
+            "user_id": 5,
+            "messages": [],
+            "files": [],
+        },
+    )
+    chat = SimpleNamespace(
+        id=3,
+        title="Fresh Detail",
+        status=ChatStatus.OPEN,
+        specialty=None,
+        severity=None,
+        patient_age=None,
+        patient_gender=None,
+        patient_notes=None,
+        patient_context=None,
+        specialist_id=None,
+        assigned_at=None,
+        reviewed_at=None,
+        review_feedback=None,
+        created_at=datetime(2024, 1, 1),
+        user_id=5,
+        files=[],
+    )
+    monkeypatch.setattr(chat_service.chat_repository, "get", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_service.audit_repository, "log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_service.message_repository, "list_for_chat", lambda *args, **kwargs: [])
 
     user = SimpleNamespace(id=5)
     result = chat_service.get_chat(db=None, user=user, chat_id=3)
-    assert result.title == "Cached Detail"
+    assert result.title == "Fresh Detail"
 
 
 def test_create_chat_invalidates_list_cache(monkeypatch):

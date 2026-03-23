@@ -362,6 +362,47 @@ describe('GPQueryDetailPage', () => {
     });
   });
 
+  it('keeps sending the message when one uploaded file fails and shows attached files', async () => {
+    let uploadCount = 0;
+    server.use(
+      http.get('/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'open',
+          files: [
+            {
+              id: 10,
+              filename: 'existing.pdf',
+              file_type: 'application/pdf',
+              file_size: 1234,
+              created_at: '2025-01-15T10:00:00Z',
+            },
+          ],
+        })),
+      http.post('/chats/:chatId/files', () => {
+        uploadCount += 1;
+        if (uploadCount === 1) {
+          return HttpResponse.json({ detail: 'Upload failed' }, { status: 422 });
+        }
+        return HttpResponse.json({ id: 2, filename: 'ok.pdf' });
+      }),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/existing\.pdf/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /send small file stub/i }));
+
+    await waitFor(() => {
+      expect(mockConnectStream).toHaveBeenCalled();
+    });
+  });
+
   it('refreshes through the stream hook callback and preserves a draft streaming placeholder', async () => {
     hookState.injectPlaceholder = true;
     server.use(

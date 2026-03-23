@@ -4,7 +4,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict
 
-from ..config import routing_config
+from ..config import cloud_llm_config, routing_config
 from .client import ProviderName
 
 _COMPLEXITY_TERMS = {
@@ -48,6 +48,17 @@ class RouteDecision(BaseModel):
     reasons: tuple[str, ...]
 
 
+def _cloud_available() -> bool:
+    try:
+        from ..config.llm import cloud_llm_is_configured
+
+        return cloud_llm_is_configured(cloud_llm_config)
+    except Exception:
+        base_url = str(getattr(cloud_llm_config, "base_url", "")).strip().lower()
+        api_key = str(getattr(cloud_llm_config, "api_key", "")).strip().lower()
+        return bool(base_url and api_key and "example.invalid" not in base_url)
+
+
 def select_generation_provider(
     *,
     query: str,
@@ -79,12 +90,17 @@ def select_generation_provider(
     resolved_threshold = (
         routing_config.llm_route_threshold if threshold is None else threshold
     )
+    cloud_available = _cloud_available()
+
     if routing_config.force_cloud_llm:
+        forced_reasons = ["force_cloud_llm"]
+        if not cloud_available:
+            forced_reasons.append("cloud_unavailable")
         return RouteDecision(
-            provider="cloud",
+            provider="cloud" if cloud_available else "local",
             score=1.0,
             threshold=resolved_threshold,
-            reasons=("force_cloud_llm",),
+            reasons=tuple(forced_reasons),
         )
 
     reasons: list[str] = []
@@ -110,12 +126,15 @@ def select_generation_provider(
         score += ambiguity_score
         reasons.extend(ambiguity_reasons)
 
-    if is_revision and routing_config.route_revisions_to_cloud:
+    if is_revision and routing_config.route_revisions_to_cloud and cloud_available:
         reasons.append("revision_flow")
         score = max(score, resolved_threshold)
 
     score = min(score, 1.0)
     provider: ProviderName = "cloud" if score >= resolved_threshold else "local"
+    if provider == "cloud" and not cloud_available:
+        reasons.append("cloud_unavailable")
+        provider = "local"
     return RouteDecision(
         provider=provider,
         score=round(score, 3),

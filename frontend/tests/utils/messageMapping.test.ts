@@ -40,6 +40,7 @@ describe('mapCitations', () => {
       section_path: ['Section 1', 'Sub A'],
       page_start: 5,
       page_end: 10,
+      document_url: '/documents/doc-1',
       source_url: 'https://example.com',
     });
   });

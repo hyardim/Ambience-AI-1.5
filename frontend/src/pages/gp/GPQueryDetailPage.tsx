@@ -40,6 +40,15 @@ export function GPQueryDetailPage() {
   // Guard: auto-send the draft message from GPNewQueryPage only once
   const draftSentRef = useRef(false);
 
+  const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [`${files[index]?.name ?? 'Unknown file'}: ${getErrorMessage(result.reason, 'Upload failed')}`]
+        : [],
+    );
+    return failures;
+  };
+
   // ── Streaming state machine ────────────────────────────────────────────
   const refreshChat = useCallback(async () => {
     try {
@@ -234,7 +243,15 @@ export function GPQueryDetailPage() {
           setSending(false);
           return;
         }
-        await Promise.all(files.map(f => uploadChatFile(currentChat.id, f)));
+        const uploadResults = await Promise.allSettled(
+          files.map((file) => uploadChatFile(currentChat.id, file)),
+        );
+        const failures = formatUploadFailures(uploadResults, files);
+        if (failures.length > 0) {
+          setError(
+            `Message sent, but some files failed to upload: ${failures.join(' | ')}`,
+          );
+        }
       }
 
       // Open SSE stream *once* before sending so we catch the AI generation events
@@ -371,9 +388,26 @@ export function GPQueryDetailPage() {
                   </button>
                 )}
               </div>
-            </div>
+          </div>
 
-            {editingMeta && (
+          {chat.files && chat.files.length > 0 ? (
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Attached files</p>
+              <div className="flex flex-wrap gap-2">
+                {chat.files.map((file) => (
+                  <span
+                    key={file.id}
+                    className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-700 border border-gray-200"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-[var(--nhs-blue)]" />
+                    <span>{file.filename}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {editingMeta && (
               <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <input

@@ -8,12 +8,27 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from ..config import cloud_llm_config, local_llm_config, routing_config
+from ..config import (
+    cloud_llm_config,
+    local_llm_config,
+    routing_config,
+)
 from ..generation.client import ProviderName
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 _INSECURE_RAG_INTERNAL_DEFAULT = "dev-rag-internal-key"
+
+
+def _cloud_available() -> bool:
+    try:
+        from ..config.llm import cloud_llm_is_configured
+
+        return cloud_llm_is_configured(cloud_llm_config)
+    except Exception:
+        base_url = str(getattr(cloud_llm_config, "base_url", "")).strip().lower()
+        api_key = str(getattr(cloud_llm_config, "api_key", "")).strip().lower()
+        return bool(base_url and api_key and "example.invalid" not in base_url)
 
 
 def validate_internal_api_key_config() -> None:
@@ -67,13 +82,19 @@ def ensure_schema() -> None:
 
 async def warmup_ollama() -> None:
     """Pre-load the selected generation provider on service startup."""
-    if routing_config.force_cloud_llm:
+    cloud_available = _cloud_available()
+    if routing_config.force_cloud_llm and cloud_available:
         logger.info(
             "Cloud-only mode enabled. Using cloud model '%s'.",
             cloud_llm_config.model,
         )
         await warmup_model(provider="cloud")
         return
+    if routing_config.force_cloud_llm and not cloud_available:
+        logger.warning(
+            "force_cloud_llm is enabled but the cloud provider is not configured. "
+            "Falling back to local warmup."
+        )
 
     logger.info("Warming up local model '%s'...", local_llm_config.model)
     await warmup_model()

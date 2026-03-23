@@ -236,11 +236,6 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
     Raises:
         HTTPException: If the chat is not found.
     """
-    cache_key = cache_keys.chat_detail(user.id, chat_id)
-    cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_detail")
-    if cached is not None:
-        return ChatWithMessages(**cached)
-
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -261,13 +256,6 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
         )
         for f in (chat.files or [])
     ]
-    cache.set_sync(
-        cache_key,
-        response.model_dump(),
-        ttl=settings.CACHE_CHAT_DETAIL_TTL,
-        user_id=user.id,
-        resource="chat_detail",
-    )
     return response
 
 

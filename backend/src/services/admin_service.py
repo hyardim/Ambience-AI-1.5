@@ -250,23 +250,12 @@ def list_all_chats(
 
 
 def get_any_chat(db: Session, chat_id: int) -> ChatWithMessages:
-    cache_key = cache_keys.admin_chat_detail(chat_id)
-    cached = cache.get_sync(cache_key, resource="admin_chat_detail")
-    if cached is not None:
-        return ChatWithMessages(**cached)
-
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     messages = message_repository.list_for_chat(db, chat.id)
     resp = ChatWithMessages(**chat_to_response(chat).model_dump())
     resp.messages = [msg_to_response(m) for m in messages]
-    cache.set_sync(
-        cache_key,
-        resp.model_dump(),
-        ttl=settings.CACHE_ADMIN_CHAT_TTL,
-        resource="admin_chat_detail",
-    )
     return resp
 
 

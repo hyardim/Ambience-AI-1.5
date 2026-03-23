@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
@@ -120,4 +121,42 @@ def build_cloud_llm_config(llm: LLMConfig) -> CloudLLMConfig:
         timeout_seconds=float(
             os.getenv("CLOUD_LLM_TIMEOUT_SECONDS", str(llm.llm_timeout_seconds))
         ),
+    )
+
+
+def cloud_llm_is_configured(config: CloudLLMConfig) -> bool:
+    """Return True only when the cloud provider looks intentionally configured.
+
+    Local Docker/dev environments often carry placeholder values so the config
+    object can be constructed. Routing should not treat those placeholders as a
+    usable remote provider.
+    """
+
+    base_url = config.base_url.strip()
+    api_key = config.api_key.strip()
+    model = config.model.strip()
+    if not base_url or not api_key or not model:
+        return False
+
+    parsed = urlparse(base_url)
+    hostname = (parsed.hostname or "").strip().lower()
+    if not parsed.scheme or not hostname:
+        return False
+
+    placeholder_hosts = {"example.invalid", "localhost", "127.0.0.1"}
+    if hostname in placeholder_hosts and "runpod.net" not in hostname:
+        return False
+
+    placeholder_tokens = {
+        "dummy",
+        "placeholder",
+        "changeme",
+        "replace-me",
+        "replace_with_real_key",
+        "required",
+    }
+    normalized_key = api_key.lower()
+    return not (
+        normalized_key in placeholder_tokens
+        or normalized_key.startswith("required_")
     )

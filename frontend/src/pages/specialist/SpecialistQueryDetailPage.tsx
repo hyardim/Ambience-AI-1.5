@@ -56,6 +56,13 @@ export function SpecialistQueryDetailPage() {
 
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
+  const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
+    const failedFiles = results.flatMap((result, index) =>
+      result.status === 'rejected' ? [files[index]?.name ?? `file ${index + 1}`] : [],
+    );
+    return failedFiles.length > 0 ? failedFiles.join(', ') : null;
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
 
@@ -254,7 +261,13 @@ export function SpecialistQueryDetailPage() {
         return;
       }
       if (manualResponseFiles.length > 0) {
-        await Promise.all(manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)));
+        const uploadResults = await Promise.allSettled(
+          manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)),
+        );
+        const failures = formatUploadFailures(uploadResults, manualResponseFiles);
+        if (failures) {
+          setError(`Manual response sent, but some files failed to upload: ${failures}`);
+        }
       }
       const sources = manualResponseSources
         .split('\n')
@@ -351,7 +364,11 @@ export function SpecialistQueryDetailPage() {
           setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
           return;
         }
-        await Promise.all(files.map(f => uploadChatFile(currentChat.id, f)));
+        const uploadResults = await Promise.allSettled(files.map(f => uploadChatFile(currentChat.id, f)));
+        const failures = formatUploadFailures(uploadResults, files);
+        if (failures) {
+          setError(`Message sent, but some files failed to upload: ${failures}`);
+        }
       }
       await sendSpecialistMessage(currentChat.id, content);
     } catch (err) {

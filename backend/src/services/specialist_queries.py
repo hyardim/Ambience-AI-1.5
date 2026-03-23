@@ -77,11 +77,6 @@ def get_assigned(db: Session, specialist: User) -> list[ChatResponse]:
 
 
 def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMessages:
-    cache_key = cache_keys.chat_detail(specialist.id, chat_id)
-    cached = cache.get_sync(cache_key, user_id=specialist.id, resource="chat_detail")
-    if cached is not None:
-        return ChatWithMessages(**cached)
-
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -94,13 +89,6 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
     messages = message_repository.list_for_chat(db, chat.id)
     response = ChatWithMessages(**chat_to_response(chat).model_dump())
     response.messages = [msg_to_response(m) for m in messages]
-    cache.set_sync(
-        cache_key,
-        response.model_dump(),
-        ttl=settings.CACHE_CHAT_DETAIL_TTL,
-        user_id=specialist.id,
-        resource="chat_detail",
-    )
     return response
 
 

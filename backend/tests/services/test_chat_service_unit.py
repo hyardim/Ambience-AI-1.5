@@ -136,6 +136,42 @@ def test_get_chat_builds_file_responses(db_session):
     assert response.files[0].filename == "note.txt"
 
 
+def test_get_chat_ignores_stale_cached_detail(monkeypatch, db_session):
+    user = _user(db_session)
+    chat = _chat(db_session, user)
+    db_session.add(Message(chat_id=chat.id, content="Fresh AI", sender="ai"))
+    db_session.commit()
+
+    monkeypatch.setattr(
+        chat_service.cache,
+        "get_sync",
+        lambda *args, **kwargs: {
+            "id": chat.id,
+            "title": "Stale",
+            "status": "submitted",
+            "specialty": "neurology",
+            "severity": None,
+            "patient_age": None,
+            "patient_gender": None,
+            "patient_notes": None,
+            "specialist_id": None,
+            "assigned_at": None,
+            "reviewed_at": None,
+            "review_feedback": None,
+            "created_at": "2024-01-01T00:00:00",
+            "user_id": user.id,
+            "messages": [],
+            "files": [],
+        },
+    )
+
+    response = chat_service.get_chat(db_session, user, chat.id)
+
+    assert response.title == "Chat"
+    assert len(response.messages) == 1
+    assert response.messages[0].content == "Fresh AI"
+
+
 def test_invalidate_specialist_caches_without_specialist_id(monkeypatch):
     deleted = []
     patterns = []
@@ -209,6 +245,13 @@ def test_select_rag_citations_prefers_citations_used():
         {"citations_used": [1], "citations": [2]}
     ) == [1]
     assert chat_service._select_rag_citations({"citations": [2]}) == [2]
+    assert (
+        chat_service._select_rag_citations(
+            {"citations_used": [], "citations_retrieved": [3]}
+        )
+        == [3]
+    )
+    assert chat_service._select_rag_citations({"citations_used": []}) == []
     assert chat_service._select_rag_citations({}) is None
 
 

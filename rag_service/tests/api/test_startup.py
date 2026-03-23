@@ -43,6 +43,7 @@ def test_ensure_schema_raises_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.anyio
 async def test_warmup_ollama_cloud_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(startup.routing_config, "force_cloud_llm", True)
+    monkeypatch.setattr(startup, "_cloud_available", lambda: True)
     calls: list[str] = []
 
     async def fake_warmup(provider: str = "local") -> None:
@@ -58,6 +59,24 @@ async def test_warmup_ollama_cloud_only(monkeypatch: pytest.MonkeyPatch) -> None
 @pytest.mark.anyio
 async def test_warmup_ollama_local(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(startup.routing_config, "force_cloud_llm", False)
+    calls: list[str] = []
+
+    async def fake_warmup(provider: str = "local") -> None:
+        calls.append(provider)
+
+    monkeypatch.setattr(startup, "warmup_model", fake_warmup)
+
+    await startup.warmup_ollama()
+
+    assert calls == ["local"]
+
+
+@pytest.mark.anyio
+async def test_warmup_ollama_force_cloud_falls_back_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(startup.routing_config, "force_cloud_llm", True)
+    monkeypatch.setattr(startup, "_cloud_available", lambda: False)
     calls: list[str] = []
 
     async def fake_warmup(provider: str = "local") -> None:

@@ -13,6 +13,18 @@ from src.main import app
 
 
 @pytest.mark.anyio
+async def test_health_check_reports_cloud_availability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(routes, "_cloud_available", lambda: False)
+
+    result = await routes.health_check()
+
+    assert result["status"] == "ready"
+    assert result["cloud_available"] is False
+
+
+@pytest.mark.anyio
 async def test_clinical_query_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*args: object, **kwargs: object) -> list[dict[str, object]]:
         raise RuntimeError("boom")
