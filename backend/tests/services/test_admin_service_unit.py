@@ -106,11 +106,38 @@ def test_update_user_updates_optional_fields(db_session):
     assert updated.is_active is False
 
 
+def test_update_user_prevents_self_deactivation_and_role_change(db_session):
+    admin = _admin(db_session)
+
+    with pytest.raises(HTTPException, match="Cannot deactivate your own account"):
+        admin_service.update_user(
+            db_session,
+            admin.id,
+            UserUpdateAdmin(is_active=False),
+            current_user=admin,
+        )
+
+    with pytest.raises(HTTPException, match="Cannot change your own role"):
+        admin_service.update_user(
+            db_session,
+            admin.id,
+            UserUpdateAdmin(role="gp"),
+            current_user=admin,
+        )
+
+
 def test_deactivate_user_not_found(db_session):
     admin = _admin(db_session)
     with pytest.raises(HTTPException) as exc:
         admin_service.deactivate_user(db_session, 999, current_user=admin)
     assert exc.value.status_code == 404
+
+
+def test_deactivate_user_prevents_self_deactivation(db_session):
+    admin = _admin(db_session)
+
+    with pytest.raises(HTTPException, match="Cannot deactivate your own account"):
+        admin_service.deactivate_user(db_session, admin.id, current_user=admin)
 
 
 def test_list_all_chats_rejects_invalid_status(db_session):

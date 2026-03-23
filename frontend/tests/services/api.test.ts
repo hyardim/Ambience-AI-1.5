@@ -117,6 +117,15 @@ describe('API service', () => {
       await expect(login('bad', 'creds')).rejects.toThrow('Bad creds');
     });
 
+    it('surfaces the friendly login error on 401 responses', async () => {
+      server.use(
+        http.post('/auth/login', () =>
+          HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
+      );
+
+      await expect(login('bad', 'creds')).rejects.toThrow('Incorrect email or password');
+    });
+
     it('registers a user and requests a password reset', async () => {
       const loginResponse = await register({
         email: 'new@example.com',

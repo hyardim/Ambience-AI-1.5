@@ -245,8 +245,75 @@ def test_assign_rejects_assigning_other_specialist(db_session):
             specialist,
             chat.id,
             SimpleNamespace(specialist_id=specialist.id + 1),
-        )
+    )
     assert exc.value.status_code == 403
+
+
+def test_assign_rejects_when_chat_already_assigned(db_session):
+    owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    other_specialist = _user(
+        db_session,
+        email="other@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, other_specialist, status=ChatStatus.SUBMITTED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.assign(
+            db_session,
+            specialist,
+            chat.id,
+            SimpleNamespace(specialist_id=specialist.id),
+        )
+
+    assert exc.value.status_code == 409
+
+
+def test_unassign_rejects_when_not_assigned_or_completed(db_session):
+    owner = _user(db_session, email="gp2@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec2@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    other_specialist = _user(
+        db_session,
+        email="other2@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    assigned_chat = _chat(db_session, owner, other_specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.unassign(db_session, specialist, assigned_chat.id)
+    assert exc.value.status_code == 403
+
+    completed_chat = _chat(db_session, owner, specialist, status=ChatStatus.APPROVED)
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.unassign(db_session, specialist, completed_chat.id)
+    assert exc.value.status_code == 400
+
+
+def test_unassign_rejects_when_chat_missing(db_session):
+    specialist = _user(
+        db_session,
+        email="missing-spec@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.unassign(db_session, specialist, 99999)
+
+    assert exc.value.status_code == 404
 
 
 def test_review_blocks_terminal_actions_while_generation_in_progress(db_session):
@@ -836,6 +903,122 @@ def test_do_revise_failure_logs_rag_error_and_notifies_user(monkeypatch, db_sess
     assert notifications[-1]["user_id"] == owner.id
     assert notifications[-1]["chat_id"] == chat.id
     assert invalidated == [owner.id]
+
+
+def test_do_revise_rejects_non_dict_payload(monkeypatch):
+    placeholder = SimpleNamespace(
+        id=102,
+        chat_id=5,
+        content="",
+        citations=None,
+        is_generating=True,
+    )
+
+    class FakeDB:
+        def commit(self):
+            return None
+
+        def refresh(self, obj):
+            return None
+
+        def query(self, model):
+            return SimpleNamespace(
+                filter=lambda *args, **kwargs: SimpleNamespace(first=lambda: None)
+            )
+
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = ["bad"]
+
+    monkeypatch.setattr(
+        specialist_review.httpx,
+        "Client",
+        _mock_httpx_client(lambda *args, **kwargs: response),
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "publish_threadsafe",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "close_chat_threadsafe",
+        lambda *args, **kwargs: None,
+    )
+
+    specialist_review._do_revise(
+        FakeDB(),
+        placeholder,
+        "question",
+        "old answer",
+        "feedback",
+        "neurology",
+        None,
+        None,
+        None,
+        False,
+    )
+
+    assert "temporarily unavailable for revision" in placeholder.content
+    assert placeholder.is_generating is False
+
+
+def test_do_revise_rejects_non_string_answer(monkeypatch):
+    placeholder = SimpleNamespace(
+        id=103,
+        chat_id=5,
+        content="",
+        citations=None,
+        is_generating=True,
+    )
+
+    class FakeDB:
+        def commit(self):
+            return None
+
+        def refresh(self, obj):
+            return None
+
+        def query(self, model):
+            return SimpleNamespace(
+                filter=lambda *args, **kwargs: SimpleNamespace(first=lambda: None)
+            )
+
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {"answer": 123}
+
+    monkeypatch.setattr(
+        specialist_review.httpx,
+        "Client",
+        _mock_httpx_client(lambda *args, **kwargs: response),
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "publish_threadsafe",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        specialist_review.chat_event_bus,
+        "close_chat_threadsafe",
+        lambda *args, **kwargs: None,
+    )
+
+    specialist_review._do_revise(
+        FakeDB(),
+        placeholder,
+        "question",
+        "old answer",
+        "feedback",
+        "neurology",
+        None,
+        None,
+        None,
+        False,
+    )
+
+    assert "temporarily unavailable for revision" in placeholder.content
+    assert placeholder.is_generating is False
 
 
 def test_threaded_revision_task_removed_from_specialist_review() -> None:

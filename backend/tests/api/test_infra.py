@@ -20,7 +20,7 @@ from src.app.main import (
     create_app,
 )
 from src.core import config as core_config
-from src.core import rate_limit
+from src.core import rate_limit, security
 from src.db.models import UserRole
 
 
@@ -684,6 +684,16 @@ def test_get_redis_returns_none_when_cache_disabled(monkeypatch):
     assert rate_limit._get_redis() is None
 
 
+def test_get_redis_returns_none_during_retry_cooldown(monkeypatch):
+    monkeypatch.setattr(core_config.settings, "CACHE_ENABLED", True)
+    monkeypatch.setattr(rate_limit, "_redis_client", None)
+    monkeypatch.setattr(rate_limit, "_redis_init_attempted", True)
+    monkeypatch.setattr(rate_limit, "_redis_last_attempt_time", 100.0)
+    monkeypatch.setattr(rate_limit.time, "monotonic", lambda: 100.5)
+
+    assert rate_limit._get_redis() is None
+
+
 def test_get_redis_initialises_and_caches_client(monkeypatch):
     pinged = {"value": 0}
 
@@ -978,6 +988,50 @@ def test_validate_settings_rejects_missing_smtp_password_when_username_is_set(
         core_config.validate_settings()
 
     monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_validate_settings_rejects_missing_smtp_host_or_from_when_delivery_enabled(
+    monkeypatch,
+):
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "production")
+    monkeypatch.setattr(core_config.settings, "SECRET_KEY", "a-strong-secret")
+    monkeypatch.setattr(core_config.settings, "AUTH_BOOTSTRAP_DEMO_USERS", False)
+    monkeypatch.setattr(
+        core_config.settings, "ALLOWED_ORIGINS", ["https://app.example.com"]
+    )
+    monkeypatch.setattr(
+        core_config.settings,
+        "DATABASE_URL",
+        "postgresql://admin:secure-password@db:5432/app",
+    )
+    monkeypatch.setattr(
+        core_config.settings, "EMAIL_VERIFICATION_TOKEN_PEPPER", "pepper"
+    )
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_TOKEN_PEPPER", "pepper")
+    monkeypatch.setattr(
+        core_config.settings,
+        "RAG_INTERNAL_API_KEY",
+        "a-very-strong-rag-internal-key-value",
+    )
+    monkeypatch.setattr(core_config.settings, "SMTP_HOST", "")
+    monkeypatch.setattr(core_config.settings, "SMTP_FROM", "")
+    monkeypatch.setattr(core_config.settings, "SMTP_USERNAME", "")
+    monkeypatch.setattr(core_config.settings, "SMTP_PASSWORD", "")
+    monkeypatch.setattr(core_config.settings, "PASSWORD_RESET_EMAIL_LOG_ONLY", False)
+    monkeypatch.setattr(
+        core_config.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False
+    )
+
+    with pytest.raises(RuntimeError, match="SMTP_HOST and SMTP_FROM"):
+        core_config.validate_settings()
+
+    monkeypatch.setattr(core_config.settings, "APP_ENV", "development")
+
+
+def test_request_path_falls_back_to_empty_string_without_path_sources():
+    request = SimpleNamespace(url=SimpleNamespace(path=None), scope=None)
+
+    assert security._request_path(request) == ""
 
 
 def test_admin_logs_rejects_invalid_date_range(client, admin_headers):

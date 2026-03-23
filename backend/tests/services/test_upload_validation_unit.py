@@ -1,3 +1,5 @@
+import sys
+import types
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -111,3 +113,54 @@ async def test_upload_chat_file_deduplicates_existing_filename(
     assert attachment.filename == "report_1.txt"
     assert (upload_dir / "report_1.txt").read_text() == "fresh content"
     assert db_session.query(FileAttachment).count() == 1
+
+
+def test_extract_text_returns_pdf_text_when_reader_succeeds(monkeypatch, tmp_path):
+    class FakeReader:
+        def __init__(self, _path):
+            self.pages = [SimpleNamespace(extract_text=lambda: "A" * 60)]
+
+    monkeypatch.setitem(sys.modules, "pypdf", types.SimpleNamespace(PdfReader=FakeReader))
+
+    result = rag_context.extract_text(str(tmp_path / "doc.pdf"), "application/pdf")
+
+    assert result == "A" * 60
+
+
+def test_build_file_context_result_prefers_sentence_boundary_when_truncating(monkeypatch):
+    monkeypatch.setattr(rag_context, "FILE_CONTEXT_CHAR_LIMIT", 45)
+    chat = SimpleNamespace(
+        files=[
+            SimpleNamespace(
+                filename="note.txt",
+                file_path="/tmp/note.txt",
+                file_type="text/plain",
+            )
+        ]
+    )
+    text = "Sentence one is quite long. Sentence two should be removed entirely afterward."
+
+    result = rag_context.build_file_context_result(chat, extract_text_fn=lambda *_args: text)
+
+    assert result.was_truncated is True
+    assert "Sentence one is quite long." in (result.file_context or "")
+    assert "Sentence two should be removed" not in (result.file_context or "")
+
+
+def test_build_file_context_result_falls_back_to_word_boundary_when_truncating(monkeypatch):
+    monkeypatch.setattr(rag_context, "FILE_CONTEXT_CHAR_LIMIT", 55)
+    chat = SimpleNamespace(
+        files=[
+            SimpleNamespace(
+                filename="note.txt",
+                file_path="/tmp/note.txt",
+                file_type="text/plain",
+            )
+        ]
+    )
+    text = "Wordboundary truncation should stop before clipping the finalwordwithoutperiod"
+
+    result = rag_context.build_file_context_result(chat, extract_text_fn=lambda *_args: text)
+
+    assert result.was_truncated is True
+    assert "finalwordwithoutperiod" not in (result.file_context or "")

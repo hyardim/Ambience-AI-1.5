@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from src.db.models import Chat, ChatStatus, FileAttachment, Message, User, UserRole
+from src.schemas.chat import MessageCreate
 from src.services import chat_service
 from tests.conftest import TestingAsyncSessionLocal
 
@@ -210,6 +212,54 @@ def test_select_rag_citations_prefers_citations_used():
     assert chat_service._select_rag_citations({}) is None
 
 
+def test_validate_rag_response_rejects_non_dict_payload():
+    with pytest.raises(ValueError, match="Expected dict"):
+        chat_service._validate_rag_response(["not", "a", "dict"])
+
+
+def test_validate_rag_response_rejects_non_string_answer():
+    with pytest.raises(ValueError, match="Expected 'answer' to be a string"):
+        chat_service._validate_rag_response({"answer": 123})
+
+
+def test_message_create_rejects_whitespace_only_content():
+    with pytest.raises(ValidationError):
+        MessageCreate(content="   ")
+
+
+def test_archive_chat_logs_warning_when_file_delete_fails(monkeypatch, db_session):
+    user = _user(db_session)
+    chat = _chat(db_session, user)
+    attachment = FileAttachment(
+        filename="note.txt",
+        file_path="/tmp/failing.txt",
+        file_type="text/plain",
+        file_size=12,
+        chat_id=chat.id,
+        uploader_id=user.id,
+    )
+    db_session.add(attachment)
+    db_session.commit()
+
+    monkeypatch.setattr(chat_service.os.path, "exists", lambda path: True)
+
+    def boom(_path):
+        raise OSError("cannot delete")
+
+    monkeypatch.setattr(chat_service.os, "remove", boom)
+    monkeypatch.setattr(chat_service.audit_repository, "log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_service.cache, "delete_pattern_sync", lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_service, "invalidate_admin_chat_caches_sync", lambda *args, **kwargs: None)
+    warnings = []
+    monkeypatch.setattr(chat_service.logger, "warning", lambda *args, **kwargs: warnings.append(args))
+
+    chat_service.archive_chat(db_session, user, chat.id)
+
+    db_session.refresh(chat)
+    assert chat.is_archived is True
+    assert warnings
+
+
 @pytest.mark.asyncio
 async def test_async_generate_ai_response_returns_when_chat_missing(monkeypatch):
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", TestingAsyncSessionLocal)
@@ -222,6 +272,27 @@ async def test_async_generate_ai_response_returns_when_chat_missing(monkeypatch)
     await chat_service._async_generate_ai_response(999, 1, "hello")
 
     close_chat.assert_awaited_once_with(999)
+
+
+@pytest.mark.asyncio
+async def test_async_generate_ai_response_skips_when_existing_generation_found(
+    monkeypatch, db_session
+):
+    user = _user(db_session)
+    chat = _chat(db_session, user, status=ChatStatus.SUBMITTED)
+    db_session.add(Message(chat_id=chat.id, content="busy", sender="ai", is_generating=True))
+    db_session.commit()
+
+    monkeypatch.setattr(chat_service, "AsyncSessionLocal", TestingAsyncSessionLocal)
+    publish = AsyncMock()
+    close_chat = AsyncMock()
+    monkeypatch.setattr(chat_service.chat_event_bus, "publish", publish)
+    monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", close_chat)
+
+    await chat_service._async_generate_ai_response(chat.id, user.id, "Question")
+
+    publish.assert_not_awaited()
+    close_chat.assert_awaited_once_with(chat.id)
 
 
 @pytest.mark.asyncio

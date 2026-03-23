@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from collections import defaultdict
 from types import SimpleNamespace
 
@@ -295,3 +297,116 @@ def test_is_rate_limited_falls_back_when_redis_command_errors(monkeypatch):
 
     assert first is False
     assert second is True
+
+
+def test_get_auth_redis_initialises_and_caches_client(monkeypatch):
+    pinged = {"value": 0}
+
+    class FakeClient:
+        def ping(self):
+            pinged["value"] += 1
+
+    client = FakeClient()
+
+    class FakeRedisClass:
+        @staticmethod
+        def from_url(url, decode_responses, socket_connect_timeout):
+            assert decode_responses is True
+            assert socket_connect_timeout == 2
+            return client
+
+    monkeypatch.setattr(auth_service.settings, "CACHE_ENABLED", True)
+    monkeypatch.setattr(auth_service, "_auth_redis_client", None)
+    monkeypatch.setattr(auth_service, "_auth_redis_attempted", False)
+    monkeypatch.setitem(
+        sys.modules, "redis", types.SimpleNamespace(Redis=FakeRedisClass)
+    )
+
+    assert auth_service._get_auth_redis() is client
+    assert auth_service._get_auth_redis() is client
+    assert pinged["value"] == 1
+
+
+def test_get_auth_redis_returns_none_when_unavailable(monkeypatch, caplog):
+    class FakeRedisClass:
+        @staticmethod
+        def from_url(url, decode_responses, socket_connect_timeout):
+            raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(auth_service.settings, "CACHE_ENABLED", True)
+    monkeypatch.setattr(auth_service, "_auth_redis_client", None)
+    monkeypatch.setattr(auth_service, "_auth_redis_attempted", False)
+    monkeypatch.setitem(
+        sys.modules, "redis", types.SimpleNamespace(Redis=FakeRedisClass)
+    )
+
+    with caplog.at_level("WARNING"):
+        assert auth_service._get_auth_redis() is None
+
+    assert "using in-process fallback" in caplog.text
+
+
+def test_redis_rate_limited_sets_expiry_on_first_hit(monkeypatch):
+    events = []
+
+    class FakeRedis:
+        def incr(self, key):
+            events.append(("incr", key))
+            return 1
+
+        def expire(self, key, ttl):
+            events.append(("expire", key, ttl))
+
+    monkeypatch.setattr(auth_service, "_get_auth_redis", lambda: FakeRedis())
+
+    assert auth_service._redis_rate_limited("key", 60, 2) is False
+    assert events == [("incr", "key"), ("expire", "key", 60)]
+
+
+def test_is_rate_limited_returns_redis_result_without_local_fallback(monkeypatch):
+    attempts: dict[str, list] = defaultdict(list)
+    monkeypatch.setattr(auth_service, "_redis_rate_limited", lambda *args: True)
+
+    assert (
+        auth_service._is_rate_limited(
+            key="limit@example.com",
+            redis_prefix="forgot_pw",
+            attempts=attempts,
+            window_seconds=60,
+            max_attempts=1,
+        )
+        is True
+    )
+    assert attempts == {}
+
+
+def test_reset_password_confirm_rejects_reusing_current_password(
+    monkeypatch, db_session
+):
+    user = _user(db_session)
+    token_row = SimpleNamespace(user=user, token_hash="token-hash")
+
+    monkeypatch.setattr(
+        auth_service.password_reset_repository,
+        "get_valid_by_hash",
+        lambda *_args, **_kwargs: token_row,
+    )
+    monkeypatch.setattr(
+        auth_service.security,
+        "verify_password_reset_token",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        auth_service.security,
+        "verify_password",
+        lambda plain, hashed: True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        auth_service.reset_password_confirm(
+            db_session,
+            PasswordResetConfirmRequest(token="raw-token", new_password="StrongPass1!"),
+        )
+
+    assert exc.value.status_code == 400
+    assert "different from current password" in exc.value.detail.lower()
