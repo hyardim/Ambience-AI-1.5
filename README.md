@@ -23,12 +23,33 @@ Before first run, create a root `.env` from the example and set real secrets:
 
 ```bash
 cp .env.example .env
-docker compose up -d --build
+ollama serve
+docker compose up -d
 ```
 
-The backend container runs its own startup preparation step on boot, so local
-development does not require separate migration or demo-user seed commands in
-the common case.
+The default local stack is now prepared for first-run evaluation:
+
+- the backend container runs its own startup preparation step on boot
+- Postgres initializes the RAG schema and loads a pre-seeded `rag_chunks`
+  corpus from the RAG DB migration assets on a fresh database directory
+- local development does not require separate ingestion commands in the common
+  case
+
+Important note for existing local volumes:
+
+- the pre-seeded RAG corpus is loaded only when Postgres initializes a fresh
+  `postgres_data/` directory
+- if you already have a local database volume, Docker will keep using it and
+  will not rerun the init seed automatically
+- for a truly fresh local bootstrap, stop the stack and remove `postgres_data/`
+  before running `docker compose up -d`
+
+RAG DB bootstrap assets now live together under:
+
+- [rag_service/scripts/db/migrations/001_create_rag_chunks.sql](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/001_create_rag_chunks.sql)
+- [rag_service/scripts/db/migrations/002_indexes.sql](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/002_indexes.sql)
+- [rag_service/scripts/db/migrations/003_add_text_search_vector.sql](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/003_add_text_search_vector.sql)
+- [rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz)
 
 Main endpoints:
 

@@ -47,6 +47,10 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+      - ./rag_service/scripts/db/migrations/001_create_rag_chunks.sql:/docker-entrypoint-initdb.d/001_create_rag_chunks.sql:ro
+      - ./rag_service/scripts/db/migrations/002_indexes.sql:/docker-entrypoint-initdb.d/002_indexes.sql:ro
+      - ./rag_service/scripts/db/migrations/003_add_text_search_vector.sql:/docker-entrypoint-initdb.d/003_add_text_search_vector.sql:ro
+      - ./rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz:/docker-entrypoint-initdb.d/004_seed_rag_chunks.sql.gz:ro
     networks:
       - ambience_net
     healthcheck:

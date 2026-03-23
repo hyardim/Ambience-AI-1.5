@@ -160,6 +160,22 @@ The ingestion pipeline:
 Extract -> Clean -> Chunk -> Attach metadata -> Embed -> Store
 ```
 
+## DB bootstrap assets
+
+The RAG database bootstrap assets live under `scripts/db/migrations/`:
+
+- `001_create_rag_chunks.sql`
+- `002_indexes.sql`
+- `003_add_text_search_vector.sql`
+- `004_seed_rag_chunks.sql.gz`
+
+The `004` file is a data-only seed for `rag_chunks`. In the repo-root
+Docker stack it is mounted into Postgres init so a fresh local database starts
+with a ready-to-query corpus and markers do not need to run ingestion manually.
+
+It is stored as `.sql.gz` simply to keep the repo smaller; Postgres Docker init
+supports gzipped SQL files directly.
+
 ## API surface
 
 Main endpoints exposed by the FastAPI app:
