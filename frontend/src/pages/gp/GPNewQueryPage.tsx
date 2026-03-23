@@ -13,6 +13,7 @@ export function GPNewQueryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [fileNotice, setFileNotice] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     patientAge: '',
@@ -34,6 +35,16 @@ export function GPNewQueryPage() {
     e.preventDefault();
     setError('');
 
+    if (!formData.title.trim()) {
+      setError('Please enter a consultation title.');
+      return;
+    }
+
+    if (!formData.message.trim()) {
+      setError('Please enter a clinical question before submitting.');
+      return;
+    }
+
     if (!formData.specialty) {
       setError('Please select a specialty before submitting. Without it, the consultation cannot be routed to a specialist.');
       return;
@@ -41,6 +52,12 @@ export function GPNewQueryPage() {
 
     if (!formData.patientAge) {
       setError('Please enter the patient\'s age.');
+      return;
+    }
+
+    const age = parseInt(formData.patientAge, 10);
+    if (isNaN(age) || age < 0 || age > 150) {
+      setError('Please enter a valid patient age between 0 and 150.');
       return;
     }
 
@@ -59,7 +76,7 @@ export function GPNewQueryPage() {
     try {
       // 1. Create the chat with structured patient demographics
       const chat = await createChat({
-        title: formData.title || 'New Consultation',
+        title: formData.title.trim(),
         specialty: formData.specialty,
         severity: formData.severity,
         patient_age: parseInt(formData.patientAge, 10),
@@ -77,7 +94,7 @@ export function GPNewQueryPage() {
       //    sending the first GP message. Attachments are already persisted.
       navigate(`/gp/query/${chat.id}`, { state: { draftMessage: formData.message } });
     } catch {
-      setError('Failed to create consultation. Is the backend running?');
+      setError('Unable to create consultation. Please try again or contact support if the issue persists.');
     } finally {
       setIsSubmitting(false);
     }
@@ -255,10 +272,27 @@ export function GPNewQueryPage() {
                         return;
                       }
                       setError('');
-                      setAttachedFiles(selected);
+                      setAttachedFiles(prev => {
+                        const existingNames = new Set(prev.map(f => f.name));
+                        const duplicates = selected.filter(f => existingNames.has(f.name));
+                        const newFiles = selected.filter(f => !existingNames.has(f.name));
+                        if (duplicates.length > 0) {
+                          setFileNotice(`Already added: ${duplicates.map(f => f.name).join(', ')}`);
+                          setTimeout(() => setFileNotice(''), 4000);
+                        } else {
+                          setFileNotice('');
+                        }
+                        return [...prev, ...newFiles];
+                      });
+                      e.target.value = '';
                     }}
                   />
                 </label>
+                {fileNotice && (
+                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                    {fileNotice}
+                  </p>
+                )}
                 {attachedFiles.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {attachedFiles.map((f, i) => (

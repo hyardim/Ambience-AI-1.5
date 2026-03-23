@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # File upload limits
     MAX_FILE_SIZE_BYTES: int = 3 * 1024 * 1024
     MAX_FILES_PER_CHAT: int = 5
-    FILE_CONTEXT_CHAR_LIMIT: int = 8_000
+    FILE_CONTEXT_CHAR_LIMIT: int = 50_000
     ALLOWED_UPLOAD_EXTENSIONS: list[str] = [
         ".pdf",
         ".txt",
