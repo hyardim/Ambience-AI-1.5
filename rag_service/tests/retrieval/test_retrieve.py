@@ -362,8 +362,29 @@ class TestRetrieve:
         assert vkwargs["top_k"] == 12  # top_k * 4
         _, kkwargs = mocks["keyword_search"].call_args
         assert kkwargs["top_k"] == 12  # top_k * 4
+        _, fusion_kwargs = mocks["reciprocal_rank_fusion"].call_args
+        assert fusion_kwargs["top_k"] == 18  # top_k * 6
         _, rkwargs = mocks["rerank"].call_args
         assert rkwargs["top_k"] == 6  # top_k * 2
+
+    def test_long_query_uses_wider_candidate_depth(self):
+        mocks = make_all_stage_mocks()
+        mocks["process_query"].return_value = ProcessedQuery(
+            original=QUERY,
+            expanded=(
+                "patient with rapidly progressive gait disturbance and urinary "
+                "incontinence over 3 months ct head shows ventriculomegaly"
+            ),
+            embedding=[0.1] * 384,
+            embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        )
+        run_retrieve(mocks, top_k=3)
+        _, vkwargs = mocks["vector_search"].call_args
+        assert vkwargs["top_k"] == 40
+        _, kkwargs = mocks["keyword_search"].call_args
+        assert kkwargs["top_k"] == 40
+        _, fusion_kwargs = mocks["reciprocal_rank_fusion"].call_args
+        assert fusion_kwargs["top_k"] == 40
 
     def test_filters_passed_through_to_vector_and_keyword_search(self):
         mocks = make_all_stage_mocks()

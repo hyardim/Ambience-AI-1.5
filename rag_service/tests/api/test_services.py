@@ -174,7 +174,9 @@ def test_filter_chunks_uses_guarded_low_score_fallback_for_near_top_hits() -> No
     assert filtered == [top_hit]
 
 
-def test_filter_chunks_low_score_fallback_ignores_very_low_top_scores() -> None:
+def test_filter_chunks_low_score_fallback_preserves_weak_overlap_when_available() -> (
+    None
+):
     retrieved = [
         {
             "text": "SLE and proteinuria mention only briefly.",
@@ -185,7 +187,7 @@ def test_filter_chunks_low_score_fallback_ignores_very_low_top_scores() -> None:
 
     filtered = filter_chunks("SLE proteinuria referral", retrieved)
 
-    assert filtered == []
+    assert filtered == retrieved
 
 
 def test_filter_chunks_keeps_hits_with_doc_id_even_without_public_source_url() -> None:

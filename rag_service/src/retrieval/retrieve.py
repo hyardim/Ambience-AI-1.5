@@ -20,6 +20,11 @@ logger = setup_logger(__name__)
 
 DEBUG_ARTIFACT_DIR = path_config.data_debug / "retrieval"
 RETRIEVAL_TELEMETRY_PATH = path_config.logs / "retrieval_metrics.jsonl"
+BASE_SEARCH_CANDIDATE_MULTIPLIER = 4
+LONG_QUERY_TOKEN_THRESHOLD = 8
+LONG_QUERY_CANDIDATE_FLOOR = 40
+FUSION_CANDIDATE_MULTIPLIER = 6
+RERANK_CANDIDATE_MULTIPLIER = 2
 
 
 def retrieve(
@@ -85,6 +90,9 @@ def retrieve(
         ) from e
     logger.debug(f"QUERY complete in {_ms(t)}ms")
     artifacts["01_query"] = processed.model_dump(exclude={"embedding"})
+    candidate_top_k = _search_candidate_top_k(top_k, processed.expanded)
+    fusion_top_k = max(top_k * FUSION_CANDIDATE_MULTIPLIER, candidate_top_k)
+    rerank_top_k = top_k * RERANK_CANDIDATE_MULTIPLIER
 
     # ------------------------------------------------------------------
     # Stage 2: Vector search
@@ -96,7 +104,7 @@ def retrieve(
         vector_results = vector_search(
             query_embedding=processed.embedding,
             db_url=db_url,
-            top_k=top_k * 4,
+            top_k=candidate_top_k,
             specialty=specialty,
             source_name=source_name,
             doc_type=doc_type,
@@ -119,7 +127,7 @@ def retrieve(
         keyword_results = keyword_search(
             query=processed.expanded,
             db_url=db_url,
-            top_k=top_k * 4,
+            top_k=candidate_top_k,
             specialty=specialty,
             source_name=source_name,
             doc_type=doc_type,
@@ -147,6 +155,7 @@ def retrieve(
         fused = reciprocal_rank_fusion(
             vector_results=vector_results,
             keyword_results=keyword_results,
+            top_k=fusion_top_k,
         )
     except RetrievalError:
         raise
@@ -184,7 +193,7 @@ def retrieve(
     # ------------------------------------------------------------------
     t = time.perf_counter()
     try:
-        reranked = rerank(query=query, results=filtered, top_k=top_k * 2)
+        reranked = rerank(query=query, results=filtered, top_k=rerank_top_k)
     except RetrievalError:
         raise
     except Exception as e:
@@ -263,6 +272,20 @@ def retrieve(
 def _ms(start: float) -> int:
     """Convert elapsed perf_counter seconds to integer milliseconds."""
     return int((time.perf_counter() - start) * 1000)
+
+
+def _search_candidate_top_k(top_k: int, query: str) -> int:
+    """Select candidate depth for vector/keyword retrieval.
+
+    Longer case-style queries tend to include many symptoms and modifiers.
+    We widen retrieval depth for these queries so relevant chunks are not
+    dropped before fusion/reranking.
+    """
+    base_top_k = top_k * BASE_SEARCH_CANDIDATE_MULTIPLIER
+    query_tokens = query.split()
+    if len(query_tokens) < LONG_QUERY_TOKEN_THRESHOLD:
+        return base_top_k
+    return max(base_top_k, LONG_QUERY_CANDIDATE_FLOOR)
 
 
 def _maybe_write_artifacts(

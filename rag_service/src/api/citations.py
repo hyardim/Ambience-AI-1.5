@@ -11,7 +11,7 @@ from ..utils.citation_utils import (
 from .schemas import SearchResult
 
 MAX_CITATIONS = 3
-MIN_RELEVANCE = 0.25
+MIN_RELEVANCE = 0.12
 
 GENERIC_TOKENS = {
     "guideline",

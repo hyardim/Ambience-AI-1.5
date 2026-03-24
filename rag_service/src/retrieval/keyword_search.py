@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -15,6 +16,25 @@ from ..utils.logger import setup_logger
 from .query import RetrievalError
 
 logger = setup_logger(__name__)
+
+RELAXED_QUERY_STOPWORDS = {
+    "and",
+    "are",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "patient",
+    "patients",
+    "show",
+    "shows",
+    "that",
+    "the",
+    "this",
+    "with",
+}
+RELAXED_QUERY_MAX_TERMS = 12
 
 
 # -----------------------------------------------------------------------
@@ -160,7 +180,7 @@ def _run_query(
         logger.debug("Stopword-only query detected; full text omitted from logs")
         return []
 
-    sql = """
+    strict_sql = """
         SELECT
             chunk_id,
             doc_id,
@@ -198,10 +218,48 @@ def _run_query(
         LIMIT %s;
     """
 
+    relaxed_sql = """
+        SELECT
+            chunk_id,
+            doc_id,
+            text,
+            ts_rank(text_search_vector, to_tsquery('english', %s)) AS rank,
+            metadata->>'specialty' AS specialty,
+            metadata->>'source_name' AS source_name,
+            metadata->>'doc_type' AS doc_type,
+            metadata->>'source_url' AS source_url,
+            metadata->>'content_type' AS content_type,
+            metadata->>'section_title' AS section_title,
+            metadata->>'title' AS title,
+            COALESCE(
+                metadata->>'creation_date',
+                metadata->'citation'->>'creation_date'
+            ) AS creation_date,
+            COALESCE(
+                metadata->>'publish_date',
+                metadata->'citation'->>'publish_date'
+            ) AS publish_date,
+            COALESCE(
+                metadata->>'last_updated_date',
+                metadata->'citation'->>'last_updated_date'
+            ) AS last_updated_date,
+            (COALESCE(metadata->>'page_start', '0'))::int AS page_start,
+            (COALESCE(metadata->>'page_end', '0'))::int AS page_end,
+            metadata->'section_path' AS section_path
+        FROM rag_chunks
+        WHERE
+            text_search_vector @@ to_tsquery('english', %s)
+            AND (%s::text IS NULL OR metadata->>'specialty'   = %s)
+            AND (%s::text IS NULL OR metadata->>'source_name' = %s)
+            AND (%s::text IS NULL OR metadata->>'doc_type'    = %s)
+        ORDER BY rank DESC
+        LIMIT %s;
+    """
+
     start = time.perf_counter()
     with conn.cursor() as cur:
         cur.execute(
-            sql,
+            strict_sql,
             (
                 query,
                 query,
@@ -215,37 +273,36 @@ def _run_query(
             ),
         )
         rows = cur.fetchall()
+
+        if not rows:
+            relaxed_query = _build_relaxed_or_tsquery(query)
+            if relaxed_query:
+                logger.debug(
+                    "Keyword search strict query returned no rows; "
+                    "retrying with relaxed OR tsquery."
+                )
+                cur.execute(
+                    relaxed_sql,
+                    (
+                        relaxed_query,
+                        relaxed_query,
+                        specialty,
+                        specialty,
+                        source_name,
+                        source_name,
+                        doc_type,
+                        doc_type,
+                        top_k,
+                    ),
+                )
+                rows = cur.fetchall()
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     if not rows:
         logger.debug("Keyword search returned 0 results")
         return []
 
-    results = []
-    for row in rows:
-        results.append(
-            KeywordSearchResult(
-                chunk_id=row[0],
-                doc_id=row[1],
-                text=row[2],
-                rank=float(row[3]),
-                metadata={
-                    "specialty": row[4],
-                    "source_name": row[5],
-                    "doc_type": row[6],
-                    "source_url": row[7],
-                    "content_type": row[8],
-                    "section_title": row[9],
-                    "title": row[10],
-                    "creation_date": row[11],
-                    "publish_date": row[12],
-                    "last_updated_date": row[13],
-                    "page_start": row[14] if row[14] is not None else 0,
-                    "page_end": row[15] if row[15] is not None else 0,
-                    "section_path": row[16],
-                },
-            )
-        )
+    results = _rows_to_results(rows)
 
     logger.debug(
         f"Keyword search returned {len(results)} results in {elapsed_ms:.0f}ms"
@@ -255,3 +312,47 @@ def _run_query(
     )
 
     return results
+
+
+def _rows_to_results(rows: list[tuple[Any, ...]]) -> list[KeywordSearchResult]:
+    """Convert DB row tuples into KeywordSearchResult objects."""
+    return [
+        KeywordSearchResult(
+            chunk_id=row[0],
+            doc_id=row[1],
+            text=row[2],
+            rank=float(row[3]),
+            metadata={
+                "specialty": row[4],
+                "source_name": row[5],
+                "doc_type": row[6],
+                "source_url": row[7],
+                "content_type": row[8],
+                "section_title": row[9],
+                "title": row[10],
+                "creation_date": row[11],
+                "publish_date": row[12],
+                "last_updated_date": row[13],
+                "page_start": row[14] if row[14] is not None else 0,
+                "page_end": row[15] if row[15] is not None else 0,
+                "section_path": row[16],
+            },
+        )
+        for row in rows
+    ]
+
+
+def _build_relaxed_or_tsquery(query: str) -> str | None:
+    """Build a fallback OR tsquery string from meaningful query tokens."""
+    terms: list[str] = []
+    seen: set[str] = set()
+    for token in re.findall(r"[A-Za-z0-9]+", query.lower()):
+        if len(token) < 3 or token in RELAXED_QUERY_STOPWORDS or token in seen:
+            continue
+        terms.append(token)
+        seen.add(token)
+        if len(terms) >= RELAXED_QUERY_MAX_TERMS:
+            break
+    if not terms:
+        return None
+    return " | ".join(terms)
