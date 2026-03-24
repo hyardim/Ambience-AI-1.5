@@ -39,6 +39,14 @@ LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
 
 
+def _has_citable_source(chunk: dict[str, Any]) -> bool:
+    metadata = chunk.get("metadata") or {}
+    source_url = metadata.get("source_url")
+    if isinstance(source_url, str):
+        source_url = source_url.strip()
+    return bool(chunk.get("doc_id") or source_url)
+
+
 def _effective_relevance_score(result: CitedResult) -> float:
     """Prefer retrieval's calibrated final score, falling back safely if absent."""
     final_score = float(getattr(result, "final_score", 0.0) or 0.0)
@@ -179,7 +187,7 @@ def _filter_chunks(
         chunk
         for chunk in retrieved
         if chunk.get("score", 0) >= MIN_RELEVANCE
-        and ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
+        and _has_citable_source(chunk)
     ]
     if not base_candidates:
         if not retrieved:
@@ -195,7 +203,7 @@ def _filter_chunks(
             chunk
             for chunk in retrieved
             if chunk.get("score", 0) >= low_score_threshold
-            and ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
+            and _has_citable_source(chunk)
             and _raw_query_overlap(chunk)
         ]
         return _sort_by_alignment(
@@ -307,7 +315,11 @@ def _filter_chunks(
         if chunk.get("score", 0) >= low_score_threshold
         and _raw_query_overlap(chunk)
     ]
-    return low_score_fallback
+    return _sort_by_alignment(
+        low_score_fallback,
+        expanded_query,
+        specialty=specialty,
+    )
 
 
 def filter_chunks(

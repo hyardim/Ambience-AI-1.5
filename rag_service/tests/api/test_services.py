@@ -453,6 +453,20 @@ def test_filter_chunks_keeps_hits_with_doc_id_even_without_public_source_url() -
     assert filtered == retrieved
 
 
+def test_filter_chunks_drops_blank_source_url_without_doc_id() -> None:
+    retrieved = [
+        {
+            "text": "Use beta interferon for indicated patients.",
+            "score": 0.9,
+            "metadata": {"source_url": "   "},
+        }
+    ]
+
+    filtered = filter_chunks("beta interferon", retrieved)
+
+    assert filtered == []
+
+
 def test_filter_chunks_drops_hits_without_source_url_or_doc_id() -> None:
     retrieved = [
         {
@@ -465,6 +479,39 @@ def test_filter_chunks_drops_hits_without_source_url_or_doc_id() -> None:
     filtered = filter_chunks("beta interferon", retrieved)
 
     assert filtered == []
+
+
+def test_filter_chunks_low_score_fallback_returns_alignment_sorted_results() -> None:
+    weaker = {
+        "text": "SLE creatinine issue is mentioned briefly.",
+        "score": 0.048,
+        "section_path": "General renal issues",
+        "metadata": {
+            "title": "General Rheumatology Notes",
+            "source_url": "https://example.com/weaker",
+            "specialty": "rheumatology",
+        },
+    }
+    stronger = {
+        "text": (
+            "SLE with proteinuria and rising creatinine needs urgent renal pathway."
+        ),
+        "score": 0.047,
+        "section_path": "Lupus nephritis > Renal red flags",
+        "metadata": {
+            "title": "Bsr Enhanced Triage And Specialist Advice",
+            "source_url": "https://example.com/stronger",
+            "specialty": "rheumatology",
+        },
+    }
+
+    filtered = filter_chunks(
+        "SLE proteinuria rising creatinine referral",
+        [weaker, stronger],
+        specialty="rheumatology",
+    )
+
+    assert filtered == [stronger, weaker]
 
 
 def test_to_search_result_uses_default_source_name() -> None:

@@ -66,16 +66,23 @@ def _cloud_available() -> bool:
         return bool(base_url and api_key and "example.invalid" not in base_url)
 
 
-def _no_evidence_response(stream: bool) -> AnswerResponse | StreamingResponse:
+def _no_evidence_response(
+    stream: bool,
+    *,
+    citations_retrieved: list[SearchResult] | None = None,
+) -> AnswerResponse | StreamingResponse:
     if stream:
         return StreamingResponse(
-            ndjson_done_only(NO_EVIDENCE_RESPONSE),
+            ndjson_done_only(
+                NO_EVIDENCE_RESPONSE,
+                citations_retrieved=citations_retrieved,
+            ),
             media_type="application/x-ndjson",
         )
     return AnswerResponse(
         answer=NO_EVIDENCE_RESPONSE,
         citations_used=[],
-        citations_retrieved=[],
+        citations_retrieved=citations_retrieved or [],
         citations=[],
     )
 
@@ -366,7 +373,10 @@ async def _generate_answer_from_retrieval(
             strip_references=True,
         )
         if not citations_used and not file_context:
-            return _no_evidence_response(stream)
+            return _no_evidence_response(
+                stream,
+                citations_retrieved=citations_retrieved,
+            )
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,

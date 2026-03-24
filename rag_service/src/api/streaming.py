@@ -56,9 +56,7 @@ async def streaming_generator(
                     citation.model_dump() for citation in citations_used
                 ],
                 "citations_retrieved": [
-                    citation.model_dump() for citation in (
-                        citations_retrieved if citations_used else []
-                    )
+                    citation.model_dump() for citation in citations_retrieved
                 ],
                 "citations": [citation.model_dump() for citation in citations_used],
             }
@@ -67,7 +65,10 @@ async def streaming_generator(
     )
 
 
-async def ndjson_done_only(answer: str) -> AsyncGenerator[str, None]:
+async def ndjson_done_only(
+    answer: str,
+    citations_retrieved: list[SearchResult] | None = None,
+) -> AsyncGenerator[str, None]:
     """Single ``done`` line for cases where no streaming is needed."""
     yield (
         json.dumps(
@@ -75,7 +76,9 @@ async def ndjson_done_only(answer: str) -> AsyncGenerator[str, None]:
                 "type": "done",
                 "answer": answer,
                 "citations_used": [],
-                "citations_retrieved": [],
+                "citations_retrieved": [
+                    citation.model_dump() for citation in (citations_retrieved or [])
+                ],
                 "citations": [],
             }
         )

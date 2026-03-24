@@ -237,6 +237,20 @@ async def test_revise_clinical_answer_returns_no_evidence_response(
     assert response.answer == routes.NO_EVIDENCE_RESPONSE
 
 
+def test_no_evidence_response_preserves_retrieved_citations() -> None:
+    citations = [SearchResult(text="evidence", source="guide.pdf", score=0.9)]
+
+    response = routes._no_evidence_response(
+        False,
+        citations_retrieved=citations,
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE
+    assert response.citations_used == []
+    assert response.citations == []
+    assert response.citations_retrieved == citations
+
+
 @pytest.mark.anyio
 async def test_generate_clinical_answer_generic_exception_wrapped(
     monkeypatch: pytest.MonkeyPatch,

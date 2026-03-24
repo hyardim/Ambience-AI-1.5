@@ -8,6 +8,10 @@ from src.api.schemas import SearchResult
 from src.api.streaming import ndjson_done_only, streaming_generator
 
 
+def _search_result_payload(result: SearchResult) -> dict[str, object | None]:
+    return result.model_dump()
+
+
 @pytest.mark.anyio
 async def test_streaming_generator_uses_generate_answer_for_cloud(
     monkeypatch: pytest.MonkeyPatch,
@@ -103,6 +107,10 @@ async def test_done_payload_keeps_empty_used_citations(
     assert lines[-1]["type"] == "done"
     assert lines[-1]["citations_used"] == []
     assert lines[-1]["citations"] == []
+    assert lines[-1]["citations_retrieved"] == [
+        _search_result_payload(citations_retrieved[0])
+    ]
+    assert lines[-1]["answer"] != "No inline citations here"
 
 
 @pytest.mark.anyio
@@ -145,6 +153,25 @@ async def test_ndjson_done_only_emits_done_payload() -> None:
             "answer": "Final answer",
             "citations_used": [],
             "citations_retrieved": [],
+            "citations": [],
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_ndjson_done_only_can_include_retrieved_citations() -> None:
+    lines = []
+    citations = [SearchResult(text="evidence", source="guide.pdf", score=0.8)]
+
+    async for line in ndjson_done_only("No evidence", citations):
+        lines.append(json.loads(line.strip()))
+
+    assert lines == [
+        {
+            "type": "done",
+            "answer": "No evidence",
+            "citations_used": [],
+            "citations_retrieved": [_search_result_payload(citations[0])],
             "citations": [],
         }
     ]

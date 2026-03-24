@@ -332,13 +332,17 @@ def _install_stubs() -> None:
 
     import json as _json
 
-    async def _fake_ndjson_done_only(answer: str, citations: list | None = None):
+    async def _fake_ndjson_done_only(
+        answer: str,
+        citations_retrieved: list | None = None,
+    ):
         yield (
             _json.dumps(
                 {
                     "type": "done",
                     "answer": answer,
-                    "citations_used": citations or [],
+                    "citations_used": [],
+                    "citations_retrieved": citations_retrieved or [],
                 }
             )
             + "\n"
