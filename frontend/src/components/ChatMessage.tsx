@@ -123,6 +123,8 @@ export function ChatMessage({
             const page = formatPage(c);
             const section = formatSection(c);
             const docDate = formatDate(c);
+            // Prefer the authenticated in-app PDF route when available so
+            // citations open directly to the document, not a landing page.
             const targetUrl = c.document_url || c.source_url;
             const href = targetUrl
               ? c.page_start != null

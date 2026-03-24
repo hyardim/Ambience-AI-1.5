@@ -1,8 +1,22 @@
+from pathlib import Path
+
 import psycopg2
 from psycopg2.extensions import connection as PsycopgConnection
 
-from ..config import db_config, vector_config
+from ..config import db_config, path_config, vector_config
 from ..utils.db import db
+
+
+def _remap_source_path_to_data_root(source_path: str) -> Path | None:
+    """Map host/container absolute paths containing ``data/raw`` to local data root."""
+    normalized = source_path.replace("\\", "/")
+    marker = "/data/raw/"
+    if marker not in normalized:
+        return None
+    tail = normalized.split(marker, 1)[1]
+    if not tail:
+        return None
+    return path_config.data_raw / tail
 
 
 def get_conn() -> PsycopgConnection:
@@ -74,16 +88,46 @@ def init_db(vector_dim: int) -> None:
 
 
 def get_source_path_for_doc(doc_id: str) -> str | None:
-    """Return the source_path for a given doc_id, if present in metadata."""
+    """Return a resolvable source_path for a given doc_id, if available."""
     with db.raw_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT metadata->>'source_path'
+            SELECT metadata->>'source_path' AS source_path,
+                   MAX(updated_at) AS last_seen
             FROM rag_chunks
             WHERE doc_id = %s
-            LIMIT 1;
+              AND COALESCE(metadata->>'source_path', '') <> ''
+            GROUP BY metadata->>'source_path'
+            ORDER BY MAX(updated_at) DESC;
             """,
             (doc_id,),
         )
-        row = cur.fetchone()
-        return row[0] if row and row[0] else None
+        rows = cur.fetchall()
+        if not rows:
+            return None
+
+        for row in rows:
+            source_path = row[0]
+            if not source_path:
+                continue
+            candidates: list[Path] = []
+            original = Path(source_path)
+            candidates.append(original)
+            if not original.is_absolute():
+                candidates.append((path_config.root / original).resolve())
+            remapped = _remap_source_path_to_data_root(source_path)
+            if remapped is not None:
+                candidates.append(remapped.resolve())
+
+            seen: set[str] = set()
+            for candidate in candidates:
+                key = str(candidate)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if candidate.exists():
+                    return str(candidate)
+
+        # Fall back to the newest stored source path even if the file is gone.
+        # The caller endpoint will surface a clear 404 for missing files.
+        return rows[0][0]

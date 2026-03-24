@@ -112,7 +112,7 @@ describe('ChatMessage', () => {
     expect(screen.getByText(/published 2024-01-01/i)).toBeInTheDocument();
   });
 
-  it('prefers the exact in-app document link over the generic source URL', () => {
+  it('prefers in-app document links over absolute source URLs', () => {
     const aiMessage: Message = {
       ...baseMessage,
       senderType: 'ai',
@@ -122,6 +122,29 @@ describe('ChatMessage', () => {
           source_name: 'NICE',
           document_url: '/documents/doc-1',
           source_url: 'https://www.nice.org.uk',
+          page_start: 3,
+        },
+      ],
+    };
+
+    render(<ChatMessage message={aiMessage} />);
+
+    expect(screen.getByRole('link', { name: 'Guideline A' })).toHaveAttribute(
+      'href',
+      '/documents/doc-1#page=3',
+    );
+  });
+
+  it('uses in-app document links when source URLs are not absolute', () => {
+    const aiMessage: Message = {
+      ...baseMessage,
+      senderType: 'ai',
+      citations: [
+        {
+          title: 'Guideline A',
+          source_name: 'NICE',
+          document_url: '/documents/doc-1',
+          source_url: '/docs/doc-1',
           page_start: 3,
         },
       ],
