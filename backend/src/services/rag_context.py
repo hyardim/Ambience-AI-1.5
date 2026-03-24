@@ -63,7 +63,11 @@ def build_conversation_history_from_messages(
     # Walk backwards from the most recent message so we keep the tail while
     # ignoring any persisted fallback/error AI messages.
     for message in reversed(messages[-limit:]):
-        if not message.content or getattr(message, "is_error", False):
+        if (
+            not message.content
+            or getattr(message, "is_error", False)
+            or message.sender == "ai"
+        ):
             continue
         speaker = {
             "user": "GP",
