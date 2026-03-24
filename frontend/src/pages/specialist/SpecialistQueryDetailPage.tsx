@@ -266,13 +266,6 @@ export function SpecialistQueryDetailPage() {
     setError('');
     try {
       let uploadWarning = '';
-      const MAX_FILE_SIZE = 3 * 1024 * 1024;
-      const oversized = manualResponseFiles.filter((file) => file.size > MAX_FILE_SIZE);
-      if (oversized.length > 0) {
-        setError(`File(s) too large: ${oversized.map((file) => file.name).join(', ')}. Maximum size is 3 MB.`);
-        setActionLoading(false);
-        return;
-      }
       if (manualResponseFiles.length > 0) {
         const uploadResults = await Promise.allSettled(
           manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)),
@@ -410,13 +403,6 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
-      const MAX_FILE_SIZE = 3 * 1024 * 1024;
-      const oversized = consultationManualFiles.filter((f) => f.size > MAX_FILE_SIZE);
-      if (oversized.length > 0) {
-        setError(`File(s) too large: ${oversized.map((f) => f.name).join(', ')}. Maximum size is 3 MB.`);
-        setActionLoading(false);
-        return;
-      }
       if (consultationManualFiles.length > 0) {
         await Promise.all(consultationManualFiles.map((f) => uploadChatFile(currentChat.id, f)));
       }

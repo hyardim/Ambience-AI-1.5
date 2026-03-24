@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { EditResponseModal, ManualResponseModal } from '@/pages/specialist/SpecialistReviewModals';
+import {
+  EditResponseModal,
+  ManualResponseModal,
+  SendCommentModal,
+  UnassignConfirmModal,
+} from '@/pages/specialist/SpecialistReviewModals';
 
 describe('EditResponseModal', () => {
   const defaultProps = {
@@ -139,7 +144,120 @@ describe('ManualResponseModal', () => {
       new File(['x'.repeat(11 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
     );
 
-    expect(screen.getByText(/file\(s\) exceed the 10 mb limit/i)).toBeInTheDocument();
+    expect(screen.getByText(/file\(s\) exceed the 3 mb limit/i)).toBeInTheDocument();
     expect(onFilesChange).not.toHaveBeenCalled();
+  });
+
+  it('removes an attached source file', async () => {
+    const onFilesChange = vi.fn();
+    render(
+      <ManualResponseModal
+        {...defaultProps}
+        manualResponseContent="Use this instead"
+        manualResponseFiles={[new File(['ok'], 'source.txt', { type: 'text/plain' })]}
+        onFilesChange={onFilesChange}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: /remove source\.txt/i }));
+
+    expect(onFilesChange).toHaveBeenCalledWith([]);
+  });
+
+  it('deduplicates manual-response attachments by filename', async () => {
+    const existingFile = new File(['ok'], 'source.txt', { type: 'text/plain' });
+    const newFile = new File(['new'], 'fresh.txt', { type: 'text/plain' });
+    const onFilesChange = vi.fn();
+    render(
+      <ManualResponseModal
+        {...defaultProps}
+        manualResponseContent="Use this instead"
+        manualResponseFiles={[existingFile]}
+        onFilesChange={onFilesChange}
+      />,
+    );
+    const user = userEvent.setup({ applyAccept: false });
+
+    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [existingFile, newFile]);
+
+    expect(onFilesChange).toHaveBeenCalledWith([existingFile, newFile]);
+  });
+});
+
+describe('SendCommentModal', () => {
+  it('renders, validates, and submits consultation comments', async () => {
+    const onChange = vi.fn();
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <SendCommentModal
+        open
+        actionLoading={false}
+        commentContent=""
+        onChange={onChange}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+      />,
+    );
+    const user = userEvent.setup();
+
+    expect(screen.getByRole('button', { name: /send comment/i })).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Please review the attached plan');
+    expect(onChange).toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('shows the loading state while sending a comment', () => {
+    render(
+      <SendCommentModal
+        open
+        actionLoading
+        commentContent="Ready to send"
+        onChange={vi.fn()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /sending/i })).toBeDisabled();
+  });
+});
+
+describe('UnassignConfirmModal', () => {
+  it('renders and confirms unassign actions', async () => {
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <UnassignConfirmModal
+        open
+        actionLoading={false}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+      />,
+    );
+    const user = userEvent.setup();
+
+    expect(screen.getByText(/release the consultation back to the queue/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /confirm unassign/i }));
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it('shows the loading state while unassigning', () => {
+    render(
+      <UnassignConfirmModal
+        open
+        actionLoading
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /unassigning/i })).toBeDisabled();
   });
 });

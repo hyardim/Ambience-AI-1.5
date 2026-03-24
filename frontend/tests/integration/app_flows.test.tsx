@@ -142,7 +142,8 @@ describe('app integration flows', () => {
       expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/review actions are available/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /request revision/i })).toBeInTheDocument();
   });
 
   it('admin dashboard renders stat values', async () => {

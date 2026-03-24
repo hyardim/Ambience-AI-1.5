@@ -14,7 +14,12 @@ from src.repositories import (
     message_repository,
     notification_repository,
 )
-from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, FileAttachmentResponse
+from src.schemas.chat import (
+    AssignRequest,
+    ChatResponse,
+    ChatWithMessages,
+    FileAttachmentResponse,
+)
 from src.services._mappers import chat_to_response, msg_to_response
 from src.services.cache_invalidation import (
     invalidate_admin_chat_caches_sync,

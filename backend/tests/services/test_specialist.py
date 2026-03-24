@@ -425,10 +425,10 @@ class TestSpecialistReview:
         assert resp2.status_code == 200
         assert resp2.json()["status"] == "approved"
 
-    def test_manual_response_not_allowed_on_chat_review(
+    def test_manual_response_on_chat_review_closes_consultation(
         self, client, specialist_headers, submitted_chat, registered_specialist
     ):
-        """manual_response action is only valid on per-message review, not whole-chat review."""
+        """manual_response on whole-chat review should create a final specialist answer."""
         self._assign(
             client,
             specialist_headers,
@@ -443,7 +443,19 @@ class TestSpecialistReview:
             },
             headers=specialist_headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "approved"
+
+        detail = client.get(
+            f"/specialist/chats/{submitted_chat['id']}",
+            headers=specialist_headers,
+        )
+        assert detail.status_code == 200
+        specialist_messages = [
+            m for m in detail.json()["messages"] if m["sender"] == "specialist"
+        ]
+        assert specialist_messages
+        assert specialist_messages[-1]["content"] == "My manual answer."
 
 
 # ---------------------------------------------------------------------------

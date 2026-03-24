@@ -211,6 +211,23 @@ describe('API service', () => {
       await expect(getProfile()).rejects.toThrow('Request failed (500)');
     });
 
+    it('surfaces joined FastAPI validation errors from a detail array', async () => {
+      server.use(
+        http.get('/auth/me', () =>
+          HttpResponse.json(
+            {
+              detail: [
+                { msg: 'field required' },
+                { msg: 'must be a valid email' },
+              ],
+            },
+            { status: 422 },
+          )),
+      );
+
+      await expect(getProfile()).rejects.toThrow('field required; must be a valid email');
+    });
+
     it('retries the original request after a successful refresh', async () => {
       let meCalls = 0;
       server.use(

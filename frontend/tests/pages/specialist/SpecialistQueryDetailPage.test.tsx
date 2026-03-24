@@ -163,7 +163,8 @@ describe('SpecialistQueryDetailPage', () => {
 
     await user.click(screen.getByRole('button', { name: /assign to me/i }));
     await waitFor(() => {
-      expect(screen.getByText(/review actions are available on each ai response below/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /request revision/i })).toBeInTheDocument();
     });
   });
 
@@ -194,6 +195,207 @@ describe('SpecialistQueryDetailPage', () => {
     });
     expect(screen.getByText('scan.pdf')).toBeInTheDocument();
   });
+
+  it('handles consultation-level request revision, comments, and manual response flows', async () => {
+    const reviewActions: string[] = [];
+    let currentStatus = 'assigned';
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: currentStatus,
+          specialist_id: mockSpecialistUser.id,
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/specialist/chats/:chatId/review', async ({ request }) => {
+        const body = await request.json() as { action: string };
+        reviewActions.push(body.action);
+        if (body.action === 'request_changes') {
+          currentStatus = 'reviewing';
+        } else if (body.action === 'manual_response') {
+          currentStatus = 'approved';
+        }
+        return HttpResponse.json({ ...mockChatWithMessages, status: currentStatus });
+      }),
+      http.post('/chats/:chatId/files', () => HttpResponse.json({ id: 'file-1' })),
+    );
+
+    renderPage();
+    const user = userEvent.setup({ applyAccept: false });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /request revision/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /request revision/i }));
+    await user.type(screen.getByPlaceholderText(/describe the required changes/i), 'Clarify the monitoring plan');
+    await user.click(screen.getByRole('button', { name: /submit feedback/i }));
+    await waitFor(() => {
+      expect(reviewActions).toContain('request_changes');
+    });
+    expect(mockConnectStream).toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /send comment to gp/i }));
+    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Please review the latest bloods');
+    await user.click(screen.getByRole('button', { name: /^send comment$/i }));
+    await waitFor(() => {
+      expect(reviewActions).toContain('send_comment');
+    });
+
+    await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
+    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use the specialist plan instead');
+    await user.type(screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i), 'NICE NG228');
+    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
+    await user.click(screen.getByRole('button', { name: /send manual response/i }));
+    await waitFor(() => {
+      expect(reviewActions).toContain('manual_response');
+    });
+  }, 15000);
+
+  it('unassigns a consultation from the consultation-level controls', async () => {
+    const reviewActions: string[] = [];
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'assigned',
+          specialist_id: mockSpecialistUser.id,
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/specialist/chats/:chatId/review', async ({ request }) => {
+        const body = await request.json() as { action: string };
+        reviewActions.push(body.action);
+        return HttpResponse.json({ ...mockChatWithMessages, status: 'submitted' });
+      }),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /unassign/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /unassign/i }));
+    await user.click(screen.getByRole('button', { name: /confirm unassign/i }));
+
+    await waitFor(() => {
+      expect(reviewActions).toContain('unassign');
+      expect(screen.getByText(/specialist queries/i)).toBeInTheDocument();
+    });
+  });
+
+  it('supports cancelling consultation-level modals and surfaces consultation-level errors', async () => {
+    const reviewActions: string[] = [];
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'assigned',
+          specialist_id: mockSpecialistUser.id,
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/specialist/chats/:chatId/review', async ({ request }) => {
+        const body = await request.json() as { action: string };
+        reviewActions.push(body.action);
+        const detail =
+          body.action === 'request_changes'
+            ? 'Revision failed'
+            : body.action === 'send_comment'
+              ? 'Comment failed'
+              : body.action === 'manual_response'
+                ? 'Manual response failed'
+              : 'Unassign failed';
+        return HttpResponse.json({ detail }, { status: 500 });
+      }),
+      http.post('/chats/:chatId/files', () => HttpResponse.json({ id: 'file-1' })),
+    );
+
+    renderPage();
+    const user = userEvent.setup({ applyAccept: false });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /request revision/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /request revision/i }));
+    await user.type(screen.getByPlaceholderText(/describe the required changes/i), 'Needs changes');
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByDisplayValue('Needs changes')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /send comment to gp/i }));
+    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Temporary comment');
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByDisplayValue('Temporary comment')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
+    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Replacement');
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByDisplayValue('Replacement')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /unassign/i }));
+    expect(screen.getByRole('button', { name: /confirm unassign/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByRole('button', { name: /confirm unassign/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /request revision/i }));
+    await user.type(screen.getByPlaceholderText(/describe the required changes/i), 'Retry revision');
+    await user.click(screen.getByRole('button', { name: /submit feedback/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/revision failed/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /send comment to gp/i }));
+    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Retry comment');
+    await user.click(screen.getByRole('button', { name: /^send comment$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/comment failed/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
+    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Retry manual');
+    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
+    await user.click(screen.getByRole('button', { name: /send manual response/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/manual response failed/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /unassign/i }));
+    await user.click(screen.getByRole('button', { name: /confirm unassign/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/unassign failed/i)).toBeInTheDocument();
+      expect(reviewActions).toContain('unassign');
+    });
+  }, 15000);
 
   it('handles approve, approve with comment, request changes, and manual response flows', async () => {
     server.use(
@@ -316,10 +518,10 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText(/all ai responses have been reviewed/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole('button', { name: /close & approve consultation/i })[0]);
+    await user.click(screen.getByRole('button', { name: /approve and send/i }));
     await user.click(screen.getByRole('button', { name: /confirm close & approve/i }));
 
     await user.click(screen.getByRole('button', { name: /send specialist note/i }));
@@ -420,10 +622,9 @@ describe('SpecialistQueryDetailPage', () => {
       fileInput,
       new File(['x'.repeat(4 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
     );
-    await user.click(screen.getByRole('button', { name: /send manual response/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/maximum size is 3 mb/i)).toBeInTheDocument();
+      expect(screen.getByText(/file\(s\) exceed the 3 mb limit/i)).toBeInTheDocument();
     });
   });
 
@@ -592,12 +793,12 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText(/all ai responses have been reviewed/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole('button', { name: /close & approve consultation/i })[0]);
+    await user.click(screen.getByRole('button', { name: /approve and send/i }));
     await user.click(screen.getByRole('button', { name: /^cancel$/i }));
-    expect(screen.getAllByText(/close & approve consultation/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
 
     server.use(
       http.get('/specialist/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })),
@@ -736,10 +937,10 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /close & approve consultation/i }).length).toBeGreaterThan(1);
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole('button', { name: /close & approve consultation/i })[1]);
+    await user.click(screen.getByRole('button', { name: /approve and send/i }));
     await user.click(screen.getByRole('button', { name: /confirm close & approve/i }));
     await waitFor(() => {
       expect(screen.getByText(/close failed/i)).toBeInTheDocument();

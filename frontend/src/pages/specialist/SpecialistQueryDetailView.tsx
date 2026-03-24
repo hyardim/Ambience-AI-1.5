@@ -5,7 +5,6 @@ import {
   Lock,
   Loader2,
   MessageSquare,
-  Paperclip,
   PenLine,
   RefreshCw,
   UserMinus,
@@ -424,23 +423,6 @@ export function SpecialistQueryDetailView({
             )}
             <div ref={messagesEndRef} />
           </div>
-
-          {chat?.files && chat.files.length > 0 && (
-            <div className="border-t border-gray-200 px-4 pt-3 pb-0">
-              <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1.5">
-                <Paperclip className="w-3 h-3" />
-                <span className="font-medium">Consultation files</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5 pb-2">
-                {chat.files.map((f) => (
-                  <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded text-xs text-blue-700">
-                    {f.filename}
-                    {f.file_size ? <span className="text-blue-400 ml-0.5">· {(f.file_size / 1024).toFixed(0)} KB</span> : null}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           {!isTerminal && (
             <div className="border-t border-gray-200 p-4">

@@ -453,13 +453,15 @@ test('specialist reviews and approves', async ({ page }) => {
   await setAuthenticatedSession(page, 'specialist');
   await page.goto('/login');
   await page.getByText(/queue consultation/i).click();
-  await expect(page.locator('body')).toContainText(/review this ai response/i);
+  await expect(page.locator('body')).toContainText(/approve and send/i);
+  await expect(page.locator('body')).toContainText(/advanced message actions/i);
 
+  await page.getByText(/advanced message actions/i).click();
   await page.getByRole('button', { name: /^approve$/i }).first().click();
   await page.getByRole('button', { name: /confirm approval/i }).click();
-  await expect(page.locator('body')).toContainText(/all ai responses have been reviewed/i);
+  await expect(page.locator('body')).toContainText(/specialist approved/i);
 
-  await page.getByRole('button', { name: /close & approve consultation/i }).first().click();
+  await page.getByRole('button', { name: /approve and send/i }).click();
   await page.getByRole('button', { name: /confirm close & approve/i }).click();
   await expect(page.locator('body')).toContainText(/consultation approved/i);
 });

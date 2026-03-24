@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
@@ -96,16 +96,16 @@ describe('ProfilePage', () => {
       expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
 
-    await user.clear(screen.getByLabelText(/full name/i));
-    await user.type(screen.getByLabelText(/full name/i), 'A'.repeat(101));
+    const fullNameInput = screen.getByLabelText(/full name/i);
+    await user.clear(fullNameInput);
+    fireEvent.change(fullNameInput, { target: { value: 'A'.repeat(101) } });
     await user.click(screen.getByRole('button', { name: /save changes/i }));
     expect(screen.getByText(/full name must be 100 characters or fewer/i)).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText(/full name/i));
-    await user.type(screen.getByLabelText(/full name/i), 'Valid User');
-    await user.type(screen.getByLabelText(/current password/i), 'oldpass');
-    await user.type(screen.getByLabelText(/^New Password$/i), 'password123');
-    await user.type(screen.getByLabelText(/^Confirm New Password$/i), 'password123');
+    fireEvent.change(fullNameInput, { target: { value: 'Valid User' } });
+    fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: 'oldpass' } });
+    fireEvent.change(screen.getByLabelText(/^New Password$/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm New Password$/i), { target: { value: 'password123' } });
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     expect(screen.getByText(/include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
