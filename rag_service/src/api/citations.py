@@ -63,7 +63,7 @@ def has_query_overlap(question: str, chunk_text: str) -> bool:
         return {
             token
             for token in re.findall(r"[A-Za-z0-9]+", text.lower())
-            if len(token) >= 4 and token not in GENERIC_TOKENS
+            if len(token) >= 3 and token not in GENERIC_TOKENS
         }
 
     q_tokens = _tokens(question)

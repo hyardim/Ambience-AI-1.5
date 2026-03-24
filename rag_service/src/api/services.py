@@ -20,6 +20,9 @@ NO_EVIDENCE_RESPONSE = (
     "document, or try a different query."
 )
 HIGH_CONFIDENCE_RELEVANCE = 0.72
+SOFT_FALLBACK_RELEVANCE = 0.55
+LOW_SCORE_FALLBACK_FLOOR = 0.04
+LOW_SCORE_FALLBACK_RATIO = 0.85
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
 
@@ -126,15 +129,45 @@ def retrieve_chunks_advanced(
 
 
 def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
+    base_candidates = [
         chunk
         for chunk in retrieved
         if chunk.get("score", 0) >= MIN_RELEVANCE
         and ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
-        and (
-            has_query_overlap(query, chunk.get("text", ""))
-            or chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE
-        )
+        and not is_boilerplate(chunk)
+    ]
+
+    strict_matches = [
+        chunk
+        for chunk in base_candidates
+        if has_query_overlap(query, chunk.get("text", ""))
+        or chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE
+    ]
+    if strict_matches:
+        return strict_matches
+
+    semantic_fallback = [
+        chunk
+        for chunk in base_candidates
+        if chunk.get("score", 0) >= SOFT_FALLBACK_RELEVANCE
+    ]
+    if semantic_fallback:
+        return semantic_fallback
+
+    if not retrieved:
+        return []
+
+    top_score = max(float(chunk.get("score", 0.0)) for chunk in retrieved)
+    low_score_threshold = max(
+        LOW_SCORE_FALLBACK_FLOOR,
+        top_score * LOW_SCORE_FALLBACK_RATIO,
+    )
+    return [
+        chunk
+        for chunk in retrieved
+        if chunk.get("score", 0) >= low_score_threshold
+        and ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
+        and has_query_overlap(query, chunk.get("text", ""))
         and not is_boilerplate(chunk)
     ]
 

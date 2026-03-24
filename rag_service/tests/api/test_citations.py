@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.api.citations import (
     extract_citation_results,
+    has_query_overlap,
     parse_citation_group,
 )
 from src.api.schemas import SearchResult
@@ -25,3 +26,10 @@ def test_extract_citation_results_can_strip_references() -> None:
 
 def test_parse_citation_group_skips_invalid_values() -> None:
     assert parse_citation_group("1, x, 5-a") == [1]
+
+
+def test_has_query_overlap_accepts_three_character_tokens() -> None:
+    assert has_query_overlap(
+        "DVT prophylaxis in CKD",
+        "CKD patients need DVT prevention",
+    )

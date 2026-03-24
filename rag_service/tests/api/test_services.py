@@ -122,6 +122,72 @@ def test_filter_chunks_keeps_high_confidence_semantic_hit_without_token_overlap(
     assert filtered == retrieved
 
 
+def test_filter_chunks_falls_back_to_semantic_candidates_when_strict_match_empty() -> (
+    None
+):
+    retrieved = [
+        {
+            "text": "Acetylsalicylic acid may be considered for secondary prevention.",
+            "score": 0.62,
+            "metadata": {"source_url": "https://example.com/doc.pdf"},
+        }
+    ]
+
+    filtered = filter_chunks("aspirin management", retrieved)
+
+    assert filtered == retrieved
+
+
+def test_filter_chunks_semantic_fallback_keeps_low_relevance_out() -> None:
+    retrieved = [
+        {
+            "text": "Acetylsalicylic acid may be considered for secondary prevention.",
+            "score": 0.44,
+            "metadata": {"source_url": "https://example.com/doc.pdf"},
+        }
+    ]
+
+    filtered = filter_chunks("aspirin management", retrieved)
+
+    assert filtered == []
+
+
+def test_filter_chunks_uses_guarded_low_score_fallback_for_near_top_hits() -> None:
+    top_hit = {
+        "text": (
+            "SLE with proteinuria and rising creatinine needs urgent renal pathway."
+        ),
+        "score": 0.047,
+        "metadata": {"source_url": "https://example.com/doc.pdf"},
+    }
+    lower_hit = {
+        "text": "SLE proteinuria context with less specific detail.",
+        "score": 0.03,
+        "metadata": {"source_url": "https://example.com/doc.pdf"},
+    }
+
+    filtered = filter_chunks(
+        "SLE proteinuria rising creatinine referral",
+        [top_hit, lower_hit],
+    )
+
+    assert filtered == [top_hit]
+
+
+def test_filter_chunks_low_score_fallback_ignores_very_low_top_scores() -> None:
+    retrieved = [
+        {
+            "text": "SLE and proteinuria mention only briefly.",
+            "score": 0.02,
+            "metadata": {"source_url": "https://example.com/doc.pdf"},
+        }
+    ]
+
+    filtered = filter_chunks("SLE proteinuria referral", retrieved)
+
+    assert filtered == []
+
+
 def test_filter_chunks_keeps_hits_with_doc_id_even_without_public_source_url() -> None:
     retrieved = [
         {
