@@ -251,6 +251,7 @@ async def generate_clinical_answer(
             file_context=request.file_context,
             stream=request.stream,
             severity=request.severity,
+            specialty=request.specialty,
             retrieved=retrieved,
             route_endpoint="/answer",
             prompt_label=ACTIVE_PROMPT,
@@ -275,6 +276,7 @@ async def _generate_answer_from_retrieval(
     file_context: str | None,
     stream: bool,
     severity: str | None,
+    specialty: str | None,
     retrieved: list[dict[str, Any]],
     route_endpoint: str,
     prompt_label: str,
@@ -282,7 +284,7 @@ async def _generate_answer_from_retrieval(
     idempotency_key: str | None,
 ) -> Any:
     try:
-        filtered = filter_chunks(query, retrieved)
+        filtered = filter_chunks(query, retrieved, specialty=specialty)
         top_chunks = filtered[:MAX_CITATIONS]
         if not top_chunks and not file_context:
             return _no_evidence_response(stream)
@@ -322,6 +324,7 @@ async def _generate_answer_from_retrieval(
                     prompt,
                     max_tokens,
                     citations_retrieved,
+                    allow_uncited_answer=bool(file_context),
                     provider=route.provider,
                 ),
                 media_type="application/x-ndjson",
@@ -362,6 +365,8 @@ async def _generate_answer_from_retrieval(
             citations_retrieved,
             strip_references=True,
         )
+        if not citations_used and not file_context:
+            return _no_evidence_response(stream)
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
@@ -393,7 +398,11 @@ async def revise_clinical_answer(
             top_k=request.top_k,
             specialty=request.specialty,
         )
-        filtered = filter_chunks(request.original_query, retrieved)
+        filtered = filter_chunks(
+            request.original_query,
+            retrieved,
+            specialty=request.specialty,
+        )
         top_chunks = filtered[:MAX_CITATIONS]
         if not top_chunks and not request.file_context:
             return _no_evidence_response(request.stream)
@@ -436,6 +445,7 @@ async def revise_clinical_answer(
                     prompt,
                     request.max_tokens,
                     citations_retrieved,
+                    allow_uncited_answer=bool(request.file_context),
                     provider=route.provider,
                 ),
                 media_type="application/x-ndjson",

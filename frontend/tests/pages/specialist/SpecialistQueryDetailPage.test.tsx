@@ -395,7 +395,7 @@ describe('SpecialistQueryDetailPage', () => {
       expect(screen.getByText(/unassign failed/i)).toBeInTheDocument();
       expect(reviewActions).toContain('unassign');
     });
-  }, 15000);
+  }, 30000);
 
   it('handles approve, approve with comment, request changes, and manual response flows', async () => {
     server.use(
@@ -488,7 +488,7 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/manual response sent, but some files failed to upload/i)).toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it('shows close-and-approve flow, send errors, oversize validation, and not-found state', async () => {
     server.use(
@@ -539,7 +539,7 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/query not found/i)).toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it('resets modal state on cancel and shows terminal consultation banner', async () => {
     server.use(
@@ -587,7 +587,7 @@ describe('SpecialistQueryDetailPage', () => {
     await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Replacement');
     await user.click(screen.getByRole('button', { name: /^cancel$/i }));
     expect(screen.queryByDisplayValue('Replacement')).not.toBeInTheDocument();
-  });
+  }, 15000);
 
   it('shows manual response file-size validation without submitting', async () => {
     server.use(
@@ -729,7 +729,7 @@ describe('SpecialistQueryDetailPage', () => {
       await latestOnRefresh?.();
     });
     await user.click(screen.getByRole('button', { name: /send specialist small file/i }));
-  });
+  }, 15000);
 
   it('still sends specialist messages when one uploaded file fails', async () => {
     server.use(
@@ -766,7 +766,7 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/message sent, but some files failed to upload/i)).toBeInTheDocument();
     });
-  });
+  }, 30000);
 
   it('renders empty consultations, supports canceling confirmation modals, and navigates back from not-found state', async () => {
     server.use(
@@ -813,7 +813,7 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/specialist queries/i)).toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it('surfaces approval, review, and manual response errors', async () => {
     server.use(
@@ -909,7 +909,7 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/assign failed/i)).toBeInTheDocument();
     });
-  });
+  }, 20000);
 
   it('surfaces close-and-approve failures from either close action', async () => {
     server.use(

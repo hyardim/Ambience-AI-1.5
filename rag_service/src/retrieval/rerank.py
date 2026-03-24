@@ -34,6 +34,7 @@ class RankedResult(BaseModel):
     doc_id: str
     text: str
     rerank_score: float
+    final_score: float = 0.0
     rrf_score: float
     vector_score: float | None
     keyword_rank: float | None
@@ -102,6 +103,7 @@ def rerank(
                 doc_id=r.doc_id,
                 text=r.text,
                 rerank_score=0.0,
+                final_score=0.0,
                 rrf_score=r.rrf_score,
                 vector_score=r.vector_score,
                 keyword_rank=r.keyword_rank,
@@ -130,6 +132,7 @@ def rerank(
                 doc_id=r.doc_id,
                 text=r.text,
                 rerank_score=0.0,
+                final_score=0.0,
                 rrf_score=r.rrf_score,
                 vector_score=r.vector_score,
                 keyword_rank=r.keyword_rank,
@@ -168,6 +171,7 @@ def rerank(
                 doc_id=result.doc_id,
                 text=result.text,
                 rerank_score=score,
+                final_score=score,
                 rrf_score=result.rrf_score,
                 vector_score=result.vector_score,
                 keyword_rank=result.keyword_rank,

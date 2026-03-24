@@ -8,6 +8,7 @@ from ..generation.streaming import stream_generate
 from ..utils.logger import setup_logger
 from .citations import extract_citation_results
 from .schemas import SearchResult
+from .services import NO_EVIDENCE_RESPONSE
 
 logger = setup_logger(__name__)
 
@@ -16,6 +17,8 @@ async def streaming_generator(
     prompt: str,
     max_tokens: int,
     citations_retrieved: list[SearchResult],
+    *,
+    allow_uncited_answer: bool = False,
     provider: ProviderName = "local",
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
@@ -41,6 +44,8 @@ async def streaming_generator(
         citations_retrieved,
         strip_references=True,
     )
+    if not citations_used and not allow_uncited_answer:
+        renumbered_answer = NO_EVIDENCE_RESPONSE
 
     yield (
         json.dumps(
@@ -51,7 +56,9 @@ async def streaming_generator(
                     citation.model_dump() for citation in citations_used
                 ],
                 "citations_retrieved": [
-                    citation.model_dump() for citation in citations_retrieved
+                    citation.model_dump() for citation in (
+                        citations_retrieved if citations_used else []
+                    )
                 ],
                 "citations": [citation.model_dump() for citation in citations_used],
             }

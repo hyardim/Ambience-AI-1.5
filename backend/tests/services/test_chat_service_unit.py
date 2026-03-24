@@ -237,7 +237,7 @@ def test_build_conversation_history_skips_error_messages_and_keeps_recent_tail()
         messages,
         token_budget=5,
     )
-    assert history == "AI: Recent guidance"
+    assert history == "GP: Older note"
 
 
 def test_select_rag_citations_prefers_citations_used():
@@ -249,7 +249,7 @@ def test_select_rag_citations_prefers_citations_used():
         chat_service._select_rag_citations(
             {"citations_used": [], "citations_retrieved": [3]}
         )
-        == [3]
+        == []
     )
     assert chat_service._select_rag_citations({"citations_used": []}) == []
     assert chat_service._select_rag_citations({}) is None

@@ -44,7 +44,11 @@ def test_orchestration_answer_full_pipeline(monkeypatch):
         "retrieve_chunks_advanced",
         lambda **kwargs: [_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(
         routes,
         "select_generation_provider",
@@ -73,7 +77,11 @@ def test_orchestration_no_evidence_fallback(monkeypatch):
     monkeypatch.setattr(
         routes.api_services, "retrieve_chunks_advanced", lambda **kwargs: []
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
 
     resp = client.post(
         "/answer", json={"query": "unsupported topic", "specialty": "neurology"}
@@ -92,7 +100,11 @@ def test_orchestration_revise_with_feedback(monkeypatch):
         "retrieve_chunks",
         lambda original_query, top_k, specialty: [_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(
         routes,
         "select_generation_provider",

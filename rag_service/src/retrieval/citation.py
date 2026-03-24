@@ -51,6 +51,7 @@ class CitedResult(BaseModel):
     chunk_id: str
     text: str
     rerank_score: float
+    final_score: float = 0.0
     rrf_score: float
     vector_score: float | None
     keyword_rank: float | None
@@ -66,7 +67,6 @@ _REQUIRED_FIELDS = (
     "source_name",
     "specialty",
     "doc_type",
-    "source_url",
     "content_type",
     "section_title",
     "section_path",
@@ -112,6 +112,7 @@ def assemble_citations(
                 chunk_id=result.chunk_id,
                 text=result.text,
                 rerank_score=result.rerank_score,
+                final_score=result.final_score,
                 rrf_score=result.rrf_score,
                 vector_score=result.vector_score,
                 keyword_rank=result.keyword_rank,
@@ -205,6 +206,17 @@ def _build_citation(result: RankedResult) -> Citation:
     else:
         page_end = metadata["page_end"]
 
+    source_url = metadata.get("source_url")
+    if isinstance(source_url, str):
+        source_url = source_url.strip()
+    if not source_url:
+        logger.warning(
+            "Missing source_url for chunk '%s' — relying on "
+            "doc_id-backed document access",
+            result.chunk_id,
+        )
+        source_url = ""
+
     return Citation(
         title=metadata["title"],
         source_name=metadata["source_name"],
@@ -217,7 +229,7 @@ def _build_citation(result: RankedResult) -> Citation:
         section_title=metadata["section_title"],
         page_start=page_start,
         page_end=page_end,
-        source_url=metadata["source_url"],
+        source_url=source_url,
         doc_id=result.doc_id,
         chunk_id=result.chunk_id,
         content_type=metadata["content_type"],

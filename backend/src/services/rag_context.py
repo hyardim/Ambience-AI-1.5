@@ -61,9 +61,15 @@ def build_conversation_history_from_messages(
     history_lines: list[str] = []
     total_chars = 0
     # Walk backwards from the most recent message so we keep the tail while
-    # ignoring any persisted fallback/error AI messages.
+    # ignoring persisted fallback/error AI messages and prior AI answers.
+    # This reduces self-anchoring where the model can be biased by its own
+    # earlier output instead of the retrieved evidence.
     for message in reversed(messages[-limit:]):
-        if not message.content or getattr(message, "is_error", False):
+        if (
+            not message.content
+            or getattr(message, "is_error", False)
+            or message.sender == "ai"
+        ):
             continue
         speaker = {
             "user": "GP",
@@ -136,12 +142,10 @@ def build_file_context_result(
 
 
 def select_rag_citations(payload: dict) -> list | None:
-    first_empty_list: list | None = None
-    for key in ("citations_used", "citations", "citations_retrieved"):
-        value = payload.get(key)
-        if isinstance(value, list):
-            if value:
-                return value
-            if first_empty_list is None:
-                first_empty_list = value
-    return first_empty_list
+    for key in ("citations_used", "citations"):
+        if key in payload and isinstance(payload.get(key), list):
+            return payload[key]
+    value = payload.get("citations_retrieved")
+    if isinstance(value, list):
+        return value
+    return None

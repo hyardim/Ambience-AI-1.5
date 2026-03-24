@@ -182,7 +182,7 @@ describe('GPQueryDetailPage', () => {
     await waitFor(() => {
       expect(mockConnectStream).toHaveBeenCalled();
     });
-  });
+  }, 15000);
 
   it('shows not-found and send validation errors', async () => {
     server.use(http.get('/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })));

@@ -153,6 +153,7 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-thewindmom/llama3-med42-8b}
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
       - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-thewindmom/llama3-med42-8b}
+      - LOCAL_LLM_TIMEOUT_SECONDS=${LOCAL_LLM_TIMEOUT_SECONDS:-120}
       - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
       - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY}
@@ -208,6 +209,7 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-thewindmom/llama3-med42-8b}
       - LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
       - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-thewindmom/llama3-med42-8b}
+      - LOCAL_LLM_TIMEOUT_SECONDS=${LOCAL_LLM_TIMEOUT_SECONDS:-120}
       - CLOUD_LLM_BASE_URL=${CLOUD_LLM_BASE_URL}
       - CLOUD_LLM_MODEL=${CLOUD_LLM_MODEL:-m42-health/Llama3-Med42-70B}
       - CLOUD_LLM_API_KEY=${CLOUD_LLM_API_KEY}

@@ -2,8 +2,8 @@ import argparse
 from pathlib import Path
 from typing import TypedDict
 
-from sqlalchemy import inspect
 from alembic.config import Config
+from sqlalchemy import inspect
 
 from alembic import command
 from src.core import security

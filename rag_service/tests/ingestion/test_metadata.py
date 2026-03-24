@@ -969,8 +969,7 @@ class TestAttachMetadata:
             result = attach_metadata(doc, source_info)
 
         assert (
-            result["doc_meta"]["source_url"]
-            == "https://www.nice.org.uk/guidance/ng103"
+            result["doc_meta"]["source_url"] == "https://www.nice.org.uk/guidance/ng103"
         )
 
     def test_missing_source_path_raises_metadata_validation_error(self) -> None:

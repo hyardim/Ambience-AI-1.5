@@ -1,6 +1,7 @@
 import re
 
 from ..config import generation_config
+from ..retrieval.relevance import phrase_overlap_count, query_overlap_count
 
 MAX_CHARS_PER_CHUNK = 1200
 _MAX_INPUT_LENGTH = 10_000
@@ -104,11 +105,16 @@ _INSTRUCTIONS_NEW = (
     "to explain terminology, provide clinical context, or bridge small gaps in "
     "the indexed evidence, never to replace it.\n\n"
     "Rules for answering:\n"
+    "0. RELEVANCE DISCIPLINE: The context items are already ordered by estimated "
+    "direct relevance, with [1] the strongest match. Prefer the lowest-numbered "
+    "passage that directly addresses the clinical point. Do not cite a higher-"
+    "numbered passage if a lower-numbered passage answers the same point more "
+    "specifically.\n"
     "1. INDEXED CITATIONS FIRST: Base your answer on the indexed passages. "
     "Cite them with [1], [2] etc. only when a passage directly supports the "
     "specific claim you are making. "
     "Read each passage carefully — if it covers a different condition or topic "
-    "than the question, "
+    "than the question, a different complication, or a different referral pathway, "
     "do not cite it, even if it contains a related keyword.\n"
     "2. UPLOADED DOCUMENTS: If an 'UPLOADED DOCUMENTS' section is present, it "
     "contains patient-specific files (e.g. a guideline PDF or clinical "
@@ -119,8 +125,10 @@ _INSTRUCTIONS_NEW = (
     "never mix it with cited content or "
     "attach citation numbers to it.\n"
     "4. HONEST SCOPE: If the indexed passages do not cover the question's "
-    "topic, say so in one sentence, "
-    "then continue with the 'General clinical context:' section only.\n"
+    "topic, say so in one sentence. If the question is non-medical, off-topic, "
+    "or unrelated to patient care, STOP there and do not add a 'General clinical "
+    "context:' section. Only use 'General clinical context:' for clearly medical "
+    "questions that are partially but not fully covered by the indexed evidence.\n"
     "5. NO FABRICATION: Do not invent drug doses, statistics, guideline codes, "
     "study references, "
     "author names, or year references — not even for well-known studies. "
@@ -139,8 +147,8 @@ _INSTRUCTIONS_NEW = (
     "Then, if there is additional useful context from general medical "
     "knowledge, add a single paragraph starting with exactly: 'General clinical "
     "context:' — no citation numbers, no statistics, no author names. "
-    "If the indexed evidence fully covers the question, omit this block "
-    "entirely.\n"
+    "If the indexed evidence fully covers the question, or if the question is "
+    "non-medical/off-topic, omit this block entirely.\n"
     "If safety considerations apply to this question, end with one or two "
     "sentences on relevant safety flags or monitoring. "
     "If there are no safety implications, omit this section entirely."
@@ -151,7 +159,48 @@ def _active_instructions() -> str:
     return _INSTRUCTIONS_NEW if ACTIVE_PROMPT == "new" else _INSTRUCTIONS_ORIGINAL
 
 
-def _format_context(chunks: list[dict]) -> str:
+def _matching_signals(question: str, chunk: dict) -> str:
+    metadata = chunk.get("metadata", {}) or {}
+    text = chunk.get("text", "")
+    title = (
+        metadata.get("title")
+        or metadata.get("source_name")
+        or metadata.get("filename")
+        or ""
+    )
+    section = chunk.get("section_path") or metadata.get("section_title") or ""
+
+    signals: list[str] = []
+    body_overlap = query_overlap_count(question, text)
+    body_phrases = phrase_overlap_count(question, text)
+    title_overlap = query_overlap_count(question, title)
+    title_phrases = phrase_overlap_count(question, title)
+    section_overlap = query_overlap_count(question, section)
+    section_phrases = phrase_overlap_count(question, section)
+
+    if body_phrases:
+        signals.append("strong phrase overlap in passage text")
+    elif body_overlap >= 3:
+        signals.append("high token overlap in passage text")
+    elif body_overlap >= 1:
+        signals.append("some token overlap in passage text")
+
+    if title_phrases or title_overlap >= 2:
+        signals.append("title closely matches the question topic")
+    elif title_overlap == 1:
+        signals.append("title partially matches the question topic")
+
+    if section_phrases or section_overlap >= 2:
+        signals.append("section heading closely matches the question topic")
+    elif section_overlap == 1:
+        signals.append("section heading partially matches the question topic")
+
+    if not signals:
+        return "broader contextual support only"
+    return "; ".join(signals[:3])
+
+
+def _format_context(question: str, chunks: list[dict]) -> str:
     """Render retrieved chunks for the prompt. Empty string when none."""
     if not chunks:
         return ""
@@ -173,10 +222,18 @@ def _format_context(chunks: list[dict]) -> str:
                 page_note = f" (page {page_start})"
             else:
                 page_note = f" (pages {page_start}-{page_end})"
+        specialty = metadata.get("specialty")
+        section = chunk.get("section_path") or metadata.get("section_title")
+        source_meta_bits = [source]
+        if specialty:
+            source_meta_bits.append(f"specialty={specialty}")
+        if section:
+            source_meta_bits.append(f"section={section}")
 
         lines.append(
-            f"[{idx}] {_truncate_chunk_text(chunk.get('text', ''))}\n"
-            f"Source: {source}{page_note}"
+            f"[{idx}] Match cues: {_matching_signals(question, chunk)}\n"
+            f"Passage: {_truncate_chunk_text(chunk.get('text', ''))}\n"
+            f"Source: {' | '.join(source_meta_bits)}{page_note}"
         )
 
     return "\n\n".join(lines)
@@ -195,9 +252,7 @@ def _format_patient_context(patient_context: dict | None) -> str:
         age = _sanitize_input(str(patient_context["age"]), max_length=20)
         parts.append(f"Age: {age}")
     if patient_context.get("gender"):
-        gender = _sanitize_input(
-            patient_context["gender"], max_length=50
-        ).capitalize()
+        gender = _sanitize_input(patient_context["gender"], max_length=50).capitalize()
         parts.append(f"Gender: {gender}")
     if patient_context.get("specialty"):
         spec = _sanitize_input(
@@ -205,9 +260,7 @@ def _format_patient_context(patient_context: dict | None) -> str:
         ).capitalize()
         parts.append(f"Specialty: {spec}")
     if patient_context.get("severity"):
-        sev = _sanitize_input(
-            patient_context["severity"], max_length=50
-        ).capitalize()
+        sev = _sanitize_input(patient_context["severity"], max_length=50).capitalize()
         parts.append(f"Severity: {sev}")
     header = "  |  ".join(parts)
     notes = _sanitize_input(patient_context.get("notes", ""))
@@ -240,7 +293,7 @@ def build_grounded_prompt(
     if file_context:
         file_context = _sanitize_input(file_context, max_length=_MAX_INPUT_LENGTH * 2)
 
-    context_block = _format_context(chunks)
+    context_block = _format_context(question, chunks)
     has_context = bool(chunks)
     has_files = bool(file_context)
 
@@ -283,7 +336,7 @@ def build_revision_prompt(
     specialist_feedback = _sanitize_input(specialist_feedback)
     if file_context:
         file_context = _sanitize_input(file_context, max_length=_MAX_INPUT_LENGTH * 2)
-    context_block = _format_context(chunks)
+    context_block = _format_context(original_question, chunks)
     has_context = bool(chunks)
 
     # Use the same active prompt variant as the initial generation so

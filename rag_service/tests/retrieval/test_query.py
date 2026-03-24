@@ -217,6 +217,57 @@ class TestExpandQuery:
         result = _expand_query("GCA headache")
         assert "giant cell arteritis" in result
 
+    def test_aspirin_expansion(self):
+        result = _expand_query("aspirin management")
+        assert "acetylsalicylic acid" in result
+
+    def test_red_flag_back_pain_cluster_expands_to_cauda_equina(self):
+        result = _expand_query(
+            "Severe back pain with bilateral leg weakness and urinary retention."
+        )
+        assert "cauda equina syndrome" in result
+        assert "progressive neurological deficit" in result
+
+    def test_nph_pattern_expands_to_normal_pressure_hydrocephalus(self):
+        result = _expand_query(
+            "Gait disturbance with urinary incontinence and ventriculomegaly."
+        )
+        assert "normal pressure hydrocephalus" in result
+        assert "NPH" in result
+        assert "gait apraxia" in result
+
+    def test_visual_headache_pattern_expands_to_migraine_aura_and_tia(self):
+        result = _expand_query(
+            "Transient visual disturbance followed by headache for 10 minutes."
+        )
+        assert "migraine aura" in result
+        assert "transient ischaemic attack" in result
+
+    def test_methotrexate_toxicity_pattern_expands_to_monitoring_terms(self):
+        result = _expand_query(
+            "Methotrexate with fever, sore throat, and neutropenia on blood count."
+        )
+        assert "DMARD toxicity" in result
+        assert "drug-induced neutropenia" in result
+        assert "csDMARD monitoring" in result
+
+    def test_sle_renal_pattern_expands_to_lupus_nephritis_terms(self):
+        result = _expand_query(
+            "Known SLE with new proteinuria and rising creatinine."
+        )
+        assert "lupus nephritis" in result
+        assert "renal involvement" in result
+        assert "nephrology referral" in result
+
+    def test_inflammatory_arthritis_referral_pattern_expands_to_triage_terms(self):
+        result = _expand_query(
+            "Intermittent joint swelling in knees and wrists before "
+            "specialist referral."
+        )
+        assert "early inflammatory arthritis" in result
+        assert "baseline blood tests" in result
+        assert "plain radiographs" in result
+
 
 # -----------------------------------------------------------------------
 # Tests — RetrievalError

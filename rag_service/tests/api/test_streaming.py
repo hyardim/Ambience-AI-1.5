@@ -62,7 +62,12 @@ async def test_produces_chunks_then_done(monkeypatch: pytest.MonkeyPatch) -> Non
     ]
 
     lines = []
-    async for line in streaming_generator("prompt", 512, citations_retrieved):
+    async for line in streaming_generator(
+        "prompt",
+        512,
+        citations_retrieved,
+        allow_uncited_answer=True,
+    ):
         lines.append(json.loads(line.strip()))
 
     assert len(lines) == 4

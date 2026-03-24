@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     CACHE_NOTIFICATION_TTL: int = 30
 
     # RAG / chat flow tuning
-    CHAT_RAG_TOP_K: int = 4
+    CHAT_RAG_TOP_K: int = 5
     CHAT_HISTORY_MESSAGE_LIMIT: int = 8
 
     # Auth verification / recovery

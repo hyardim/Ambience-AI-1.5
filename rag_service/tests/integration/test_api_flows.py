@@ -59,7 +59,11 @@ def test_answer_returns_no_evidence_when_retrieval_empty(monkeypatch):
     monkeypatch.setattr(
         routes.api_services, "retrieve_chunks_advanced", lambda **kwargs: []
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
 
     response = client.post(
         "/answer",
@@ -79,7 +83,11 @@ def test_answer_streaming_returns_ndjson_chunks(monkeypatch):
         "retrieve_chunks_advanced",
         lambda **kwargs: [_sample_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "select_generation_provider", _route_local)
 
     async def fake_stream_generate(prompt, max_tokens=None):
@@ -110,7 +118,11 @@ def test_answer_with_patient_context_threads_into_prompt(monkeypatch):
         "retrieve_chunks_advanced",
         lambda **kwargs: [_sample_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "select_generation_provider", _route_local)
 
     captured_prompt = {}
@@ -146,7 +158,11 @@ def test_answer_file_context_only_uses_cloud_provider(monkeypatch):
     monkeypatch.setattr(
         routes.api_services, "retrieve_chunks_advanced", lambda **kwargs: []
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
 
     selected = {}
 
@@ -185,7 +201,11 @@ def test_answer_retry_on_retryable_generation_error(monkeypatch):
         "retrieve_chunks_advanced",
         lambda **kwargs: [_sample_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "select_generation_provider", _route_local)
     monkeypatch.setattr(routes.retry_config, "retry_enabled", True)
 
@@ -215,7 +235,11 @@ def test_revise_with_feedback_and_chunks(monkeypatch):
         "retrieve_chunks",
         lambda original_query, top_k, specialty: [_sample_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "select_generation_provider", _route_local)
 
     captured = {}
@@ -248,7 +272,11 @@ def test_revise_streaming(monkeypatch):
         "retrieve_chunks",
         lambda original_query, top_k, specialty: [_sample_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "select_generation_provider", _route_local)
 
     async def fake_stream_generate(prompt, max_tokens=None):
@@ -349,7 +377,11 @@ def test_answer_route_integration_returns_grounded_citations(
         "retrieve_chunks_advanced",
         lambda **kwargs: [_sample_chunk()],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "select_generation_provider", _route_local)
 
     async def fake_generate_answer(prompt, max_tokens, provider):

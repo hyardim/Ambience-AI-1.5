@@ -8,7 +8,7 @@ class AskRequest(BaseModel):
     source_name: str | None = None
     doc_type: str | None = None
     score_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
-    expand_query: bool = False
+    expand_query: bool = True
 
 
 class CitationResponse(BaseModel):

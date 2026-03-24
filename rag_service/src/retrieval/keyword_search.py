@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -13,8 +14,10 @@ from ..config import db_config
 from ..utils.db import db
 from ..utils.logger import setup_logger
 from .query import RetrievalError
+from .relevance import GENERIC_TOKENS
 
 logger = setup_logger(__name__)
+RELAXED_QUERY_TERM_LIMIT = 8
 
 
 # -----------------------------------------------------------------------
@@ -215,6 +218,60 @@ def _run_query(
             ),
         )
         rows = cur.fetchall()
+        if not rows:
+            relaxed_query = _build_relaxed_tsquery(query)
+            if relaxed_query:
+                cur.execute(
+                    """
+                    SELECT
+                        chunk_id,
+                        doc_id,
+                        text,
+                        ts_rank(text_search_vector, to_tsquery('english', %s)) AS rank,
+                        metadata->>'specialty' AS specialty,
+                        metadata->>'source_name' AS source_name,
+                        metadata->>'doc_type' AS doc_type,
+                        metadata->>'source_url' AS source_url,
+                        metadata->>'content_type' AS content_type,
+                        metadata->>'section_title' AS section_title,
+                        metadata->>'title' AS title,
+                        COALESCE(
+                            metadata->>'creation_date',
+                            metadata->'citation'->>'creation_date'
+                        ) AS creation_date,
+                        COALESCE(
+                            metadata->>'publish_date',
+                            metadata->'citation'->>'publish_date'
+                        ) AS publish_date,
+                        COALESCE(
+                            metadata->>'last_updated_date',
+                            metadata->'citation'->>'last_updated_date'
+                        ) AS last_updated_date,
+                        (COALESCE(metadata->>'page_start', '0'))::int AS page_start,
+                        (COALESCE(metadata->>'page_end', '0'))::int AS page_end,
+                        metadata->'section_path' AS section_path
+                    FROM rag_chunks
+                    WHERE
+                        text_search_vector @@ to_tsquery('english', %s)
+                        AND (%s::text IS NULL OR metadata->>'specialty'   = %s)
+                        AND (%s::text IS NULL OR metadata->>'source_name' = %s)
+                        AND (%s::text IS NULL OR metadata->>'doc_type'    = %s)
+                    ORDER BY rank DESC
+                    LIMIT %s;
+                    """,
+                    (
+                        relaxed_query,
+                        relaxed_query,
+                        specialty,
+                        specialty,
+                        source_name,
+                        source_name,
+                        doc_type,
+                        doc_type,
+                        top_k,
+                    ),
+                )
+                rows = cur.fetchall()
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     if not rows:
@@ -255,3 +312,25 @@ def _run_query(
     )
 
     return results
+
+
+def _build_relaxed_tsquery(query: str) -> str | None:
+    tokens = [
+        token
+        for token in re.findall(r"[A-Za-z0-9]+", query.lower())
+        if len(token) >= 3 and not token.isdigit() and token not in GENERIC_TOKENS
+    ]
+    if not tokens:
+        return None
+    unique_tokens: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
+        unique_tokens.append(token)
+        if len(unique_tokens) >= RELAXED_QUERY_TERM_LIMIT:
+            break
+    if len(unique_tokens) < 2:
+        return None
+    return " | ".join(unique_tokens)

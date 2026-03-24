@@ -59,8 +59,19 @@ def _derive_source_url(
 
     # Match well-known NICE guideline code prefixes in the filename stem.
     nice_prefixes = (
-        "ng", "cg", "qs", "ta", "ph", "mpg", "ipg", "dg", "hst", "mtg",
-        "es", "ecd", "sc",
+        "ng",
+        "cg",
+        "qs",
+        "ta",
+        "ph",
+        "mpg",
+        "ipg",
+        "dg",
+        "hst",
+        "mtg",
+        "es",
+        "ecd",
+        "sc",
     )
     guide_code = _extract_nice_code(stem, nice_prefixes)
 
@@ -90,9 +101,7 @@ def _derive_source_url(
     return provided
 
 
-def _extract_nice_code(
-    text: str, prefixes: tuple[str, ...]
-) -> str | None:
+def _extract_nice_code(text: str, prefixes: tuple[str, ...]) -> str | None:
     """Extract a NICE guideline code (e.g. 'ng128') from *text*.
 
     Returns the lowercased code if *text* starts with a known prefix followed

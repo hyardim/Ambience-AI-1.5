@@ -26,6 +26,12 @@ _FILE_CONTEXT = (
 
 
 class TestGroundedPromptFileContext:
+    def test_context_includes_match_cues_and_passage_labels(self):
+        prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=_FILE_CONTEXT)
+
+        assert "Match cues:" in prompt
+        assert "Passage: Methotrexate is first-line for RA." in prompt
+
     def test_uploaded_documents_block_present(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=_FILE_CONTEXT)
         assert "UPLOADED DOCUMENTS" in prompt
@@ -121,14 +127,36 @@ class TestGroundedPromptFileContext:
             "What DMT?",
             _CHUNKS,
             patient_context={
-                "conversation_history": "User: relapse\nAssistant: review recent MRI",
+                "conversation_history": "GP: relapse\nSpecialist: review recent MRI",
             },
         )
 
         assert "RECENT CHAT HISTORY" in prompt
-        # The sanitizer strips "Assistant:" (prompt-injection pattern), so the
-        # conversation history appears without that prefix.
+        assert "GP: relapse" in prompt
+        assert "Specialist: review recent MRI" in prompt
         assert "review recent MRI" in prompt
+
+    def test_prompt_blocks_general_context_for_off_topic_questions(self):
+        prompt = build_grounded_prompt(
+            "Best pizza topping?",
+            _CHUNKS,
+            file_context=None,
+        )
+
+        assert "If the question is non-medical, off-topic" in prompt
+        assert (
+            "STOP there and do not add a 'General clinical context:' section"
+            in prompt
+        )
+
+    def test_grounded_prompt_prefers_lower_numbered_more_specific_passages(self):
+        prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=None)
+
+        assert (
+            "The context items are already ordered by estimated direct relevance"
+            in prompt
+        )
+        assert "Prefer the lowest-numbered passage" in prompt
 
 
 class TestRevisionPromptFileContext:
@@ -221,7 +249,11 @@ class TestRevisionPromptFileContext:
         chunks = [
             {
                 "text": "Methotrexate is first-line for RA.",
-                "metadata": {"title": "BSR RA Guideline"},
+                "metadata": {
+                    "title": "BSR RA Guideline",
+                    "specialty": "rheumatology",
+                    "section_title": "DMARD therapy",
+                },
                 "score": 0.9,
                 "page_start": 5,
                 "page_end": 6,
@@ -231,3 +263,5 @@ class TestRevisionPromptFileContext:
         prompt = build_grounded_prompt("What DMT?", chunks)
 
         assert "(pages 5-6)" in prompt
+        assert "specialty=rheumatology" in prompt
+        assert "section=DMARD therapy" in prompt

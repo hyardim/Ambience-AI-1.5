@@ -126,8 +126,9 @@ def get_source_path_for_doc(doc_id: str) -> str | None:
                     continue
                 seen.add(key)
                 if candidate.exists():
-                    return str(candidate)
+                    return str(candidate.resolve())
 
         # Fall back to the newest stored source path even if the file is gone.
         # The caller endpoint will surface a clear 404 for missing files.
-        return rows[0][0]
+        fallback = rows[0][0]
+        return str(fallback) if fallback else None

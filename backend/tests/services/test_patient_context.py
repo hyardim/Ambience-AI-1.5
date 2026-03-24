@@ -243,5 +243,5 @@ class TestPatientContextRAGPayload:
             "conversation_history", ""
         )
         assert "GP: Initial question" in history
-        assert "AI: First answer" in history
+        assert "AI: First answer" not in history
         assert "GP: Follow-up question" in history

@@ -10,7 +10,7 @@ class GenerationConfig(AppBaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="thewindmom/llama3-med42-8b")
     ollama_max_tokens: int = Field(default=1024)
-    ollama_timeout_seconds: float = Field(default=60.0)
+    ollama_timeout_seconds: float = Field(default=120.0)
     prompt_variant: str = Field(default="new")
 
 
@@ -157,6 +157,5 @@ def cloud_llm_is_configured(config: CloudLLMConfig) -> bool:
     }
     normalized_key = api_key.lower()
     return not (
-        normalized_key in placeholder_tokens
-        or normalized_key.startswith("required_")
+        normalized_key in placeholder_tokens or normalized_key.startswith("required_")
     )

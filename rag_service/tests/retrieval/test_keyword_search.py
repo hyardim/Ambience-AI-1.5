@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from psycopg2 import errors as pg_errors
 
-from src.retrieval.keyword_search import KeywordSearchResult, keyword_search
+from src.retrieval.keyword_search import (
+    KeywordSearchResult,
+    _build_relaxed_tsquery,
+    keyword_search,
+)
 from src.retrieval.query import RetrievalError
 
 # -----------------------------------------------------------------------
@@ -397,3 +401,37 @@ class TestKeywordSearch:
             keyword_search("the a is", db_url="postgresql://fake")
         warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
         assert not any("the a is" in c for c in warning_calls)
+
+    def test_build_relaxed_tsquery_uses_unique_informative_terms(self):
+        relaxed = _build_relaxed_tsquery(
+            "Methotrexate methotrexate with fever and sore throat and neutropenia"
+        )
+        assert relaxed is not None
+        assert "methotrexate" in relaxed
+        assert "neutropenia" in relaxed
+        assert relaxed.count("methotrexate") == 1
+
+    def test_run_query_uses_relaxed_keyword_fallback_when_strict_search_empty(self):
+        stop_cursor = MagicMock()
+        stop_cursor.fetchone.return_value = ("methotrexate & dosage",)
+        stop_cursor.__enter__.return_value = stop_cursor
+        stop_cursor.__exit__.return_value = False
+
+        query_cursor = MagicMock()
+        query_cursor.fetchall.side_effect = [[], [make_row(chunk_id="relaxed-hit")]]
+        query_cursor.__enter__.return_value = query_cursor
+        query_cursor.__exit__.return_value = False
+
+        mock_conn = MagicMock()
+        mock_conn.cursor.side_effect = [stop_cursor, query_cursor]
+
+        with patch(
+            "src.retrieval.keyword_search.psycopg2.connect", return_value=mock_conn
+        ):
+            results = keyword_search(
+                "methotrexate fever sore throat neutropenia",
+                db_url="postgresql://fake",
+            )
+
+        assert [result.chunk_id for result in results] == ["relaxed-hit"]
+        assert query_cursor.execute.call_count == 2

@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 import re
 from typing import Any
 
+from ..retrieval.relevance import has_query_overlap, query_overlap_count
 from ..utils.citation_utils import (
     extract_citation_indices,
     parse_citation_group,
@@ -10,26 +9,8 @@ from ..utils.citation_utils import (
 )
 from .schemas import SearchResult
 
-MAX_CITATIONS = 3
-MIN_RELEVANCE = 0.25
-
-GENERIC_TOKENS = {
-    "guideline",
-    "guidelines",
-    "recommendation",
-    "recommendations",
-    "committee",
-    "evidence",
-    "information",
-    "summary",
-    "overview",
-    "introduction",
-    "statement",
-    "data",
-    "supplementary",
-    "material",
-    "details",
-}
+MAX_CITATIONS = 5
+MIN_RELEVANCE = 0.12
 
 BOILERPLATE_PATTERNS = [
     "data availability",
@@ -41,6 +22,9 @@ BOILERPLATE_PATTERNS = [
     "license",
     "doi",
     "manuscript",
+    "thank you for this referral",
+    "we have not offered an appointment",
+    "we have not made an appointment",
 ]
 
 # Re-export for existing consumers
@@ -52,24 +36,9 @@ __all__ = [
     "has_query_overlap",
     "is_boilerplate",
     "parse_citation_group",
+    "query_overlap_count",
     "rewrite_citations",
 ]
-
-
-def has_query_overlap(question: str, chunk_text: str) -> bool:
-    """Basic lexical check to ensure the chunk mentions query terms."""
-
-    def _tokens(text: str) -> set[str]:
-        return {
-            token
-            for token in re.findall(r"[A-Za-z0-9]+", text.lower())
-            if len(token) >= 3 and token not in GENERIC_TOKENS
-        }
-
-    q_tokens = _tokens(question)
-    c_tokens = _tokens(chunk_text)
-    overlap = q_tokens.intersection(c_tokens)
-    return bool(q_tokens and c_tokens and overlap)
 
 
 def is_boilerplate(chunk: dict[str, Any]) -> bool:

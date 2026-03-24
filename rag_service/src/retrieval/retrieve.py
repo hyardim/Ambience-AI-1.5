@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from typing import Any
 
@@ -13,6 +14,14 @@ from .filters import FilterConfig, apply_filters
 from .fusion import reciprocal_rank_fusion
 from .keyword_search import keyword_search
 from .query import RetrievalError, process_query
+from .relevance import (
+    document_kind_score,
+    phrase_overlap_count,
+    query_intent_alignment_score,
+    query_overlap_count,
+    query_overlap_ratio,
+    text_quality_score,
+)
 from .rerank import deduplicate, rerank
 from .vector_search import vector_search
 
@@ -20,6 +29,9 @@ logger = setup_logger(__name__)
 
 DEBUG_ARTIFACT_DIR = path_config.data_debug / "retrieval"
 RETRIEVAL_TELEMETRY_PATH = path_config.logs / "retrieval_metrics.jsonl"
+MIN_SEARCH_CANDIDATES = 40
+SEARCH_MULTIPLIER = 8
+RERANK_MULTIPLIER = 6
 
 
 def retrieve(
@@ -65,6 +77,8 @@ def retrieve(
     """
     logger.info(f'Retrieving for query: "{query}", top_k={top_k}')
     total_start = time.perf_counter()
+    search_top_k = max(top_k * SEARCH_MULTIPLIER, MIN_SEARCH_CANDIDATES)
+    rerank_top_k = max(top_k * RERANK_MULTIPLIER, MIN_SEARCH_CANDIDATES)
 
     query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
     artifacts: dict[str, Any] = {}
@@ -96,8 +110,8 @@ def retrieve(
         vector_results = vector_search(
             query_embedding=processed.embedding,
             db_url=db_url,
-            top_k=top_k * 4,
-            specialty=specialty,
+            top_k=search_top_k,
+            specialty=None,
             source_name=source_name,
             doc_type=doc_type,
         )
@@ -119,8 +133,8 @@ def retrieve(
         keyword_results = keyword_search(
             query=processed.expanded,
             db_url=db_url,
-            top_k=top_k * 4,
-            specialty=specialty,
+            top_k=search_top_k,
+            specialty=None,
             source_name=source_name,
             doc_type=doc_type,
         )
@@ -147,6 +161,7 @@ def retrieve(
         fused = reciprocal_rank_fusion(
             vector_results=vector_results,
             keyword_results=keyword_results,
+            top_k=search_top_k,
         )
     except RetrievalError:
         raise
@@ -162,7 +177,7 @@ def retrieve(
     try:
         config = FilterConfig(
             score_threshold=score_threshold,
-            specialty=specialty,
+            specialty=None,
             source_name=source_name,
             doc_type=doc_type,
         )
@@ -184,7 +199,7 @@ def retrieve(
     # ------------------------------------------------------------------
     t = time.perf_counter()
     try:
-        reranked = rerank(query=query, results=filtered, top_k=top_k * 2)
+        reranked = rerank(query=query, results=filtered, top_k=rerank_top_k)
     except RetrievalError:
         raise
     except Exception as e:
@@ -210,6 +225,18 @@ def retrieve(
     dropped = len(reranked) - len(deduped)
     logger.debug(f"DEDUP complete in {_ms(t)}ms, dropped {dropped}")
     artifacts["07_dedup"] = [r.model_dump() for r in deduped]
+
+    # ------------------------------------------------------------------
+    # Stage 7.5: Final score calibration
+    # ------------------------------------------------------------------
+    deduped = _apply_final_ranking(query, deduped, preferred_specialty=specialty)
+    artifacts["07_5_final_ranking"] = [r.model_dump() for r in deduped]
+
+    # ------------------------------------------------------------------
+    # Stage 7.6: Document diversification
+    # ------------------------------------------------------------------
+    deduped = _diversify_by_document(deduped, max_per_doc=1)
+    artifacts["07_6_doc_diversity"] = [r.model_dump() for r in deduped]
 
     # ------------------------------------------------------------------
     # Stage 8: Citations
@@ -242,9 +269,10 @@ def retrieve(
             "fused_count": len(fused),
             "filtered_count": len(filtered),
             "reranked_count": len(reranked),
+            "top_final_score": deduped[0].final_score if deduped else None,
             "returned_count": len(cited),
-            "top_returned_score": cited[0].rerank_score if cited else None,
-            "bottom_returned_score": cited[-1].rerank_score if cited else None,
+            "top_returned_score": cited[0].final_score if cited else None,
+            "bottom_returned_score": cited[-1].final_score if cited else None,
             "vector_failed": vector_failed,
             "keyword_failed": keyword_failed,
             "latency_ms": total_ms,
@@ -263,6 +291,202 @@ def retrieve(
 def _ms(start: float) -> int:
     """Convert elapsed perf_counter seconds to integer milliseconds."""
     return int((time.perf_counter() - start) * 1000)
+
+
+def _keyword_signal(keyword_rank: float | None) -> float:
+    if keyword_rank is None:
+        return 0.0
+    return 1.0 / (1.0 + max(float(keyword_rank), 0.0))
+
+
+def _calibrate_score(
+    query: str,
+    result: Any,
+    *,
+    preferred_specialty: str | None = None,
+) -> float:
+    rerank_score = max(float(getattr(result, "rerank_score", 0.0) or 0.0), 0.0)
+    vector_score = max(float(getattr(result, "vector_score", 0.0) or 0.0), 0.0)
+    keyword_signal = _keyword_signal(getattr(result, "keyword_rank", None))
+    text = getattr(result, "text", "")
+    overlap_count = query_overlap_count(query, text)
+    phrase_count = phrase_overlap_count(query, text)
+    metadata = getattr(result, "metadata", {}) or {}
+    specialty_bonus = 0.0
+    if preferred_specialty and metadata.get("specialty") == preferred_specialty:
+        specialty_bonus = 0.04
+    query_age = _extract_query_age(query)
+    title_overlap = query_overlap_count(query, metadata.get("title", ""))
+    title_phrase_count = phrase_overlap_count(query, metadata.get("title", ""))
+    title_signal = min(title_overlap + (2 * title_phrase_count), 4) / 4.0
+    section_text = " ".join(metadata.get("section_path") or [])
+    document_signal = document_kind_score(
+        title=metadata.get("title", ""),
+        section=section_text,
+        doc_type=metadata.get("doc_type", ""),
+        source_name=metadata.get("source_name", ""),
+    )
+    intent_signal = query_intent_alignment_score(
+        query,
+        title=metadata.get("title", ""),
+        section=section_text,
+        text=text,
+        doc_type=metadata.get("doc_type", ""),
+    )
+    section_overlap = query_overlap_count(query, section_text)
+    section_phrase_count = phrase_overlap_count(query, section_text)
+    section_signal = min(section_overlap + (2 * section_phrase_count), 4) / 4.0
+    lexical_signal = min(overlap_count + (2 * phrase_count), 6) / 6.0
+    structure_signal = max(title_signal, section_signal)
+    structural_relevance = (
+        min(
+            title_overlap
+            + section_overlap
+            + (2 * (title_phrase_count + section_phrase_count)),
+            6,
+        )
+        / 6.0
+    )
+    coverage_signal = query_overlap_ratio(
+        query,
+        " ".join([metadata.get("title", ""), section_text, text]),
+    )
+    quality_signal = text_quality_score(text)
+    age_alignment = _age_alignment_score(
+        query_age,
+        " ".join(
+            [
+                metadata.get("title", ""),
+                section_text,
+                text,
+            ]
+        ),
+    )
+
+    blended = (
+        (0.45 * rerank_score)
+        + (0.3 * vector_score)
+        + (0.08 * keyword_signal)
+        + (0.12 * lexical_signal)
+        + (0.08 * structure_signal)
+        + (0.08 * structural_relevance)
+        + (0.08 * coverage_signal)
+        + document_signal
+        + intent_signal
+        + specialty_bonus
+        + age_alignment
+    )
+
+    if quality_signal < 0.45 and structural_relevance < 0.5:
+        blended -= 0.24
+    elif quality_signal < 0.6 and structural_relevance < 0.34:
+        blended -= 0.08
+
+    if age_alignment >= 0:
+        if phrase_count >= 1:
+            blended = max(blended, vector_score * 1.08)
+        elif overlap_count >= 2:
+            blended = max(blended, vector_score)
+        elif overlap_count >= 1 and vector_score >= 0.6:
+            blended = max(blended, vector_score * 0.97)
+
+    minimum_signal = rerank_score
+    if age_alignment < 0:
+        minimum_signal = rerank_score
+    elif coverage_signal >= 0.3 or phrase_count >= 1:
+        minimum_signal = max(minimum_signal, vector_score * 0.95)
+
+    return min(max(blended, minimum_signal), 1.0)
+
+
+def _extract_query_age(query: str) -> int | None:
+    match = re.search(r"\b(\d{1,3})-year-old\b", query.lower())
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _age_alignment_score(query_age: int | None, candidate_text: str) -> float:
+    if query_age is None:
+        return 0.0
+
+    text = candidate_text.lower()
+    child_markers = (
+        "paediatric",
+        "pediatric",
+        "children",
+        "child ",
+        "young people",
+        "infant",
+        "neonatal",
+        "under 16",
+        "under 18",
+    )
+    adult_markers = (
+        "adult",
+        "adults",
+        "over 16",
+        "over 18",
+    )
+
+    has_child_marker = any(marker in text for marker in child_markers)
+    has_adult_marker = any(marker in text for marker in adult_markers)
+
+    if query_age >= 18:
+        if has_child_marker:
+            return -0.4
+        if has_adult_marker:
+            return 0.04
+    else:
+        if has_adult_marker:
+            return -0.28
+        if has_child_marker:
+            return 0.04
+    return 0.0
+
+
+def _apply_final_ranking(
+    query: str,
+    results: list[Any],
+    *,
+    preferred_specialty: str | None = None,
+) -> list[Any]:
+    calibrated = []
+    for result in results:
+        final_score = _calibrate_score(
+            query,
+            result,
+            preferred_specialty=preferred_specialty,
+        )
+        calibrated.append(result.model_copy(update={"final_score": final_score}))
+
+    calibrated.sort(key=lambda item: item.final_score, reverse=True)
+
+    preferred = (preferred_specialty or "").strip().casefold()
+    if not preferred:
+        return calibrated
+
+    def _is_preferred(item: Any) -> bool:
+        metadata = getattr(item, "metadata", {}) or {}
+        specialty = (metadata.get("specialty") or "").strip().casefold()
+        return bool(specialty and specialty == preferred)
+
+    # Keep specialty preference soft: only prioritize if there is at least one
+    # sufficiently strong hit in the requested specialty.
+    viable_preferred = [
+        item for item in calibrated if _is_preferred(item) and item.final_score >= 0.25
+    ]
+    if not viable_preferred:
+        return calibrated
+
+    preferred_items = [item for item in calibrated if _is_preferred(item)]
+    non_preferred_items = [item for item in calibrated if not _is_preferred(item)]
+    preferred_items.sort(key=lambda item: item.final_score, reverse=True)
+    non_preferred_items.sort(key=lambda item: item.final_score, reverse=True)
+    return preferred_items + non_preferred_items
 
 
 def _maybe_write_artifacts(
@@ -285,3 +509,22 @@ def _maybe_write_artifacts(
         path = out_dir / f"{name}.json"
         path.write_text(json.dumps(data, indent=2, default=str))
     logger.debug(f"Debug artifacts written to {out_dir}")
+
+
+def _diversify_by_document(
+    results: list[Any],
+    *,
+    max_per_doc: int,
+) -> list[Any]:
+    if max_per_doc <= 0:
+        return results
+
+    kept: list[Any] = []
+    counts: dict[str, int] = {}
+    for result in results:
+        doc_id = getattr(result, "doc_id", "")
+        if counts.get(doc_id, 0) >= max_per_doc:
+            continue
+        kept.append(result)
+        counts[doc_id] = counts.get(doc_id, 0) + 1
+    return kept

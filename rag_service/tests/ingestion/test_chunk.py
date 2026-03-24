@@ -525,7 +525,8 @@ class TestChunkSectionGroup:
                     else 10
                     if text == "Lead sentence. Follow up sentence."
                     else 910
-                    if text == (
+                    if text
+                    == (
                         "Lead sentence. Follow up sentence. "
                         "Oversized sentence placeholder."
                     )

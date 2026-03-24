@@ -322,7 +322,7 @@ def _install_stubs() -> None:
     fake_api_services.retrieve_chunks = MagicMock(return_value=[])
     fake_api_services.retrieve_chunks_advanced = MagicMock(return_value=[])
     fake_api_services.filter_chunks = MagicMock(
-        side_effect=lambda _query, retrieved: retrieved
+        side_effect=lambda _query, retrieved, specialty=None: retrieved
     )
     fake_api_services.NO_EVIDENCE_RESPONSE = "No evidence"
     fake_api_services.evidence_level = MagicMock(return_value="strong")
@@ -333,13 +333,16 @@ def _install_stubs() -> None:
     import json as _json
 
     async def _fake_ndjson_done_only(answer: str, citations: list | None = None):
-        yield _json.dumps(
-            {
-                "type": "done",
-                "answer": answer,
-                "citations_used": citations or [],
-            }
-        ) + "\n"
+        yield (
+            _json.dumps(
+                {
+                    "type": "done",
+                    "answer": answer,
+                    "citations_used": citations or [],
+                }
+            )
+            + "\n"
+        )
 
     fake_streaming = sys.modules["src.api.streaming"]
     fake_streaming.streaming_generator = MagicMock()
@@ -580,7 +583,7 @@ def test_answer_passes_specialty_to_similarity_search(monkeypatch, client, main_
         source_name=None,
         doc_type=None,
         score_threshold=0.3,
-        expand_query=False,
+        expand_query=True,
     )
 
 

@@ -378,4 +378,3 @@ class TestIngestCommand:
             finally:
                 cli_module.__name__ = original
                 mock_main.assert_called_once()
-

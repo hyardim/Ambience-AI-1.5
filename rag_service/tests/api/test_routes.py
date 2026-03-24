@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from src.api import routes
 from src.api.schemas import QueryRequest, SearchResult
 from src.main import app
+from src.retrieval.citation import Citation, CitedResult
 
 
 @pytest.mark.anyio
@@ -159,7 +160,11 @@ async def test_generate_clinical_answer_preserves_http_exceptions(
         "retrieve_chunks_advanced",
         lambda **kwargs: [{}],
     )
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(
         routes,
         "build_grounded_prompt",
@@ -182,7 +187,11 @@ async def test_revise_clinical_answer_preserves_http_exceptions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(routes, "retrieve_chunks", lambda query, top_k, specialty: [{}])
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(
         routes,
         "build_revision_prompt",
@@ -210,7 +219,11 @@ async def test_revise_clinical_answer_returns_no_evidence_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(routes, "retrieve_chunks", lambda query, top_k, specialty: [])
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: [])
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: [],
+    )
 
     response = await routes.revise_clinical_answer(
         routes.ReviseRequest(
@@ -249,6 +262,65 @@ async def test_generate_clinical_answer_generic_exception_wrapped(
 
 
 @pytest.mark.anyio
+async def test_generate_clinical_answer_uses_vector_fallback_when_rerank_is_weak(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    citation = Citation(
+        title="Rheumatoid arthritis in adults: management",
+        source_name="NICE",
+        specialty="rheumatology",
+        doc_type="guideline",
+        section_path=["Referral"],
+        section_title="Referral",
+        page_start=6,
+        page_end=6,
+        source_url="https://example.com/ra",
+        doc_id="doc-ra",
+        chunk_id="chunk-ra",
+        content_type="text",
+    )
+    result = CitedResult(
+        chunk_id="chunk-ra",
+        text=(
+            "Refer for specialist opinion any adult with suspected persistent "
+            "synovitis of undetermined cause. If investigations are ordered in "
+            "primary care, they should not delay referral."
+        ),
+        rerank_score=0.01,
+        final_score=0.58,
+        rrf_score=0.2,
+        vector_score=0.58,
+        keyword_rank=0.1,
+        citation=citation,
+    )
+
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [routes.api_services._cited_result_to_chunk(result)],
+    )
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(
+            query=(
+                "What baseline blood tests and imaging should be completed "
+                "prior to referral?"
+            ),
+            specialty="rheumatology",
+            stream=False,
+        )
+    )
+
+    assert response.answer == "Answer [1]"
+    assert len(response.citations_used) == 1
+
+
+@pytest.mark.anyio
 async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -266,7 +338,11 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
         ]
 
     monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
     monkeypatch.setattr(
         routes,
@@ -287,7 +363,7 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
         lambda answer, citations, strip_references: (answer, []),
     )
 
-    await routes.generate_clinical_answer(
+    response = await routes.generate_clinical_answer(
         routes.AnswerRequest(
             query="q",
             specialty="neurology",
@@ -299,6 +375,8 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
         )
     )
 
+    assert response.answer == routes.api_services.NO_EVIDENCE_RESPONSE
+    assert response.citations_used == []
     assert captured["query"] == "q"
     assert captured["specialty"] == "neurology"
     assert captured["source_name"] == "NICE"
@@ -327,7 +405,11 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
         ]
 
     monkeypatch.setattr(routes, "retrieve_chunks", fake_basic)
-    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
     monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
     monkeypatch.setattr(
         routes,
@@ -352,7 +434,8 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
         routes.AnswerRequest(query="q", top_k=3, specialty="neurology")
     )
 
-    assert response.answer == "A"
+    assert response.answer == routes.api_services.NO_EVIDENCE_RESPONSE
+    assert response.citations_used == []
     assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}
 
 

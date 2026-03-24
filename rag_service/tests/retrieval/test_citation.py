@@ -153,14 +153,12 @@ class TestAssembleCitations:
     def test_empty_input_returns_empty_list(self):
         assert assemble_citations([]) == []
 
-    def test_missing_metadata_field_raises_citation_error(self):
+    def test_missing_source_url_falls_back_to_empty_string(self):
         metadata = make_metadata()
         del metadata["source_url"]
         result = make_ranked_result(chunk_id="c1", metadata=metadata)
-        with pytest.raises(CitationError) as exc_info:
-            assemble_citations([result])
-        assert exc_info.value.chunk_id == "c1"
-        assert exc_info.value.missing_field == "source_url"
+        output = assemble_citations([result])
+        assert output[0].citation.source_url == ""
 
     def test_empty_string_required_field_raises_citation_error(self):
         metadata = make_metadata(title="")

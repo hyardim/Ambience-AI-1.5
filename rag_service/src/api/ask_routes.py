@@ -70,6 +70,7 @@ async def ask_route(
             file_context=None,
             stream=False,
             severity=None,
+            specialty=payload.specialty,
             retrieved=retrieved,
             route_endpoint="/ask",
             prompt_label=ACTIVE_PROMPT,
