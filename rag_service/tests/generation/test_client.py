@@ -89,12 +89,97 @@ async def test_generate_answer_raises_when_both_fail(monkeypatch):
     monkeypatch.setattr(client, "_call_local_model", fail_local)
     monkeypatch.setattr(client, "_call_cloud_model", fail_cloud)
 
-    with pytest.raises(RuntimeError, match="All model providers failed"):
+    with pytest.raises(
+        client.ModelGenerationError,
+        match="All model providers failed",
+    ) as exc_info:
         await client.generate_answer(
             "prompt",
             max_tokens=64,
             provider="cloud",
         )
+    assert exc_info.value.retryable is False
+
+
+@pytest.mark.anyio
+async def test_generate_answer_sets_retryable_when_all_provider_errors_retryable(
+    monkeypatch,
+):
+    async def fail_cloud(prompt: str, max_tokens=None) -> str:
+        raise client.ProviderRequestError(
+            "cloud timeout",
+            provider="cloud",
+            retryable=True,
+        )
+
+    async def fail_local(prompt: str, max_tokens=None) -> str:
+        raise client.ProviderRequestError(
+            "local connect",
+            provider="local",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(client, "_call_local_model", fail_local)
+    monkeypatch.setattr(client, "_call_cloud_model", fail_cloud)
+
+    with pytest.raises(client.ModelGenerationError) as exc_info:
+        await client.generate_answer("prompt", provider="cloud")
+
+    assert exc_info.value.retryable is True
+
+
+@pytest.mark.anyio
+async def test_generate_answer_sets_retryable_false_for_non_retryable_provider_error(
+    monkeypatch,
+):
+    async def fail_cloud(prompt: str, max_tokens=None) -> str:
+        raise client.ProviderRequestError(
+            "cloud bad request",
+            provider="cloud",
+            retryable=False,
+            status_code=400,
+        )
+
+    async def fail_local(prompt: str, max_tokens=None) -> str:
+        raise client.ProviderRequestError(
+            "local timeout",
+            provider="local",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(client, "_call_local_model", fail_local)
+    monkeypatch.setattr(client, "_call_cloud_model", fail_cloud)
+
+    with pytest.raises(client.ModelGenerationError) as exc_info:
+        await client.generate_answer("prompt", provider="cloud")
+
+    assert exc_info.value.retryable is False
+
+
+@pytest.mark.anyio
+async def test_generate_answer_sets_retryable_false_for_non_provider_error(monkeypatch):
+    async def fail_cloud(prompt: str, max_tokens=None) -> str:
+        raise RuntimeError("cloud panic")
+
+    async def fail_local(prompt: str, max_tokens=None) -> str:
+        raise client.ProviderRequestError(
+            "local timeout",
+            provider="local",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(client, "_call_local_model", fail_local)
+    monkeypatch.setattr(client, "_call_cloud_model", fail_cloud)
+
+    with pytest.raises(client.ModelGenerationError) as exc_info:
+        await client.generate_answer("prompt", provider="cloud")
+
+    assert exc_info.value.retryable is False
+
+
+def test_fallback_provider_switches_between_local_and_cloud() -> None:
+    assert client._fallback_provider("local") == "cloud"
+    assert client._fallback_provider("cloud") == "local"
 
 
 @pytest.mark.anyio
@@ -139,6 +224,42 @@ async def test_warmup_model_logs_success(monkeypatch):
     await client.warmup_model("local")
 
     assert any("warmed up and kept alive" in message for message, _ in messages)
+
+
+@pytest.mark.anyio
+async def test_warmup_model_local_posts_to_generate(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url: str, json: dict[str, object]):
+            captured["url"] = url
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(client.httpx, "AsyncClient", lambda timeout: FakeClient())
+    monkeypatch.setattr(client.local_llm_config, "base_url", "http://localhost:11434")
+    monkeypatch.setattr(client.local_llm_config, "model", "demo-model")
+
+    await client.warmup_model("local")
+
+    assert captured["url"] == "http://localhost:11434/api/generate"
+    assert captured["json"] == {
+        "model": "demo-model",
+        "prompt": "warmup",
+        "stream": False,
+        "keep_alive": -1,
+        "options": {"num_predict": 1},
+    }
 
 
 @pytest.mark.anyio
