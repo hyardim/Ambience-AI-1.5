@@ -133,6 +133,7 @@ describe('ProfilePage', () => {
     );
     await user.click(toggleButtons[0]);
     await user.click(toggleButtons[1]);
+    await user.click(screen.getByRole('button', { name: /show confirm password/i }));
     await user.click(screen.getByRole('button', { name: /back/i }));
 
     expect(screen.getByText(/specialist queries/i)).toBeInTheDocument();

@@ -24,16 +24,11 @@ const TAB_STATUSES: Record<TabKey, string[]> = {
 
 const SPECIALTY_OPTIONS = [
   'neurology',
-  'cardiology',
   'rheumatology',
-  'dermatology',
-  'orthopedics',
-  'psychiatry',
-  'gastroenterology',
-  'endocrinology',
-  'pulmonology',
-  'oncology',
 ];
+
+type SortKey = 'created_at' | 'title' | 'specialty' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 export function GPQueriesPage() {
   const navigate = useNavigate();
@@ -47,6 +42,8 @@ export function GPQueriesPage() {
   const [dateTo, setDateTo] = useState('');
   const [tab, setTab] = useState<TabKey>('submitted');
   const [showFilters, setShowFilters] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
 
@@ -146,7 +143,15 @@ export function GPQueriesPage() {
   const tabChats = (key: TabKey) =>
     chats.filter(c => TAB_STATUSES[key].includes(c.status));
 
-  const filteredChats = tabChats(tab);
+  const filteredChats = [...tabChats(tab)].sort((a, b) => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    if (sortKey === 'created_at') {
+      return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * direction;
+    }
+    const aValue = (a[sortKey] ?? '').toString().toLowerCase();
+    const bValue = (b[sortKey] ?? '').toString().toLowerCase();
+    return aValue.localeCompare(bValue) * direction;
+  });
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -235,7 +240,7 @@ export function GPQueriesPage() {
           {/* Expanded filter controls */}
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <label htmlFor="filter-specialty" className="block text-sm font-medium text-gray-700 mb-1">
                     Specialty
@@ -275,6 +280,36 @@ export function GPQueriesPage() {
                     onChange={(e) => setDateTo(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   />
+                </div>
+                <div>
+                  <label htmlFor="sort-key" className="block text-sm font-medium text-gray-700 mb-1">
+                    Sort by
+                  </label>
+                  <select
+                    id="sort-key"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value as SortKey)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                  >
+                    <option value="created_at">Created date</option>
+                    <option value="title">Title</option>
+                    <option value="specialty">Specialty</option>
+                    <option value="status">Status</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="sort-direction" className="block text-sm font-medium text-gray-700 mb-1">
+                    Direction
+                  </label>
+                  <select
+                    id="sort-direction"
+                    value={sortDirection}
+                    onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                  >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                  </select>
                 </div>
               </div>
               {hasActiveFilters && (

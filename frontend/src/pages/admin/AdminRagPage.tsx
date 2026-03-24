@@ -42,6 +42,10 @@ export default function AdminRagPage() {
   const [data, setData] = useState<RagStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<'source_name' | 'chunk_count' | 'latest_ingestion'>('latest_ingestion');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const requestControllerRef = useRef<AbortController | null>(null);
 
   const fetchStatus = async () => {
@@ -68,6 +72,29 @@ export default function AdminRagPage() {
       requestControllerRef.current?.abort();
     };
   }, []);
+
+  const sourceOptions = Array.from(new Set(data?.documents.map((doc) => doc.source_name).filter(Boolean) ?? [])).sort();
+  const visibleDocuments = [...(data?.documents ?? [])]
+    .filter((doc) => {
+      const matchesSearch =
+        !searchTerm ||
+        doc.doc_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.source_name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSource = sourceFilter === 'all' || doc.source_name === sourceFilter;
+      return matchesSearch && matchesSource;
+    })
+    .sort((a, b) => {
+      const direction = sortDirection === 'asc' ? 1 : -1;
+      if (sortKey === 'chunk_count') {
+        return (a.chunk_count - b.chunk_count) * direction;
+      }
+      if (sortKey === 'latest_ingestion') {
+        const aTime = a.latest_ingestion ? new Date(a.latest_ingestion).getTime() : 0;
+        const bTime = b.latest_ingestion ? new Date(b.latest_ingestion).getTime() : 0;
+        return (aTime - bTime) * direction;
+      }
+      return a.source_name.localeCompare(b.source_name) * direction;
+    });
 
   return (
     <AdminLayout>
@@ -100,10 +127,67 @@ export default function AdminRagPage() {
           </div>
         ) : data && (
           <>
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
+                  <label htmlFor="rag-search" className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                  <input
+                    id="rag-search"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by document ID or source..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="rag-source" className="block text-sm font-medium text-gray-700 mb-1">Source</label>
+                  <select
+                    id="rag-source"
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                  >
+                    <option value="all">All sources</option>
+                    {sourceOptions.map((source) => (
+                      <option key={source} value={source}>{source}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="rag-sort-key" className="block text-sm font-medium text-gray-700 mb-1">Sort by</label>
+                    <select
+                      id="rag-sort-key"
+                      value={sortKey}
+                      onChange={(e) => setSortKey(e.target.value as 'source_name' | 'chunk_count' | 'latest_ingestion')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                    >
+                      <option value="latest_ingestion">Last ingested</option>
+                      <option value="source_name">Source</option>
+                      <option value="chunk_count">Chunks</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="rag-sort-direction" className="block text-sm font-medium text-gray-700 mb-1">Direction</label>
+                    <select
+                      id="rag-sort-direction"
+                      value={sortDirection}
+                      onChange={(e) => setSortDirection(e.target.value as 'asc' | 'desc')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                    >
+                      <option value="desc">Descending</option>
+                      <option value="asc">Ascending</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Indexed Documents */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-sm font-medium text-gray-700 mb-4">Indexed Documents</h2>
-              {data.documents.length === 0 ? (
+              {visibleDocuments.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-12">No indexed documents</p>
               ) : (
                 <div className="overflow-x-auto">
@@ -117,7 +201,7 @@ export default function AdminRagPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {data.documents.map((doc) => (
+                      {visibleDocuments.map((doc) => (
                         <tr key={doc.doc_id} className="text-gray-700">
                           <td className="py-2.5 pr-4 font-mono text-xs">{doc.doc_id}</td>
                           <td className="py-2.5 pr-4">{doc.source_name}</td>

@@ -12,6 +12,8 @@ import { filterSpecialistChats, formatSpecialtyLabel } from '../../utils/special
 import { orFallback } from '../../utils/value';
 
 type TabKey = 'queue' | 'assigned';
+type SortKey = 'created_at' | 'assigned_at' | 'title' | 'specialty' | 'status' | 'severity';
+type SortDirection = 'asc' | 'desc';
 
 export function SpecialistQueriesPage() {
   const navigate = useNavigate();
@@ -25,6 +27,8 @@ export function SpecialistQueriesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -58,7 +62,17 @@ export function SpecialistQueriesPage() {
 
   const currentList = tab === 'queue' ? queueChats : assignedChats;
 
-  const filteredChats = filterSpecialistChats(currentList, searchTerm, statusFilter, severityFilter);
+  const filteredChats = [...filterSpecialistChats(currentList, searchTerm, statusFilter, severityFilter)].sort((a, b) => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    if (sortKey === 'created_at' || sortKey === 'assigned_at') {
+      const aTime = a[sortKey] ? new Date(a[sortKey] as string).getTime() : 0;
+      const bTime = b[sortKey] ? new Date(b[sortKey] as string).getTime() : 0;
+      return (aTime - bTime) * direction;
+    }
+    const aValue = (a[sortKey] ?? '').toString().toLowerCase();
+    const bValue = (b[sortKey] ?? '').toString().toLowerCase();
+    return aValue.localeCompare(bValue) * direction;
+  });
 
   const pendingCount = queueChats.length + assignedChats.filter(c => ['assigned', 'reviewing'].includes(c.status)).length;
 
@@ -130,7 +144,7 @@ export function SpecialistQueriesPage() {
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <div className="relative">
                 <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <select
@@ -156,6 +170,28 @@ export function SpecialistQueriesPage() {
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
+              </select>
+              <select
+                aria-label="Sort by"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
+              >
+                <option value="created_at">Created date</option>
+                <option value="assigned_at">Assigned date</option>
+                <option value="title">Title</option>
+                <option value="specialty">Specialty</option>
+                <option value="status">Status</option>
+                <option value="severity">Severity</option>
+              </select>
+              <select
+                aria-label="Sort direction"
+                value={sortDirection}
+                onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
               </select>
             </div>
           </div>

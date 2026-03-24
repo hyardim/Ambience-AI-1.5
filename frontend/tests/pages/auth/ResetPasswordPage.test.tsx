@@ -51,6 +51,11 @@ describe('ResetPasswordPage', () => {
     await user.click(passwordInput.parentElement!.querySelector('button')!);
     expect(passwordInput).toHaveAttribute('type', 'text');
 
+    const confirmPasswordInput = screen.getByLabelText(/^Confirm new password$/i);
+    expect(confirmPasswordInput).toHaveAttribute('type', 'password');
+    await user.click(screen.getByRole('button', { name: /show confirm password/i }));
+    expect(confirmPasswordInput).toHaveAttribute('type', 'text');
+
     await user.type(screen.getByLabelText(/^New password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/^Confirm new password$/i), 'Password1!');
     await user.click(screen.getByRole('button', { name: /reset password/i }));

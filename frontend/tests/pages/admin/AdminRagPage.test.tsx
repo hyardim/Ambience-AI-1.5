@@ -190,7 +190,7 @@ describe('AdminRagPage — multiple documents', () => {
     await waitFor(() => expect(screen.getByText('doc-a')).toBeInTheDocument());
     expect(screen.getByText('doc-b')).toBeInTheDocument();
     expect(screen.getByText('doc-c')).toBeInTheDocument();
-    expect(screen.getByText('BSR B')).toBeInTheDocument();
+    expect(screen.getAllByText('BSR B').length).toBeGreaterThan(0);
     expect(screen.getByText('10')).toBeInTheDocument();
     expect(screen.getByText('20')).toBeInTheDocument();
     expect(screen.getByText('30')).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe('AdminRagPage — refresh', () => {
     await user.click(screen.getByRole('button', { name: /refresh/i }));
 
     await waitFor(() => expect(screen.getByText('doc-refreshed')).toBeInTheDocument());
-    expect(screen.getByText('New Source')).toBeInTheDocument();
+    expect(screen.getAllByText('New Source').length).toBeGreaterThan(0);
     expect(screen.getByText('99')).toBeInTheDocument();
   });
 
@@ -323,5 +323,57 @@ describe('AdminRagPage — refresh', () => {
       expect(screen.queryByText(/service down/i)).not.toBeInTheDocument(),
     );
     expect(screen.getByText(/ingestion jobs/i)).toBeInTheDocument();
+  });
+});
+
+describe('AdminRagPage — search, filter, and sort', () => {
+  it('filters documents by search text and source, and sorts by chunk count', async () => {
+    overrideRagStatus({
+      service_status: 'healthy',
+      documents: [
+        { doc_id: 'doc-a', source_name: 'NICE', chunk_count: 10, latest_ingestion: '2025-06-15T14:30:00Z' },
+        { doc_id: 'doc-b', source_name: 'BSR', chunk_count: 30, latest_ingestion: '2025-06-16T14:30:00Z' },
+        { doc_id: 'match-doc', source_name: 'NICE', chunk_count: 20, latest_ingestion: '2025-06-17T14:30:00Z' },
+      ],
+      jobs: null,
+    });
+
+    renderRagPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('doc-a')).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/search/i), 'doc');
+    await user.selectOptions(screen.getByLabelText(/source/i), 'NICE');
+    await user.selectOptions(screen.getByLabelText(/sort by/i), 'chunk_count');
+    await user.selectOptions(screen.getByLabelText(/direction/i), 'desc');
+
+    expect(screen.getByText('match-doc')).toBeInTheDocument();
+    expect(screen.queryByText('doc-b')).not.toBeInTheDocument();
+
+    const documentRows = screen.getAllByRole('row').slice(1);
+    expect(documentRows[0]).toHaveTextContent('match-doc');
+  });
+
+  it('sorts documents by source name ascending', async () => {
+    overrideRagStatus({
+      service_status: 'healthy',
+      documents: [
+        { doc_id: 'doc-z', source_name: 'Zeta Source', chunk_count: 1, latest_ingestion: null },
+        { doc_id: 'doc-a', source_name: 'Alpha Source', chunk_count: 1, latest_ingestion: null },
+      ],
+      jobs: null,
+    });
+
+    renderRagPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('doc-z')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText(/sort by/i), 'source_name');
+    await user.selectOptions(screen.getByLabelText(/direction/i), 'asc');
+
+    const documentRows = screen.getAllByRole('row').slice(1);
+    expect(documentRows[0]).toHaveTextContent('Alpha Source');
   });
 });

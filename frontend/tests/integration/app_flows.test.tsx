@@ -221,7 +221,7 @@ describe('app integration flows', () => {
     fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: 'User' } });
     fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'new.gp@example.com' } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'Password123!' } });
-    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: 'Password123!' } });
+    fireEvent.change(screen.getByLabelText(/^confirm password$/i), { target: { value: 'Password123!' } });
 
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 

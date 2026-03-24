@@ -289,6 +289,46 @@ describe('useChatStream', () => {
     expect(wrapper.getMessages()).toHaveLength(1);
   });
 
+  it('reuses an existing generating AI message instead of appending a second placeholder', () => {
+    const seeded = createWrapperWithMessages([
+      {
+        id: 'temp-ai',
+        senderId: 'ai',
+        senderName: 'NHS AI Assistant',
+        senderType: 'ai',
+        content: '',
+        timestamp: new Date(),
+        isGenerating: true,
+      },
+      {
+        id: 'user-1',
+        senderId: 'user',
+        senderName: 'GP User',
+        senderType: 'gp',
+        content: 'Question',
+        timestamp: new Date(),
+      },
+    ]);
+
+    const { result } = renderHook(() =>
+      useChatStream(seeded.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+      }),
+    );
+
+    act(() => {
+      result.current.connectStream(1);
+      latestCallbacks.onStreamStart?.(42);
+    });
+
+    const messages = seeded.getMessages();
+    expect(messages).toHaveLength(2);
+    expect(messages[0].id).toBe('42');
+    expect(messages[0].isGenerating).toBe(true);
+    expect(messages[1].id).toBe('user-1');
+  });
+
   it('updates message content on content event', () => {
     const { result } = renderHook(() =>
       useChatStream(wrapper.setMessages, {

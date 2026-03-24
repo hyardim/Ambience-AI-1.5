@@ -200,6 +200,16 @@ export function useChatStream(
             }
             // Insert placeholder AI message if not already present
             setMessages((prev) => {
+              const existingGenerating = prev.find(
+                (m) => m.isGenerating && m.senderType === 'ai',
+              );
+              if (existingGenerating) {
+                return existingGenerating.id === String(messageId)
+                  ? prev
+                  : prev.map((m) =>
+                      m.id === existingGenerating.id ? { ...m, id: String(messageId) } : m,
+                    );
+              }
               if (prev.find((m) => m.id === String(messageId))) return prev;
               const placeholder: Message = {
                 id: String(messageId),

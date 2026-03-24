@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
@@ -210,6 +210,10 @@ describe('GPQueriesPage', () => {
   });
 
   it('archives a chat when archive button is clicked', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    server.use(
+      http.delete('/chats/:chatId', () => HttpResponse.json({ status: 'ok' })),
+    );
     renderGPQueries();
     const user = userEvent.setup();
 
@@ -217,9 +221,8 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('Headache consultation')).toBeInTheDocument();
     });
 
-    // Find the archive button for the first chat (has title "Archive consultation")
-    const archiveButtons = screen.getAllByTitle('Archive consultation');
-    await user.click(archiveButtons[0]);
+    const headacheCard = screen.getByText('Headache consultation').closest('div[class*="bg-white"]')!;
+    await user.click(within(headacheCard).getByTitle('Archive consultation'));
 
     await waitFor(() => {
       expect(screen.queryByText('Headache consultation')).not.toBeInTheDocument();
@@ -341,6 +344,53 @@ describe('GPQueriesPage', () => {
       const badge = filtersButton.querySelector('span');
       expect(badge).not.toBeNull();
       expect(badge!.textContent).toBe('1');
+    });
+  });
+
+  it('only shows supported specialty filter options', async () => {
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Headache consultation')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Toggle filters'));
+    const specialtySelect = screen.getByLabelText('Specialty');
+
+    expect(screen.getByRole('option', { name: 'Neurology' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Rheumatology' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Cardiology' })).not.toBeInTheDocument();
+    expect(specialtySelect).toBeInTheDocument();
+  });
+
+  it('sorts consultations by title ascending', async () => {
+    server.use(
+      http.get('/chats/', () =>
+        HttpResponse.json([
+          { id: 1, title: 'Zulu case', status: 'submitted', specialty: 'rheumatology', severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T10:00:00Z', user_id: 1 },
+          { id: 2, title: 'Alpha case', status: 'open', specialty: 'neurology', severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T09:00:00Z', user_id: 1 },
+        ]),
+      ),
+    );
+
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zulu case')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Toggle filters'));
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
+    await user.selectOptions(screen.getByLabelText('Direction'), 'asc');
+
+    await waitFor(() => {
+      const headings = screen
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+      expect(headings[0]).toBe('Alpha case');
+      expect(headings[1]).toBe('Zulu case');
     });
   });
 

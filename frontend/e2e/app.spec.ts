@@ -350,7 +350,7 @@ test('register with valid data', async ({ page }) => {
   await page.getByLabel(/last name/i).fill('User');
   await page.getByLabel(/email address/i).fill('new@example.com');
   await page.getByLabel(/^password$/i).fill('Password123!');
-  await page.getByLabel(/confirm password/i).fill('Password123!');
+  await page.getByLabel(/^confirm password$/i).fill('Password123!');
   await page.getByRole('button', { name: /create account/i }).click();
   await expect(page).toHaveURL(/\/gp\/queries/);
 });

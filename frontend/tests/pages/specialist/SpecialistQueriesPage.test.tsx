@@ -70,6 +70,99 @@ describe('SpecialistQueriesPage', () => {
     expect(screen.getByText('No queries found')).toBeInTheDocument();
   });
 
+  it('sorts specialist queues by title descending', async () => {
+    server.use(
+      http.get('/specialist/queue', () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            title: 'Alpha consultation',
+            status: 'submitted',
+            specialty: 'neurology',
+            severity: 'low',
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+          {
+            id: 2,
+            title: 'Zulu consultation',
+            status: 'submitted',
+            specialty: 'rheumatology',
+            severity: 'urgent',
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-16T10:00:00Z',
+            user_id: 1,
+          },
+        ]),
+      ),
+      http.get('/specialist/assigned', () =>
+        HttpResponse.json([
+          {
+            id: 3,
+            title: 'Assigned older',
+            status: 'assigned',
+            specialty: 'neurology',
+            severity: 'medium',
+            specialist_id: 2,
+            assigned_at: '2025-01-16T10:00:00Z',
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+          {
+            id: 4,
+            title: 'Assigned newer',
+            status: 'reviewing',
+            specialty: 'rheumatology',
+            severity: 'high',
+            specialist_id: 2,
+            assigned_at: '2025-01-18T10:00:00Z',
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-17T10:00:00Z',
+            user_id: 1,
+          },
+        ]),
+      ),
+    );
+
+    renderSpecialistQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha consultation')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText(/sort by/i), 'title');
+    await user.selectOptions(screen.getByLabelText(/sort direction/i), 'desc');
+
+    await waitFor(() => {
+      const headings = screen
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+      expect(headings[0]).toBe('Zulu consultation');
+    });
+
+    await user.click(screen.getByText(/my assigned/i));
+    await user.selectOptions(screen.getByLabelText(/sort by/i), 'assigned_at');
+    await user.selectOptions(screen.getByLabelText(/sort direction/i), 'desc');
+
+    await waitFor(() => {
+      const headings = screen
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+      expect(headings[0]).toBe('Assigned newer');
+    });
+  });
+
   it('shows error on API failure', async () => {
     server.use(
       http.get('/specialist/queue', () => {
