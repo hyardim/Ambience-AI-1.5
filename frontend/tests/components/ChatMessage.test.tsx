@@ -239,7 +239,7 @@ describe('ChatMessage', () => {
       ...baseMessage,
       senderType: 'ai',
       citations: [
-        { doc_id: 'doc-1', source_name: 'NICE' },
+        { doc_id: 'doc-1', source_name: 'NICE', source_url: 'https://example.com/doc.pdf' },
         { source_name: 'NICE' },
       ],
     };
@@ -247,8 +247,10 @@ describe('ChatMessage', () => {
     render(<ChatMessage message={aiMessage} />);
 
     expect(screen.getAllByText('Source')).toHaveLength(2);
-    // Citations without source_url render as plain text, not links
-    expect(screen.queryByRole('link', { name: 'Source' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Source' })).toHaveAttribute(
+      'href',
+      'https://example.com/doc.pdf',
+    );
   });
 
   it('renders review badges, feedback, and specialist actions', async () => {

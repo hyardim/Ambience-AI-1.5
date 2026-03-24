@@ -32,6 +32,14 @@ describe('ResetPasswordPage', () => {
     fireEvent.submit(form);
 
     expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/^New password$/i));
+    await user.type(screen.getByLabelText(/^New password$/i), 'password1!');
+    await user.clear(screen.getByLabelText(/^Confirm new password$/i));
+    await user.type(screen.getByLabelText(/^Confirm new password$/i), 'password1!');
+    fireEvent.submit(form);
+
+    expect(screen.getByText(/include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
   });
 
   it('toggles password visibility and completes reset flow', async () => {

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Send, Paperclip, MoreVertical } from 'lucide-react';
 
 const CHAT_UPLOAD_ACCEPT =
@@ -16,6 +16,13 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
   const [files, setFiles] = useState<File[]>([]);
   const [duplicateNotice, setDuplicateNotice] = useState<string>('');
   const filesRef = useRef<File[]>([]);
+  const duplicateNoticeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (duplicateNoticeTimerRef.current !== null) {
+      window.clearTimeout(duplicateNoticeTimerRef.current);
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,10 +44,16 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
       const duplicates = selected.filter(f => currentNames.has(f.name));
       const incoming = selected.filter(f => !currentNames.has(f.name));
       if (duplicates.length > 0) {
+        if (duplicateNoticeTimerRef.current !== null) {
+          window.clearTimeout(duplicateNoticeTimerRef.current);
+        }
         setDuplicateNotice(
           `Already in this chat: ${duplicates.map(f => f.name).join(', ')}`
         );
-        setTimeout(() => setDuplicateNotice(''), 4000);
+        duplicateNoticeTimerRef.current = window.setTimeout(() => {
+          setDuplicateNotice('');
+          duplicateNoticeTimerRef.current = null;
+        }, 4000);
       } else {
         setDuplicateNotice('');
       }
@@ -72,6 +85,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
               <button
                 type="button"
                 onClick={() => removeFile(index)}
+                aria-label={`Remove ${file.name}`}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ×
@@ -94,6 +108,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
         {/* File input triggered natively via label — no JS .click() needed */}
         <label
           htmlFor="chat-file-input"
+          aria-label="Attach files"
           aria-disabled={disabled}
           className={`p-3 rounded-lg transition-colors cursor-pointer ${
             disabled
@@ -115,6 +130,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
         <button
           type="submit"
+          aria-label="Send message"
           disabled={disabled || (!message.trim() && files.length === 0)}
           className="p-3 bg-[var(--nhs-blue)] text-white rounded-lg hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -123,6 +139,7 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
         <button
           type="button"
+          aria-label="More options"
           className="p-3 text-gray-500 hover:text-[var(--nhs-blue)] hover:bg-gray-100 rounded-lg transition-colors"
         >
           <MoreVertical className="w-5 h-5" />

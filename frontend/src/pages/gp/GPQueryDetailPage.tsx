@@ -17,7 +17,7 @@ import {
 import type { BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
 import type { Message } from '../../types';
 import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
-import { shouldAutoConnectGpStream } from '../../utils/gpDetail';
+import { mergeStreamingMessage, shouldAutoConnectGpStream } from '../../utils/gpDetail';
 import { orFallback } from '../../utils/value';
 
 export function GPQueryDetailPage() {
@@ -172,14 +172,10 @@ export function GPQueryDetailPage() {
         const refreshed = await getChat(chat.id);
         setChat(refreshed);
         setMessages((prev) => {
-          const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
           const fetched = refreshed.messages.map((m) =>
             toFrontendMessage(m, orFallback(username, 'GP User')),
           );
-          if (!streamingMsg) {
-            return fetched;
-          }
-          return fetched.map((m) => (m.id === streamingMsg.id ? streamingMsg : m));
+          return mergeStreamingMessage(prev, fetched);
         });
       } catch {
         setError('Failed to send message');

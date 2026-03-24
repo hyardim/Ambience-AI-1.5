@@ -88,6 +88,29 @@ describe('ProfilePage', () => {
     expect(screen.getAllByText(/password must be at least 8 characters/i).length).toBeGreaterThan(0);
   });
 
+  it('rejects weak passwords and overly long names', async () => {
+    renderProfile();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
+    });
+
+    await user.clear(screen.getByLabelText(/full name/i));
+    await user.type(screen.getByLabelText(/full name/i), 'A'.repeat(101));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(screen.getByText(/full name must be 100 characters or fewer/i)).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/full name/i));
+    await user.type(screen.getByLabelText(/full name/i), 'Valid User');
+    await user.type(screen.getByLabelText(/current password/i), 'oldpass');
+    await user.type(screen.getByLabelText(/^New Password$/i), 'password123');
+    await user.type(screen.getByLabelText(/^Confirm New Password$/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(screen.getByText(/include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
+  });
+
   it('shows specialist specialty field, toggles passwords, and navigates back', async () => {
     server.use(http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)));
     seedAuth({ role: 'specialist', username: 'Dr Specialist' });

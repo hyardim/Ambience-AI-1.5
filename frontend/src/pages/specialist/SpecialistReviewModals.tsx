@@ -259,9 +259,21 @@ export function ManualResponseModal({
             <p className="mt-2 text-sm text-red-600">{fileError}</p>
           )}
           {!fileError && manualResponseFiles.length > 0 && (
-            <p className="mt-2 text-sm text-gray-500">
-              {manualResponseFiles.length} file(s) will be uploaded to this chat before the manual response is sent.
-            </p>
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-gray-500">
+                {manualResponseFiles.length} file(s) will be uploaded to this chat before the manual response is sent.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {manualResponseFiles.map((file) => (
+                  <span
+                    key={`${file.name}-${file.size}`}
+                    className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700"
+                  >
+                    {file.name}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
         </div>
         <div className="flex gap-3 justify-end">

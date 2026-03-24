@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { EditResponseModal } from '@/pages/specialist/SpecialistReviewModals';
+import { EditResponseModal, ManualResponseModal } from '@/pages/specialist/SpecialistReviewModals';
 
 describe('EditResponseModal', () => {
   const defaultProps = {
@@ -102,5 +102,44 @@ describe('EditResponseModal', () => {
     render(<EditResponseModal {...defaultProps} actionLoading />);
 
     expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+  });
+});
+
+describe('ManualResponseModal', () => {
+  const defaultProps = {
+    open: true,
+    actionLoading: false,
+    manualResponseContent: '',
+    manualResponseSources: '',
+    manualResponseFiles: [],
+    onContentChange: vi.fn(),
+    onSourcesChange: vi.fn(),
+    onFilesChange: vi.fn(),
+    onCancel: vi.fn(),
+    onConfirm: vi.fn(),
+  };
+
+  it('renders selected files and blocks oversized attachments', async () => {
+    const onFilesChange = vi.fn();
+    render(
+      <ManualResponseModal
+        {...defaultProps}
+        manualResponseContent="Use this instead"
+        manualResponseFiles={[new File(['ok'], 'source.txt', { type: 'text/plain' })]}
+        onFilesChange={onFilesChange}
+      />,
+    );
+
+    expect(screen.getByText('source.txt')).toBeInTheDocument();
+
+    const user = userEvent.setup({ applyAccept: false });
+    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(
+      fileInput,
+      new File(['x'.repeat(11 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
+    );
+
+    expect(screen.getByText(/file\(s\) exceed the 10 mb limit/i)).toBeInTheDocument();
+    expect(onFilesChange).not.toHaveBeenCalled();
   });
 });

@@ -35,6 +35,20 @@ describe('AdminGuidelinesPage', () => {
     expect(screen.getByText(/only pdf files are supported/i)).toBeInTheDocument();
   });
 
+  it('validates that a source is selected before upload', async () => {
+    const { container } = renderPage();
+    const user = userEvent.setup({ applyAccept: false });
+
+    const sourceSelect = screen.getByRole('combobox');
+    fireEvent.change(sourceSelect, { target: { value: '' } });
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(['%PDF'], 'guideline.pdf', { type: 'application/pdf' }));
+    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+
+    expect(screen.getByText(/please choose where this guideline belongs before uploading/i)).toBeInTheDocument();
+  });
+
   it('clears the selected file when the file picker is reset to empty', async () => {
     const { container } = renderPage();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

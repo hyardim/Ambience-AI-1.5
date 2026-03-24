@@ -2,6 +2,7 @@ import type { ComponentType, RefObject } from 'react';
 import {
   ArrowLeft,
   CheckCircle,
+  ClipboardCheck,
   Loader2,
   Lock,
   UserPlus,
@@ -270,6 +271,25 @@ export function SpecialistQueryDetailView({
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {chat.files && chat.files.length > 0 && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">
+                  Consultation Files
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {chat.files.map((file) => (
+                    <span
+                      key={file.id}
+                      className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-700 border border-gray-200"
+                    >
+                      <ClipboardCheck className="w-3.5 h-3.5 text-[var(--nhs-blue)]" />
+                      <span>{file.filename}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {messages.length === 0 ? (
               <p className="text-center text-gray-500 py-8">No messages yet.</p>
             ) : (
@@ -338,6 +358,7 @@ export function SpecialistQueryDetailView({
               <ChatInput
                 onSendMessage={onSendMessage}
                 placeholder="Add a comment or ask for clarification..."
+                existingFileNames={chat.files?.map((file) => file.filename) ?? []}
               />
             </div>
           )}

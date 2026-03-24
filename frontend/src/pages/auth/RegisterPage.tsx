@@ -13,6 +13,16 @@ function routeForRole(role: UserRole): string {
   return '/gp/queries';
 }
 
+function isStrongPassword(password: string): boolean {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(password)
+  );
+}
+
 export function RegisterPage() {
   const [formData, setFormData] = useState({
     firstName: '',
@@ -33,9 +43,18 @@ export function RegisterPage() {
 
   /** Clears field-level error on change and updates form state. */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
+    const { name, value } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value,
+      specialty:
+        name === 'role'
+          ? value !== 'specialist'
+            ? ''
+            : prev.specialty
+          : name === 'specialty'
+            ? value
+            : prev.specialty,
     }));
     setFieldErrors(prev => ({ ...prev, [e.target.name]: '' }));
   };
@@ -49,20 +68,25 @@ export function RegisterPage() {
     setError('');
     setSuccessMessage('');
 
+    const normalizedEmail = formData.email.trim().toLowerCase();
+    const trimmedFirstName = formData.firstName.trim();
+    const trimmedLastName = formData.lastName.trim();
     const errors: Record<string, string> = {};
-    if (!formData.firstName.trim()) errors.firstName = 'First name is required';
-    if (!formData.lastName.trim()) errors.lastName = 'Last name is required';
-    if (!formData.email.trim()) {
+    if (!trimmedFirstName) errors.firstName = 'First name is required';
+    if (!trimmedLastName) errors.lastName = 'Last name is required';
+    if (!normalizedEmail) {
       errors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       errors.email = 'Please enter a valid email address';
     }
     if (!formData.password) {
       errors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      errors.password = 'Password must be at least 8 characters';
+    } else if (!isStrongPassword(formData.password)) {
+      errors.password = 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.';
     }
-    if (formData.password !== formData.confirmPassword) {
+    if (!formData.confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = 'Passwords do not match';
     }
     if (formData.role === 'specialist' && !formData.specialty) {
@@ -77,8 +101,8 @@ export function RegisterPage() {
     setIsSubmitting(true);
     try {
       const result = await register({
-        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
-        email: formData.email,
+        full_name: `${trimmedFirstName} ${trimmedLastName}`.trim(),
+        email: normalizedEmail,
         password: formData.password,
         role: formData.role,
         specialty: formData.role === 'specialist' ? formData.specialty : undefined,

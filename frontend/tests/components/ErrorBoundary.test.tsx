@@ -104,4 +104,45 @@ describe('ErrorBoundary', () => {
       }),
     );
   });
+
+  it('registers and unregisters the global unhandledrejection listener', () => {
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+    const { unmount } = render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    );
+
+    expect(addEventListenerSpy).toHaveBeenCalledWith('unhandledrejection', expect.any(Function));
+
+    unmount();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('unhandledrejection', expect.any(Function));
+  });
+
+  it('resets the rendered fallback when Try again is clicked', async () => {
+    let shouldThrow = true;
+
+    function ToggleBoom() {
+      if (shouldThrow) {
+        throw new Error('toggle kaboom');
+      }
+      return <div>safe child</div>;
+    }
+
+    const user = userEvent.setup();
+    render(
+      <ErrorBoundary>
+        <ToggleBoom />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+
+    shouldThrow = false;
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+
+    expect(screen.getByText('safe child')).toBeInTheDocument();
+  });
 });

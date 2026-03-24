@@ -254,6 +254,7 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
+      let uploadWarning = '';
       const MAX_FILE_SIZE = 3 * 1024 * 1024;
       const oversized = manualResponseFiles.filter((file) => file.size > MAX_FILE_SIZE);
       if (oversized.length > 0) {
@@ -266,7 +267,7 @@ export function SpecialistQueryDetailPage() {
         );
         const failures = formatUploadFailures(uploadResults, manualResponseFiles);
         if (failures) {
-          setError(`Manual response sent, but some files failed to upload: ${failures}`);
+          uploadWarning = `Manual response sent, but some files failed to upload: ${failures}`;
         }
       }
       const sources = manualResponseSources
@@ -287,6 +288,9 @@ export function SpecialistQueryDetailPage() {
       setManualResponseFiles([]);
       setReviewTargetMessageId(null);
       await loadData();
+      if (uploadWarning) {
+        setError(uploadWarning);
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to submit manual response'));
     } finally {

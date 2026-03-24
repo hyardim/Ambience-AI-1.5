@@ -64,8 +64,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/first name/i), 'John');
     await user.type(screen.getByLabelText(/last name/i), 'Doe');
     await user.type(screen.getByLabelText(/email address/i), 'john@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password1');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password2');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123?');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('RegisterPage', () => {
     expect(screen.getByText(/first name is required/i)).toBeInTheDocument();
     expect(screen.getByText(/last name is required/i)).toBeInTheDocument();
     expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
-    expect(screen.getByText(/password must be at least 8 characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/password must be at least 8 characters and include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
   });
 
   it('shows field validation errors when email and password are missing', async () => {
@@ -103,6 +103,25 @@ describe('RegisterPage', () => {
 
     expect(screen.getByText(/email is required/i)).toBeInTheDocument();
     expect(screen.getByText(/^password is required$/i)).toBeInTheDocument();
+  });
+
+  it('requires password confirmation and clears specialty when role changes away from specialist', async () => {
+    renderRegister();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(/first name/i), 'Jane');
+    await user.type(screen.getByLabelText(/last name/i), 'Smith');
+    await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
+    await user.selectOptions(screen.getByLabelText(/role/i), 'specialist');
+    await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
+    await user.selectOptions(screen.getByLabelText(/role/i), 'gp');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    fireEvent.submit(screen.getByRole('button', { name: /create account/i }).closest('form')!);
+
+    expect(screen.getByText(/please confirm your password/i)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/role/i), 'specialist');
+    expect(screen.getByLabelText(/specialty/i)).toHaveValue('');
   });
 
   it('shows specialty field when specialist role is selected', async () => {
@@ -130,8 +149,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/last name/i), 'Smith');
     await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
     await user.selectOptions(screen.getByLabelText(/role/i), 'specialist');
-    await user.type(screen.getByLabelText(/^password$/i), 'pass123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'pass123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     fireEvent.submit(screen.getByRole('button', { name: /create account/i }).closest('form')!);
 
     expect(screen.getByText(/specialty is required/i)).toBeInTheDocument();
@@ -148,8 +167,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/first name/i), 'John');
     await user.type(screen.getByLabelText(/last name/i), 'Doe');
     await user.type(screen.getByLabelText(/email address/i), 'john@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
@@ -174,8 +193,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/first name/i), 'John');
     await user.type(screen.getByLabelText(/last name/i), 'Doe');
     await user.type(screen.getByLabelText(/email address/i), 'existing@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
@@ -269,8 +288,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/last name/i), 'User');
     await user.type(screen.getByLabelText(/email address/i), 'admin@example.com');
     await user.selectOptions(screen.getByLabelText(/role/i), 'admin');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
@@ -304,8 +323,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/first name/i), 'GP');
     await user.type(screen.getByLabelText(/last name/i), 'User');
     await user.type(screen.getByLabelText(/email address/i), 'gp@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
@@ -313,21 +332,41 @@ describe('RegisterPage', () => {
     });
   });
 
-  it('registers specialists to the specialist portal and omits specialty for GP registrations', async () => {
+  it('lets specialists choose a specialty before submitting', async () => {
+    renderRegister();
+    const user = userEvent.setup();
+
+    await user.selectOptions(screen.getByLabelText(/role/i), 'specialist');
+    await waitFor(() => {
+      expect(screen.getByLabelText(/specialty/i)).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText(/specialty/i), { target: { value: 'neurology' } });
+
+    expect(screen.getByLabelText(/specialty/i)).toHaveValue('neurology');
+  });
+
+  it('registers specialists and navigates to the specialist page', async () => {
     server.use(
       http.post('/auth/register', async ({ request }) => {
         const body = await request.json() as { role: string; specialty?: string };
+        expect(body).toEqual(expect.objectContaining({
+          role: 'specialist',
+          specialty: 'neurology',
+        }));
+
         return HttpResponse.json({
           access_token: 'token',
           token_type: 'bearer',
           user: {
-            id: body.role === 'specialist' ? 2 : 1,
-            email: 'user@example.com',
-            full_name: 'Test User',
-            role: body.role,
-            specialty: body.specialty ?? null,
+            id: 2,
+            email: 'jane@example.com',
+            full_name: 'Jane Spec',
+            role: 'specialist',
+            specialty: 'neurology',
             is_active: true,
           },
+          requires_email_verification: false,
+          message: '',
         });
       }),
     );
@@ -340,8 +379,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/email address/i), 'jane@example.com');
     await user.selectOptions(screen.getByLabelText(/role/i), 'specialist');
     await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
@@ -365,8 +404,8 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText(/first name/i), 'No');
     await user.type(screen.getByLabelText(/last name/i), 'Role');
     await user.type(screen.getByLabelText(/email address/i), 'norole@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
-    await user.type(screen.getByLabelText(/confirm password/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {

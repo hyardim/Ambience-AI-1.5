@@ -6,6 +6,16 @@ import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
 import { resetPasswordConfirm } from '../../services/api';
 import { getErrorMessage } from '../../utils/errors';
 
+function isStrongPassword(password: string): boolean {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(password)
+  );
+}
+
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -30,6 +40,10 @@ export function ResetPasswordPage() {
     }
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+    if (!isStrongPassword(newPassword)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
       return;
     }
 

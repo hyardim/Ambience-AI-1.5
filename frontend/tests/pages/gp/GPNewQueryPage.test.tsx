@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route, useLocation } from 'react-router-dom';
@@ -64,6 +64,24 @@ describe('GPNewQueryPage', () => {
     fireEvent.submit(form as HTMLFormElement);
 
     expect(screen.getByText(/please select a specialty before submitting/i)).toBeInTheDocument();
+  });
+
+  it('shows errors when title or clinical question are missing', async () => {
+    renderNewQuery();
+    const user = userEvent.setup();
+    const form = screen.getByRole('button', { name: /submit consultation/i }).closest('form');
+
+    await user.type(screen.getByLabelText(/patient age/i), '42');
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
+    await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(screen.getByText(/please enter a consultation title/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/consultation title/i), 'Test');
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(screen.getByText(/please enter a clinical question before submitting/i)).toBeInTheDocument();
   });
 
   it('creates a consultation and navigates to detail page with draftMessage', async () => {
@@ -363,6 +381,24 @@ describe('GPNewQueryPage', () => {
     await user.upload(fileInput, oversized);
 
     expect(screen.getByText(/file\(s\) too large.*huge\.pdf.*maximum size is 3 mb/i)).toBeInTheDocument();
+  });
+
+  it('shows a duplicate-file notice when the same file is added twice', async () => {
+    vi.useFakeTimers();
+    renderNewQuery();
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['a'], 'scan.pdf', { type: 'application/pdf' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    expect(screen.getByText(/already added: scan\.pdf/i)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(screen.queryByText(/already added: scan\.pdf/i)).not.toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('ignores cancelled file selections', () => {

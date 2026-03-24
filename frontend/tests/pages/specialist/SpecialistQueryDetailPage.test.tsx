@@ -167,6 +167,34 @@ describe('SpecialistQueryDetailPage', () => {
     });
   });
 
+  it('shows consultation-level attached files to specialists', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'assigned',
+          files: [
+            {
+              id: 1,
+              filename: 'scan.pdf',
+              file_type: 'application/pdf',
+              file_size: 1024,
+              created_at: '2025-01-15T10:00:00Z',
+            },
+          ],
+        })),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/consultation files/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText('scan.pdf')).toBeInTheDocument();
+  });
+
   it('handles approve, approve with comment, request changes, and manual response flows', async () => {
     server.use(
       http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
@@ -215,8 +243,50 @@ describe('SpecialistQueryDetailPage', () => {
     await user.type(screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i), 'NICE CG1');
     const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
+    expect(screen.getByText('source.txt')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /send manual response/i }));
   }, 15000);
+
+  it('keeps the manual response upload warning visible after refreshing chat data', async () => {
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'reviewing',
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/chats/:chatId/files', () =>
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+      http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
+        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' })),
+    );
+
+    renderPage();
+    const user = userEvent.setup({ applyAccept: false });
+
+    await waitFor(() => {
+      expect(screen.getByText(/ai answer/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /manual response action/i }));
+    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
+    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
+    await user.click(screen.getByRole('button', { name: /send manual response/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/manual response sent, but some files failed to upload/i)).toBeInTheDocument();
+    });
+  });
 
   it('shows close-and-approve flow, send errors, oversize validation, and not-found state', async () => {
     server.use(

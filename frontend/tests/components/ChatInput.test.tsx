@@ -1,9 +1,17 @@
-import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '@/components/ChatInput';
 
 describe('ChatInput', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders the input and send button', () => {
     render(<ChatInput onSendMessage={vi.fn()} />);
 
@@ -84,7 +92,7 @@ describe('ChatInput', () => {
 
     expect(screen.getByText('note.txt')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '×' }));
+    await user.click(screen.getByRole('button', { name: /remove note\.txt/i }));
     expect(screen.queryByText('note.txt')).not.toBeInTheDocument();
 
     await user.upload(input, file);
@@ -129,5 +137,45 @@ describe('ChatInput', () => {
     fireEvent.change(input, { target: { files: null } });
 
     expect(screen.queryByText(/note\.txt/i)).not.toBeInTheDocument();
+  });
+
+  it('shows and clears a duplicate-file notice when an existing file is picked again', async () => {
+    vi.useFakeTimers();
+    render(<ChatInput onSendMessage={vi.fn()} existingFileNames={['existing.pdf']} />);
+
+    const input = document.getElementById('chat-file-input') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['dup'], 'existing.pdf', { type: 'application/pdf' })],
+      },
+    });
+
+    expect(screen.getByText(/already in this chat: existing\.pdf/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^existing\.pdf$/i)).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(screen.queryByText(/already in this chat: existing\.pdf/i)).not.toBeInTheDocument();
+  });
+
+  it('restarts duplicate timers for files already queued and clears timers on unmount', () => {
+    vi.useFakeTimers();
+    const { unmount } = render(<ChatInput onSendMessage={vi.fn()} />);
+    const input = document.getElementById('chat-file-input') as HTMLInputElement;
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(screen.getByText(/already in this chat: note\.txt/i)).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(screen.getByText(/already in this chat: note\.txt/i)).toBeInTheDocument();
+
+    unmount();
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
   });
 });

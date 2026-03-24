@@ -36,6 +36,60 @@ def test_api_router_registers_expected_paths():
     assert "/chats/" in paths
 
 
+@pytest.mark.anyio
+async def test_fetch_rag_document_omits_content_disposition_when_absent(monkeypatch):
+    class DummyResponse:
+        status_code = 200
+        headers = {"content-type": "application/pdf"}
+        content = b"%PDF"
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers):
+            return DummyResponse()
+
+    monkeypatch.setattr(rag.httpx, "AsyncClient", lambda timeout: DummyClient())
+    monkeypatch.setattr(rag, "build_rag_headers", lambda: {})
+
+    response = await rag.fetch_rag_document("doc-1", current_user=SimpleNamespace())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "content-disposition" not in response.headers
+
+
+@pytest.mark.anyio
+async def test_fetch_rag_document_raises_for_non_404_non_200(monkeypatch):
+    class DummyResponse:
+        status_code = 503
+        headers = {}
+        content = b""
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers):
+            return DummyResponse()
+
+    monkeypatch.setattr(rag.httpx, "AsyncClient", lambda timeout: DummyClient())
+    monkeypatch.setattr(rag, "build_rag_headers", lambda: {})
+
+    with pytest.raises(HTTPException) as exc:
+        await rag.fetch_rag_document("doc-1", current_user=SimpleNamespace())
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "RAG service request failed."
+
+
 def test_create_app_builds_fastapi_app(monkeypatch):
     called = {"logging": 0, "db": 0, "settings": 0}
 

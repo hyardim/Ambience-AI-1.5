@@ -46,6 +46,10 @@ export function AdminGuidelinesPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedSource) {
+      setError('Please choose where this guideline belongs before uploading.');
+      return;
+    }
     if (!file) {
       setError('Please select a PDF file.');
       return;
@@ -86,7 +90,10 @@ export function AdminGuidelinesPage() {
             </label>
             <select
               value={selectedSource}
-              onChange={e => setSelectedSource(e.target.value)}
+              onChange={(e) => {
+                setSelectedSource(e.target.value);
+                setError('');
+              }}
               disabled={uploading}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm disabled:opacity-50"
             >
