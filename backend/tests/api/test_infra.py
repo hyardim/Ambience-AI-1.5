@@ -599,7 +599,7 @@ async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
 
     # Atomic incr is called; expire is NOT called because count > 1
     assert calls == [
-        ("incr", "ratelimit:anon:127.0.0.1"),
+        ("incr", "ratelimit:global:anon:127.0.0.1"),
     ]
 
 
@@ -624,7 +624,7 @@ async def test_rate_limit_dependency_keys_by_session_and_ip(monkeypatch):
 
     await rate_limit.rate_limit_dependency(request)
 
-    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].startswith("ratelimit:global:session:")
     assert seen["key"].endswith(":127.0.0.1")
 
 
@@ -649,8 +649,33 @@ async def test_rate_limit_dependency_uses_access_cookie_subject(monkeypatch):
 
     await rate_limit.rate_limit_dependency(request)
 
-    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].startswith("ratelimit:global:session:")
     assert seen["key"].endswith(":10.0.0.1")
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_dependency_login_ignores_stale_cookie_subject(monkeypatch):
+    seen = {}
+
+    class FakeRedis:
+        def incr(self, key):
+            seen["key"] = key
+            return 1
+
+        def expire(self, key, ttl):
+            pass
+
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: FakeRedis())
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.2"),
+        url=SimpleNamespace(path="/auth/login"),
+        headers={},
+        cookies={core_config.settings.ACCESS_COOKIE_NAME: "stale-cookie"},
+    )
+
+    await rate_limit.rate_limit_dependency(request)
+
+    assert seen["key"] == "ratelimit:auth:login:anon:10.0.0.2"
 
 
 @pytest.mark.asyncio

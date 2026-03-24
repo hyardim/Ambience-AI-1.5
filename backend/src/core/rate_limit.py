@@ -25,8 +25,51 @@ _local_cleanup_counter = 0
 _LOCAL_CLEANUP_INTERVAL = 256
 
 
-def _request_subject(request: Request) -> str:
+def _request_path(request: Request) -> str:
+    """Return request path safely for real and test Request objects."""
+    url = getattr(request, "url", None)
+    path = getattr(url, "path", None)
+    if isinstance(path, str) and path:
+        return path
+
+    scope = getattr(request, "scope", None)
+    if isinstance(scope, dict):
+        scope_path = scope.get("path")
+        if isinstance(scope_path, str):
+            return scope_path
+
+    return ""
+
+
+def _request_scope(request: Request) -> str:
+    """Derive a coarse endpoint scope so limits don't bleed across domains."""
+    path = _request_path(request).strip("/")
+    if not path:
+        return "global"
+
+    parts = [part for part in path.split("/") if part]
+    # Support mounted prefix forms like /api/v1/...
+    if len(parts) >= 2 and parts[0] == "api" and parts[1] == "v1":
+        parts = parts[2:]
+    if not parts:
+        return "global"
+
+    # Keep auth endpoints isolated from each other (e.g. login vs refresh).
+    if parts[0] == "auth" and len(parts) > 1:
+        return f"auth:{parts[1]}"
+
+    # Use top-level router segment for all other endpoints.
+    return parts[0]
+
+
+def _request_subject(request: Request, scope: str | None = None) -> str:
     """Derive a stable subject bucket from auth artifacts when available."""
+    active_scope = scope or _request_scope(request)
+    # Login should always be scoped to anonymous/IP buckets so stale cookies from
+    # a previous throttled session don't block fresh login attempts.
+    if active_scope == "auth:login":
+        return "anon"
+
     headers = getattr(request, "headers", {})
     cookies = getattr(request, "cookies", {})
     auth = headers.get("authorization") if hasattr(headers, "get") else ""
@@ -118,8 +161,9 @@ async def rate_limit_dependency(request: Request) -> None:
     ``settings.RATE_LIMIT_PER_MINUTE`` requests per 60-second window.
     """
     client_ip = request.client.host if request.client else "unknown"
-    subject = _request_subject(request)
-    bucket_key = f"{subject}:{client_ip}"
+    scope = _request_scope(request)
+    subject = _request_subject(request, scope=scope)
+    bucket_key = f"{scope}:{subject}:{client_ip}"
     window = 60  # seconds
     client = _get_redis()
     if client is None:
