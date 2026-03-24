@@ -79,11 +79,10 @@ export function GPQueryDetailPage() {
     messages.length > 0 &&
     (messages[messages.length - 1].senderType === 'gp' || messages.some(m => m.isGenerating));
 
-  // Also poll when the latest AI message is still generating (revision in progress)
-  const hasRevisionInProgress =
-    messages.length > 0 &&
-    messages[messages.length - 1].senderType === 'ai' &&
-    messages[messages.length - 1].isGenerating === true;
+  // Also poll when any AI message is still generating (revision in progress)
+  const hasRevisionInProgress = messages.some(
+    (message) => message.senderType === 'ai' && message.isGenerating === true,
+  );
 
   // Poll when the chat is in a review workflow and the status may change
   const chatStatus = chat?.status ?? '';
@@ -498,7 +497,7 @@ export function GPQueryDetailPage() {
                 />
               );
             })}
-            {hasPendingAIResponse && !streamConnected && (
+            {hasPendingAIResponse && !streamConnected && !hasRevisionInProgress && (
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">

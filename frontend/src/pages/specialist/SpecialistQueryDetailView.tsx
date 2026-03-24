@@ -214,6 +214,10 @@ export function SpecialistQueryDetailView({
   onConsultationManualResponse,
   onCloseConsultationManualResponseModal,
 }: SpecialistQueryDetailViewProps) {
+  const hasGeneratingAIResponse = messages.some(
+    (message) => message.senderType === 'ai' && message.isGenerating === true,
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
@@ -399,7 +403,7 @@ export function SpecialistQueryDetailView({
               })
             )}
 
-            {hasPendingAIResponse && (
+            {hasPendingAIResponse && !hasGeneratingAIResponse && (
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
