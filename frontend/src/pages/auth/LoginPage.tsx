@@ -6,6 +6,11 @@ import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
 import { getErrorMessage } from '../../utils/errors';
 
+const DEMO_LOGIN = {
+  email: 'gp@example.com',
+  password: 'Password123',
+} as const;
+
 function routeForRole(role: UserRole | null): string {
   if (role === 'specialist') return '/specialist/queries';
   if (role === 'admin') return '/admin/users';
@@ -72,8 +77,8 @@ export function LoginPage() {
   };
 
   const fillDemoCredentials = () => {
-    setEmail('gp@example.com');
-    setPassword('password123');
+    setEmail(DEMO_LOGIN.email);
+    setPassword(DEMO_LOGIN.password);
   };
 
   return (
@@ -90,8 +95,8 @@ export function LoginPage() {
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials</p>
               <p className="text-sm text-blue-700">
-                Username: <code className="bg-blue-100 px-1 rounded">gp@example.com</code> &nbsp;
-                Password: <code className="bg-blue-100 px-1 rounded">password123</code>
+                Username: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.email}</code> &nbsp;
+                Password: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.password}</code>
               </p>
               <button
                 type="button"

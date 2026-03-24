@@ -89,7 +89,7 @@ async function installApiMocks(page: Page) {
       const data = new URLSearchParams(req.postData() ?? '');
       const username = data.get('username');
       const password = data.get('password');
-      if (password !== 'password123') {
+      if (password !== 'Password123') {
         return json(401, { detail: 'Incorrect username or password' });
       }
       if (username === 'specialist@example.com') currentRole = 'specialist';
@@ -305,7 +305,7 @@ async function setAuthenticatedSession(page: Page, role: MockRole) {
   await page.evaluate(async ({ email }: { email: string }) => {
     const body = new URLSearchParams();
     body.append('username', email);
-    body.append('password', 'password123');
+    body.append('password', 'Password123');
 
     const response = await fetch('/auth/login', {
       method: 'POST',
@@ -328,7 +328,7 @@ test.beforeEach(async ({ page }) => {
 test('login with valid credentials', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel(/username/i).fill('gp@example.com');
-  await page.getByLabel(/password/i).fill('password123');
+  await page.getByLabel(/password/i).fill('Password123');
   await page.getByRole('button', { name: /login/i }).click();
   await expect(page.locator('body')).not.toContainText(/incorrect username or password/i);
   await expect
@@ -574,7 +574,7 @@ test('deep link preserved after login', async ({ page }) => {
   await page.goto('/gp/query/1');
   await expect(page).toHaveURL(/\/login$/);
   await page.getByLabel(/username/i).fill('gp@example.com');
-  await page.getByLabel(/password/i).fill('password123');
+  await page.getByLabel(/password/i).fill('Password123');
   await page.getByRole('button', { name: /login/i }).click();
   await expect
     .poll(async () => page.evaluate(() => localStorage.getItem('user_role')))

@@ -81,7 +81,7 @@ describe('LoginPage', () => {
     await user.click(screen.getByText(/fill demo credentials/i));
 
     expect(screen.getByLabelText(/username/i)).toHaveValue('gp@example.com');
-    expect(screen.getByLabelText(/password/i)).toHaveValue('password123');
+    expect(screen.getByLabelText(/password/i)).toHaveValue('Password123');
   });
 
   it('logs in and navigates to GP queries on success', async () => {
@@ -93,7 +93,7 @@ describe('LoginPage', () => {
     });
 
     await user.type(screen.getByLabelText(/username/i), 'gp@example.com');
-    await user.type(screen.getByLabelText(/password/i), 'password123');
+    await user.type(screen.getByLabelText(/password/i), 'Password123');
     await user.click(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
@@ -290,7 +290,7 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText(/username/i), 'gp@example.com');
-    await user.type(screen.getByLabelText(/password/i), 'password123');
+    await user.type(screen.getByLabelText(/password/i), 'Password123');
     await user.click(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
