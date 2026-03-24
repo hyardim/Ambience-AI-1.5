@@ -62,6 +62,20 @@ function buildStateFromUser(user: Pick<UserProfile, 'full_name' | 'email' | 'rol
   };
 }
 
+function isTransientAuthBootstrapError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('too many requests')
+    || message.includes('rate limit')
+    || message.includes('failed to fetch')
+    || message.includes('networkerror')
+    || message.includes('request failed (5')
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const storedIdentity = readStoredIdentity();
   const [state, setState] = useState<AuthState>({
@@ -100,6 +114,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           if (isAbortError(error)) return;
           if (cancelled) return;
+          if (isTransientAuthBootstrapError(error)) {
+            // Keep the existing local identity on temporary outages/rate limits.
+            setState((prev) => ({
+              ...prev,
+              isLoading: false,
+            }));
+            return;
+          }
           clearIdentity();
           setState({
             token: null,

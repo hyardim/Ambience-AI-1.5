@@ -177,6 +177,22 @@ describe('SpecialistQueriesPage', () => {
     });
   });
 
+  it('shows a rate-limit specific message on 429 responses', async () => {
+    server.use(
+      http.get('/specialist/queue', () => {
+        return HttpResponse.json({ detail: 'Rate limit exceeded' }, { status: 429 });
+      }),
+    );
+
+    renderSpecialistQueries();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/too many requests right now\. please wait a moment and try again/i),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('shows pending count badge', async () => {
     renderSpecialistQueries();
 

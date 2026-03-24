@@ -112,6 +112,32 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('user_role')).toBeNull();
   });
 
+  it('keeps local identity when refresh and profile fail with transient rate-limit errors', async () => {
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    server.use(
+      http.post('/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Rate limit exceeded' }, { status: 429 }),
+      ),
+      http.get('/auth/me', () =>
+        HttpResponse.json({ detail: 'Rate limit exceeded' }, { status: 429 }),
+      ),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.username).toBe('Stored User');
+    expect(localStorage.getItem('username')).toBe('Stored User');
+    expect(localStorage.getItem('user_email')).toBe('stored@example.com');
+    expect(localStorage.getItem('user_role')).toBe('gp');
+  });
+
   it('does not update state after unmount when refresh fails late', async () => {
     const refreshGate = deferred<void>();
     let profileCalls = 0;

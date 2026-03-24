@@ -7,7 +7,7 @@ import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useAuth } from '../../contexts/useAuth';
 import { getSpecialistQueue, getAssignedChats } from '../../services/api';
 import type { BackendChat } from '../../types/api';
-import { ifNotAbortError } from '../../utils/errors';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { filterSpecialistChats, formatSpecialtyLabel } from '../../utils/specialistQueries';
 import { orFallback } from '../../utils/value';
 
@@ -53,6 +53,11 @@ export function SpecialistQueriesPage() {
       setAssignedChatsState(assigned);
     } catch (error) {
       ifNotAbortError(error, () => {
+        const message = getErrorMessage(error, 'Failed to load chats. Is the backend running?');
+        if (message.toLowerCase().includes('too many requests')) {
+          setError('Too many requests right now. Please wait a moment and try again.');
+          return;
+        }
         setError('Failed to load chats. Is the backend running?');
       });
     } finally {
