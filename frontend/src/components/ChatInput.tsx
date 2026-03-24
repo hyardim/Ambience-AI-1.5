@@ -8,11 +8,13 @@ interface ChatInputProps {
   onSendMessage: (message: string, files?: File[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  existingFileNames?: string[];
 }
 
-export function ChatInput({ onSendMessage, placeholder = 'Type your message here...', disabled = false }: ChatInputProps) {
+export function ChatInput({ onSendMessage, placeholder = 'Type your message here...', disabled = false, existingFileNames = [] }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [duplicateNotice, setDuplicateNotice] = useState<string>('');
   const filesRef = useRef<File[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -27,7 +29,21 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const incoming = Array.from(e.target.files);
+      const currentNames = new Set([
+        ...existingFileNames,
+        ...filesRef.current.map(f => f.name),
+      ]);
+      const selected = Array.from(e.target.files);
+      const duplicates = selected.filter(f => currentNames.has(f.name));
+      const incoming = selected.filter(f => !currentNames.has(f.name));
+      if (duplicates.length > 0) {
+        setDuplicateNotice(
+          `Already in this chat: ${duplicates.map(f => f.name).join(', ')}`
+        );
+        setTimeout(() => setDuplicateNotice(''), 4000);
+      } else {
+        setDuplicateNotice('');
+      }
       filesRef.current = [...filesRef.current, ...incoming];
       setFiles([...filesRef.current]);
       // Reset input value so the same file can be picked again later
@@ -43,6 +59,11 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
   return (
     <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4 sm:p-6">
       <p className="text-xs text-gray-400 mb-2">For best results, ask specific clinical questions about a condition or treatment.</p>
+      {duplicateNotice && (
+        <p className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          {duplicateNotice}
+        </p>
+      )}
       {files.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {files.map((file, index) => (

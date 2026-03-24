@@ -6,6 +6,8 @@ covers single file, multiple files, truncation cap, and no-file baseline.
 import io
 from unittest.mock import MagicMock, patch
 
+from src.core.config import settings
+
 
 def _fake_rag_factory(captured: dict):
     """Return a fake httpx.post that records the RAG payload and returns a stub response."""
@@ -106,10 +108,10 @@ class TestFileContextRAGPayload:
         assert "ocrelizumab" in fc
         assert captured["file_context_truncated"] is False
 
-    def test_file_context_truncated_at_8000_chars(
+    def test_file_context_truncated_at_configured_limit(
         self, client, gp_headers, created_chat, tmp_path
     ):
-        long_content = b"A" * 20_000
+        long_content = b"A" * (settings.FILE_CONTEXT_CHAR_LIMIT + 20_000)
         with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
             client.post(
                 f"/chats/{created_chat['id']}/files",
@@ -132,14 +134,14 @@ class TestFileContextRAGPayload:
             )
 
         fc = captured.get("file_context", "")
-        assert len(fc) <= 8_100  # cap + truncation message overhead
+        assert len(fc) <= settings.FILE_CONTEXT_CHAR_LIMIT + 100
         assert "truncated" in fc.lower()
         assert captured["file_context_truncated"] is True
 
     def test_file_context_not_truncated_when_under_limit(
         self, client, gp_headers, created_chat, tmp_path
     ):
-        content = b"Short clinical note." * 10  # well under 8,000 chars
+        content = b"Short clinical note." * 10
         with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
             client.post(
                 f"/chats/{created_chat['id']}/files",

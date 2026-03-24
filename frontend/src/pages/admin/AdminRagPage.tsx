@@ -1,19 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Loader2, CheckCircle, XCircle, AlertTriangle, Clock, Activity } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetRagStatus } from '../../services/api';
 import type { RagStatusResponse } from '../../types/api';
 import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
-
-const STATUS_BADGE: Record<string, string> = {
-  running: 'text-blue-700 bg-blue-50 border-blue-200',
-  pending: 'text-amber-700 bg-amber-50 border-amber-200',
-  failed: 'text-red-700 bg-red-50 border-red-200',
-};
-
-function statusBadgeClass(status: string): string {
-  return STATUS_BADGE[status] ?? 'text-gray-700 bg-gray-50 border-gray-200';
-}
 
 const formatTimestamp = (iso: string | null) => {
   if (!iso) return '—';
@@ -24,11 +14,11 @@ const formatTimestamp = (iso: string | null) => {
 };
 
 function HealthBadge({ status }: { status: string }) {
-  if (status === 'healthy') {
+  if (status === 'healthy' || status === 'ready') {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
         <CheckCircle className="w-4 h-4" />
-        Healthy
+        {status === 'ready' ? 'Ready' : 'Healthy'}
       </span>
     );
   }
@@ -141,26 +131,35 @@ export default function AdminRagPage() {
               )}
             </div>
 
-            {/* Job Summary */}
+            {/* Job Counts */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-sm font-medium text-gray-700 mb-4">Job Summary</h2>
-              {data.jobs ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {([
-                    ['pending', data.jobs.pending],
-                    ['running', data.jobs.running],
-                    ['failed', data.jobs.failed],
-                  ] as const).map(([status, count]) => (
-                    <div key={status} className="rounded-lg border border-gray-200 p-4">
-                      <div className={`inline-block text-xs font-semibold rounded-full border px-2 py-0.5 ${statusBadgeClass(status)}`}>
-                        {status}
-                      </div>
-                      <div className="mt-3 text-2xl font-bold text-gray-900">{count}</div>
-                    </div>
-                  ))}
-                </div>
+              <h2 className="text-sm font-medium text-gray-700 mb-4">Ingestion Jobs</h2>
+              {!data.jobs ? (
+                <p className="text-sm text-gray-400 text-center py-8">No job data available</p>
               ) : (
-                <p className="text-sm text-gray-400 text-center py-12">No job summary available</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-100 rounded-lg">
+                    <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-2xl font-bold text-amber-700">{data.jobs.pending}</p>
+                      <p className="text-xs text-amber-600">Pending</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <Activity className="w-5 h-5 text-blue-600 shrink-0" />
+                    <div>
+                      <p className="text-2xl font-bold text-blue-700">{data.jobs.running}</p>
+                      <p className="text-xs text-blue-600">Running</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-lg">
+                    <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                    <div>
+                      <p className="text-2xl font-bold text-red-700">{data.jobs.failed}</p>
+                      <p className="text-xs text-red-600">Failed</p>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </>

@@ -393,7 +393,7 @@ describe('GPQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText(/existing\.pdf/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/existing\.pdf/i).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getByRole('button', { name: /send small file stub/i }));

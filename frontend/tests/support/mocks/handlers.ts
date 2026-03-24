@@ -181,8 +181,8 @@ export const mockRagStatus: RagStatusResponse = {
     },
   ],
   jobs: {
-    pending: 1,
-    running: 0,
+    pending: 2,
+    running: 1,
     failed: 0,
   },
 };

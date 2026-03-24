@@ -67,6 +67,10 @@ export default defineConfig({
       '/admin': {
         target: backendUrl,
         changeOrigin: true,
+        bypass(req) {
+          // Let browser page navigations fall through to Vite (SPA routing)
+          if (req.headers.accept?.includes('text/html')) return req.url;
+        },
       },
       '/search': {
         target: backendUrl,

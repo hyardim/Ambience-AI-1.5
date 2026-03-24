@@ -212,7 +212,7 @@ describe('SpecialistQueryDetailPage', () => {
 
     await user.click(screen.getByRole('button', { name: /manual response action/i }));
     await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
-    await user.type(screen.getByPlaceholderText(/optional. add one source per line/i), 'NICE CG1');
+    await user.type(screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i), 'NICE CG1');
     const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
     await user.click(screen.getByRole('button', { name: /send manual response/i }));

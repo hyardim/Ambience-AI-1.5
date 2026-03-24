@@ -604,8 +604,8 @@ def test_regenerate_ai_response_handles_empty_context(monkeypatch):
     assert called["args"][2] == "consultation"
     assert called["args"][6] is None
     assert called["args"][7] is None
-    assert called["args"][8].endswith("[Document truncated to fit context window]")
-    assert called["args"][9] is True
+    assert called["args"][8].startswith("[doc.txt]\n")
+    assert called["args"][9] is False
 
 
 def test_regenerate_ai_response_still_calls_revise_when_inline_ai_disabled(

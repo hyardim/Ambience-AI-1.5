@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { AlertTriangle, CheckCircle, Edit2, Lock, MessageSquare, PenLine } from 'lucide-react';
 
 import { filesFromInput } from '../../utils/control';
+
+const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 interface ApproveConfirmModalProps {
   open: boolean;
@@ -193,9 +197,21 @@ export function ManualResponseModal({
   onCancel,
   onConfirm,
 }: ManualResponseModalProps) {
+  const [fileError, setFileError] = useState('');
+
   if (!open) {
     return null;
   }
+
+  const handleFilesChange = (files: File[]) => {
+    const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      setFileError(`File(s) exceed the ${MAX_FILE_SIZE_MB} MB limit: ${oversized.map(f => f.name).join(', ')}`);
+      return;
+    }
+    setFileError('');
+    onFilesChange(files);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -218,28 +234,31 @@ export function ManualResponseModal({
         />
         <div className="mt-4 mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Sources
+            Sources <span className="text-gray-400 font-normal">(optional — one per line)</span>
           </label>
           <textarea
             value={manualResponseSources}
             onChange={(e) => onSourcesChange(e.target.value)}
-            rows={4}
+            rows={3}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-            placeholder="Optional. Add one source per line."
+            placeholder="e.g. NICE NG228, BSR guideline 2023"
           />
         </div>
-        <div className="mt-4 mb-6">
+        <div className="mt-4 mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Attach files
+            Attach files <span className="text-gray-400 font-normal">(optional — max {MAX_FILE_SIZE_MB} MB each)</span>
           </label>
           <input
             type="file"
             multiple
             accept=".pdf,.txt,.md,.rtf,.doc,.docx,.csv,.json,.xml"
-            onChange={(e) => onFilesChange(filesFromInput(e.target.files))}
+            onChange={(e) => handleFilesChange(filesFromInput(e.target.files))}
             className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:font-medium file:text-purple-700 hover:file:bg-purple-100"
           />
-          {manualResponseFiles.length > 0 && (
+          {fileError && (
+            <p className="mt-2 text-sm text-red-600">{fileError}</p>
+          )}
+          {!fileError && manualResponseFiles.length > 0 && (
             <p className="mt-2 text-sm text-gray-500">
               {manualResponseFiles.length} file(s) will be uploaded to this chat before the manual response is sent.
             </p>

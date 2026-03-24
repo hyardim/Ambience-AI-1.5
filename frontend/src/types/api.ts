@@ -160,7 +160,7 @@ export interface RagJobSummary {
 export interface RagStatusResponse {
   service_status: string;
   documents: RagDocumentHealth[];
-  jobs?: RagJobSummary | null;
+  jobs: RagJobSummary | null;
 }
 
 // ---------------------------------------------------------------------------

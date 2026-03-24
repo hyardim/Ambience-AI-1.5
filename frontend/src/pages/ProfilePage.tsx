@@ -64,6 +64,12 @@ export function ProfilePage() {
     setSuccessMsg('');
     setPasswordErrors({});
 
+    // Validate name length
+    if (fullName.trim().length > 100) {
+      setError('Full name must be 100 characters or fewer.');
+      return;
+    }
+
     // Validate password fields
     const pwErrors: { current?: string; new?: string } = {};
     if (newPassword && !currentPassword) {
@@ -84,6 +90,18 @@ export function ProfilePage() {
       setPasswordErrors(pwErrors);
       setError(Object.values(pwErrors).join('. '));
       return;
+    }
+    if (newPassword) {
+      const strongEnough =
+        newPassword.length >= 8 &&
+        /[A-Z]/.test(newPassword) &&
+        /[a-z]/.test(newPassword) &&
+        /\d/.test(newPassword) &&
+        /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(newPassword);
+      if (!strongEnough) {
+        setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+        return;
+      }
     }
 
     const payload: ProfileUpdateRequest = buildProfileUpdatePayload({

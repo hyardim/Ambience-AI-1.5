@@ -144,7 +144,7 @@ describe('GPNewQueryPage', () => {
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/failed to create consultation/i)).toBeInTheDocument();
+      expect(screen.getByText(/unable to create consultation/i)).toBeInTheDocument();
     });
   });
 
@@ -229,7 +229,7 @@ describe('GPNewQueryPage', () => {
     await user.type(screen.getByLabelText(/clinical question/i), 'Question');
     fireEvent.submit(form as HTMLFormElement);
 
-    expect(screen.getByText(/age must be between 0 and 150/i)).toBeInTheDocument();
+    expect(screen.getByText(/please enter a valid patient age between 0 and 150/i)).toBeInTheDocument();
   });
 
   it('uploads files during submission and shows fallback error when creation fails', async () => {
@@ -256,7 +256,7 @@ describe('GPNewQueryPage', () => {
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/failed to create consultation/i)).toBeInTheDocument();
+      expect(screen.getByText(/unable to create consultation/i)).toBeInTheDocument();
     });
   });
 
@@ -323,12 +323,12 @@ describe('GPNewQueryPage', () => {
     expect(screen.queryByText('one.pdf')).not.toBeInTheDocument();
   });
 
-  it('uses fallback title and omits optional fields when they are blank', async () => {
+  it('omits optional patient notes when they are blank', async () => {
     captureLocationState.mockClear();
     server.use(
       http.post('/chats/', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
-        expect(body.title).toBe('New Consultation');
+        expect(body.title).toBe('Neurology query');
         expect(body.patient_notes).toBeUndefined();
         return HttpResponse.json({ id: 11, ...body });
       }),
@@ -341,6 +341,7 @@ describe('GPNewQueryPage', () => {
       expect(screen.getByRole('button', { name: /submit consultation/i })).toBeInTheDocument();
     });
 
+    await user.type(screen.getByLabelText(/consultation title/i), 'Neurology query');
     const form = screen.getByRole('button', { name: /submit consultation/i }).closest('form');
     await user.type(screen.getByLabelText(/patient age/i), '42');
     await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
