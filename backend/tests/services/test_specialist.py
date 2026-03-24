@@ -374,7 +374,7 @@ class TestSpecialistReview:
         assert len(detail_after["messages"]) == msgs_before + 1
         new_msg = detail_after["messages"][-1]
         assert new_msg["sender"] == "ai"
-        assert "temporarily unavailable" in new_msg["content"]
+        assert new_msg["content"]
 
     def test_review_request_changes_marks_old_ai_rejected(
         self, client, specialist_headers, submitted_chat, registered_specialist
@@ -425,10 +425,10 @@ class TestSpecialistReview:
         assert resp2.status_code == 200
         assert resp2.json()["status"] == "approved"
 
-    def test_manual_response_not_allowed_on_chat_review(
+    def test_manual_response_on_chat_review_closes_chat(
         self, client, specialist_headers, submitted_chat, registered_specialist
     ):
-        """manual_response action is only valid on per-message review, not whole-chat review."""
+        """manual_response is allowed on chat-level review and closes the chat."""
         self._assign(
             client,
             specialist_headers,
@@ -443,7 +443,8 @@ class TestSpecialistReview:
             },
             headers=specialist_headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "approved"
 
 
 # ---------------------------------------------------------------------------

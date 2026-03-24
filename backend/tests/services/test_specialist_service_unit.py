@@ -189,7 +189,7 @@ def test_invalidate_specialist_lists_without_specialist_id(monkeypatch):
     assert patterns
 
 
-def test_review_rejects_invalid_action(db_session):
+def test_review_manual_response_returns_not_found_for_unassigned_chat(db_session):
     specialist = _user(
         db_session,
         email="spec@example.com",
@@ -200,7 +200,7 @@ def test_review_rejects_invalid_action(db_session):
         specialist_service.review(
             db_session, specialist, 1, ReviewRequest(action="manual_response")
         )
-    assert exc.value.status_code == 400
+    assert exc.value.status_code == 404
 
 
 def test_review_rejects_invalid_status(db_session):

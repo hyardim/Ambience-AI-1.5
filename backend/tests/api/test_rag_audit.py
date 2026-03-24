@@ -100,14 +100,22 @@ class TestRAGAnswerLogging:
         mock.raise_for_status = MagicMock()
         mock.json.return_value = {
             "answer": "Based on NICE guidelines, the recommended treatment is...",
-            "citations_used": citations or [{"source": "NICE CG101", "chunk": "..."}],
+            "citations_used": (
+                citations
+                if citations is not None
+                else [{"source": "NICE CG101", "chunk": "..."}]
+            ),
         }
         return mock
 
     def test_rag_answer_logged_on_success(self, client, admin_headers, gp_headers):
+        mock_response = self._mock_rag_response()
         with patch(
+            "src.services.chat_service.httpx.post",
+            return_value=mock_response,
+        ), patch(
             "src.services.chat_service.httpx.AsyncClient",
-            return_value=_mock_async_client(self._mock_rag_response()),
+            return_value=_mock_async_client(mock_response),
         ):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
@@ -119,9 +127,13 @@ class TestRAGAnswerLogging:
         assert len(rag_answer_logs) >= 1
 
     def test_rag_answer_category_is_rag(self, client, admin_headers, gp_headers):
+        mock_response = self._mock_rag_response()
         with patch(
+            "src.services.chat_service.httpx.post",
+            return_value=mock_response,
+        ), patch(
             "src.services.chat_service.httpx.AsyncClient",
-            return_value=_mock_async_client(self._mock_rag_response()),
+            return_value=_mock_async_client(mock_response),
         ):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
@@ -135,9 +147,13 @@ class TestRAGAnswerLogging:
     def test_rag_grounded_stat_increments_on_answer_with_citations(
         self, client, admin_headers, gp_headers
     ):
+        mock_response = self._mock_rag_response()
         with patch(
+            "src.services.chat_service.httpx.post",
+            return_value=mock_response,
+        ), patch(
             "src.services.chat_service.httpx.AsyncClient",
-            return_value=_mock_async_client(self._mock_rag_response()),
+            return_value=_mock_async_client(mock_response),
         ):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)
@@ -168,9 +184,13 @@ class TestRAGAnswerLogging:
         self, client, admin_headers, gp_headers
     ):
         citations = [{"source": "NICE", "chunk": "a"}, {"source": "BMJ", "chunk": "b"}]
+        mock_response = self._mock_rag_response(citations)
         with patch(
+            "src.services.chat_service.httpx.post",
+            return_value=mock_response,
+        ), patch(
             "src.services.chat_service.httpx.AsyncClient",
-            return_value=_mock_async_client(self._mock_rag_response(citations)),
+            return_value=_mock_async_client(mock_response),
         ):
             chat = _create_chat(client, gp_headers)
             _send_message(client, chat["id"], gp_headers)

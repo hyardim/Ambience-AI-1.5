@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 import pytest
 
@@ -186,16 +187,17 @@ def test_ensure_default_users_skips_existing(monkeypatch):
 
 def test_bootstrap_module_reload_sets_expected_paths():
     reloaded = importlib.reload(bootstrap)
+    expected_root = Path(reloaded.__file__).resolve().parents[2]
 
-    assert reloaded.PROJECT_ROOT.name == "backend"
-    assert reloaded.ALEMBIC_INI_PATH.name == "alembic.ini"
-    assert reloaded.ALEMBIC_SCRIPT_PATH.name == "alembic"
+    assert reloaded.PROJECT_ROOT == expected_root
+    assert reloaded.ALEMBIC_INI_PATH == expected_root / "alembic.ini"
+    assert reloaded.ALEMBIC_SCRIPT_PATH == expected_root / "alembic"
 
 
 def test_build_alembic_config_sets_expected_paths_and_url():
     config = bootstrap.build_alembic_config()
 
-    assert config.get_main_option("script_location").endswith("/backend/alembic")
+    assert config.get_main_option("script_location") == str(bootstrap.ALEMBIC_SCRIPT_PATH)
     assert config.get_main_option("sqlalchemy.url") == bootstrap.settings.DATABASE_URL
 
 
