@@ -362,6 +362,9 @@ async def _generate_answer_from_retrieval(
             citations_retrieved,
             strip_references=True,
         )
+        if not renumbered_answer.strip():
+            renumbered_answer = NO_EVIDENCE_RESPONSE
+            citations_used = []
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
@@ -475,6 +478,9 @@ async def revise_clinical_answer(
             citations_retrieved,
             strip_references=False,
         )
+        if not renumbered_answer.strip():
+            renumbered_answer = NO_EVIDENCE_RESPONSE
+            citations_used = []
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,

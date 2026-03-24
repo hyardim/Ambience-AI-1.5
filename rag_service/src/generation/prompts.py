@@ -125,9 +125,14 @@ _INSTRUCTIONS_NEW = (
     "Response format:\n"
     "Write a concise answer that includes only claims supported by indexed "
     "passages and/or uploaded documents. "
-    "Use [N] citations for indexed passages and 'Uploaded document' for file "
-    "context. "
-    "Do not add uncited supplementary sections."
+    "Every clinical claim sentence must include a valid indexed citation [N] "
+    "or explicitly cite 'Uploaded document'. "
+    "Do not include uncited safety advice, monitoring advice, or treatment "
+    "advice. "
+    "Do not include section labels or lead-ins such as 'General clinical "
+    "context', 'Safety considerations', or 'Regarding safety considerations'. "
+    "Do not use guideline subsection references as citations (for example "
+    "[1.4.4]) and do not add 'Source:' lines."
 )
 
 

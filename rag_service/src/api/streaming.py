@@ -10,6 +10,11 @@ from .citations import extract_citation_results
 from .schemas import SearchResult
 
 logger = setup_logger(__name__)
+_NO_EVIDENCE_RESPONSE = (
+    "I couldn't find any guideline passage in the indexed sources that directly "
+    "answers this question. Please rephrase the question, upload a supporting "
+    "document, or try a different query."
+)
 
 
 async def streaming_generator(
@@ -41,6 +46,9 @@ async def streaming_generator(
         citations_retrieved,
         strip_references=True,
     )
+    if not renumbered_answer.strip():
+        renumbered_answer = _NO_EVIDENCE_RESPONSE
+        citations_used = []
 
     yield (
         json.dumps(
