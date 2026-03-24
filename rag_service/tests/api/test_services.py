@@ -171,7 +171,7 @@ def test_filter_chunks_uses_guarded_low_score_fallback_for_near_top_hits() -> No
         [top_hit, lower_hit],
     )
 
-    assert filtered == [top_hit]
+    assert filtered == [top_hit, lower_hit]
 
 
 def test_filter_chunks_low_score_fallback_preserves_weak_overlap_when_available() -> (
@@ -217,6 +217,29 @@ def test_filter_chunks_drops_hits_without_source_url_or_doc_id() -> None:
     filtered = filter_chunks("beta interferon", retrieved)
 
     assert filtered == []
+
+
+def test_filter_chunks_prioritises_higher_query_overlap_over_raw_score() -> None:
+    high_score_low_overlap = {
+        "text": "Refer urgently for sudden-onset unsteady gait.",
+        "score": 0.14,
+        "metadata": {"source_url": "https://example.com/doc-a.pdf"},
+    }
+    lower_score_high_overlap = {
+        "text": (
+            "Refer adults with rapidly progressive unsteady gait and consider "
+            "normal pressure hydrocephalus if gait apraxia is present."
+        ),
+        "score": 0.06,
+        "metadata": {"source_url": "https://example.com/doc-b.pdf"},
+    }
+
+    filtered = filter_chunks(
+        "rapidly progressive gait disturbance with possible normal pressure hydrocephalus",
+        [high_score_low_overlap, lower_score_high_overlap],
+    )
+
+    assert filtered[0] == lower_score_high_overlap
 
 
 def test_to_search_result_uses_default_source_name() -> None:

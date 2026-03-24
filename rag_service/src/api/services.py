@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
 from ..config import db_config, path_config
@@ -22,7 +23,7 @@ NO_EVIDENCE_RESPONSE = (
 HIGH_CONFIDENCE_RELEVANCE = 0.72
 SOFT_FALLBACK_RELEVANCE = 0.55
 LOW_SCORE_FALLBACK_FLOOR = 0.0
-LOW_SCORE_FALLBACK_RATIO = 0.65
+LOW_SCORE_FALLBACK_RATIO = 0.5
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
 
@@ -144,7 +145,7 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         or chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE
     ]
     if strict_matches:
-        return strict_matches
+        return _rank_by_query_overlap(query, strict_matches)
 
     semantic_fallback = [
         chunk
@@ -152,7 +153,7 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         if chunk.get("score", 0) >= SOFT_FALLBACK_RELEVANCE
     ]
     if semantic_fallback:
-        return semantic_fallback
+        return _rank_by_query_overlap(query, semantic_fallback)
 
     if not retrieved:
         return []
@@ -162,7 +163,7 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         LOW_SCORE_FALLBACK_FLOOR,
         top_score * LOW_SCORE_FALLBACK_RATIO,
     )
-    return [
+    low_score_matches = [
         chunk
         for chunk in retrieved
         if chunk.get("score", 0) >= low_score_threshold
@@ -170,6 +171,36 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         and has_query_overlap(query, chunk.get("text", ""))
         and not is_boilerplate(chunk)
     ]
+    return _rank_by_query_overlap(query, low_score_matches)
+
+
+def _rank_by_query_overlap(
+    query: str, chunks: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Prioritise chunks that cover more query terms, then score."""
+    if not chunks:
+        return []
+    return sorted(
+        chunks,
+        key=lambda chunk: (
+            _query_overlap_count(query, chunk.get("text", "")),
+            float(chunk.get("score", 0.0)),
+        ),
+        reverse=True,
+    )
+
+
+def _query_overlap_count(query: str, text: str) -> int:
+    """Count overlapping lexical terms between query and chunk text."""
+
+    def _tokens(value: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[A-Za-z0-9]+", value.lower())
+            if len(token) >= 3
+        }
+
+    return len(_tokens(query).intersection(_tokens(text)))
 
 
 def evidence_level(chunks: list[dict[str, Any]]) -> str:
