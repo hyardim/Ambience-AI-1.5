@@ -385,11 +385,14 @@ async def _generate_answer_from_retrieval(
                 stream,
                 citations_retrieved=citations_retrieved,
             )
+        fallback_citations = (
+            citations_used if citations_used else citations_retrieved
+        )
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=citations_used,
+            citations=fallback_citations,
         )
     except HTTPException:
         raise
@@ -512,11 +515,12 @@ async def revise_clinical_answer(
             citations_retrieved,
             strip_references=False,
         )
+        fallback_citations = citations_used if citations_used else citations_retrieved
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=citations_used,
+            citations=fallback_citations,
         )
     except HTTPException:
         raise

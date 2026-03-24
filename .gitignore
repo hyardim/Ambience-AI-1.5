@@ -74,6 +74,7 @@ coverage/
 # Editor settings
 .vscode/
 .idea/
+node_modules/
 
 # Local TLS certs for nginx
 nginx/certs/*.pem

@@ -427,67 +427,47 @@ def _prune_topic_outliers(
     chunks: list[dict[str, Any]],
     query: str,
 ) -> list[dict[str, Any]]:
+    """Remove chunks whose topic intent is negatively aligned with the query.
+
+    Uses ``query_intent_alignment_score`` as the primary signal — this covers
+    procedural/surgical docs, audit tools, appraisals, etc. without needing
+    a hardcoded marker list.  A chunk is pruned when:
+
+    1. The top-ranked chunk is reasonably strong (score ≥ 0.4, alignment ≥ 3).
+    2. The candidate has a *negative* intent score (wrong topic/task).
+    3. The candidate's alignment is noticeably weaker than the top chunk's.
+    """
     if len(chunks) <= 1:
         return chunks
 
     top = chunks[0]
     top_alignment = _alignment_details(query, top)
     top_score = float(top.get("score", 0.0))
-    top_haystack = " ".join(
-        str(value).lower()
-        for value in (
-            (top.get("metadata") or {}).get("title", ""),
-            top.get("section_path")
-            or (top.get("metadata") or {}).get("section_title", ""),
-            top.get("text") or "",
-        )
-    )
-    pruned = [top]
-    procedural_markers = (
-        "joint replacement",
-        "arthroplasty",
-        "implant",
-        "implants",
-        "surgical approach",
-        "surgical approaches",
-        "elective hip replacement",
-        "spinal fusion",
-    )
 
+    if top_score < 0.4 or top_alignment["total"] < 3:
+        return chunks
+
+    pruned = [top]
     for chunk in chunks[1:]:
         alignment = _alignment_details(query, chunk)
         metadata = chunk.get("metadata") or {}
-        intent_score = query_intent_alignment_score(
+        intent = query_intent_alignment_score(
             query,
             title=metadata.get("title", ""),
-            section=chunk.get("section_path") or metadata.get("section_title") or "",
+            section=(
+                chunk.get("section_path")
+                or metadata.get("section_title")
+                or ""
+            ),
             text=chunk.get("text") or "",
             doc_type=metadata.get("doc_type", ""),
         )
         score = float(chunk.get("score", 0.0))
-        haystack_lc = " ".join(
-            str(value).lower()
-            for value in (
-                metadata.get("title", ""),
-                chunk.get("section_path") or metadata.get("section_title", ""),
-                chunk.get("text") or "",
-            )
-        )
+
         if (
-            top_score >= 0.7
-            and top_alignment["total"] >= 8
-            and any(marker in haystack_lc for marker in procedural_markers)
-            and not any(marker in top_haystack for marker in procedural_markers)
-            and alignment["total"] + 4 <= top_alignment["total"]
-            and score < top_score
-        ):
-            continue
-        if (
-            top_score >= 0.7
-            and top_alignment["total"] >= 4
-            and intent_score < 0
+            intent < 0
             and alignment["total"] <= max(2, top_alignment["total"] - 2)
-            and score < (top_score * 0.99)
+            and score < top_score
         ):
             continue
         pruned.append(chunk)

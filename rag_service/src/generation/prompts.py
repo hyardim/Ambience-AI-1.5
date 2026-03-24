@@ -210,7 +210,7 @@ def select_answer_mode(
     question_lc = question.lower()
     severity_lc = (severity or "").strip().lower()
 
-    if severity_lc in {"urgent", "emergency"} or any(
+    if severity_lc == "emergency" or any(
         pattern.search(question) for pattern in _EMERGENCY_PATTERNS
     ):
         return "emergency"

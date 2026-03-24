@@ -118,3 +118,68 @@ def test_init_db_executes_schema_sql() -> None:
     assert "rag_chunks_embedding_idx" in schema_sql
     assert "idx_rag_chunks_embedding_hnsw" in schema_sql
     conn.close.assert_called_once()
+
+
+def test_remap_source_path_returns_none_when_no_data_raw_marker() -> None:
+    result = vector_store._remap_source_path_to_data_root(
+        "/some/random/path/without/marker.pdf"
+    )
+    assert result is None
+
+
+def test_remap_source_path_returns_none_for_empty_tail() -> None:
+    result = vector_store._remap_source_path_to_data_root(
+        "/some/project/data/raw/"
+    )
+    assert result is None
+
+
+def test_get_source_path_for_doc_skips_empty_source_path(
+    tmp_path,
+) -> None:
+    """Cover line 112: continue when source_path is empty."""
+    real_file = tmp_path / "real.pdf"
+    real_file.write_text("pdf")
+    conn, _cur = make_conn(
+        [
+            ("", None),
+            (str(real_file), None),
+        ]
+    )
+    with patch.object(
+        vector_store.db, "raw_connection", return_value=yield_conn(conn)
+    ):
+        result = vector_store.get_source_path_for_doc("doc123")
+    # Empty source_path is skipped; second row resolves to the real file
+    assert result == str(real_file)
+
+
+def test_get_source_path_for_doc_skips_duplicate_candidate_paths() -> None:
+    """Cover line 126: when remap produces path already in candidates."""
+    data_raw = vector_store.path_config.data_raw
+    file_path = data_raw / "_tmp" / "vector-store-dedup-test.pdf"
+    # Use the resolved absolute path. Since it's absolute:
+    #   - original = Path(resolved_path) -> added to candidates
+    #   - is_absolute() is True -> no root-join candidate
+    #   - remap finds /data/raw/ in the path -> produces data_raw/_tmp/file
+    #     which resolves to the same path -> duplicate triggers line 126.
+    #
+    # Keep the file missing so the function doesn't return early on the first
+    # candidate; it must evaluate the duplicate candidate and then fall back to
+    # the stored source path.
+    source_str = str(file_path.resolve())
+    conn, _cur = make_conn([(source_str, None)])
+    file_path.unlink(missing_ok=True)
+
+    with (
+        patch.object(
+            vector_store.db, "raw_connection", return_value=yield_conn(conn)
+        ),
+        patch(
+            "src.retrieval.vector_store._remap_source_path_to_data_root",
+            return_value=Path(source_str),
+        ),
+    ):
+        result = vector_store.get_source_path_for_doc("doc123")
+
+    assert result == source_str

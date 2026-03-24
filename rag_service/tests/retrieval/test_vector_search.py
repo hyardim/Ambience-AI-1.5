@@ -425,3 +425,24 @@ class TestVectorSearch:
             vector_search(VALID_EMBEDDING, db_url="postgresql://fake", top_k=True)
         assert exc_info.value.stage == "VECTOR_SEARCH"
         assert "top_k" in exc_info.value.message
+
+    def test_pooled_connection_used_when_db_url_matches_config(self):
+        from unittest.mock import MagicMock, patch
+
+        import src.retrieval.vector_search as vs_mod
+
+        mock_conn = make_mock_conn([make_row()])
+        config_url = vs_mod.db_config.database_url
+
+        with (
+            patch.object(vs_mod.db, "raw_connection") as mock_pool,
+            patch("src.retrieval.vector_search.register_vector"),
+        ):
+            mock_pool.return_value.__enter__ = MagicMock(
+                return_value=mock_conn
+            )
+            mock_pool.return_value.__exit__ = MagicMock(return_value=False)
+            results = vector_search(VALID_EMBEDDING, db_url=config_url)
+
+        mock_pool.assert_called_once()
+        assert isinstance(results, list)

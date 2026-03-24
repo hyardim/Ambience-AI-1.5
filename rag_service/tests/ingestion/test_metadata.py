@@ -1037,3 +1037,18 @@ class TestGetPageText:
         from src.ingestion.metadata import _get_page_text
 
         assert _get_page_text(make_table_aware_doc(pages=[]), 0) == ""
+
+
+# -----------------------------------------------------------------------
+# _parse_human_date - edge cases
+# -----------------------------------------------------------------------
+
+
+def test_parse_human_date_returns_none_for_unparseable_string() -> None:
+    result = _parse_human_date("not a date at all")
+    assert result is None
+
+
+def test_parse_human_date_parses_valid_date() -> None:
+    result = _parse_human_date("15 March 2024")
+    assert result == "2024-03-15"

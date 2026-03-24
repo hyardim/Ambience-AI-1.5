@@ -225,3 +225,45 @@ def test_select_generation_provider_revision_not_forced_when_toggle_off(
 
     assert decision.provider == "local"
     assert "revision_flow" not in decision.reasons
+
+
+def test_cloud_available_exception_fallback_returns_true(
+    monkeypatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://api.realhost.com/v1",
+        api_key="sk-real-key",
+    )
+    monkeypatch.setattr(router, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert router._cloud_available() is True
+
+
+def test_cloud_available_exception_fallback_rejects_placeholder(
+    monkeypatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://example.invalid/v1",
+        api_key="sk-real-key",
+    )
+    monkeypatch.setattr(router, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert router._cloud_available() is False

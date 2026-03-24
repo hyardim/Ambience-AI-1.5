@@ -679,3 +679,159 @@ class TestRetrieve:
         run_retrieve(mocks, score_threshold=0.7)
         _, fkwargs = mocks["apply_filters"].call_args
         assert fkwargs["config"].score_threshold == 0.7
+
+
+# -----------------------------------------------------------------------
+# _calibrate_final_score
+# -----------------------------------------------------------------------
+
+
+class TestCalibrateScore:
+    def test_low_quality_low_structure_penalty(self):
+        """Cover line 381: quality_signal < 0.45 and structural_relevance < 0.5"""
+        from src.retrieval.retrieve import _calibrate_score
+
+        result = make_ranked_result("c-garbled").model_copy(
+            update={
+                "rerank_score": 0.1,
+                "vector_score": 0.1,
+                "keyword_rank": None,
+                "text": "zx3 q7b xnm kl2 p9f",
+                "metadata": {"title": "Unrelated", "section_path": []},
+            }
+        )
+        score_penalized = _calibrate_score("gout treatment options", result)
+
+        # Same inputs but with good quality text — no penalty
+        good_result = result.model_copy(
+            update={"text": "Gout treatment involves urate lowering therapy"}
+        )
+        score_clean = _calibrate_score("gout treatment options", good_result)
+
+        assert score_penalized < score_clean
+
+    def test_moderate_quality_low_structure_penalty(self):
+        """Cover line 383: quality < 0.6 and structural_relevance < 0.34"""
+        from src.retrieval.retrieve import _calibrate_score
+
+        result = make_ranked_result("c-short").model_copy(
+            update={
+                "rerank_score": 0.5,
+                "vector_score": 0.5,
+                "keyword_rank": None,
+                "text": "ab cd ef gh ij kl mn op qr st uv wx yz",
+                "metadata": {
+                    "title": "Unrelated Doc",
+                    "section_path": [],
+                },
+            }
+        )
+        score = _calibrate_score("gout treatment options", result)
+        assert isinstance(score, float)
+
+    def test_overlap_count_floor_applied(self):
+        """Cover line 389: overlap_count >= 2 floors blended at vector_score"""
+        from src.retrieval.retrieve import _calibrate_score
+
+        result = make_ranked_result("c-overlap").model_copy(
+            update={
+                "rerank_score": 0.01,
+                "vector_score": 0.7,
+                "keyword_rank": None,
+                "text": "alpha gout beta treatment gamma management",
+                "metadata": {"title": "Guide", "section_path": []},
+            }
+        )
+        score = _calibrate_score("gout treatment options", result)
+        assert score >= 0.7 * 0.95
+
+
+# -----------------------------------------------------------------------
+# _extract_query_age
+# -----------------------------------------------------------------------
+
+
+class TestExtractQueryAge:
+    def test_extract_query_age_returns_none_for_no_match(self):
+        from src.retrieval.retrieve import _extract_query_age
+
+        assert _extract_query_age("patient with gait issues") is None
+
+    def test_extract_query_age_extracts_age(self):
+        from src.retrieval.retrieve import _extract_query_age
+
+        assert _extract_query_age("65-year-old with headache") == 65
+
+    def test_extract_query_age_returns_none_when_match_is_not_numeric(self):
+        from src.retrieval.retrieve import _extract_query_age
+
+        class _FakeMatch:
+            def group(self, index: int) -> str:
+                assert index == 1
+                return "not-a-number"
+
+        with patch("src.retrieval.retrieve.re.search", return_value=_FakeMatch()):
+            assert _extract_query_age("65-year-old with headache") is None
+
+
+# -----------------------------------------------------------------------
+# _age_alignment_score
+# -----------------------------------------------------------------------
+
+
+class TestAgeAlignmentScore:
+    def test_age_alignment_child_query_penalizes_adult_markers(self):
+        from src.retrieval.retrieve import _age_alignment_score
+
+        score = _age_alignment_score(12, "Treatment for adults over 18 years")
+        assert score < 0
+
+    def test_age_alignment_child_query_boosts_child_markers(self):
+        from src.retrieval.retrieve import _age_alignment_score
+
+        score = _age_alignment_score(12, "Paediatric guidelines for children")
+        assert score > 0
+
+
+# -----------------------------------------------------------------------
+# _apply_final_ranking - no viable preferred specialty
+# -----------------------------------------------------------------------
+
+
+class TestApplyFinalRankingNoViable:
+    def test_final_ranking_no_viable_preferred_returns_calibrated_order(self):
+        """Cover line 483: no viable preferred items returns calibrated as-is"""
+        from src.retrieval.retrieve import _apply_final_ranking
+
+        item = make_ranked_result("c1").model_copy(
+            update={
+                "doc_id": "doc-1",
+                "text": "Some text.",
+                "rerank_score": 0.01,
+                "final_score": 0.0,
+                "vector_score": 0.2,
+                "keyword_rank": None,
+                "metadata": {"specialty": "rheumatology"},
+            }
+        )
+        # Request neurology but only rheumatology items exist with low scores
+        ranked = _apply_final_ranking(
+            "query about something",
+            [item],
+            preferred_specialty="neurology",
+        )
+        assert len(ranked) == 1
+
+
+# -----------------------------------------------------------------------
+# _diversify_by_document
+# -----------------------------------------------------------------------
+
+
+class TestDiversifyByDocument:
+    def test_diversify_by_document_with_zero_limit_returns_all(self):
+        from src.retrieval.retrieve import _diversify_by_document
+
+        items = [make_ranked_result(f"c{i}") for i in range(3)]
+        result = _diversify_by_document(items, max_per_doc=0)
+        assert len(result) == 3

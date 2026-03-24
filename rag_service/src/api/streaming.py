@@ -44,8 +44,20 @@ async def streaming_generator(
         citations_retrieved,
         strip_references=True,
     )
+    refused = False
     if not citations_used and not allow_uncited_answer:
         renumbered_answer = NO_EVIDENCE_RESPONSE
+        refused = True
+
+    # When the answer was allowed through (not refused), fall back to
+    # citations_retrieved so the frontend can still display sources.
+    final_citations: list[SearchResult]
+    if citations_used:
+        final_citations = citations_used
+    elif not refused:
+        final_citations = citations_retrieved
+    else:
+        final_citations = []
 
     yield (
         json.dumps(
@@ -58,7 +70,9 @@ async def streaming_generator(
                 "citations_retrieved": [
                     citation.model_dump() for citation in citations_retrieved
                 ],
-                "citations": [citation.model_dump() for citation in citations_used],
+                "citations": [
+                    citation.model_dump() for citation in final_citations
+                ],
             }
         )
         + "\n"

@@ -463,6 +463,7 @@ async def test_generate_clinical_answer_keeps_uncited_low_risk_answer(
     assert response.answer.startswith("Based on standard clinical practice:")
     assert response.citations_used == []
     assert response.citations_retrieved
+    assert response.citations == response.citations_retrieved
 
 
 @pytest.mark.anyio
@@ -601,3 +602,43 @@ async def test_documents_health_closes_connection_on_error(
         await routes.documents_health()
 
     assert closed == [True]
+
+
+def test_cloud_available_exception_fallback_with_valid_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover lines 65-68: _cloud_available falls back when configured check raises."""
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://api.realhost.com/v1",
+        api_key="sk-test-key",
+    )
+    monkeypatch.setattr(routes, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert routes._cloud_available() is True
+
+
+def test_cloud_available_exception_fallback_rejects_example_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover lines 65-68: _cloud_available rejects example.invalid in fallback."""
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://example.invalid/v1",
+        api_key="sk-test-key",
+    )
+    monkeypatch.setattr(routes, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert routes._cloud_available() is False

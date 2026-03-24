@@ -241,3 +241,45 @@ def test_validate_internal_api_key_config_skips_in_test_env(
     monkeypatch.delenv("RAG_INTERNAL_API_KEY", raising=False)
 
     startup.validate_internal_api_key_config()
+
+
+def test_cloud_available_exception_fallback_returns_true_for_valid_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://api.realhost.com/v1",
+        api_key="sk-real-key",
+    )
+    monkeypatch.setattr(startup, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert startup._cloud_available() is True
+
+
+def test_cloud_available_exception_fallback_rejects_example_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://example.invalid/v1",
+        api_key="sk-real-key",
+    )
+    monkeypatch.setattr(startup, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert startup._cloud_available() is False

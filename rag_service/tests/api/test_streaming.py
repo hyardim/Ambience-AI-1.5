@@ -114,6 +114,41 @@ async def test_done_payload_keeps_empty_used_citations(
 
 
 @pytest.mark.anyio
+async def test_done_payload_falls_back_to_retrieved_citations_when_uncited_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_stream_generate(prompt: str, max_tokens: int | None = None):
+        del prompt, max_tokens
+        yield "Based on standard clinical practice: reassure and safety-net."
+
+    monkeypatch.setattr(
+        "src.api.streaming.stream_generate",
+        fake_stream_generate,
+    )
+
+    citations_retrieved = [
+        SearchResult(text="evidence", source="guideline.pdf", score=0.9)
+    ]
+
+    lines = []
+    async for line in streaming_generator(
+        "prompt",
+        128,
+        citations_retrieved,
+        allow_uncited_answer=True,
+    ):
+        lines.append(json.loads(line.strip()))
+
+    assert lines[-1]["citations_used"] == []
+    assert lines[-1]["citations"] == [
+        _search_result_payload(citations_retrieved[0])
+    ]
+    assert lines[-1]["citations_retrieved"] == [
+        _search_result_payload(citations_retrieved[0])
+    ]
+
+
+@pytest.mark.anyio
 async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     async def failing_stream(prompt: str, max_tokens: int | None = None):
         del prompt, max_tokens

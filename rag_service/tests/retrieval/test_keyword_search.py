@@ -435,3 +435,44 @@ class TestKeywordSearch:
 
         assert [result.chunk_id for result in results] == ["relaxed-hit"]
         assert query_cursor.execute.call_count == 2
+
+    def test_pooled_connection_used_when_db_url_matches_config(self):
+        from unittest.mock import MagicMock, patch
+
+        import src.retrieval.keyword_search as ks_mod
+
+        mock_conn = make_mock_conn([make_row()])
+
+        # Make db_url match db_config.database_url to trigger pool path
+        config_url = ks_mod.db_config.database_url
+
+        with (
+            patch.object(
+                ks_mod.db, "raw_connection"
+            ) as mock_pool,
+        ):
+            mock_pool.return_value.__enter__ = MagicMock(
+                return_value=mock_conn
+            )
+            mock_pool.return_value.__exit__ = MagicMock(return_value=False)
+            results = keyword_search(QUERY, db_url=config_url)
+
+        mock_pool.assert_called_once()
+        assert isinstance(results, list)
+
+    def test_build_relaxed_tsquery_returns_none_for_generic_only_tokens(self):
+        result = _build_relaxed_tsquery("about for from with")
+        assert result is None
+
+    def test_build_relaxed_tsquery_limits_terms(self):
+        from src.retrieval.keyword_search import RELAXED_QUERY_TERM_LIMIT
+        query = " ".join(
+            f"term{i}" for i in range(RELAXED_QUERY_TERM_LIMIT + 5)
+        )
+        result = _build_relaxed_tsquery(query)
+        assert result is not None
+        assert result.count("|") == RELAXED_QUERY_TERM_LIMIT - 1
+
+    def test_build_relaxed_tsquery_returns_none_for_single_token(self):
+        result = _build_relaxed_tsquery("migraine")
+        assert result is None

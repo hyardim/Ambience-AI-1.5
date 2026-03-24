@@ -101,6 +101,12 @@ _INTENT_QUERY_MARKERS: tuple[str, ...] = (
     "refer",
     "referral",
     "monitor",
+    "treatment",
+    "management",
+    "should",
+    "started",
+    "prescribe",
+    "initiate",
     "monitoring",
     "toxicity",
     "proteinuria",
@@ -272,7 +278,10 @@ def query_intent_alignment_score(
     if not any(marker in query_lc for marker in _INTENT_QUERY_MARKERS):
         return 0.0
 
-    haystack = " ".join(part for part in (title, section, doc_type, text[:400]) if part)
+    # Exclude doc_type from haystack — it is scored separately below to avoid
+    # double-counting (e.g. a "guideline" doc_type matching both the positive
+    # doc marker list AND the doc_type bonus).
+    haystack = " ".join(part for part in (title, section, text[:400]) if part)
     haystack_lc = haystack.lower()
 
     score = 0.0

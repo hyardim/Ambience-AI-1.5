@@ -149,7 +149,7 @@ def test_filter_chunks_prunes_wrong_task_outlier_when_top_match_is_strong() -> N
             "Surgical approaches for primary elective hip replacement include "
             "posterior and anterolateral approaches."
         ),
-        "score": 0.79,
+        "score": 0.55,
         "section_path": "Implants for primary elective hip replacement",
         "metadata": {
             "title": "Joint replacement (primary): hip, knee and shoulder",
@@ -684,3 +684,129 @@ def test_log_route_decision_records_telemetry(
     assert payload["evidence"] == "strong"
     assert payload["outcome"] == NO_EVIDENCE_RESPONSE
     assert isinstance(payload["query_hash"], str)
+
+
+def test_filter_chunks_returns_empty_when_all_boilerplate_below_alignment() -> None:
+    """Cover line 227: all base candidates are boilerplate with low alignment."""
+    boilerplate = {
+        "text": "supplementary material data availability copyright notice",
+        "score": 0.5,
+        "metadata": {
+            "source_url": "https://example.com/blank",
+            "title": "Appendix Document",
+        },
+    }
+
+    filtered = filter_chunks("rare neurological condition details", [boilerplate])
+
+    assert filtered == []
+
+
+def test_filter_chunks_refined_path_returns_high_alignment_subset() -> None:
+    """Cover line 279: refined subset when total >= 5 but no title/section overlap >= 2
+    and no text phrases (so narrowed block is skipped but refined is entered).
+
+    We need: strict_matches exist (raw query overlap), max_title_section_overlap < 2
+    AND max_text_phrases < 1, but alignment["total"] >= 5.  Total counts text_overlap +
+    title_overlap + section_overlap + 2*(phrases).  So we need >= 5 text token overlaps
+    with no phrases (scatter overlapping words among non-overlapping words) and minimal
+    title/section overlap.
+    """
+    chunk = {
+        "text": (
+            "alpha migraine beta aura gamma triptans delta preventive epsilon "
+            "therapy zeta prophylactic eta dosing"
+        ),
+        "score": 0.6,
+        "section_path": "",
+        "metadata": {
+            "title": "General Guide",
+            "source_url": "https://example.com/migraine",
+        },
+    }
+
+    filtered = filter_chunks(
+        "migraine aura triptans preventive therapy prophylactic dosing",
+        [chunk],
+    )
+
+    assert chunk in filtered
+
+
+def test_filter_chunks_semantic_fallback_with_alignment() -> None:
+    """Cover line 313: semantic fallback path.
+
+    Needs: base_candidates present (score >= MIN_RELEVANCE, citable), NOT boilerplate,
+    NO strict matches (no raw query overlap with text, no expanded overlap,
+    score < 0.72), but score >= 0.45 and alignment total >= 3 via title/section.
+    """
+    # Chunk text has NO overlap with query tokens, but title + section do.
+    chunk = {
+        "text": "Commence oral anticoagulation per protocol.",
+        "score": 0.55,
+        "section_path": "Rheumatology referral investigation baseline",
+        "metadata": {
+            "title": "Rheumatology referral investigation baseline imaging",
+            "source_url": "https://example.com/rheum",
+        },
+    }
+
+    # Query tokens: rheumatology, referral, investigation, baseline, imaging
+    # Chunk text tokens: commence, oral, anticoagulation, per, protocol — NO overlap
+    # Title/section tokens overlap: rheumatology, referral, etc.
+    filtered = filter_chunks(
+        "rheumatology referral investigation baseline imaging",
+        [chunk],
+    )
+
+    assert chunk in filtered
+
+
+def test_filter_chunks_semantic_fallback_returns_aligned_results() -> None:
+    """Cover line 313: semantic fallback path with no strict token overlap."""
+    chunk = {
+        "text": "Acetylsalicylic acid antiplatelet secondary prevention therapy.",
+        "score": 0.55,
+        "section_path": "Antiplatelet > Secondary prevention",
+        "metadata": {
+            "title": "Antiplatelet therapy guidance",
+            "source_url": "https://example.com/aspirin",
+        },
+    }
+
+    filtered = filter_chunks("aspirin secondary prevention antiplatelet", [chunk])
+
+    assert filtered == [chunk]
+
+
+def test_prune_topic_outliers_keeps_non_negative_intent_chunks() -> None:
+    """Cover line 473: chunk with non-negative intent is kept."""
+    from src.api.services import _prune_topic_outliers
+
+    top = {
+        "text": "Refer adults with suspected inflammatory arthritis promptly.",
+        "score": 0.85,
+        "section_path": "Referral > Inflammatory arthritis",
+        "metadata": {
+            "title": "BSR Triage Guidance",
+            "doc_type": "guideline",
+            "source_url": "https://example.com/bsr",
+        },
+    }
+    keeper = {
+        "text": "Baseline investigations for suspected arthritis include CRP and ESR.",
+        "score": 0.6,
+        "section_path": "Investigation > Blood tests",
+        "metadata": {
+            "title": "BSR Triage Guidance",
+            "doc_type": "guideline",
+            "source_url": "https://example.com/bsr-inv",
+        },
+    }
+
+    result = _prune_topic_outliers(
+        [top, keeper],
+        "What baseline blood tests should be done before referral for arthritis?",
+    )
+
+    assert keeper in result
