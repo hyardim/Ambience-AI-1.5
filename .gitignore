@@ -48,6 +48,7 @@ rag_data/*
 .cache/huggingface/
 postgres_data/
 postgres_data_v2/
+postgres_data.pre_reset_*/
 .gitignore.swp
 .gitattributes.swp
 

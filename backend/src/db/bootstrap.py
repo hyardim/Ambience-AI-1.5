@@ -2,18 +2,31 @@ import argparse
 from pathlib import Path
 from typing import TypedDict
 
+from sqlalchemy import inspect
 from alembic.config import Config
 
 from alembic import command
 from src.core import security
 from src.core.config import settings
 from src.db.models import User, UserRole
-from src.db.session import SessionLocal
+from src.db.session import SessionLocal, engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI_PATH = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_SCRIPT_PATH = PROJECT_ROOT / "alembic"
 DEMO_SEED_ALLOWED_ENVS = {"development", "test"}
+MANAGED_BACKEND_TABLES = frozenset(
+    {
+        "audit_logs",
+        "chats",
+        "email_verification_tokens",
+        "file_attachments",
+        "messages",
+        "notifications",
+        "password_reset_tokens",
+        "users",
+    }
+)
 
 
 class DefaultUserSpec(TypedDict):
@@ -31,7 +44,35 @@ def build_alembic_config() -> Config:
     return config
 
 
+def _existing_public_tables() -> set[str]:
+    inspector = inspect(engine)
+    if engine.dialect.name == "postgresql":
+        return set(inspector.get_table_names(schema="public"))
+    return set(inspector.get_table_names())
+
+
+def _ensure_supported_migration_state() -> None:
+    existing_tables = _existing_public_tables()
+    if "alembic_version" in existing_tables:
+        return
+
+    legacy_backend_tables = sorted(existing_tables & MANAGED_BACKEND_TABLES)
+    if not legacy_backend_tables:
+        return
+
+    joined_tables = ", ".join(legacy_backend_tables)
+    raise RuntimeError(
+        "Detected backend tables without Alembic migration history: "
+        f"{joined_tables}. This usually means the stack is reusing an older "
+        "local postgres_data/ directory. For a fresh local bootstrap, stop the "
+        "stack and remove postgres_data/ before starting again. If you need to "
+        "preserve the data, back it up first and add a one-off migration or "
+        "Alembic stamp for the legacy schema before restarting the backend."
+    )
+
+
 def run_migrations() -> None:
+    _ensure_supported_migration_state()
     command.upgrade(build_alembic_config(), "head")
 
 

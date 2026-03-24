@@ -199,8 +199,44 @@ def test_build_alembic_config_sets_expected_paths_and_url():
     assert config.get_main_option("sqlalchemy.url") == bootstrap.settings.DATABASE_URL
 
 
+def test_ensure_supported_migration_state_allows_fresh_rag_only_database(monkeypatch):
+    monkeypatch.setattr(
+        bootstrap,
+        "_existing_public_tables",
+        lambda: {"doc_access", "rag_chunks"},
+    )
+
+    bootstrap._ensure_supported_migration_state()
+
+
+def test_ensure_supported_migration_state_allows_tracked_database(monkeypatch):
+    monkeypatch.setattr(
+        bootstrap,
+        "_existing_public_tables",
+        lambda: {"alembic_version", "users"},
+    )
+
+    bootstrap._ensure_supported_migration_state()
+
+
+def test_ensure_supported_migration_state_raises_for_legacy_backend_tables(monkeypatch):
+    monkeypatch.setattr(
+        bootstrap,
+        "_existing_public_tables",
+        lambda: {"chats", "rag_chunks", "users"},
+    )
+
+    with pytest.raises(RuntimeError, match="without Alembic migration history"):
+        bootstrap._ensure_supported_migration_state()
+
+
 def test_run_migrations_upgrades_to_head(monkeypatch):
     calls = []
+    monkeypatch.setattr(
+        bootstrap,
+        "_ensure_supported_migration_state",
+        lambda: calls.append("checked"),
+    )
     monkeypatch.setattr(bootstrap, "build_alembic_config", lambda: "cfg")
     monkeypatch.setattr(
         bootstrap.command,
@@ -210,7 +246,7 @@ def test_run_migrations_upgrades_to_head(monkeypatch):
 
     bootstrap.run_migrations()
 
-    assert calls == [("cfg", "head")]
+    assert calls == ["checked", ("cfg", "head")]
 
 
 def test_prepare_database_runs_migrations_then_bootstraps_users(monkeypatch):

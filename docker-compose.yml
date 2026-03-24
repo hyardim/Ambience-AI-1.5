@@ -69,6 +69,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini:ro
       - ./backend/logs:/app/logs
     environment:
       - PYTHONPATH=/app
@@ -159,6 +161,10 @@ services:
       - LLM_FALLBACK_ALERT_TIMEOUT_SECONDS=${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    command: >
+      sh -c "python -c 'import redis, rq' 2>/dev/null
+      || python -m pip install --no-cache-dir 'redis>=5.0.0' 'rq>=1.16.2';
+      exec uvicorn src.main:app --host 0.0.0.0 --port 8001"
     healthcheck:
       test:
         [
@@ -209,7 +215,10 @@ services:
       - LLM_FALLBACK_ALERT_TIMEOUT_SECONDS=${LLM_FALLBACK_ALERT_TIMEOUT_SECONDS:-2.0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: python scripts/workers/run_retry_worker.py
+    command: >
+      sh -c "python -c 'import redis, rq' 2>/dev/null
+      || python -m pip install --no-cache-dir 'redis>=5.0.0' 'rq>=1.16.2';
+      exec python scripts/workers/run_retry_worker.py"
     stop_signal: SIGTERM
     stop_grace_period: 60s
     security_opt:
