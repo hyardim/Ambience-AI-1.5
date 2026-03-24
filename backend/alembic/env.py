@@ -20,6 +20,8 @@ if config.config_file_name is not None:
 # Import all models so Alembic can see them for autogenerate
 from src.db.base import Base  # noqa: E402
 import src.db.models  # noqa: E402, F401
+import src.db.email_verification_models  # noqa: E402, F401
+import src.db.password_reset_models  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

@@ -4,13 +4,9 @@ from sqlalchemy import text
 from src.core import security
 import os
 
-from src.db.base import Base
 from src.db.session import engine
 from src.db.models import User, UserRole
 from src.db.session import SessionLocal
-import src.db.models  # noqa: F401 — ensures all models are registered before create_all
-
-Base.metadata.create_all(bind=engine)
 
 
 def ensure_auth_columns() -> None:
