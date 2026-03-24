@@ -84,3 +84,86 @@ def test_extract_citation_results_strips_safety_leadin_phrase() -> None:
     assert "safety considerations" not in answer.lower()
     assert answer == "urgent referral is needed [1]."
     assert used == [citations[0]]
+
+
+def test_extract_citation_results_adds_referral_gap_note_when_missing() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Immediate investigations include urinalysis [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with new proteinuria and rising creatinine. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert answer.startswith("Immediate investigations include urinalysis [1].")
+    assert "referral/urgency pathway part of this question" in answer
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_returns_empty_with_no_referral_evidence() -> None:
+    answer, used = extract_citation_results(
+        "Referral should be urgent.",
+        [],
+        strip_references=False,
+        query="What referral pathway and urgency are recommended?",
+    )
+
+    assert answer == ""
+    assert used == []
+
+
+def test_extract_citation_results_drops_treatment_when_not_requested() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        (
+            "Immediate investigations include urinalysis [1]. "
+            "Start ACE inhibitors for proteinuria [1]."
+        ),
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with SLE and new proteinuria. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert "urinalysis [1]" in answer
+    assert "ace inhibitors" not in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_marks_missing_imaging_and_referral_parts() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Baseline blood tests include ESR and CRP [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with intermittent joint swelling. What baseline blood tests "
+            "and imaging should be completed prior to referral?"
+        ),
+    )
+
+    assert "ESR and CRP [1]" in answer
+    assert "imaging and referral/urgency pathway part of this question" in answer
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_treatment_when_requested() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Start ACE inhibitors for proteinuria [1].",
+        citations,
+        strip_references=False,
+        query="What treatment is recommended for SLE proteinuria?",
+    )
+
+    assert "ACE inhibitors" in answer
+    assert used == [citations[0]]

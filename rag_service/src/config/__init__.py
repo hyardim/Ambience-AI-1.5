@@ -14,6 +14,7 @@ from .llm import (
 from .runtime import (
     AlertingConfig,
     LoggingConfig,
+    RetrievalConfig,
     RetryConfig,
     RoutingConfig,
 )
@@ -37,6 +38,7 @@ cloud_llm_config = build_cloud_llm_config(llm_config)
 routing_config = RoutingConfig()
 retry_config = RetryConfig()
 alerting_config = AlertingConfig()
+retrieval_config = RetrievalConfig()
 path_config = PathConfig()
 
 __all__ = [
@@ -53,6 +55,7 @@ __all__ = [
     "LocalLLMConfig",
     "LoggingConfig",
     "PathConfig",
+    "RetrievalConfig",
     "RetryConfig",
     "RoutingConfig",
     "VectorIndexConfig",
@@ -72,6 +75,7 @@ __all__ = [
     "local_llm_config",
     "logging_config",
     "path_config",
+    "retrieval_config",
     "retry_config",
     "routing_config",
     "vector_config",

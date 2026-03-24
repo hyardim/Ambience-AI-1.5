@@ -26,6 +26,20 @@ LOW_SCORE_FALLBACK_FLOOR = 0.0
 LOW_SCORE_FALLBACK_RATIO = 0.5
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
+REFERRAL_QUERY_HINT_RE = re.compile(
+    r"\b(refer|referral|pathway|how urgently|urgency|urgent|immediate)\b",
+    re.IGNORECASE,
+)
+REFERRAL_SECTION_HINT_RE = re.compile(
+    r"\b(recommendation|recommendations|refer|referral|pathway|"
+    r"when to refer|urgent|immediate)\b",
+    re.IGNORECASE,
+)
+NON_DIRECTIVE_SECTION_HINT_RE = re.compile(
+    r"\b(discussion|results|context|background|rationale|headlines|"
+    r"why the committee made)\b",
+    re.IGNORECASE,
+)
 
 
 def _citation_section_path(result: CitedResult) -> str:
@@ -177,17 +191,33 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
 def _rank_by_query_overlap(
     query: str, chunks: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Prioritise chunks that cover more query terms, then score."""
+    """Prioritise section fit, overlap, then score."""
     if not chunks:
         return []
     return sorted(
         chunks,
         key=lambda chunk: (
+            _section_priority(query, chunk),
             _query_overlap_count(query, chunk.get("text", "")),
             float(chunk.get("score", 0.0)),
         ),
         reverse=True,
     )
+
+
+def _section_priority(query: str, chunk: dict[str, Any]) -> int:
+    """Bias ranking toward recommendation/referral sections for pathway queries."""
+    section_path = (chunk.get("section_path") or "").lower()
+    if not section_path:
+        return 0
+
+    priority = 0
+    if REFERRAL_QUERY_HINT_RE.search(query):
+        if REFERRAL_SECTION_HINT_RE.search(section_path):
+            priority += 2
+        if NON_DIRECTIVE_SECTION_HINT_RE.search(section_path):
+            priority -= 1
+    return priority
 
 
 def _query_overlap_count(query: str, text: str) -> int:
@@ -241,6 +271,9 @@ def log_route_decision(
     top_score: float | None = None,
     evidence: str | None = None,
     outcome: str | None = None,
+    canonicalization_triggered: bool | None = None,
+    selected_retrieval_pass: str | None = None,
+    fallback_reason: str | None = None,
 ) -> None:
     logger.info(
         "%s routing provider=%s score=%s threshold=%s reasons=%s",
@@ -263,5 +296,8 @@ def log_route_decision(
             "top_score": top_score,
             "evidence": evidence,
             "outcome": outcome,
+            "canonicalization_triggered": canonicalization_triggered,
+            "selected_retrieval_pass": selected_retrieval_pass,
+            "fallback_reason": fallback_reason,
         },
     )

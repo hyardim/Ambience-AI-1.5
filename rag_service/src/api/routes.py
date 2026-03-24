@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -28,6 +30,7 @@ from ..retrieval.vector_store import get_source_path_for_doc
 from ..utils.db import db as db_manager
 from ..utils.logger import setup_logger
 from . import services as api_services
+from .canonicalization import build_canonical_retrieval_query, parse_allowed_specialties
 from .citations import MAX_CITATIONS, extract_citation_results
 from .schemas import (
     AnswerRequest,
@@ -54,6 +57,77 @@ from .streaming import ndjson_done_only, streaming_generator
 logger = setup_logger(__name__)
 router = APIRouter()
 
+try:
+    from ..config import retrieval_config
+except ImportError:  # pragma: no cover - compatibility for isolated test stubs
+    class _RetrievalConfigFallback:
+        retrieval_canonicalization_enabled = False
+        retrieval_canonicalization_specialties = "rheumatology"
+
+    retrieval_config = _RetrievalConfigFallback()
+
+ABSOLUTE_MIN_TOP_SCORE = 0.002
+HIGH_PRECISION_MIN_TOP_SCORE = 0.02
+HIGH_PRECISION_MIN_OVERLAP = 5
+HIGH_PRECISION_SOFT_MIN_TOP_SCORE = 0.08
+HIGH_PRECISION_MIN_KEY_OVERLAP = 3
+HIGH_PRECISION_MIN_OVERLAP_RATIO = 0.12
+HIGH_PRECISION_QUERY_RE = re.compile(
+    r"\b(baseline|blood tests?|imaging|investigations?|prior to referral|"
+    r"referral pathway|how urgently|urgency)\b",
+    re.IGNORECASE,
+)
+NON_DIRECTIVE_SECTION_HINT_RE = re.compile(
+    r"\b(discussion|results|context|background|rationale|headlines|"
+    r"why the committee made)\b",
+    re.IGNORECASE,
+)
+DIRECTIVE_SECTION_HINT_RE = re.compile(
+    r"\b(recommendation|recommendations|refer|referral|pathway|"
+    r"when to refer|urgent|immediate|assessment|investigation)\b",
+    re.IGNORECASE,
+)
+OVERLAP_STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "this",
+    "that",
+    "what",
+    "when",
+    "where",
+    "which",
+    "should",
+    "would",
+    "could",
+    "patient",
+    "patients",
+    "male",
+    "female",
+    "year",
+    "years",
+    "old",
+    "known",
+    "new",
+    "over",
+    "month",
+    "months",
+}
+
+
+@dataclass
+class _RetrievalPassDecision:
+    name: str
+    retrieval_query: str
+    retrieved: list[dict[str, Any]]
+    filtered: list[dict[str, Any]]
+    top_chunks: list[dict[str, Any]]
+    passes_low_confidence_gate: bool
+    has_directive_section_fit: bool
+    evidence_quality_score: float
+
 
 def _cloud_available() -> bool:
     try:
@@ -78,6 +152,176 @@ def _no_evidence_response(stream: bool) -> AnswerResponse | StreamingResponse:
         citations_retrieved=[],
         citations=[],
     )
+
+
+def _minimum_required_top_score(query: str) -> float:
+    if HIGH_PRECISION_QUERY_RE.search(query):
+        return HIGH_PRECISION_MIN_TOP_SCORE
+    return ABSOLUTE_MIN_TOP_SCORE
+
+
+def _query_overlap_count(query: str, text: str) -> int:
+    def _tokens(value: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[A-Za-z0-9]+", value.lower())
+            if len(token) >= 3 and token not in OVERLAP_STOPWORDS
+        }
+
+    return len(_tokens(query).intersection(_tokens(text)))
+
+
+def _query_overlap_ratio(query: str, text: str) -> float:
+    def _tokens(value: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[A-Za-z0-9]+", value.lower())
+            if len(token) >= 3 and token not in OVERLAP_STOPWORDS
+        }
+
+    query_tokens = _tokens(query)
+    if not query_tokens:
+        return 0.0
+    overlap = len(query_tokens.intersection(_tokens(text)))
+    return overlap / len(query_tokens)
+
+
+def _should_reject_for_low_confidence(query: str, top_chunk: dict[str, Any]) -> bool:
+    top_score = float(top_chunk.get("score", 0.0))
+    if top_score < ABSOLUTE_MIN_TOP_SCORE:
+        return True
+    is_high_precision = bool(HIGH_PRECISION_QUERY_RE.search(query))
+    if not is_high_precision:
+        return top_score < _minimum_required_top_score(query)
+
+    overlap = _query_overlap_count(query, top_chunk.get("text", ""))
+    if top_score < HIGH_PRECISION_MIN_TOP_SCORE:
+        return overlap < HIGH_PRECISION_MIN_OVERLAP
+
+    if top_score < HIGH_PRECISION_SOFT_MIN_TOP_SCORE:
+        section_path = str(top_chunk.get("section_path") or "")
+        if NON_DIRECTIVE_SECTION_HINT_RE.search(section_path):
+            return True
+        if overlap < HIGH_PRECISION_MIN_KEY_OVERLAP:
+            return True
+        overlap_ratio = _query_overlap_ratio(query, top_chunk.get("text", ""))
+        if overlap_ratio < HIGH_PRECISION_MIN_OVERLAP_RATIO:
+            return True
+
+    return False
+
+
+def _retrieve_for_answer_query(
+    request: AnswerRequest,
+    *,
+    retrieval_query: str,
+) -> list[dict[str, Any]]:
+    advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
+    if callable(advanced_retriever):
+
+        def _run_advanced(doc_type: str | None) -> list[dict[str, Any]]:
+            return advanced_retriever(
+                query=retrieval_query,
+                top_k=request.top_k,
+                specialty=request.specialty,
+                source_name=request.source_name,
+                doc_type=doc_type,
+                score_threshold=request.score_threshold,
+                expand_query=request.expand_query,
+            )
+
+        if request.doc_type is not None:
+            return _run_advanced(request.doc_type)
+
+        # Guideline-first retrieval: fall back to all document types only
+        # when guideline-only retrieval yields no usable evidence.
+        guideline_retrieved = _run_advanced("guideline")
+        guideline_filtered = filter_chunks(retrieval_query, guideline_retrieved)
+        if guideline_filtered:
+            return guideline_retrieved
+        return _run_advanced(None)
+
+    return retrieve_chunks(
+        retrieval_query,
+        top_k=request.top_k,
+        specialty=request.specialty,
+    )
+
+
+def _has_directive_section_fit(chunks: list[dict[str, Any]]) -> bool:
+    for chunk in chunks[:MAX_CITATIONS]:
+        section_path = str(chunk.get("section_path") or "")
+        if not section_path:
+            continue
+        if NON_DIRECTIVE_SECTION_HINT_RE.search(section_path):
+            continue
+        if DIRECTIVE_SECTION_HINT_RE.search(section_path):
+            return True
+    return False
+
+
+def _evidence_quality_score(chunks: list[dict[str, Any]]) -> float:
+    if not chunks:
+        return 0.0
+    scores = [float(chunk.get("score", 0.0)) for chunk in chunks[:MAX_CITATIONS]]
+    top_score = scores[0]
+    mean_score = sum(scores) / len(scores)
+    return (0.7 * top_score) + (0.3 * mean_score)
+
+
+def _evaluate_retrieval_pass(
+    *,
+    name: str,
+    retrieval_query: str,
+    retrieved: list[dict[str, Any]],
+) -> _RetrievalPassDecision:
+    filtered = filter_chunks(retrieval_query, retrieved)
+    top_chunks = filtered[:MAX_CITATIONS]
+    passes_low_confidence_gate = bool(top_chunks) and not (
+        _should_reject_for_low_confidence(
+            retrieval_query,
+            top_chunks[0],
+        )
+    )
+    return _RetrievalPassDecision(
+        name=name,
+        retrieval_query=retrieval_query,
+        retrieved=retrieved,
+        filtered=filtered,
+        top_chunks=top_chunks,
+        passes_low_confidence_gate=passes_low_confidence_gate,
+        has_directive_section_fit=(
+            passes_low_confidence_gate and _has_directive_section_fit(top_chunks)
+        ),
+        evidence_quality_score=_evidence_quality_score(top_chunks),
+    )
+
+
+def _pass_rank(decision: _RetrievalPassDecision) -> tuple[int, int, float]:
+    return (
+        int(decision.passes_low_confidence_gate),
+        int(decision.has_directive_section_fit),
+        decision.evidence_quality_score,
+    )
+
+
+def _select_retrieval_pass(
+    primary: _RetrievalPassDecision,
+    secondary: _RetrievalPassDecision | None,
+) -> _RetrievalPassDecision:
+    if secondary is None:
+        return primary
+    if _pass_rank(secondary) > _pass_rank(primary):
+        return secondary
+    return primary
+
+
+def _fallback_reason_from_decision(decision: _RetrievalPassDecision) -> str | None:
+    if not decision.top_chunks:
+        return "no_relevant_chunks"
+    if not decision.passes_low_confidence_gate:
+        return "low_confidence_retrieval"
+    return None
 
 
 @router.post(
@@ -227,35 +471,57 @@ async def generate_clinical_answer(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Any:
     try:
-        advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
-        if callable(advanced_retriever):
-            retrieved = advanced_retriever(
+        primary_pass = _evaluate_retrieval_pass(
+            name="original",
+            retrieval_query=request.query,
+            retrieved=_retrieve_for_answer_query(
+                request,
+                retrieval_query=request.query,
+            )
+        )
+
+        canonicalization_triggered = False
+        canonical_pass: _RetrievalPassDecision | None = None
+
+        if retrieval_config.retrieval_canonicalization_enabled and (
+            not primary_pass.top_chunks or not primary_pass.passes_low_confidence_gate
+        ):
+            allowed_specialties = parse_allowed_specialties(
+                retrieval_config.retrieval_canonicalization_specialties
+            )
+            canonical_query = build_canonical_retrieval_query(
                 query=request.query,
-                top_k=request.top_k,
                 specialty=request.specialty,
-                source_name=request.source_name,
-                doc_type=request.doc_type,
-                score_threshold=request.score_threshold,
-                expand_query=request.expand_query,
+                allowed_specialties=allowed_specialties,
             )
-        else:
-            retrieved = retrieve_chunks(
-                request.query,
-                top_k=request.top_k,
-                specialty=request.specialty,
-            )
+            if canonical_query:
+                canonicalization_triggered = True
+                canonical_pass = _evaluate_retrieval_pass(
+                    name="canonical",
+                    retrieval_query=canonical_query,
+                    retrieved=_retrieve_for_answer_query(
+                        request,
+                        retrieval_query=canonical_query,
+                    ),
+                )
+
+        selected_pass = _select_retrieval_pass(primary_pass, canonical_pass)
         return await _generate_answer_from_retrieval(
             query=request.query,
+            retrieval_query=selected_pass.retrieval_query,
             max_tokens=request.max_tokens,
             patient_context=request.patient_context,
             file_context=request.file_context,
             stream=request.stream,
             severity=request.severity,
-            retrieved=retrieved,
+            retrieved=selected_pass.retrieved,
             route_endpoint="/answer",
             prompt_label=ACTIVE_PROMPT,
             request_type="answer",
             idempotency_key=idempotency_key,
+            canonicalization_triggered=canonicalization_triggered,
+            selected_retrieval_pass=selected_pass.name,
+            fallback_reason=_fallback_reason_from_decision(selected_pass),
         )
     except HTTPException:
         raise
@@ -270,6 +536,7 @@ async def generate_clinical_answer(
 async def _generate_answer_from_retrieval(
     *,
     query: str,
+    retrieval_query: str | None = None,
     max_tokens: int,
     patient_context: dict[str, Any] | None,
     file_context: str | None,
@@ -280,14 +547,53 @@ async def _generate_answer_from_retrieval(
     prompt_label: str,
     request_type: str,
     idempotency_key: str | None,
+    canonicalization_triggered: bool | None = None,
+    selected_retrieval_pass: str | None = None,
+    fallback_reason: str | None = None,
 ) -> Any:
     try:
-        filtered = filter_chunks(query, retrieved)
+        query_for_retrieval = retrieval_query or query
+        filtered = filter_chunks(query_for_retrieval, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
-        if not top_chunks and not file_context:
-            return _no_evidence_response(stream)
-
         evidence = evidence_level(top_chunks)
+        if not top_chunks and not file_context:
+            log_route_decision(
+                route_endpoint,
+                "local",
+                0.0,
+                routing_config.llm_route_threshold,
+                ("no_evidence",),
+                query=query,
+                retrieved_count=len(filtered or retrieved),
+                top_score=None,
+                evidence=evidence,
+                outcome="fallback",
+                canonicalization_triggered=canonicalization_triggered,
+                selected_retrieval_pass=selected_retrieval_pass,
+                fallback_reason=fallback_reason or "no_relevant_chunks",
+            )
+            return _no_evidence_response(stream)
+        if (
+            top_chunks
+            and not file_context
+            and _should_reject_for_low_confidence(query_for_retrieval, top_chunks[0])
+        ):
+            log_route_decision(
+                route_endpoint,
+                "local",
+                0.0,
+                routing_config.llm_route_threshold,
+                ("no_evidence", "low_confidence"),
+                query=query,
+                retrieved_count=len(filtered or retrieved),
+                top_score=top_chunks[0]["score"],
+                evidence=evidence,
+                outcome="fallback",
+                canonicalization_triggered=canonicalization_triggered,
+                selected_retrieval_pass=selected_retrieval_pass,
+                fallback_reason=fallback_reason or "low_confidence_retrieval",
+            )
+            return _no_evidence_response(stream)
 
         prompt = build_grounded_prompt(
             query,
@@ -313,6 +619,9 @@ async def _generate_answer_from_retrieval(
             top_score=top_chunks[0]["score"] if top_chunks else None,
             evidence=evidence,
             outcome="selected",
+            canonicalization_triggered=canonicalization_triggered,
+            selected_retrieval_pass=selected_retrieval_pass,
+            fallback_reason=None,
         )
         citations_retrieved = [to_search_result(result) for result in top_chunks]
 
@@ -323,6 +632,7 @@ async def _generate_answer_from_retrieval(
                     max_tokens,
                     citations_retrieved,
                     provider=route.provider,
+                    query=query,
                 ),
                 media_type="application/x-ndjson",
             )
@@ -361,6 +671,7 @@ async def _generate_answer_from_retrieval(
             answer_text,
             citations_retrieved,
             strip_references=True,
+            query=query,
         )
         if not renumbered_answer.strip():
             renumbered_answer = NO_EVIDENCE_RESPONSE
@@ -399,6 +710,15 @@ async def revise_clinical_answer(
         filtered = filter_chunks(request.original_query, retrieved)
         top_chunks = filtered[:MAX_CITATIONS]
         if not top_chunks and not request.file_context:
+            return _no_evidence_response(request.stream)
+        if (
+            top_chunks
+            and not request.file_context
+            and _should_reject_for_low_confidence(
+                request.original_query,
+                top_chunks[0],
+            )
+        ):
             return _no_evidence_response(request.stream)
 
         evidence = evidence_level(top_chunks)
@@ -440,6 +760,7 @@ async def revise_clinical_answer(
                     request.max_tokens,
                     citations_retrieved,
                     provider=route.provider,
+                    query=request.original_query,
                 ),
                 media_type="application/x-ndjson",
             )
@@ -477,6 +798,7 @@ async def revise_clinical_answer(
             answer_text,
             citations_retrieved,
             strip_references=False,
+            query=request.original_query,
         )
         if not renumbered_answer.strip():
             renumbered_answer = NO_EVIDENCE_RESPONSE

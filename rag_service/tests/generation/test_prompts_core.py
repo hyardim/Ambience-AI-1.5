@@ -85,3 +85,10 @@ def test_revision_prompt_files_only_uses_with_citations_hint_and_order() -> None
 
     assert "Revised answer (with citations):" in prompt
     assert prompt.index("Context:") < prompt.rindex("UPLOADED DOCUMENTS")
+
+
+def test_new_instructions_require_part_coverage_and_scope_controls() -> None:
+    instructions = prompts._INSTRUCTIONS_NEW
+    assert "If the user asks multiple parts" in instructions
+    assert "state which part is not directly addressed" in instructions
+    assert "Do not include treatment or management recommendations" in instructions

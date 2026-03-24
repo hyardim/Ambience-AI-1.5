@@ -37,6 +37,42 @@ _SCOPE_HINT_RE = re.compile(
     r"can't provide|cannot answer|insufficient evidence|not enough evidence)\b",
     re.IGNORECASE,
 )
+_REFERRAL_QUERY_HINT_RE = re.compile(
+    r"\b(refer|referral|pathway|urgent|immediate|urgency|how urgently)\b",
+    re.IGNORECASE,
+)
+_REFERRAL_SENTENCE_HINT_RE = re.compile(
+    r"\b(refer|referral|pathway|urgent|urgency)\b",
+    re.IGNORECASE,
+)
+_INVESTIGATION_QUERY_HINT_RE = re.compile(
+    r"\b(investigations?|investigate|baseline|blood tests?|work[- ]?up|"
+    r"laboratory|labs?)\b",
+    re.IGNORECASE,
+)
+_INVESTIGATION_SENTENCE_HINT_RE = re.compile(
+    r"\b(investigations?|blood tests?|fbc|cbc|esr|crp|urinalysis|"
+    r"anti-?ccp|rheumatoid factor|rf\b|ana|dsdna|u&es|eGFR|creatinine)\b",
+    re.IGNORECASE,
+)
+_IMAGING_QUERY_HINT_RE = re.compile(
+    r"\b(imaging|x-?ray|ultrasound|mri|ct|scan)\b",
+    re.IGNORECASE,
+)
+_IMAGING_SENTENCE_HINT_RE = re.compile(
+    r"\b(x-?ray|ultrasound|mri|ct|scan|imaging)\b",
+    re.IGNORECASE,
+)
+_TREATMENT_QUERY_HINT_RE = re.compile(
+    r"\b(treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|drug)\b",
+    re.IGNORECASE,
+)
+_TREATMENT_SENTENCE_HINT_RE = re.compile(
+    r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|steroid|"
+    r"immunosuppress\w*|treat\w*|management|manage\w*|therapy|medication|"
+    r"dose|prescrib\w*|drug)\b",
+    re.IGNORECASE,
+)
 
 GENERIC_TOKENS = {
     "guideline",
@@ -161,11 +197,106 @@ def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str
     return _clean_answer_text(" ".join(kept_units))
 
 
+def _has_cited_sentence_matching(
+    answer_text: str,
+    sentence_pattern: re.Pattern[str],
+) -> bool:
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+        if _VALID_CITATION_GROUP_RE.search(unit) and sentence_pattern.search(unit):
+            return True
+    return False
+
+
+def _join_labels(labels: list[str]) -> str:
+    if not labels:
+        return ""
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]}"
+    return f"{', '.join(labels[:-1])}, and {labels[-1]}"
+
+
+def _enforce_partial_question_coverage(
+    answer_text: str,
+    *,
+    query: str | None,
+    has_citations: bool,
+) -> str:
+    """Append explicit coverage gaps for unsupported multi-part asks.
+
+    For multipart asks (investigations, imaging, referral/urgency), keep cited
+    supported statements and append a scoped "not covered" note for missing
+    parts instead of allowing fabricated completion.
+    """
+    if not answer_text.strip():
+        return ""
+    if not query:
+        return answer_text
+
+    requested_parts: list[tuple[str, re.Pattern[str]]] = []
+    if _INVESTIGATION_QUERY_HINT_RE.search(query):
+        requested_parts.append(("investigations", _INVESTIGATION_SENTENCE_HINT_RE))
+    if _IMAGING_QUERY_HINT_RE.search(query):
+        requested_parts.append(("imaging", _IMAGING_SENTENCE_HINT_RE))
+    if _REFERRAL_QUERY_HINT_RE.search(query):
+        requested_parts.append(("referral/urgency pathway", _REFERRAL_SENTENCE_HINT_RE))
+
+    if not requested_parts:
+        return answer_text
+
+    if not has_citations:
+        return ""
+
+    missing_parts = [
+        label
+        for label, pattern in requested_parts
+        if not _has_cited_sentence_matching(answer_text, pattern)
+    ]
+    if not missing_parts:
+        return answer_text
+
+    missing_phrase = _join_labels(missing_parts)
+    gap_sentence = (
+        "The indexed passages retrieved do not directly cover the "
+        f"{missing_phrase} part of this question."
+    )
+    if gap_sentence.lower() in answer_text.lower():
+        return answer_text
+
+    return _clean_answer_text(
+        f"{answer_text} {gap_sentence}"
+    )
+
+
+def _enforce_requested_scope(answer_text: str, *, query: str | None) -> str:
+    """Remove treatment-only guidance when treatment was not requested."""
+    if not answer_text.strip():
+        return ""
+    if not query or _TREATMENT_QUERY_HINT_RE.search(query):
+        return answer_text
+
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+        if _TREATMENT_SENTENCE_HINT_RE.search(unit):
+            continue
+        kept_units.append(unit)
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
 def extract_citation_results(
     answer_text: str,
     citations_retrieved: list[SearchResult],
     *,
     strip_references: bool,
+    query: str | None = None,
 ) -> tuple[str, list[SearchResult]]:
     used_indices = extract_citation_indices(answer_text)
     sorted_used = sorted(
@@ -186,4 +317,10 @@ def extract_citation_results(
     answer = _RULE_STYLE_CITATION_RE.sub("", answer)
     answer = _clean_answer_text(answer)
     answer = _enforce_grounded_sentences(answer, has_citations=bool(citations_used))
+    answer = _enforce_requested_scope(answer, query=query)
+    answer = _enforce_partial_question_coverage(
+        answer,
+        query=query,
+        has_citations=bool(citations_used),
+    )
     return answer, citations_used

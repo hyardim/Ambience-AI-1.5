@@ -22,6 +22,7 @@ async def streaming_generator(
     max_tokens: int,
     citations_retrieved: list[SearchResult],
     provider: ProviderName = "local",
+    query: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
     accumulated = ""
@@ -45,6 +46,7 @@ async def streaming_generator(
         accumulated,
         citations_retrieved,
         strip_references=True,
+        query=query,
     )
     if not renumbered_answer.strip():
         renumbered_answer = _NO_EVIDENCE_RESPONSE

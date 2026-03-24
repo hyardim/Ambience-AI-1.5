@@ -235,11 +235,46 @@ def test_filter_chunks_prioritises_higher_query_overlap_over_raw_score() -> None
     }
 
     filtered = filter_chunks(
-        "rapidly progressive gait disturbance with possible normal pressure hydrocephalus",
+        (
+            "rapidly progressive gait disturbance with possible normal pressure "
+            "hydrocephalus"
+        ),
         [high_score_low_overlap, lower_score_high_overlap],
     )
 
     assert filtered[0] == lower_score_high_overlap
+
+
+def test_filter_chunks_prefers_referral_sections_for_pathway_queries() -> None:
+    discussion_chunk = {
+        "text": (
+            "SLE proteinuria rising creatinine details with broad contextual "
+            "commentary and limited pathway instructions."
+        ),
+        "score": 0.91,
+        "section_path": "CLINICAL SCIENCE > Discussion",
+        "metadata": {"source_url": "https://example.com/paper.pdf"},
+    }
+    referral_chunk = {
+        "text": (
+            "Refer urgently to nephrology for suspected lupus nephritis when "
+            "proteinuria and creatinine are rising."
+        ),
+        "score": 0.62,
+        "section_path": "Recommendations > Referral pathway",
+        "metadata": {"source_url": "https://example.com/guideline.pdf"},
+    }
+
+    filtered = filter_chunks(
+        (
+            "patient with known SLE presenting with new proteinuria and rising "
+            "creatinine. What immediate investigations and referral pathway are "
+            "recommended?"
+        ),
+        [discussion_chunk, referral_chunk],
+    )
+
+    assert filtered[0] == referral_chunk
 
 
 def test_to_search_result_uses_default_source_name() -> None:
@@ -360,6 +395,9 @@ def test_log_route_decision_records_telemetry(
         top_score=0.91,
         evidence="strong",
         outcome=NO_EVIDENCE_RESPONSE,
+        canonicalization_triggered=True,
+        selected_retrieval_pass="canonical",
+        fallback_reason="low_confidence_retrieval",
     )
 
     assert payloads
@@ -371,4 +409,7 @@ def test_log_route_decision_records_telemetry(
     assert payload["top_score"] == 0.91
     assert payload["evidence"] == "strong"
     assert payload["outcome"] == NO_EVIDENCE_RESPONSE
+    assert payload["canonicalization_triggered"] is True
+    assert payload["selected_retrieval_pass"] == "canonical"
+    assert payload["fallback_reason"] == "low_confidence_retrieval"
     assert isinstance(payload["query_hash"], str)
