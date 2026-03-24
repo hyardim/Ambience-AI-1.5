@@ -482,9 +482,12 @@ async def generate_clinical_answer(
 
         canonicalization_triggered = False
         canonical_pass: _RetrievalPassDecision | None = None
+        primary_evidence = evidence_level(primary_pass.top_chunks)
 
         if retrieval_config.retrieval_canonicalization_enabled and (
-            not primary_pass.top_chunks or not primary_pass.passes_low_confidence_gate
+            not primary_pass.top_chunks
+            or not primary_pass.passes_low_confidence_gate
+            or primary_evidence == "weak"
         ):
             allowed_specialties = parse_allowed_specialties(
                 retrieval_config.retrieval_canonicalization_specialties

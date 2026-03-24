@@ -672,6 +672,90 @@ async def test_generate_clinical_answer_both_weak_passes_return_no_evidence(
     assert fallback_call["fallback_reason"] == "low_confidence_retrieval"
 
 
+@pytest.mark.anyio
+async def test_canonical_pass_selected_for_weak_primary_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = (
+        "35-year-old with intermittent joint swelling in knees and wrists over "
+        "4 months. CRP mildly raised. No clear diagnosis. What baseline blood "
+        "tests and imaging should be completed prior to referral?"
+    )
+    canonical_query = "canonical persistent synovitis retrieval query"
+    telemetry_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    monkeypatch.setattr(
+        routes,
+        "retrieval_config",
+        SimpleNamespace(
+            retrieval_canonicalization_enabled=True,
+            retrieval_canonicalization_specialties="rheumatology",
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "build_canonical_retrieval_query",
+        lambda **kwargs: canonical_query,
+    )
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        if kwargs["query"] == canonical_query:
+            return [
+                {
+                    "text": "Refer urgently for suspected persistent synovitis.",
+                    "score": 0.9,
+                    "section_path": "Recommendations > Referral pathway",
+                    "metadata": {"source_url": "https://example.com/guideline"},
+                    "doc_id": "doc-2",
+                }
+            ]
+        return [
+            {
+                "text": "Contextual rheumatology discussion paragraph.",
+                "score": 0.56,
+                "section_path": "Discussion",
+                "metadata": {"source_url": "https://example.com/paper"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+
+    def fake_log(*args: object, **kwargs: object) -> None:
+        telemetry_calls.append((args, kwargs))
+
+    monkeypatch.setattr(routes, "log_route_decision", fake_log)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, citations),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query=query, specialty="rheumatology", stream=False)
+    )
+
+    assert response.answer == "Answer [1]"
+    assert telemetry_calls
+    _, selected_call = telemetry_calls[-1]
+    assert selected_call["canonicalization_triggered"] is True
+    assert selected_call["selected_retrieval_pass"] == "canonical"
+
+
 def test_should_reject_for_low_confidence_high_precision_nondirective_section() -> None:
     query = (
         "What baseline blood tests and imaging should be completed prior to referral?"
