@@ -112,8 +112,11 @@ def get_source_path_for_doc(doc_id: str) -> str | None:
                 continue
             candidates: list[Path] = []
             original = Path(source_path)
-            candidates.append(original)
-            if not original.is_absolute():
+            if original.is_absolute():
+                candidates.append(original)
+            else:
+                # Normalize relative DB metadata paths to the service root so the
+                # resolved path is stable across cwd contexts.
                 candidates.append((path_config.root / original).resolve())
             remapped = _remap_source_path_to_data_root(source_path)
             if remapped is not None:
