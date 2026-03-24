@@ -290,6 +290,12 @@ def main_app():
     sys.modules["src.generation.prompts"].ACTIVE_PROMPT = "test"  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].build_grounded_prompt = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock()  # type: ignore[attr-defined]
+    sys.modules["src.generation.prompts"].select_answer_mode = MagicMock(  # type: ignore[attr-defined]
+        return_value="strict_guideline"
+    )
+    sys.modules["src.generation.prompts"].allows_uncited_answer = MagicMock(  # type: ignore[attr-defined]
+        return_value=False
+    )
     sys.modules["src.ingestion.pipeline"].PipelineError = _PipelineError  # type: ignore[attr-defined]
     sys.modules["src.ingestion.pipeline"].load_sources = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.ingestion.pipeline"].run_ingestion = MagicMock()  # type: ignore[attr-defined]

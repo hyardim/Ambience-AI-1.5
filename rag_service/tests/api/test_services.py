@@ -129,6 +129,46 @@ def test_filter_chunks_keeps_relevant_referral_template_when_alignment_is_strong
     assert filtered[0] == relevant
 
 
+def test_filter_chunks_prunes_wrong_task_outlier_when_top_match_is_strong() -> None:
+    relevant = {
+        "text": (
+            "Patients with polymyalgia rheumatica and typical shoulder and hip "
+            "girdle pain can usually start steroids in primary care unless red "
+            "flags are present."
+        ),
+        "score": 0.83,
+        "section_path": "Polymyalgia rheumatica > Initial treatment",
+        "metadata": {
+            "title": "Bsr Enhanced Triage And Specialist Advice",
+            "doc_type": "guideline",
+            "source_url": "https://example.com/pmr",
+        },
+    }
+    outlier = {
+        "text": (
+            "Surgical approaches for primary elective hip replacement include "
+            "posterior and anterolateral approaches."
+        ),
+        "score": 0.79,
+        "section_path": "Implants for primary elective hip replacement",
+        "metadata": {
+            "title": "Joint replacement (primary): hip, knee and shoulder",
+            "doc_type": "guideline",
+            "source_url": "https://example.com/joint-replacement",
+        },
+    }
+
+    filtered = filter_chunks(
+        "70-year-old with sudden onset bilateral shoulder and hip girdle pain "
+        "with morning stiffness >1 hour and raised ESR. Should polymyalgia "
+        "rheumatica be started on steroids in primary care?",
+        [relevant, outlier],
+        specialty="rheumatology",
+    )
+
+    assert filtered == [relevant]
+
+
 def test_filter_chunks_prefers_guidance_style_doc_over_appraisal_for_triage_query() -> (
     None
 ):

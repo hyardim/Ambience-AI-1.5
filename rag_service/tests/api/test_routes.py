@@ -400,6 +400,72 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
 
 
 @pytest.mark.anyio
+async def test_generate_clinical_answer_keeps_uncited_low_risk_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retrieved = [
+        {
+            "text": "Tremor may worsen with stimulants and anxiety.",
+            "score": 0.62,
+            "metadata": {
+                "title": "Benign tremor assessment",
+                "source_url": "https://example.com/tremor",
+            },
+            "doc_id": "doc-1",
+        }
+    ]
+
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: retrieved,
+    )
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return (
+            "Based on standard clinical practice: reduce caffeine, review "
+            "reversible causes, and reassure if there are no red flags."
+        )
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references: (answer, []),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(
+            query=(
+                "29-year-old with intermittent hand tremor worse with anxiety "
+                "and caffeine. No rigidity, bradykinesia, or neurological "
+                "deficit. What initial management is appropriate before referral?"
+            ),
+            specialty="neurology",
+            stream=False,
+        )
+    )
+
+    assert response.answer.startswith("Based on standard clinical practice:")
+    assert response.citations_used == []
+    assert response.citations_retrieved
+
+
+@pytest.mark.anyio
 async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

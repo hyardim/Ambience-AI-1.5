@@ -272,6 +272,12 @@ def _install_stubs() -> None:
     sys.modules["src.generation.prompts"].build_revision_prompt = MagicMock(
         return_value="prompt"
     )
+    sys.modules["src.generation.prompts"].select_answer_mode = MagicMock(
+        return_value="strict_guideline"
+    )
+    sys.modules["src.generation.prompts"].allows_uncited_answer = MagicMock(
+        return_value=False
+    )
 
     class PipelineError(Exception):
         def __init__(self, stage: str, message: str) -> None:

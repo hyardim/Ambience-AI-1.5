@@ -5,6 +5,49 @@ from ..retrieval.relevance import phrase_overlap_count, query_overlap_count
 
 MAX_CHARS_PER_CHUNK = 1200
 _MAX_INPUT_LENGTH = 10_000
+ANSWER_MODES = {
+    "strict_guideline",
+    "emergency",
+    "comparison",
+    "routine_low_risk",
+}
+
+_COMPARISON_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(distinguish\w*|differentiat\w*|compare|comparison)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bvs\b", re.IGNORECASE),
+    re.compile(r"\bversus\b", re.IGNORECASE),
+)
+_EMERGENCY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(cauda equina|cord compression|spinal emergency|neutropenic sepsis)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(urinary retention|saddle anaesthesia|bilateral leg weakness)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(neutropenia|low neutrophils)\b.*\b(fever|sore throat|pyrexia)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(fever|sore throat|pyrexia)\b.*\b(neutropenia|low neutrophils)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(immediate action|before transfer|same-day|urgent transfer)\b",
+        re.IGNORECASE,
+    ),
+)
+_LOW_RISK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\btremor\b", re.IGNORECASE),
+    re.compile(r"\bcaffeine\b", re.IGNORECASE),
+    re.compile(r"\banxiety\b", re.IGNORECASE),
+    re.compile(r"\bno (rigidity|bradykinesia|neurological deficit)\b", re.IGNORECASE),
+)
 
 # Patterns that look like prompt-injection attempts or role impersonation.
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
@@ -159,6 +202,131 @@ def _active_instructions() -> str:
     return _INSTRUCTIONS_NEW if ACTIVE_PROMPT == "new" else _INSTRUCTIONS_ORIGINAL
 
 
+def select_answer_mode(
+    question: str,
+    *,
+    severity: str | None = None,
+) -> str:
+    question_lc = question.lower()
+    severity_lc = (severity or "").strip().lower()
+
+    if severity_lc in {"urgent", "emergency"} or any(
+        pattern.search(question) for pattern in _EMERGENCY_PATTERNS
+    ):
+        return "emergency"
+
+    if any(pattern.search(question) for pattern in _COMPARISON_PATTERNS):
+        return "comparison"
+
+    low_risk_hits = sum(1 for pattern in _LOW_RISK_PATTERNS if pattern.search(question))
+    if low_risk_hits >= 2:
+        return "routine_low_risk"
+
+    if (
+        (
+            "initial management" in question_lc
+            or "before referral" in question_lc
+            or "prior to referral" in question_lc
+            or "baseline blood tests" in question_lc
+            or "baseline tests" in question_lc
+            or "what baseline" in question_lc
+        )
+        and any(
+            marker in question_lc
+            for marker in (
+                "no neurological deficit",
+                "no persistent deficit",
+                "no clear diagnosis",
+                "mildly raised",
+                "intermittent",
+                "worse with anxiety",
+                "worse with caffeine",
+                "over 4 months",
+            )
+        )
+    ):
+        return "routine_low_risk"
+
+    return "strict_guideline"
+
+
+def allows_uncited_answer(
+    answer_mode: str,
+    *,
+    evidence_level: str,
+    has_file_context: bool = False,
+) -> bool:
+    if has_file_context:
+        return True
+    if answer_mode == "routine_low_risk":
+        return True
+    return answer_mode == "comparison" and evidence_level == "weak"
+
+
+def _mode_instructions(answer_mode: str) -> str:
+    if answer_mode == "emergency":
+        return (
+            "EMERGENCY MODE:\n"
+            "- Start with exactly 'Immediate action:' and give the urgent step "
+            "in the first sentence.\n"
+            "- Use decisive wording for emergency transfer or same-day "
+            "escalation when supported.\n"
+            "- Keep the answer short and operational. Do not add a 'General "
+            "clinical context:' block unless essential.\n"
+            "- If the indexed passages support only the red-flag pattern but "
+            "not every operational detail, say 'Based on standard emergency "
+            "clinical practice:' for the uncited part.\n"
+            "- Never bury the immediate action inside explanation."
+        )
+    if answer_mode == "comparison":
+        return (
+            "COMPARISON MODE:\n"
+            "- Start with exactly 'Answer:' and directly answer the comparison "
+            "question.\n"
+            "- Then add a section starting exactly 'Key differences:' with "
+            "short feature-based bullet points.\n"
+            "- Compare onset, symptom type, progression, duration, and "
+            "follow-up/referral when relevant.\n"
+            "- Avoid vague filler like 'consider history' or 'clinical "
+            "judgement' unless followed by a concrete distinguishing feature.\n"
+            "- If uncertainty remains, end with one clear safety/referral sentence."
+        )
+    if answer_mode == "routine_low_risk":
+        return (
+            "ROUTINE LOW-RISK MODE:\n"
+            "- If the indexed passages are only indirectly relevant, do NOT "
+            "refuse solely for lack of a perfect guideline match.\n"
+            "- Provide a practical answer based on standard clinical practice "
+            "when the scenario is common and low risk.\n"
+            "- If you use standard clinical practice rather than a directly "
+            "answering indexed passage, write one sentence starting exactly "
+            "'Based on standard clinical practice:' and do not attach bracket "
+            "citations to that sentence.\n"
+            "- Keep the answer concise, useful, and safety-net focused."
+        )
+    return (
+        "STRICT GUIDELINE MODE:\n"
+        "- Stay close to the indexed evidence.\n"
+        "- If the indexed evidence is insufficient for an important claim, say "
+        "so explicitly.\n"
+        "- Do not fill large gaps with uncited medical knowledge."
+    )
+
+
+def _grounding_guardrails() -> str:
+    return (
+        "GROUNDING GUARDRAILS:\n"
+        "- Never write phrases like 'directly addresses', 'the guideline "
+        "recommends', or 'the passage states' unless the indexed passage "
+        "explicitly supports that exact claim.\n"
+        "- Keep grounded statements and general clinical context clearly separate.\n"
+        "- Do not invent author names, year references, trial names, or paper "
+        "citations unless they are present in the provided text.\n"
+        "- If you infer something from general clinical practice, label it "
+        "explicitly and do not attach bracket citations to it."
+    )
+
+
 def _matching_signals(question: str, chunk: dict) -> str:
     metadata = chunk.get("metadata", {}) or {}
     text = chunk.get("text", "")
@@ -282,6 +450,7 @@ def build_grounded_prompt(
     patient_context: dict | None = None,
     file_context: str | None = None,
     evidence_note: str | None = None,
+    answer_mode: str | None = None,
 ) -> str:
     """Build the main RAG prompt from a question, chunks, and context.
 
@@ -292,6 +461,9 @@ def build_grounded_prompt(
     question = _sanitize_input(question)
     if file_context:
         file_context = _sanitize_input(file_context, max_length=_MAX_INPUT_LENGTH * 2)
+    resolved_mode = answer_mode or "strict_guideline"
+    if resolved_mode not in ANSWER_MODES:
+        resolved_mode = "strict_guideline"
 
     context_block = _format_context(question, chunks)
     has_context = bool(chunks)
@@ -306,11 +478,16 @@ def build_grounded_prompt(
         else "Answer (no citations):"
     )
 
-    parts = [_active_instructions()]
+    parts = [
+        _active_instructions(),
+        _mode_instructions(resolved_mode),
+        _grounding_guardrails(),
+    ]
     if patient_block:
         parts.append(patient_block)
     if evidence_note:
         parts.append(f"EVIDENCE NOTE\n{evidence_note}")
+    parts.append(f"ANSWER MODE\n{resolved_mode}")
     parts.append(context_section)
     # Uploaded documents come after numbered context and are not cited as [N].
     if file_context:
@@ -327,6 +504,7 @@ def build_revision_prompt(
     patient_context: dict | None = None,
     file_context: str | None = None,
     evidence_note: str | None = None,
+    answer_mode: str | None = None,
 ) -> str:
     """Revise a previous answer based on specialist feedback, grounded in context.
 
@@ -336,6 +514,9 @@ def build_revision_prompt(
     specialist_feedback = _sanitize_input(specialist_feedback)
     if file_context:
         file_context = _sanitize_input(file_context, max_length=_MAX_INPUT_LENGTH * 2)
+    resolved_mode = answer_mode or "strict_guideline"
+    if resolved_mode not in ANSWER_MODES:
+        resolved_mode = "strict_guideline"
     context_block = _format_context(original_question, chunks)
     has_context = bool(chunks)
 
@@ -344,6 +525,8 @@ def build_revision_prompt(
     base_instructions = _active_instructions()
     instructions = (
         f"{base_instructions}\n\n"
+        f"{_mode_instructions(resolved_mode)}\n\n"
+        f"{_grounding_guardrails()}\n\n"
         "A medical specialist has reviewed your previous answer and requested "
         "changes. Revise your response according to the specialist's feedback "
         "while staying grounded in the provided context.\n\n"
@@ -367,6 +550,7 @@ def build_revision_prompt(
         parts.append(patient_block)
     if evidence_note:
         parts.append(f"EVIDENCE NOTE\n{evidence_note}")
+    parts.append(f"ANSWER MODE\n{resolved_mode}")
     parts.append(context_section)
     if file_context:
         parts.append(f"UPLOADED DOCUMENTS\n{file_context}")

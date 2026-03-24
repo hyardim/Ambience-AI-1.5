@@ -18,8 +18,10 @@ from ..config import (
 from ..generation.client import ModelGenerationError, generate_answer
 from ..generation.prompts import (
     ACTIVE_PROMPT,
+    allows_uncited_answer,
     build_grounded_prompt,
     build_revision_prompt,
+    select_answer_mode,
 )
 from ..generation.router import select_generation_provider
 from ..ingestion.pipeline import PipelineError, load_sources, run_ingestion
@@ -293,10 +295,15 @@ async def _generate_answer_from_retrieval(
     try:
         filtered = filter_chunks(query, retrieved, specialty=specialty)
         top_chunks = filtered[:MAX_CITATIONS]
-        if not top_chunks and not file_context:
-            return _no_evidence_response(stream)
-
         evidence = evidence_level(top_chunks)
+        answer_mode = select_answer_mode(query, severity=severity)
+        allow_uncited = allows_uncited_answer(
+            answer_mode,
+            evidence_level=evidence,
+            has_file_context=bool(file_context),
+        )
+        if not top_chunks and not file_context and not allow_uncited:
+            return _no_evidence_response(stream)
 
         prompt = build_grounded_prompt(
             query,
@@ -304,6 +311,7 @@ async def _generate_answer_from_retrieval(
             patient_context=patient_context,
             file_context=file_context,
             evidence_note=low_evidence_note(evidence),
+            answer_mode=answer_mode,
         )
         route = select_generation_provider(
             query=query,
@@ -331,7 +339,7 @@ async def _generate_answer_from_retrieval(
                     prompt,
                     max_tokens,
                     citations_retrieved,
-                    allow_uncited_answer=bool(file_context),
+                    allow_uncited_answer=allow_uncited,
                     provider=route.provider,
                 ),
                 media_type="application/x-ndjson",
@@ -372,7 +380,7 @@ async def _generate_answer_from_retrieval(
             citations_retrieved,
             strip_references=True,
         )
-        if not citations_used and not file_context:
+        if not citations_used and not allow_uncited:
             return _no_evidence_response(
                 stream,
                 citations_retrieved=citations_retrieved,
@@ -414,10 +422,18 @@ async def revise_clinical_answer(
             specialty=request.specialty,
         )
         top_chunks = filtered[:MAX_CITATIONS]
-        if not top_chunks and not request.file_context:
-            return _no_evidence_response(request.stream)
-
         evidence = evidence_level(top_chunks)
+        answer_mode = select_answer_mode(
+            request.original_query,
+            severity=request.severity,
+        )
+        allow_uncited = allows_uncited_answer(
+            answer_mode,
+            evidence_level=evidence,
+            has_file_context=bool(request.file_context),
+        )
+        if not top_chunks and not request.file_context and not allow_uncited:
+            return _no_evidence_response(request.stream)
 
         prompt = build_revision_prompt(
             original_question=request.original_query,
@@ -427,6 +443,7 @@ async def revise_clinical_answer(
             patient_context=request.patient_context,
             file_context=request.file_context,
             evidence_note=low_evidence_note(evidence),
+            answer_mode=answer_mode,
         )
         route = select_generation_provider(
             query=request.original_query,
@@ -455,7 +472,7 @@ async def revise_clinical_answer(
                     prompt,
                     request.max_tokens,
                     citations_retrieved,
-                    allow_uncited_answer=bool(request.file_context),
+                    allow_uncited_answer=allow_uncited,
                     provider=route.provider,
                 ),
                 media_type="application/x-ndjson",

@@ -143,6 +143,14 @@ _INTENT_NEGATIVE_DOC_MARKERS: tuple[str, ...] = (
     "context",
     "discussion",
     "audit",
+    "joint replacement",
+    "arthroplasty",
+    "implant",
+    "implants",
+    "surgical approach",
+    "surgical approaches",
+    "elective hip replacement",
+    "spinal fusion",
 )
 
 
@@ -272,6 +280,35 @@ def query_intent_alignment_score(
         score += 0.12
     if any(marker in haystack_lc for marker in _INTENT_NEGATIVE_DOC_MARKERS):
         score -= 0.12
+    if any(
+        marker in query_lc
+        for marker in (
+            "urgent",
+            "immediate",
+            "refer",
+            "referral",
+            "before transfer",
+            "prior to referral",
+            "investigation",
+            "investigations",
+            "diagnosis",
+            "distinguish",
+            "differentiate",
+        )
+    ) and any(
+        marker in haystack_lc
+        for marker in (
+            "joint replacement",
+            "arthroplasty",
+            "implant",
+            "implants",
+            "surgical approach",
+            "surgical approaches",
+            "elective hip replacement",
+            "spinal fusion",
+        )
+    ):
+        score -= 0.18
     doc_type_lc = doc_type.lower()
     title_lc = title.lower()
     if "appraisal" in doc_type_lc:
