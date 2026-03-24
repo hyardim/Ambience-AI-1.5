@@ -1,10 +1,14 @@
 import type { ComponentType, RefObject } from 'react';
 import {
   ArrowLeft,
-  CheckCircle,
   ClipboardCheck,
-  Loader2,
   Lock,
+  Loader2,
+  MessageSquare,
+  Paperclip,
+  PenLine,
+  RefreshCw,
+  UserMinus,
   UserPlus,
 } from 'lucide-react';
 
@@ -22,6 +26,8 @@ import {
   EditResponseModal,
   ManualResponseModal,
   RequestChangesModal,
+  SendCommentModal,
+  UnassignConfirmModal,
 } from './SpecialistReviewModals';
 
 interface TerminalState {
@@ -90,6 +96,33 @@ interface SpecialistQueryDetailViewProps {
   onCloseEditResponseModal: () => void;
   onOpenCloseConfirm: () => void;
   onCloseCloseConfirm: () => void;
+  // Consultation-level actions
+  showConsultationRejectModal: boolean;
+  consultationRejectReason: string;
+  showSendCommentModal: boolean;
+  commentContent: string;
+  showUnassignConfirm: boolean;
+  showConsultationManualResponseModal: boolean;
+  consultationManualContent: string;
+  consultationManualSources: string;
+  consultationManualFiles: File[];
+  onOpenConsultationRequestRevision: () => void;
+  onConsultationRejectReasonChange: (value: string) => void;
+  onConsultationRequestRevision: () => void;
+  onCloseConsultationRejectModal: () => void;
+  onOpenSendComment: () => void;
+  onCommentContentChange: (value: string) => void;
+  onSendComment: () => void;
+  onCloseSendCommentModal: () => void;
+  onOpenUnassignConfirm: () => void;
+  onUnassign: () => void;
+  onCloseUnassignConfirm: () => void;
+  onOpenConsultationManualResponse: () => void;
+  onConsultationManualContentChange: (value: string) => void;
+  onConsultationManualSourcesChange: (value: string) => void;
+  onConsultationManualFilesChange: (files: File[]) => void;
+  onConsultationManualResponse: () => void;
+  onCloseConsultationManualResponseModal: () => void;
 }
 
 function formatSpecialty(specialty: string | null): string {
@@ -108,8 +141,6 @@ export function SpecialistQueryDetailView({
   canReview,
   isTerminal,
   hasPendingAIResponse,
-  allAIReviewed,
-  closeReviewTitle,
   terminalState,
   unreviewedAIIds,
   approveComment,
@@ -156,6 +187,32 @@ export function SpecialistQueryDetailView({
   onCloseEditResponseModal,
   onOpenCloseConfirm,
   onCloseCloseConfirm,
+  showConsultationRejectModal,
+  consultationRejectReason,
+  showSendCommentModal,
+  commentContent,
+  showUnassignConfirm,
+  showConsultationManualResponseModal,
+  consultationManualContent,
+  consultationManualSources,
+  consultationManualFiles,
+  onOpenConsultationRequestRevision,
+  onConsultationRejectReasonChange,
+  onConsultationRequestRevision,
+  onCloseConsultationRejectModal,
+  onOpenSendComment,
+  onCommentContentChange,
+  onSendComment,
+  onCloseSendCommentModal,
+  onOpenUnassignConfirm,
+  onUnassign,
+  onCloseUnassignConfirm,
+  onOpenConsultationManualResponse,
+  onConsultationManualContentChange,
+  onConsultationManualSourcesChange,
+  onConsultationManualFilesChange,
+  onConsultationManualResponse,
+  onCloseConsultationManualResponseModal,
 }: SpecialistQueryDetailViewProps) {
   if (loading) {
     return (
@@ -246,17 +303,45 @@ export function SpecialistQueryDetailView({
 
               {canReview && (
                 <>
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 bg-gray-50 border border-gray-200">
-                    Review actions are available on each AI response below.
-                  </div>
                   <button
                     onClick={onOpenCloseConfirm}
-                    disabled={actionLoading || !allAIReviewed}
-                    title={closeReviewTitle}
-                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
                   >
                     <Lock className="w-5 h-5" />
-                    Close &amp; Approve Consultation
+                    Approve and Send
+                  </button>
+                  <button
+                    onClick={onOpenConsultationRequestRevision}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                    Request Revision
+                  </button>
+                  <button
+                    onClick={onOpenConsultationManualResponse}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    <PenLine className="w-5 h-5" />
+                    Replace with Manual Response
+                  </button>
+                  <button
+                    onClick={onOpenSendComment}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-4 py-2 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                    Send Comment to GP
+                  </button>
+                  <button
+                    onClick={onOpenUnassignConfirm}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    <UserMinus className="w-5 h-5" />
+                    Unassign
                   </button>
                 </>
               )}
@@ -336,20 +421,20 @@ export function SpecialistQueryDetailView({
             <div ref={messagesEndRef} />
           </div>
 
-          {canReview && allAIReviewed && (
-            <div className="border-t border-gray-200 bg-green-50 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
-                <CheckCircle className="w-5 h-5" />
-                All AI responses have been reviewed.
+          {chat?.files && chat.files.length > 0 && (
+            <div className="border-t border-gray-200 px-4 pt-3 pb-0">
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1.5">
+                <Paperclip className="w-3 h-3" />
+                <span className="font-medium">Consultation files</span>
               </div>
-              <button
-                onClick={onOpenCloseConfirm}
-                disabled={actionLoading}
-                className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
-              >
-                <Lock className="w-5 h-5" />
-                Close &amp; Approve Consultation
-              </button>
+              <div className="flex flex-wrap gap-1.5 pb-2">
+                {chat.files.map((f) => (
+                  <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded text-xs text-blue-700">
+                    {f.filename}
+                    {f.file_size ? <span className="text-blue-400 ml-0.5">· {(f.file_size / 1024).toFixed(0)} KB</span> : null}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -421,6 +506,44 @@ export function SpecialistQueryDetailView({
         actionLoading={actionLoading}
         onCancel={onCloseCloseConfirm}
         onConfirm={onCloseAndApprove}
+      />
+
+      <RequestChangesModal
+        open={showConsultationRejectModal}
+        actionLoading={actionLoading}
+        rejectReason={consultationRejectReason}
+        onChange={onConsultationRejectReasonChange}
+        onCancel={onCloseConsultationRejectModal}
+        onConfirm={onConsultationRequestRevision}
+      />
+
+      <ManualResponseModal
+        open={showConsultationManualResponseModal}
+        actionLoading={actionLoading}
+        manualResponseContent={consultationManualContent}
+        manualResponseSources={consultationManualSources}
+        manualResponseFiles={consultationManualFiles}
+        onContentChange={onConsultationManualContentChange}
+        onSourcesChange={onConsultationManualSourcesChange}
+        onFilesChange={onConsultationManualFilesChange}
+        onCancel={onCloseConsultationManualResponseModal}
+        onConfirm={onConsultationManualResponse}
+      />
+
+      <SendCommentModal
+        open={showSendCommentModal}
+        actionLoading={actionLoading}
+        commentContent={commentContent}
+        onChange={onCommentContentChange}
+        onCancel={onCloseSendCommentModal}
+        onConfirm={onSendComment}
+      />
+
+      <UnassignConfirmModal
+        open={showUnassignConfirm}
+        actionLoading={actionLoading}
+        onCancel={onCloseUnassignConfirm}
+        onConfirm={onUnassign}
       />
     </div>
   );

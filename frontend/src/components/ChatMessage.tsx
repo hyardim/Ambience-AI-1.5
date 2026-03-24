@@ -297,52 +297,58 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Inline specialist review actions */}
+          {/* Inline specialist review actions (secondary / advanced) */}
           {showReviewActions && (
             <div className="mt-4 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-2">Review this AI response:</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={onApprove}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[#007f3b] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve
-                </button>
-                <button
-                  onClick={onApproveWithComment}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[var(--nhs-blue)] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  Approve with Comment
-                </button>
-                <button
-                  onClick={onRequestChanges}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-amber-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Request Changes
-                </button>
-                <button
-                  onClick={onManualResponse}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[#da291c] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#b51f14] transition-colors disabled:opacity-50"
-                >
-                  <PenLine className="w-4 h-4" />
-                  Manual Response
-                </button>
-                <button
-                  onClick={onEditResponse}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  Edit
-                </button>
-              </div>
+              <details className="group">
+                <summary className="text-xs text-gray-500 cursor-pointer select-none list-none flex items-center gap-1 mb-2 hover:text-gray-700">
+                  <span className="group-open:hidden">▶</span>
+                  <span className="hidden group-open:inline">▼</span>
+                  Advanced message actions
+                </summary>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={onApprove}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-[#007f3b] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve
+                  </button>
+                  <button
+                    onClick={onApproveWithComment}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-[var(--nhs-blue)] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Approve with Comment
+                  </button>
+                  <button
+                    onClick={onRequestChanges}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-amber-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Request Changes
+                  </button>
+                  <button
+                    onClick={onManualResponse}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-[#da291c] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#b51f14] transition-colors disabled:opacity-50"
+                  >
+                    <PenLine className="w-4 h-4" />
+                    Manual Response
+                  </button>
+                  <button
+                    onClick={onEditResponse}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit
+                  </button>
+                </div>
+              </details>
             </div>
           )}
         </div>

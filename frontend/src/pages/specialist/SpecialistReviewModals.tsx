@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle, Edit2, Lock, MessageSquare, PenLine } from 
 
 import { filesFromInput } from '../../utils/control';
 
-const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE_MB = 3;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 interface ApproveConfirmModalProps {
@@ -210,7 +210,9 @@ export function ManualResponseModal({
       return;
     }
     setFileError('');
-    onFilesChange(files);
+    const existingNames = new Set(manualResponseFiles.map(f => f.name));
+    const newFiles = files.filter(f => !existingNames.has(f.name));
+    onFilesChange([...manualResponseFiles, ...newFiles]);
   };
 
   return (
@@ -258,22 +260,22 @@ export function ManualResponseModal({
           {fileError && (
             <p className="mt-2 text-sm text-red-600">{fileError}</p>
           )}
-          {!fileError && manualResponseFiles.length > 0 && (
-            <div className="mt-2 space-y-2">
-              <p className="text-sm text-gray-500">
-                {manualResponseFiles.length} file(s) will be uploaded to this chat before the manual response is sent.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {manualResponseFiles.map((file) => (
-                  <span
-                    key={`${file.name}-${file.size}`}
-                    className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700"
+          {manualResponseFiles.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {manualResponseFiles.map((f) => (
+                <li key={f.name} className="flex items-center justify-between text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5">
+                  <span className="truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => onFilesChange(manualResponseFiles.filter(x => x.name !== f.name))}
+                    className="ml-2 text-gray-400 hover:text-red-500 shrink-0"
+                    aria-label={`Remove ${f.name}`}
                   >
-                    {file.name}
-                  </span>
-                ))}
-              </div>
-            </div>
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
         <div className="flex gap-3 justify-end">
@@ -337,6 +339,112 @@ export function CloseApproveModal({
             className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
           >
             {actionLoading ? 'Closing…' : 'Confirm Close & Approve'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface SendCommentModalProps {
+  open: boolean;
+  actionLoading: boolean;
+  commentContent: string;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+export function SendCommentModal({
+  open,
+  actionLoading,
+  commentContent,
+  onChange,
+  onCancel,
+  onConfirm,
+}: SendCommentModalProps) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="flex items-center gap-3 text-[var(--nhs-blue)] mb-4">
+          <MessageSquare className="w-8 h-8" />
+          <h2 className="text-xl font-bold">Send Comment to GP</h2>
+        </div>
+        <p className="text-gray-600 mb-4">
+          Send a comment to the GP without changing the consultation status.
+        </p>
+        <textarea
+          value={commentContent}
+          onChange={(e) => onChange(e.target.value)}
+          rows={4}
+          autoFocus
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none mb-6"
+          placeholder="Write your comment for the GP..."
+        />
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!commentContent.trim() || actionLoading}
+            className="px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {actionLoading ? 'Sending…' : 'Send Comment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface UnassignConfirmModalProps {
+  open: boolean;
+  actionLoading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+export function UnassignConfirmModal({
+  open,
+  actionLoading,
+  onCancel,
+  onConfirm,
+}: UnassignConfirmModalProps) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="flex items-center gap-3 text-amber-600 mb-4">
+          <AlertTriangle className="w-8 h-8" />
+          <h2 className="text-xl font-bold">Unassign Consultation</h2>
+        </div>
+        <p className="text-gray-600 mb-6">
+          This will release the consultation back to the queue. Another specialist will be able to pick it up.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={actionLoading}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50"
+          >
+            {actionLoading ? 'Unassigning…' : 'Confirm Unassign'}
           </button>
         </div>
       </div>

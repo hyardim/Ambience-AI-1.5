@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 Severity = Literal["low", "medium", "high", "urgent"]
 Gender = Literal["male", "female", "other"]
 ReviewAction = Literal[
-    "approve", "reject", "request_changes", "manual_response", "edit_response"
+    "approve", "reject", "request_changes", "manual_response", "edit_response",
+    "send_comment", "unassign",
 ]
 
 # ---------------------------------------------------------------------------

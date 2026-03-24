@@ -73,10 +73,13 @@ def review(
     Validates that the chat is in ASSIGNED or REVIEWING status before
     allowing any review action. Rejects approve/reject while AI is generating.
     """
-    if body.action not in ("approve", "reject", "request_changes"):
+    if body.action not in (
+        "approve", "reject", "request_changes", "manual_response",
+        "send_comment", "unassign",
+    ):
         raise HTTPException(
             status_code=400,
-            detail="action must be 'approve', 'reject', or 'request_changes' (use per-message review for 'manual_response' or 'edit_response')",
+            detail="action must be one of: approve, reject, request_changes, manual_response, send_comment, unassign",
         )
 
     chat = (
@@ -95,7 +98,7 @@ def review(
             detail=f"Chat must be ASSIGNED or REVIEWING to review (current: {chat.status.value})",
         )
 
-    if body.action in ("approve", "reject"):
+    if body.action in ("approve", "reject", "manual_response", "unassign"):
         generating = (
             db.query(Message)
             .filter(
@@ -108,8 +111,98 @@ def review(
         if generating:
             raise HTTPException(
                 status_code=400,
-                detail="Cannot close the chat while an AI response is being generated",
+                detail="Cannot perform this action while an AI response is being generated",
             )
+
+    if body.action == "send_comment":
+        if not body.feedback or not body.feedback.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="feedback is required for send_comment action",
+            )
+        message_repository.create(
+            db,
+            chat_id=chat.id,
+            content=body.feedback.strip(),
+            sender="specialist",
+        )
+        audit_repository.log(
+            db,
+            user_id=specialist.id,
+            action="SPECIALIST_COMMENT",
+            details=f"Specialist sent comment to GP in chat {chat_id}",
+        )
+        notification_repository.create(
+            db,
+            user_id=chat.user_id,
+            type=NotificationType.SPECIALIST_MSG,
+            title="New comment from specialist",
+            body=f"{specialist.full_name or specialist.email} left a comment on '{chat.title}'.",
+            chat_id=chat.id,
+        )
+        invalidate_notification_caches(chat.user_id)
+        _invalidate_chat_views(chat, specialist.id)
+        return chat_to_response(chat)
+
+    if body.action == "unassign":
+        old_specialist_id = chat.specialist_id
+        chat = chat_repository.update(
+            db,
+            chat,
+            status=ChatStatus.SUBMITTED,
+            specialist_id=None,
+            assigned_at=None,
+        )
+        audit_repository.log(
+            db,
+            user_id=specialist.id,
+            action="SPECIALIST_UNASSIGN",
+            details=f"Specialist unassigned from chat {chat_id}",
+        )
+        _invalidate_chat_views(chat, old_specialist_id)
+        return chat_to_response(chat)
+
+    if body.action == "manual_response":
+        if not body.replacement_content or not body.replacement_content.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="replacement_content is required for manual_response action",
+            )
+        _mark_last_ai_message(db, chat.id, body)
+        replacement_content = body.replacement_content.strip()
+        message_repository.create(
+            db,
+            chat_id=chat.id,
+            content=replacement_content,
+            sender="specialist",
+            citations=_build_manual_citations(body.replacement_sources),
+        )
+        chat = chat_repository.update(
+            db,
+            chat,
+            status=ChatStatus.APPROVED,
+            reviewed_at=datetime.now(timezone.utc),
+            review_feedback=body.feedback,
+        )
+        audit_repository.log(
+            db,
+            user_id=specialist.id,
+            action="REVIEW_MANUAL_RESPONSE",
+            details=f"Chat {chat_id} closed with manual response by specialist",
+        )
+        notification_repository.create(
+            db,
+            user_id=chat.user_id,
+            type=NotificationType.CHAT_APPROVED,
+            title="Specialist provided a response",
+            body=(
+                f"{specialist.full_name or specialist.email} responded to '{chat.title}'."
+            ),
+            chat_id=chat.id,
+        )
+        invalidate_notification_caches(chat.user_id)
+        _invalidate_chat_views(chat, specialist.id)
+        return chat_to_response(chat)
 
     _mark_last_ai_message(db, chat.id, body)
 
@@ -389,6 +482,11 @@ def _invalidate_chat_views(chat: Chat, specialist_id: int | None) -> None:
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat.id),
         user_id=specialist_id,
+        resource="chat_detail",
+    )
+    cache.delete_pattern_sync(
+        cache_keys.chat_detail_pattern(chat.id),
+        user_id=chat.user_id,
         resource="chat_detail",
     )
     cache.delete_pattern_sync(

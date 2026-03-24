@@ -149,9 +149,16 @@ async function handleResponse<T>(res: Response, url?: string): Promise<T> {
     let errorMessage = rawBody || `Request failed (${res.status})`;
 
     try {
-      const parsed = JSON.parse(rawBody) as { detail?: string };
-      if (parsed?.detail) {
+      const parsed = JSON.parse(rawBody) as { detail?: unknown };
+      if (typeof parsed?.detail === 'string') {
         errorMessage = parsed.detail;
+      } else if (Array.isArray(parsed?.detail)) {
+        // FastAPI 422 validation errors — array of {msg, loc, type}
+        const msgs = (parsed.detail as { msg?: string }[])
+          .map(e => e.msg)
+          .filter(Boolean)
+          .join('; ');
+        errorMessage = msgs || `Request failed (${res.status})`;
       }
     } catch {
       // Keep raw text fallback when body is not JSON.
@@ -429,10 +436,14 @@ export async function reviewChat(
   chatId: number,
   decision: string,
   feedback?: string,
+  replacementContent?: string,
+  replacementSources?: string[],
 ): Promise<BackendChat> {
   const body: ReviewRequest = {
     action: decision as ReviewRequest['action'],
     feedback: feedback ?? null,
+    ...(replacementContent ? { replacement_content: replacementContent } : {}),
+    ...(replacementSources ? { replacement_sources: replacementSources } : {}),
   };
   const res = await apiFetch(apiUrl(`/specialist/chats/${chatId}/review`), {
     method: 'POST',

@@ -51,6 +51,17 @@ export function SpecialistQueryDetailPage() {
   const [editResponseFeedback, setEditResponseFeedback] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
+  // Consultation-level actions
+  const [showConsultationRejectModal, setShowConsultationRejectModal] = useState(false);
+  const [consultationRejectReason, setConsultationRejectReason] = useState('');
+  const [showSendCommentModal, setShowSendCommentModal] = useState(false);
+  const [commentContent, setCommentContent] = useState('');
+  const [showUnassignConfirm, setShowUnassignConfirm] = useState(false);
+  const [showConsultationManualResponseModal, setShowConsultationManualResponseModal] = useState(false);
+  const [consultationManualContent, setConsultationManualContent] = useState('');
+  const [consultationManualSources, setConsultationManualSources] = useState('');
+  const [consultationManualFiles, setConsultationManualFiles] = useState<File[]>([]);
+
   // Which message the current modal action targets
   const [reviewTargetMessageId, setReviewTargetMessageId] = useState<number | null>(null);
 
@@ -259,6 +270,7 @@ export function SpecialistQueryDetailPage() {
       const oversized = manualResponseFiles.filter((file) => file.size > MAX_FILE_SIZE);
       if (oversized.length > 0) {
         setError(`File(s) too large: ${oversized.map((file) => file.name).join(', ')}. Maximum size is 3 MB.`);
+        setActionLoading(false);
         return;
       }
       if (manualResponseFiles.length > 0) {
@@ -340,6 +352,86 @@ export function SpecialistQueryDetailPage() {
       await loadData();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to close consultation'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConsultationRequestRevision = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      await connectStream(currentChat.id);
+      await reviewChat(currentChat.id, 'request_changes', consultationRejectReason.trim());
+      setShowConsultationRejectModal(false);
+      setConsultationRejectReason('');
+      await loadData({ silent: true });
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to request revision'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendComment = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      await reviewChat(currentChat.id, 'send_comment', commentContent.trim());
+      setShowSendCommentModal(false);
+      setCommentContent('');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to send comment'));
+    } finally {
+      setActionLoading(false);
+    }
+    void loadData({ silent: true });
+  };
+
+  const handleUnassign = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      await reviewChat(currentChat.id, 'unassign');
+      setShowUnassignConfirm(false);
+      navigate('/specialist/queries');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to unassign'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConsultationManualResponse = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      const MAX_FILE_SIZE = 3 * 1024 * 1024;
+      const oversized = consultationManualFiles.filter((f) => f.size > MAX_FILE_SIZE);
+      if (oversized.length > 0) {
+        setError(`File(s) too large: ${oversized.map((f) => f.name).join(', ')}. Maximum size is 3 MB.`);
+        setActionLoading(false);
+        return;
+      }
+      if (consultationManualFiles.length > 0) {
+        await Promise.all(consultationManualFiles.map((f) => uploadChatFile(currentChat.id, f)));
+      }
+      const sources = consultationManualSources
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      await reviewChat(currentChat.id, 'manual_response', undefined, consultationManualContent.trim(), sources);
+      setShowConsultationManualResponseModal(false);
+      setConsultationManualContent('');
+      setConsultationManualSources('');
+      setConsultationManualFiles([]);
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to submit manual response'));
     } finally {
       setActionLoading(false);
     }
@@ -497,6 +589,43 @@ export function SpecialistQueryDetailPage() {
       }}
       onOpenCloseConfirm={() => setShowCloseConfirm(true)}
       onCloseCloseConfirm={() => setShowCloseConfirm(false)}
+      showConsultationRejectModal={showConsultationRejectModal}
+      consultationRejectReason={consultationRejectReason}
+      showSendCommentModal={showSendCommentModal}
+      commentContent={commentContent}
+      showUnassignConfirm={showUnassignConfirm}
+      showConsultationManualResponseModal={showConsultationManualResponseModal}
+      consultationManualContent={consultationManualContent}
+      consultationManualSources={consultationManualSources}
+      onOpenConsultationRequestRevision={() => setShowConsultationRejectModal(true)}
+      onConsultationRejectReasonChange={setConsultationRejectReason}
+      onConsultationRequestRevision={handleConsultationRequestRevision}
+      onCloseConsultationRejectModal={() => {
+        setShowConsultationRejectModal(false);
+        setConsultationRejectReason('');
+      }}
+      onOpenSendComment={() => setShowSendCommentModal(true)}
+      onCommentContentChange={setCommentContent}
+      onSendComment={handleSendComment}
+      onCloseSendCommentModal={() => {
+        setShowSendCommentModal(false);
+        setCommentContent('');
+      }}
+      onOpenUnassignConfirm={() => setShowUnassignConfirm(true)}
+      onUnassign={handleUnassign}
+      onCloseUnassignConfirm={() => setShowUnassignConfirm(false)}
+      onOpenConsultationManualResponse={() => setShowConsultationManualResponseModal(true)}
+      consultationManualFiles={consultationManualFiles}
+      onConsultationManualContentChange={setConsultationManualContent}
+      onConsultationManualSourcesChange={setConsultationManualSources}
+      onConsultationManualFilesChange={setConsultationManualFiles}
+      onConsultationManualResponse={handleConsultationManualResponse}
+      onCloseConsultationManualResponseModal={() => {
+        setShowConsultationManualResponseModal(false);
+        setConsultationManualContent('');
+        setConsultationManualSources('');
+        setConsultationManualFiles([]);
+      }}
     />
   );
 }

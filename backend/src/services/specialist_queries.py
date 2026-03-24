@@ -14,7 +14,7 @@ from src.repositories import (
     message_repository,
     notification_repository,
 )
-from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages
+from src.schemas.chat import AssignRequest, ChatResponse, ChatWithMessages, FileAttachmentResponse
 from src.services._mappers import chat_to_response, msg_to_response
 from src.services.cache_invalidation import (
     invalidate_admin_chat_caches_sync,
@@ -89,6 +89,16 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
     messages = message_repository.list_for_chat(db, chat.id)
     response = ChatWithMessages(**chat_to_response(chat).model_dump())
     response.messages = [msg_to_response(m) for m in messages]
+    response.files = [
+        FileAttachmentResponse(
+            id=f.id,
+            filename=f.filename,
+            file_type=f.file_type,
+            file_size=f.file_size,
+            created_at=f.created_at.isoformat() if f.created_at else "",
+        )
+        for f in (chat.files or [])
+    ]
     return response
 
 

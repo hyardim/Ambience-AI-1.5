@@ -137,7 +137,7 @@ export interface AssignRequest {
 }
 
 export interface ReviewRequest {
-  action: 'approve' | 'reject' | 'request_changes' | 'manual_response' | 'edit_response';
+  action: 'approve' | 'reject' | 'request_changes' | 'manual_response' | 'edit_response' | 'send_comment' | 'unassign';
   feedback?: string | null;
   replacement_content?: string | null;
   replacement_sources?: string[] | null;
