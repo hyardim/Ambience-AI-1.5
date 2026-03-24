@@ -163,7 +163,7 @@ describe('SpecialistQueryDetailPage', () => {
 
     await user.click(screen.getByRole('button', { name: /assign to me/i }));
     await waitFor(() => {
-      expect(screen.getByText(/review actions are available on each ai response below/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
   });
 
@@ -190,9 +190,9 @@ describe('SpecialistQueryDetailPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/consultation files/i)).toBeInTheDocument();
+      expect(screen.getByText('Consultation Files')).toBeInTheDocument();
     });
-    expect(screen.getByText('scan.pdf')).toBeInTheDocument();
+    expect(screen.getAllByText('scan.pdf').length).toBeGreaterThan(0);
   });
 
   it('handles approve, approve with comment, request changes, and manual response flows', async () => {
@@ -316,10 +316,10 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText(/all ai responses have been reviewed/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole('button', { name: /close & approve consultation/i })[0]);
+    await user.click(screen.getByRole('button', { name: /approve and send/i }));
     await user.click(screen.getByRole('button', { name: /confirm close & approve/i }));
 
     await user.click(screen.getByRole('button', { name: /send specialist note/i }));
@@ -420,10 +420,9 @@ describe('SpecialistQueryDetailPage', () => {
       fileInput,
       new File(['x'.repeat(4 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
     );
-    await user.click(screen.getByRole('button', { name: /send manual response/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/maximum size is 3 mb/i)).toBeInTheDocument();
+      expect(screen.getByText(/file\(s\) exceed the 3 mb limit/i)).toBeInTheDocument();
     });
   });
 
@@ -592,12 +591,12 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText(/all ai responses have been reviewed/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole('button', { name: /close & approve consultation/i })[0]);
+    await user.click(screen.getByRole('button', { name: /approve and send/i }));
     await user.click(screen.getByRole('button', { name: /^cancel$/i }));
-    expect(screen.getAllByText(/close & approve consultation/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
 
     server.use(
       http.get('/specialist/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })),
@@ -736,10 +735,10 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /close & approve consultation/i }).length).toBeGreaterThan(1);
+      expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole('button', { name: /close & approve consultation/i })[1]);
+    await user.click(screen.getByRole('button', { name: /approve and send/i }));
     await user.click(screen.getByRole('button', { name: /confirm close & approve/i }));
     await waitFor(() => {
       expect(screen.getByText(/close failed/i)).toBeInTheDocument();

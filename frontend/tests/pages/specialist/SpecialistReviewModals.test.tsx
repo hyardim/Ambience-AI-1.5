@@ -139,7 +139,7 @@ describe('ManualResponseModal', () => {
       new File(['x'.repeat(11 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
     );
 
-    expect(screen.getByText(/file\(s\) exceed the 10 mb limit/i)).toBeInTheDocument();
+    expect(screen.getByText(/file\(s\) exceed the 3 mb limit/i)).toBeInTheDocument();
     expect(onFilesChange).not.toHaveBeenCalled();
   });
 });
