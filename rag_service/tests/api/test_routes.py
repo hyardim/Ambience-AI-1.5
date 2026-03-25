@@ -970,6 +970,100 @@ def test_low_confidence_gate_keeps_high_precision_directive_section() -> None:
     assert routes._should_reject_for_low_confidence(query, top_chunk) is False
 
 
+def test_treatment_initiation_query_rejects_low_score_weak_overlap() -> None:
+    query = "Type 1 diabetes with recurrent nocturnal hypoglycaemia: should insulin pump therapy be started now?"
+    top_chunk = {
+        "text": (
+            "Maintain blood glucose concentration and provide insulin therapy "
+            "for acute stroke."
+        ),
+        "score": 0.08,
+        "section_path": "Blood sugar control",
+    }
+
+    assert routes._should_reject_for_low_confidence(query, top_chunk) is True
+
+
+def test_treatment_initiation_query_keeps_high_score_chunk() -> None:
+    query = (
+        "Should polymyalgia rheumatica be started on steroids in primary care?"
+    )
+    top_chunk = {
+        "text": (
+            "Start prednisolone treatment for polymyalgia rheumatica after "
+            "excluding key alternative diagnoses."
+        ),
+        "score": 0.82,
+        "section_path": "Guideline recommendations",
+    }
+
+    assert routes._should_reject_for_low_confidence(query, top_chunk) is False
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_repairs_missing_citations_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [
+            {
+                "text": "Refer urgently for suspected persistent synovitis.",
+                "score": 0.9,
+                "section_path": "Recommendations > Referral pathway",
+                "metadata": {"source_url": "https://example.com/guideline"},
+                "doc_id": "doc-1",
+            }
+        ],
+    )
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "build_revision_prompt",
+        lambda *args, **kwargs: "repair-prompt",
+    )
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    call_count = {"count": 0}
+
+    async def fake_generate_answer(prompt: str, **kwargs: object) -> str:
+        call_count["count"] += 1
+        if prompt == "repair-prompt":
+            return "Fixed answer [1]"
+        return "Draft answer without citations"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+
+    def fake_extract(
+        answer: str,
+        citations: list[object],
+        strip_references: bool,
+        query: str | None = None,
+    ) -> tuple[str, list[object]]:
+        if "Fixed answer" in answer:
+            return answer, citations[:1]
+        return answer, []
+
+    monkeypatch.setattr(routes, "extract_citation_results", fake_extract)
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query="q", stream=False)
+    )
+
+    assert response.answer == "Fixed answer [1]"
+    assert response.citations_used
+    assert call_count["count"] == 2
+
+
 @pytest.mark.anyio
 async def test_documents_health_returns_per_document_stats(
     monkeypatch: pytest.MonkeyPatch,

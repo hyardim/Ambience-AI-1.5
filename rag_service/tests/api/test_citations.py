@@ -177,6 +177,38 @@ def test_extract_citation_results_drops_mmf_cyc_treatment_when_not_requested() -
     assert used == [citations[0]]
 
 
+def test_extract_citation_results_keeps_drug_induced_diagnostic_exclusion_sentence() -> (
+    None
+):
+    citations = [
+        SearchResult(
+            text=(
+                "Other inflammatory rheumatic diseases, drug-induced myalgia, "
+                "chronic pain syndromes, endocrine disease and neurological "
+                "conditions reduce probability of PMR and should be excluded."
+            ),
+            source="S",
+            score=0.9,
+        )
+    ]
+
+    answer, used = extract_citation_results(
+        (
+            "Findings that reduce probability of PMR include drug-induced myalgia, "
+            "endocrine disease and neurological conditions [1]."
+        ),
+        citations,
+        strip_references=False,
+        query=(
+            "What findings reduce the probability of PMR and should prompt "
+            "reconsidering diagnosis?"
+        ),
+    )
+
+    assert "drug-induced myalgia" in answer.lower()
+    assert used == [citations[0]]
+
+
 def test_extract_citation_results_adds_supported_parts_from_used_citation() -> None:
     citations = [
         SearchResult(
@@ -255,6 +287,51 @@ def test_extract_citation_results_keeps_treatment_when_query_asks_to_start() -> 
 
     assert "prednisolone 15 mg daily [1]" in answer.lower()
     assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_acei_arb_when_query_mentions_acei_arb() -> None:
+    citations = [
+        SearchResult(
+            text="ACEi/ARB are recommended for moderate proteinuria.",
+            source="S",
+            score=0.9,
+        )
+    ]
+
+    answer, used = extract_citation_results(
+        "Use ACE inhibitors or ARBs for moderate proteinuria [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "In lupus nephritis with moderate proteinuria, what does guidance say "
+            "about ACE inhibitor or ARB use?"
+        ),
+    )
+
+    assert "ace inhibitors or arbs" in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_supports_snippet_only_citation_shape() -> None:
+    citation_like = type(
+        "CitationLike",
+        (),
+        {
+            "source": "S",
+            "score": 0.9,
+            "snippet": "Other inflammatory diseases reduce PMR probability.",
+        },
+    )
+
+    answer, used = extract_citation_results(
+        "Other inflammatory diseases reduce PMR probability [1].",
+        [citation_like],
+        strip_references=False,
+        query="What findings reduce PMR probability?",
+    )
+
+    assert answer.endswith("[1].")
+    assert len(used) == 1
 
 
 def test_extract_citation_results_neutralizes_unsupported_rationale_clause() -> None:

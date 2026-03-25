@@ -63,6 +63,19 @@ REFERRAL_TEXT_HINT_RE = re.compile(
     r"\b(refer\w*|referr\w*|pathway|urgent|urgency)\b",
     re.IGNORECASE,
 )
+TREATMENT_QUERY_HINT_RE = re.compile(
+    r"\b(start\w*|initiat\w*|commenc\w*|begin\w*|"
+    r"treat\w*|therapy|medication|steroid\w*|drug\w*|"
+    r"preferred|first[- ]line|acei|arb|insulin)\b",
+    re.IGNORECASE,
+)
+TREATMENT_TEXT_HINT_RE = re.compile(
+    r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|steroid|"
+    r"immunosuppress\w*|mycophenolate|mmf\b|cyclophosphamide|cyc\b|"
+    r"treat\w*|management|manage\w*|therapy|medication|"
+    r"dose|prescrib\w*|drug)\b",
+    re.IGNORECASE,
+)
 SOURCE_NAME_PRIORITY: dict[str, int] = {
     "nice": 2,
     "sign": 1,
@@ -281,6 +294,8 @@ def _requested_query_parts(query: str) -> set[str]:
         parts.add("imaging")
     if REFERRAL_QUERY_HINT_RE.search(query):
         parts.add("referral")
+    if TREATMENT_QUERY_HINT_RE.search(query):
+        parts.add("treatment")
     return parts
 
 
@@ -298,6 +313,8 @@ def _query_part_coverage_score(query: str, chunk: dict[str, Any]) -> int:
     if "imaging" in requested_parts and IMAGING_TEXT_HINT_RE.search(haystack):
         score += 1
     if "referral" in requested_parts and REFERRAL_TEXT_HINT_RE.search(haystack):
+        score += 1
+    if "treatment" in requested_parts and TREATMENT_TEXT_HINT_RE.search(haystack):
         score += 1
     return score
 

@@ -48,7 +48,7 @@ async def streaming_generator(
         strip_references=True,
         query=query,
     )
-    if not renumbered_answer.strip():
+    if not renumbered_answer.strip() or not citations_used:
         renumbered_answer = _NO_EVIDENCE_RESPONSE
         citations_used = []
 

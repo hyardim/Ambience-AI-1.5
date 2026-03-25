@@ -342,6 +342,8 @@ async def test_generate_local_answer_maps_timeout(monkeypatch):
 
 @pytest.mark.anyio
 async def test_generate_local_answer_success(monkeypatch):
+    captured: dict[str, object] = {}
+
     class FakeResponse:
         def raise_for_status(self) -> None:
             return None
@@ -357,11 +359,14 @@ async def test_generate_local_answer_success(monkeypatch):
             return None
 
         async def post(self, url: str, json: dict[str, object]):
+            captured["payload"] = json
             return FakeResponse()
 
     monkeypatch.setattr(client.httpx, "AsyncClient", lambda timeout: FakeClient())
 
     assert await client._generate_local_answer("prompt") == "local answer"
+    options = (captured.get("payload") or {}).get("options", {})
+    assert "temperature" in options
 
 
 @pytest.mark.anyio

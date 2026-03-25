@@ -28,6 +28,7 @@ class LocalLLMConfig(BaseModel):
     model: str
     api_key: str
     max_tokens: int
+    temperature: float
     timeout_seconds: float
 
 
@@ -85,6 +86,9 @@ def build_local_llm_config(generation: GenerationConfig) -> LocalLLMConfig:
         api_key=os.getenv("LOCAL_LLM_API_KEY", "ollama"),
         max_tokens=int(
             os.getenv("LOCAL_LLM_MAX_TOKENS", str(generation.ollama_max_tokens))
+        ),
+        temperature=float(
+            os.getenv("LOCAL_LLM_TEMPERATURE", str(LLMConfig().llm_temperature))
         ),
         timeout_seconds=float(
             os.getenv(

@@ -65,14 +65,15 @@ _IMAGING_SENTENCE_HINT_RE = re.compile(
 )
 _TREATMENT_QUERY_HINT_RE = re.compile(
     r"\b(treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|drug|"
-    r"start\w*|initiat\w*|commenc\w*|begin\w*|steroid\w*|prednisolone)\b",
+    r"start\w*|initiat\w*|commenc\w*|begin\w*|steroid\w*|prednisolone|"
+    r"ace inhibitors?|acei|arb|angiotensin|insulin)\b",
     re.IGNORECASE,
 )
 _TREATMENT_SENTENCE_HINT_RE = re.compile(
     r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|steroid|"
     r"immunosuppress\w*|mycophenolate|mmf\b|cyclophosphamide|cyc\b|"
     r"treat\w*|management|manage\w*|therapy|medication|"
-    r"dose|prescrib\w*|drug)\b",
+    r"dose|prescrib\w*)\b",
     re.IGNORECASE,
 )
 _TIME_VALUE_RE = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty[- ]four)"
@@ -277,6 +278,23 @@ def _citation_indices_for_unit(unit: str) -> set[int]:
     return indices
 
 
+def _citation_text(citation: Any) -> str:
+    """Best-effort access to citation text across SearchResult-like shapes."""
+    if hasattr(citation, "text"):
+        value = getattr(citation, "text")
+        if isinstance(value, str):
+            return value
+    if hasattr(citation, "snippet"):
+        value = getattr(citation, "snippet")
+        if isinstance(value, str):
+            return value
+    if isinstance(citation, dict):
+        text_value = citation.get("text") or citation.get("snippet")
+        if isinstance(text_value, str):
+            return text_value
+    return ""
+
+
 def _ensure_citation_in_unit(unit: str, source_unit: str) -> str:
     if _VALID_CITATION_GROUP_RE.search(unit):
         return unit
@@ -295,7 +313,7 @@ def _neutralize_unsupported_rationale_clauses(
         return answer_text
 
     citation_haystack_tokens_by_index = {
-        idx: _content_tokens(citation.text)
+        idx: _content_tokens(_citation_text(citation))
         for idx, citation in enumerate(citations_used, start=1)
     }
     kept_units: list[str] = []
@@ -360,7 +378,7 @@ def _enforce_explicit_timeframe_grounding(
         return answer_text
 
     citation_text_by_index = {
-        idx: _normalize_text_for_match(citation.text)
+        idx: _normalize_text_for_match(_citation_text(citation))
         for idx, citation in enumerate(citations_used, start=1)
     }
     kept_units: list[str] = []
@@ -425,7 +443,7 @@ def _find_supporting_citation_index(
     pattern: re.Pattern[str],
 ) -> int | None:
     for idx, citation in enumerate(citations_used, start=1):
-        if pattern.search(citation.text):
+        if pattern.search(_citation_text(citation)):
             return idx
     return None
 

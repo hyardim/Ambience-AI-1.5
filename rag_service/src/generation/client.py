@@ -132,7 +132,10 @@ async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> 
         "prompt": prompt,
         "stream": False,
         "keep_alive": -1,
-        "options": {"num_predict": max_tokens or local_llm_config.max_tokens},
+        "options": {
+            "num_predict": max_tokens or local_llm_config.max_tokens,
+            "temperature": local_llm_config.temperature,
+        },
     }
 
     try:

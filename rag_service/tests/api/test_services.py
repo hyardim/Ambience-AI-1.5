@@ -303,6 +303,37 @@ def test_filter_chunks_prefers_referral_sections_for_pathway_queries() -> None:
     assert filtered[0] == referral_chunk
 
 
+def test_filter_chunks_prefers_treatment_chunks_for_treatment_queries() -> None:
+    context_chunk = {
+        "text": (
+            "Lupus nephritis cohort findings show moderate proteinuria in "
+            "a subset of patients."
+        ),
+        "score": 0.91,
+        "section_path": "CLINICAL SCIENCE > Results",
+        "metadata": {"source_url": "https://example.com/results.pdf"},
+    }
+    treatment_chunk = {
+        "text": (
+            "ACE inhibitors or ARBs are recommended for moderate proteinuria "
+            "to reduce proteinuria and protect renal function."
+        ),
+        "score": 0.62,
+        "section_path": "Recommendations > Treatment",
+        "metadata": {"source_url": "https://example.com/recommendations.pdf"},
+    }
+
+    filtered = filter_chunks(
+        (
+            "In lupus nephritis with moderate proteinuria, what does guidance "
+            "say about ACE inhibitor or ARB use?"
+        ),
+        [context_chunk, treatment_chunk],
+    )
+
+    assert filtered[0] == treatment_chunk
+
+
 def test_filter_chunks_prefers_chunk_covering_requested_query_parts() -> None:
     referral_only_chunk = {
         "text": (

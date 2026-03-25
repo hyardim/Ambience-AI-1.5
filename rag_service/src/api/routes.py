@@ -79,6 +79,8 @@ HIGH_PRECISION_MIN_OVERLAP_RATIO = 0.12
 ANSWER_RETRIEVAL_MIN_TOP_K = 8
 MULTIPART_PROMPT_CHUNKS = 5
 PROMPT_BACKFILL_SCORE_RATIO = 0.35
+TREATMENT_INITIATION_MIN_TOP_SCORE = 0.15
+TREATMENT_INITIATION_MIN_OVERLAP = 5
 HIGH_PRECISION_QUERY_RE = re.compile(
     r"\b(baseline|blood tests?|imaging|investigations?|prior to referral|"
     r"referral pathway|how urgently|urgency)\b",
@@ -101,6 +103,19 @@ REFERRAL_QUERY_HINT_RE = re.compile(
 )
 REFERRAL_SENTENCE_HINT_RE = re.compile(
     r"\b(refer\w*|referr\w*|pathway|urgent|urgency)\b",
+    re.IGNORECASE,
+)
+TREATMENT_DECISION_QUERY_RE = re.compile(
+    r"\b(start\w*|initiat\w*|commenc\w*|begin\w*|"
+    r"treat\w*|therapy|medication|steroid\w*|drug\w*|"
+    r"preferred|first[- ]line|acei|arb|insulin)\b",
+    re.IGNORECASE,
+)
+TREATMENT_SENTENCE_HINT_RE = re.compile(
+    r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|steroid|"
+    r"immunosuppress\w*|mycophenolate|mmf\b|cyclophosphamide|cyc\b|"
+    r"treat\w*|management|manage\w*|therapy|medication|"
+    r"dose|prescrib\w*|drug)\b",
     re.IGNORECASE,
 )
 INVESTIGATION_QUERY_HINT_RE = re.compile(
@@ -226,6 +241,17 @@ def _should_reject_for_low_confidence(query: str, top_chunk: dict[str, Any]) -> 
     top_score = float(top_chunk.get("score", 0.0))
     if top_score < ABSOLUTE_MIN_TOP_SCORE:
         return True
+    if TREATMENT_DECISION_QUERY_RE.search(query) and top_score < (
+        TREATMENT_INITIATION_MIN_TOP_SCORE
+    ):
+        overlap = _query_overlap_count(query, top_chunk.get("text", ""))
+        section_path = str(top_chunk.get("section_path") or "")
+        has_directive_fit = bool(
+            DIRECTIVE_SECTION_HINT_RE.search(section_path)
+            or TREATMENT_SENTENCE_HINT_RE.search(top_chunk.get("text", ""))
+        )
+        if overlap < TREATMENT_INITIATION_MIN_OVERLAP or not has_directive_fit:
+            return True
     is_high_precision = bool(HIGH_PRECISION_QUERY_RE.search(query))
     if not is_high_precision:
         return top_score < _minimum_required_top_score(query)
@@ -314,6 +340,8 @@ def _requested_question_parts(query: str) -> list[tuple[str, re.Pattern[str]]]:
         requested_parts.append(("imaging", IMAGING_SENTENCE_HINT_RE))
     if REFERRAL_QUERY_HINT_RE.search(query):
         requested_parts.append(("referral/urgency pathway", REFERRAL_SENTENCE_HINT_RE))
+    if TREATMENT_DECISION_QUERY_RE.search(query):
+        requested_parts.append(("treatment/management", TREATMENT_SENTENCE_HINT_RE))
     return requested_parts
 
 
@@ -822,6 +850,36 @@ async def _generate_answer_from_retrieval(
             strip_references=True,
             query=query,
         )
+        if renumbered_answer.strip() and not citations_used and citations_retrieved:
+            # One repair pass improves consistency when the model drafts a useful
+            # answer but omits valid [N] citation tokens.
+            citation_repair_prompt = build_revision_prompt(
+                original_question=query,
+                previous_answer=answer_text,
+                specialist_feedback=(
+                    "Rewrite this answer so every clinical claim has valid "
+                    "indexed citations in [N] format only. Use only provided "
+                    "context and do not add uncited claims."
+                ),
+                chunks=top_chunks,
+                patient_context=patient_context,
+                file_context=file_context,
+                evidence_note=low_evidence_note(evidence),
+            )
+            try:
+                repaired_answer = await generate_answer(
+                    citation_repair_prompt,
+                    max_tokens=max_tokens,
+                    provider=route.provider,
+                )
+                renumbered_answer, citations_used = extract_citation_results(
+                    repaired_answer,
+                    citations_retrieved,
+                    strip_references=True,
+                    query=query,
+                )
+            except ModelGenerationError:
+                pass
         if not renumbered_answer.strip() or not citations_used:
             renumbered_answer = NO_EVIDENCE_RESPONSE
             citations_used = []
