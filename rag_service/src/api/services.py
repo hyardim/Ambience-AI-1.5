@@ -105,9 +105,16 @@ _MIGRAINE_TIA_QUERY_RE = re.compile(
     r"\b(tia|transient ischaemic attack)\b.*\b(migraine aura|migraine)\b",
     re.IGNORECASE,
 )
+_EMERGENCY_QUERY_RE = re.compile(
+    r"\b(cauda equina|cord compression|spinal emergency|neutropenic sepsis|"
+    r"urinary retention|saddle anaesthesia|bilateral leg weakness|before transfer|"
+    r"same-day|urgent transfer)\b",
+    re.IGNORECASE,
+)
 _MIGRAINE_AURA_CHUNK_RE = re.compile(
-    r"\b(migraine aura|visual symptoms?|fully reversible|gradual spread|"
-    r"5 to 60 minutes|headache)\b",
+    r"\b(migraine aura|migraine with aura|positive visual symptoms?|visual aura|"
+    r"fully reversible|gradual spread|develop over at least 5 minutes|"
+    r"5 to 60 minutes|5 and 60 minutes)\b",
     re.IGNORECASE,
 )
 _TIA_CHUNK_RE = re.compile(
@@ -115,8 +122,25 @@ _TIA_CHUNK_RE = re.compile(
     r"immediate referral|24 hours)\b",
     re.IGNORECASE,
 )
+_MIGRAINE_TIA_DISTRACTOR_RE = re.compile(
+    r"\b(galcanezumab|botulinum|quality statement|committee discussion|"
+    r"primary headache disorders|secondary headache|quality of life)\b",
+    re.IGNORECASE,
+)
 _GENERIC_SENSORY_DISTRACTOR_RE = re.compile(
     r"\b(numbness and weakness|sensory disturbances?|tingling|numbness)\b",
+    re.IGNORECASE,
+)
+_EMERGENCY_OPERATIONAL_CHUNK_RE = re.compile(
+    r"\b(cauda equina|cord compression|spinal emergency|severe low back pain|"
+    r"new[- ]onset disturbance of bladder|bowel or sexual function|"
+    r"urinary retention|perineal numbness|bilateral leg weakness|"
+    r"refer immediately|immediate assessment)\b",
+    re.IGNORECASE,
+)
+_EMERGENCY_DISTRACTOR_RE = re.compile(
+    r"\b(hemiparesis|suspected cancer pathway|brain and central nervous system cancers|"
+    r"sudden-onset limb weakness)\b",
     re.IGNORECASE,
 )
 
@@ -225,6 +249,33 @@ def _select_task_covering_chunks(
     if not chunks or max_chunks <= 0:
         return []
 
+    if _EMERGENCY_QUERY_RE.search(original_query):
+        operational = [
+            chunk
+            for chunk in chunks
+            if _EMERGENCY_OPERATIONAL_CHUNK_RE.search(
+                " ".join(
+                    part
+                    for part in (
+                        chunk.get("text") or "",
+                        chunk.get("section_path") or "",
+                        (chunk.get("metadata") or {}).get("title") or "",
+                    )
+                    if part
+                )
+            )
+        ]
+        emergency_selected: list[dict[str, Any]] = []
+        if operational:
+            emergency_selected.append(operational[0])
+        for chunk in chunks:
+            if len(emergency_selected) >= max_chunks:
+                break
+            if chunk not in emergency_selected:
+                emergency_selected.append(chunk)
+        if emergency_selected:
+            return emergency_selected[:max_chunks]
+
     if _MIGRAINE_TIA_QUERY_RE.search(original_query):
         migraine_chunks = [
             chunk
@@ -308,6 +359,10 @@ def _finalize_with_chunk_floor(
     specialty: str | None,
 ) -> list[dict[str, Any]]:
     minimum_chunks = 2 if _requested_task_count(original_query) >= 2 else 1
+    if _EMERGENCY_QUERY_RE.search(original_query):
+        minimum_chunks = max(minimum_chunks, 2)
+    if _MIGRAINE_TIA_QUERY_RE.search(original_query):
+        minimum_chunks = max(minimum_chunks, 2)
     target_chunks = min(max(minimum_chunks, len(primary)), 3)
 
     primary_final = _finalize_filtered(
@@ -522,6 +577,18 @@ def _filter_chunks(
             comparison_final,
             original_query=query,
             max_chunks=min(3, len(comparison_final)),
+        )
+
+    if _EMERGENCY_QUERY_RE.search(query):
+        emergency_final = _finalize_filtered(
+            filtered,
+            expanded_query,
+            specialty=specialty,
+        )
+        return _select_task_covering_chunks(
+            emergency_final,
+            original_query=query,
+            max_chunks=min(3, len(emergency_final)),
         )
 
     strict_matches = [
@@ -754,16 +821,39 @@ def _sort_by_alignment(
         )
         score = 0
         if _MIGRAINE_AURA_CHUNK_RE.search(haystack):
-            score += 3
+            score += 4
         if _TIA_CHUNK_RE.search(haystack):
-            score += 1
+            score += 2
         if _GENERIC_SENSORY_DISTRACTOR_RE.search(haystack):
             score -= 2
+        if _MIGRAINE_TIA_DISTRACTOR_RE.search(haystack):
+            score -= 4
+        return score
+
+    def _emergency_balance_score(chunk: dict[str, Any]) -> int:
+        if not _EMERGENCY_QUERY_RE.search(query):
+            return 0
+        metadata = chunk.get("metadata") or {}
+        haystack = " ".join(
+            part
+            for part in (
+                chunk.get("text") or "",
+                chunk.get("section_path") or metadata.get("section_title") or "",
+                metadata.get("title") or metadata.get("source_name") or "",
+            )
+            if part
+        )
+        score = 0
+        if _EMERGENCY_OPERATIONAL_CHUNK_RE.search(haystack):
+            score += 5
+        if _EMERGENCY_DISTRACTOR_RE.search(haystack):
+            score -= 3
         return score
 
     return sorted(
         chunks,
         key=lambda chunk: (
+            _emergency_balance_score(chunk),
             _sle_renal_score(chunk),
             _urgent_toxicity_score(chunk),
             _comparison_balance_score(chunk),

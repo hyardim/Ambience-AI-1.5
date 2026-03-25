@@ -478,6 +478,106 @@ def test_filter_chunks_prefers_migraine_aura_comparison_chunk_over_generic_senso
     assert filtered[0] == migraine
 
 
+def test_filter_chunks_prefers_aura_guidance_over_migraine_appraisal_for_comparison(
+) -> None:
+    aura = {
+        "text": (
+            "Suspect migraine with aura when visual symptoms are fully reversible, "
+            "develop over at least 5 minutes, and last between 5 and 60 minutes."
+        ),
+        "score": 0.73,
+        "section_path": "Sensory symptoms including tingling or numbness in adults",
+        "metadata": {
+            "title": "Suspected neurological conditions: recognition and referral",
+            "source_url": "https://example.com/aura",
+            "specialty": "neurology",
+            "doc_type": "guideline",
+        },
+    }
+    appraisal = {
+        "text": (
+            "Migraine substantially affects health-related quality of life and "
+            "there is an unmet need for migraine-specific treatments."
+        ),
+        "score": 0.88,
+        "section_path": "Committee discussion > Treatment pathway and comparators",
+        "metadata": {
+            "title": "Galcanezumab for preventing migraine",
+            "source_url": "https://example.com/appraisal",
+            "specialty": "neurology",
+            "doc_type": "appraisal",
+        },
+    }
+    tia = {
+        "text": (
+            "Refer immediately people who have had a suspected TIA for specialist "
+            "assessment and investigation, to be seen within 24 hours of onset."
+        ),
+        "score": 0.7,
+        "section_path": "Initial management of suspected and confirmed TIA",
+        "metadata": {
+            "title": "Stroke and transient ischaemic attack in over 16s",
+            "source_url": "https://example.com/tia",
+            "specialty": "neurology",
+            "doc_type": "guideline",
+        },
+    }
+
+    filtered = filter_chunks(
+        "38-year-old with recurrent episodes of transient unilateral visual "
+        "disturbance lasting 10-15 minutes followed by headache. No persistent "
+        "deficit. How can migraine aura be distinguished from TIA in primary care?",
+        [appraisal, tia, aura],
+        specialty="neurology",
+    )
+
+    assert filtered[0] == aura
+    assert tia in filtered[:2]
+
+
+def test_filter_chunks_keeps_multiple_emergency_chunks_for_transfer_query() -> None:
+    cauda_equina = {
+        "text": (
+            "Refer immediately, in line with local pathways, adults who have severe "
+            "low back pain radiating into the leg and new-onset disturbance of "
+            "bladder, bowel or sexual function, or new-onset perineal numbness, "
+            "to have an assessment for cauda equina syndrome."
+        ),
+        "score": 0.76,
+        "section_path": "Severe low back pain together with other symptoms",
+        "metadata": {
+            "title": "Suspected neurological conditions: recognition and referral",
+            "source_url": "https://example.com/cauda",
+            "specialty": "neurology",
+            "doc_type": "guideline",
+        },
+    }
+    supportive = {
+        "text": (
+            "Refer adults with very rapidly progressive weakness of a single limb "
+            "or hemiparesis for investigation, including neuroimaging."
+        ),
+        "score": 0.78,
+        "section_path": "Rapidly progressive weakness of a single limb or hemiparesis",
+        "metadata": {
+            "title": "Suspected neurological conditions: recognition and referral",
+            "source_url": "https://example.com/supportive",
+            "specialty": "neurology",
+            "doc_type": "guideline",
+        },
+    }
+
+    filtered = filter_chunks(
+        "48-year-old with new onset severe back pain and bilateral leg weakness "
+        "with urinary retention. What immediate steps are required before transfer?",
+        [supportive, cauda_equina],
+        specialty="neurology",
+    )
+
+    assert filtered[0] == cauda_equina
+    assert len(filtered) == 2
+
+
 def test_retrieve_chunks_uses_shared_retrieval_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

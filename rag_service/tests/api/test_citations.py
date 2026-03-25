@@ -116,6 +116,19 @@ def test_extract_citation_results_normalizes_section_reference_artifacts() -> No
     assert used == [citations[0]]
 
 
+def test_extract_citation_results_strips_leading_page_label_artifacts() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Page 13 Refer immediately for cauda equina syndrome [1].",
+        citations,
+        strip_references=False,
+    )
+
+    assert answer == "Refer immediately for cauda equina syndrome [1]."
+    assert used == [citations[0]]
+
+
 def test_extract_citation_results_adds_partial_coverage_note() -> None:
     citations = [SearchResult(text="A", source="S", score=0.9)]
 

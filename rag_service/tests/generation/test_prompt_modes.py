@@ -95,6 +95,7 @@ def test_grounded_prompt_includes_emergency_mode_instructions() -> None:
     assert "must contain the concrete action itself" in prompt
     assert "Do not write only that action is required" in prompt
     assert "handling an urgent question" in prompt
+    assert "cauda equina" in prompt
 
 
 def test_grounded_prompt_includes_comparison_mode_instructions() -> None:
@@ -113,6 +114,7 @@ def test_grounded_prompt_includes_comparison_mode_instructions() -> None:
         "workflow" in prompt
     )
     assert "answering a comparison question" in prompt
+    assert "'- Migraine aura:' and '- TIA:'" in prompt
 
 
 def test_grounded_prompt_uses_simpler_context_format() -> None:

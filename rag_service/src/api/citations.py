@@ -37,6 +37,10 @@ _LEADING_CONNECTIVE_RE = re.compile(
     r"^(?:however|but|also|additionally|furthermore|moreover|in addition)\s*,?\s+",
     re.IGNORECASE,
 )
+_LEADING_PAGE_LABEL_RE = re.compile(
+    r"^(?:\[(?:\d+(?:\s*,\s*\d+)*)\]\s*)?page\s+\d+\s+",
+    re.IGNORECASE,
+)
 _CLINICAL_HINT_RE = re.compile(
     r"\b(refer|referral|urgent|stroke|tia|hydrocephalus|nph|gait|ataxia|weakness|"
     r"headache|jaw claudication|temporal arteritis|bell'?s palsy|migraine|"
@@ -134,6 +138,7 @@ def _clean_answer_text(text: str) -> str:
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()
+    cleaned = _LEADING_PAGE_LABEL_RE.sub("", cleaned)
     cleaned = _LEADING_CONNECTIVE_RE.sub("", cleaned)
     if cleaned and cleaned[0].islower():
         cleaned = cleaned[0].upper() + cleaned[1:]
