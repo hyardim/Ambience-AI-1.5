@@ -170,7 +170,7 @@ export function SpecialistQueriesPage() {
                 onChange={(e) => setSeverityFilter(e.target.value)}
                 className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
               >
-                <option value="all">All Severity</option>
+                <option value="all">All Urgency</option>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -187,7 +187,7 @@ export function SpecialistQueriesPage() {
                 <option value="title">Title</option>
                 <option value="specialty">Specialty</option>
                 <option value="status">Status</option>
-                <option value="severity">Severity</option>
+                <option value="severity">Urgency</option>
               </select>
               <select
                 aria-label="Sort direction"

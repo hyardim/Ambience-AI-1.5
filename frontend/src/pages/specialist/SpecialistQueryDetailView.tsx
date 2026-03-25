@@ -365,7 +365,7 @@ export function SpecialistQueryDetailView({
               age={chat.patient_age}
               sex={chat.patient_gender}
               specialty={chat.specialty}
-              severity={chat.severity}
+              urgency={chat.severity}
               notes={chat.patient_notes}
             />
 

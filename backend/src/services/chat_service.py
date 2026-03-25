@@ -486,7 +486,7 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                 "top_k": CHAT_RAG_TOP_K,
                 "stream": True,
                 "specialty": chat.specialty,
-                "severity": chat.severity,
+                "urgency": chat.severity,
                 "patient_context": patient_context,
             }
             if file_context:

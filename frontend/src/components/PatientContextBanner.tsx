@@ -2,7 +2,7 @@ interface PatientContextBannerProps {
   age?: number | null;
   sex?: string | null;
   specialty?: string | null;
-  severity?: string | null;
+  urgency?: string | null;
   notes?: string | null;
   className?: string;
 }
@@ -18,7 +18,7 @@ export function PatientContextBanner({
   age,
   sex,
   specialty,
-  severity,
+  urgency,
   notes,
   className = "",
 }: PatientContextBannerProps) {
@@ -32,8 +32,8 @@ export function PatientContextBanner({
   if (specialty) {
     chips.push({ label: "Specialty", value: toTitleCase(specialty) });
   }
-  if (severity) {
-    chips.push({ label: "Severity", value: toTitleCase(severity) });
+  if (urgency) {
+    chips.push({ label: "Urgency", value: toTitleCase(urgency) });
   }
 
   const hasNotes = Boolean(notes && notes.trim());

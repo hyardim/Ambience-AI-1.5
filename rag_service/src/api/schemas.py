@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from ..config import llm_config
 from ..jobs.retry import RetryJobStatus
@@ -12,7 +12,10 @@ class QueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=5000)
     top_k: int = Field(default=5, ge=1, le=20)
     specialty: str | None = None
-    severity: str | None = None
+    urgency: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("urgency", "severity"),
+    )
 
 
 class SearchResult(BaseModel):
@@ -56,7 +59,10 @@ class ReviseRequest(BaseModel):
     patient_context: dict[str, Any] | None = None
     file_context: str | None = None
     specialty: str | None = None
-    severity: str | None = None
+    urgency: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("urgency", "severity"),
+    )
     stream: bool = False
 
 

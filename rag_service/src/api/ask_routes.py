@@ -69,7 +69,7 @@ async def ask_route(
             patient_context=None,
             file_context=None,
             stream=False,
-            severity=None,
+            urgency=None,
             retrieved=retrieved,
             route_endpoint="/ask",
             prompt_label=ACTIVE_PROMPT,

@@ -434,7 +434,7 @@ export function GPQueryDetailPage() {
                     onChange={(e) => setEditMeta(prev => ({ ...prev, severity: e.target.value || null }))}
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                   >
-                    <option value="">No severity</option>
+                    <option value="">No urgency</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -499,7 +499,7 @@ export function GPQueryDetailPage() {
                 age={chat?.patient_age}
                 sex={chat?.patient_gender}
                 specialty={chat?.specialty}
-                severity={chat?.severity}
+                urgency={chat?.severity}
                 notes={chat?.patient_notes}
               />
             </div>

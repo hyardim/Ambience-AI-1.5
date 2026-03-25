@@ -686,7 +686,7 @@ async def generate_clinical_answer(
             patient_context=request.patient_context,
             file_context=request.file_context,
             stream=request.stream,
-            severity=request.severity,
+            urgency=request.urgency,
             retrieved=selected_pass.retrieved,
             route_endpoint="/answer",
             prompt_label=ACTIVE_PROMPT,
@@ -714,7 +714,7 @@ async def _generate_answer_from_retrieval(
     patient_context: dict[str, Any] | None,
     file_context: str | None,
     stream: bool,
-    severity: str | None,
+    urgency: str | None,
     retrieved: list[dict[str, Any]],
     route_endpoint: str,
     prompt_label: str,
@@ -782,7 +782,7 @@ async def _generate_answer_from_retrieval(
         route = select_generation_provider(
             query=query,
             retrieved_chunks=filtered or retrieved,
-            severity=severity,
+            urgency=urgency,
             prompt_length_chars=len(prompt),
         )
         log_route_decision(
@@ -942,7 +942,7 @@ async def revise_clinical_answer(
         route = select_generation_provider(
             query=request.original_query,
             retrieved_chunks=filtered or retrieved,
-            severity=request.severity,
+            urgency=request.urgency,
             is_revision=True,
             prompt_length_chars=len(prompt),
         )

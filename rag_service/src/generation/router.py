@@ -63,7 +63,7 @@ def select_generation_provider(
     *,
     query: str,
     retrieved_chunks: list[dict],
-    severity: str | None = None,
+    urgency: str | None = None,
     is_revision: bool = False,
     prompt_length_chars: int | None = None,
     threshold: float | None = None,
@@ -78,7 +78,7 @@ def select_generation_provider(
     Args:
         query: The user's clinical question.
         retrieved_chunks: Top retrieval results (used for ambiguity scoring).
-        severity: Optional clinical severity label (e.g. "urgent").
+        urgency: Optional clinical urgency label (e.g. "urgent").
         is_revision: Whether this is a revision flow (feedback loop).
         prompt_length_chars: Character length of the assembled prompt.
         threshold: Override for the default routing threshold.
@@ -116,7 +116,7 @@ def select_generation_provider(
         score += prompt_score
         reasons.extend(prompt_reasons)
 
-    risk_score, risk_reasons = _score_risk(query, severity)
+    risk_score, risk_reasons = _score_risk(query, urgency)
     if risk_score:
         score += risk_score
         reasons.extend(risk_reasons)
@@ -198,8 +198,8 @@ def _score_prompt_size(prompt_length_chars: int | None) -> tuple[float, list[str
     return score, reasons
 
 
-def _score_risk(query: str, severity: str | None) -> tuple[float, list[str]]:
-    """Score clinical risk based on severity label and risk-related terminology.
+def _score_risk(query: str, urgency: str | None) -> tuple[float, list[str]]:
+    """Score clinical risk based on urgency label and risk-related terminology.
 
     Returns:
         Tuple of (score contribution, list of reason strings).
@@ -208,9 +208,9 @@ def _score_risk(query: str, severity: str | None) -> tuple[float, list[str]]:
     reasons: list[str] = []
     score = 0.0
 
-    if severity in {"urgent", "emergency"}:
-        score += 0.30 if severity == "urgent" else 0.40
-        reasons.append(f"severity_{severity}")
+    if urgency in {"urgent", "emergency"}:
+        score += 0.30 if urgency == "urgent" else 0.40
+        reasons.append(f"urgency_{urgency}")
 
     matched_terms = [term for term in _RISK_TERMS if term in query_lower]
     if matched_terms:

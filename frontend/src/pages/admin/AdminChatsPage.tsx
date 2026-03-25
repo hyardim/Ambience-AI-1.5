@@ -180,7 +180,7 @@ export function AdminChatsPage() {
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Owner</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Specialist</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Severity</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Urgency</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Created</th>
                   <th className="text-right px-6 py-3 text-sm font-semibold text-gray-600">Actions</th>
                 </tr>
@@ -294,7 +294,7 @@ export function AdminChatsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Urgency</label>
                 <select
                   value={editForm.severity || ''}
                   onChange={e => setEditForm({ ...editForm, severity: e.target.value || null })}
