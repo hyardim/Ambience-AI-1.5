@@ -107,6 +107,26 @@ _RATIONALE_MARKER_RE = re.compile(
     r"suggestive of|indicating|which suggests?|which indicates?)\b",
     re.IGNORECASE,
 )
+_DIRECTIVE_SECTION_HINT_RE = re.compile(
+    r"\b(recommendation|recommendations|referral|pathway|when to refer|"
+    r"management|treatment|diagnosis)\b",
+    re.IGNORECASE,
+)
+_NON_DIRECTIVE_SECTION_HINT_RE = re.compile(
+    r"\b(discussion|results|context|background|rationale|headlines|"
+    r"rigor of development|why the committee made)\b",
+    re.IGNORECASE,
+)
+_HIGH_RISK_REFERRAL_ACTION_RE = re.compile(
+    r"\b(refer\w*|referr\w*|pathway|urgent|immediate|urgency)\b",
+    re.IGNORECASE,
+)
+_HIGH_RISK_TREATMENT_ACTION_RE = re.compile(
+    r"\b(start\w*|initiat\w*|commenc\w*|begin\w*|prescrib\w*|dose\w*|"
+    r"steroid\w*|therapy|medication)\b",
+    re.IGNORECASE,
+)
+_HIGH_RISK_BIOPSY_ACTION_RE = re.compile(r"\bbiopsy\b", re.IGNORECASE)
 _CROSS_SOURCE_OVERCLAIM_RE = re.compile(
     r"\b(?:explicitly|clearly)\s+stated\s+in\s+both\s+"
     r"(?:guideline\s+)?(?:sections?|sources?|passages?)\b",
@@ -321,6 +341,84 @@ def _citation_text(citation: Any) -> str:
     return ""
 
 
+def _citation_section_path(citation: Any) -> str:
+    if hasattr(citation, "section_path"):
+        value = getattr(citation, "section_path")
+        if isinstance(value, str):
+            return value
+    if isinstance(citation, dict):
+        value = citation.get("section_path")
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _is_directive_citation(citation: Any) -> bool:
+    section_path = _citation_section_path(citation)
+    if _DIRECTIVE_SECTION_HINT_RE.search(section_path):
+        return True
+    if _NON_DIRECTIVE_SECTION_HINT_RE.search(section_path):
+        return False
+
+    citation_text = _citation_text(citation)
+    if not citation_text:
+        return False
+    has_recommendation_marker = bool(re.search(r"\b\d+\.\d+(?:\.\d+)?\b", citation_text))
+    has_directive_verb = bool(
+        re.search(
+            r"\b(refer\w*|offer|consider|start\w*|initiat\w*|prescrib\w*|biopsy|urgent|immediate)\b",
+            citation_text,
+            re.IGNORECASE,
+        )
+    )
+    if has_recommendation_marker and has_directive_verb:
+        return True
+    return has_directive_verb and len(citation_text) >= 24
+
+
+def _citation_has_low_signal(citation: Any) -> bool:
+    section_path = _citation_section_path(citation).strip()
+    citation_text = _citation_text(citation).strip()
+    return not section_path and len(citation_text) < 24
+
+
+def _high_risk_action_type(unit: str) -> str | None:
+    if _HIGH_RISK_BIOPSY_ACTION_RE.search(unit):
+        return "biopsy"
+    if _HIGH_RISK_TREATMENT_ACTION_RE.search(unit):
+        return "treatment"
+    if _HIGH_RISK_REFERRAL_ACTION_RE.search(unit):
+        return "referral"
+    return None
+
+
+def _format_citation_group(indices: set[int]) -> str:
+    ordered = sorted(index for index in indices if index >= 1)
+    if not ordered:
+        return "[1]"
+    return "[" + ", ".join(str(index) for index in ordered) + "]"
+
+
+def _high_risk_gap_sentence(action_type: str, citation_group: str) -> str:
+    if action_type == "referral":
+        return (
+            "The indexed passages include relevant context "
+            f"{citation_group}, but do not provide a directive recommendation "
+            "on referral urgency in the cited sections."
+        )
+    if action_type == "biopsy":
+        return (
+            "The indexed passages include relevant context "
+            f"{citation_group}, but do not provide a directive recommendation "
+            "to perform biopsy in the cited sections."
+        )
+    return (
+        "The indexed passages include relevant context "
+        f"{citation_group}, but do not provide a directive recommendation "
+        "to start or prescribe treatment in the cited sections."
+    )
+
+
 def _ensure_citation_in_unit(unit: str, source_unit: str) -> str:
     if _VALID_CITATION_GROUP_RE.search(unit):
         return unit
@@ -378,6 +476,66 @@ def _neutralize_unsupported_rationale_clauses(
             trimmed = f"{trimmed}."
         if trimmed:
             kept_units.append(trimmed)
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
+def _enforce_high_risk_action_source_quality(
+    answer_text: str,
+    citations_used: list[SearchResult],
+) -> str:
+    """Keep high-risk actions only when supported by directive citation sections.
+
+    If a high-risk action sentence is cited solely from non-directive sections,
+    replace that sentence with a scoped caveat rather than dropping the whole answer.
+    """
+    if not answer_text.strip() or not citations_used:
+        return answer_text
+
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+
+        action_type = _high_risk_action_type(unit)
+        if action_type is None:
+            kept_units.append(unit)
+            continue
+
+        cited_indices = _citation_indices_for_unit(unit)
+        if not cited_indices:
+            kept_units.append(unit)
+            continue
+
+        cited_citations = [
+            citations_used[index - 1]
+            for index in cited_indices
+            if 1 <= index <= len(citations_used)
+        ]
+        if not cited_citations:
+            kept_units.append(unit)
+            continue
+        if all(_citation_has_low_signal(citation) for citation in cited_citations):
+            # Avoid over-enforcing when test fixtures or sparse citation payloads
+            # lack section metadata/text signal.
+            kept_units.append(unit)
+            continue
+
+        directive_supported = any(
+            _is_directive_citation(citation)
+            for citation in cited_citations
+        )
+        if directive_supported:
+            kept_units.append(unit)
+            continue
+
+        kept_units.append(
+            _high_risk_gap_sentence(
+                action_type=action_type,
+                citation_group=_format_citation_group(cited_indices),
+            )
+        )
 
     return _clean_answer_text(" ".join(kept_units))
 
@@ -688,6 +846,7 @@ def extract_citation_results(
         answer,
         citations_used,
     )
+    answer = _enforce_high_risk_action_source_quality(answer, citations_used)
     answer = _enforce_urgency_wording_grounding(
         answer,
         citations_used,

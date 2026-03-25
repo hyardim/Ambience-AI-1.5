@@ -18,6 +18,7 @@ from src.ingestion.chunk import (
     group_blocks_by_section,
     make_table_chunk,
     merge_short_sections,
+    split_recommendation_segments,
     split_into_sentences,
 )
 from src.utils import tokenizer as tokenizer_module
@@ -182,6 +183,22 @@ class TestSplitIntoSentences:
             chunk_module._ensure_nltk_data()
 
         chunk_module._NLTK_INITIALISED = True
+
+
+class TestSplitRecommendationSegments:
+    def test_returns_original_when_no_numbered_recommendations(self) -> None:
+        text = "General discussion of symptoms and management."
+        assert split_recommendation_segments(text) == [text]
+
+    def test_splits_on_numbered_recommendation_markers(self) -> None:
+        text = (
+            "1.4.2 Refer urgently for neurological assessment. "
+            "1.4.4 Refer adults with gait apraxia to exclude NPH."
+        )
+        segments = split_recommendation_segments(text)
+        assert len(segments) == 2
+        assert segments[0].startswith("1.4.2")
+        assert segments[1].startswith("1.4.4")
 
 
 # -----------------------------------------------------------------------

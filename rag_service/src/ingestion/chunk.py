@@ -22,6 +22,10 @@ MAX_CHUNK_TOKENS = 800
 OVERLAP_TOKENS = 80
 SHORT_SECTION_TOKENS = 150
 MAX_MERGE_SECTIONS = 2
+RECOMMENDATION_SPLIT_RE = re.compile(
+    r"(?=(?:^|\n|\s)\d+\.\d+(?:\.\d+)?\s)",
+    re.MULTILINE,
+)
 
 _NLTK_INITIALISED = False
 
@@ -186,6 +190,23 @@ def split_into_sentences(text: str) -> list[str]:
     return [s for s in sentences if s.strip()]
 
 
+def split_recommendation_segments(text: str) -> list[str]:
+    """Split long blocks on numbered recommendation markers when present.
+
+    This keeps chunks more atomic around guideline directives like `1.4.2`
+    / `1.4.4`, reducing mixed-rule chunks that can blur action pathways.
+    """
+    if not text.strip():
+        return []
+
+    markers = re.findall(r"\b\d+\.\d+(?:\.\d+)?\b", text)
+    if len(markers) < 2:
+        return [text]
+
+    segments = [segment.strip() for segment in RECOMMENDATION_SPLIT_RE.split(text)]
+    return [segment for segment in segments if segment]
+
+
 # -----------------------------------------------------------------------
 # Table chunks
 # -----------------------------------------------------------------------
@@ -328,8 +349,9 @@ def chunk_section_group(
         text = block.get("text", "").strip()
         if not text:
             continue
-        for s in split_into_sentences(text):
-            sentence_block_pairs.append((s, block))
+        for segment in split_recommendation_segments(text):
+            for sentence in split_into_sentences(segment):
+                sentence_block_pairs.append((sentence, block))
 
     if not sentence_block_pairs:
         return [], []

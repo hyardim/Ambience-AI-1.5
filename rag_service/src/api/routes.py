@@ -214,6 +214,12 @@ DIFFERENTIAL_STOPWORDS = OVERLAP_STOPWORDS.union(
         "minutes",
     }
 )
+_DIFFERENTIAL_ALIAS_MAP: dict[str, set[str]] = {
+    # Keep aliases clinically meaningful and avoid generic overlap terms
+    # (for example "transient") that can spuriously satisfy both sides.
+    "tia": {"tia", "ischaemic", "ischemic", "attack"},
+    "nph": {"nph", "normal", "pressure", "hydrocephalus"},
+}
 
 
 @dataclass
@@ -323,6 +329,24 @@ def _tokenize_clinical_terms(text: str, *, stopwords: set[str]) -> set[str]:
     }
 
 
+def _expand_differential_aliases(tokens: set[str]) -> set[str]:
+    expanded = set(tokens)
+    for token in list(tokens):
+        alias_set = _DIFFERENTIAL_ALIAS_MAP.get(token)
+        if alias_set:
+            expanded.update(alias_set)
+
+    # Handle phrase-form aliases that may appear without abbreviation tokens.
+    if {"ischaemic", "attack"}.issubset(tokens) or {"ischemic", "attack"}.issubset(
+        tokens
+    ):
+        expanded.add("tia")
+    if {"normal", "pressure", "hydrocephalus"}.issubset(tokens):
+        expanded.add("nph")
+
+    return expanded
+
+
 def _extract_differential_target_tokens(query: str) -> tuple[set[str], set[str]] | None:
     patterns = (
         DIFFERENTIAL_FROM_RE,
@@ -342,6 +366,8 @@ def _extract_differential_target_tokens(query: str) -> tuple[set[str], set[str]]
             match.group("b"),
             stopwords=DIFFERENTIAL_STOPWORDS,
         )
+        left = _expand_differential_aliases(left)
+        right = _expand_differential_aliases(right)
         if not left or not right:
             continue
         # Keep only distinctive signal per side.
@@ -604,6 +630,8 @@ def _requested_question_parts(query: str) -> list[tuple[str, re.Pattern[str]]]:
 
 
 def _prompt_chunk_limit(query: str) -> int:
+    if DIFFERENTIAL_QUERY_RE.search(query):
+        return max(MAX_CITATIONS, 4)
     requested_parts = _requested_question_parts(query)
     if len(requested_parts) >= 2:
         return _multipart_prompt_chunk_limit()
