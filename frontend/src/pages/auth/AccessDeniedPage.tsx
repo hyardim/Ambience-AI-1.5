@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
 
 type AccessDeniedState = {
@@ -26,7 +26,7 @@ export function AccessDeniedPage() {
   const from = state.from || 'this area';
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <AuthHeader />
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -59,7 +59,7 @@ export function AccessDeniedPage() {
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
               to="/"
-              className="flex-1 text-center bg-[#005eb8] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#003087] transition-colors"
+              className="flex-1 text-center bg-[var(--nhs-blue)] text-white py-3 px-4 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
             >
               Back to Home
             </Link>

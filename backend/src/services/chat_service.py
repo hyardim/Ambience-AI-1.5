@@ -1,19 +1,21 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import os
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Protocol
 
 import httpx
-from fastapi import BackgroundTasks, HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.db.models import ChatStatus, FileAttachment, User
-from src.db.session import AsyncSessionLocal, SessionLocal
+from src.db.models import Chat, ChatStatus, FileAttachment, Message, User
+from src.db.session import AsyncSessionLocal
 from src.repositories import audit_repository, chat_repository, message_repository
 from src.schemas.chat import (
     ChatCreate,
@@ -22,19 +24,63 @@ from src.schemas.chat import (
     ChatWithMessages,
     FileAttachmentResponse,
 )
+from src.services import chat_uploads
 from src.services._mappers import chat_to_response, msg_to_response
-from src.utils.sse import SSEEvent, chat_event_bus
+from src.services.cache_invalidation import (
+    invalidate_admin_chat_caches_sync,
+    invalidate_admin_stats_sync,
+    invalidate_chat_related_async,
+    invalidate_chat_related_sync,
+    invalidate_specialist_lists_sync,
+)
+from src.services.chat_uploads import (
+    sanitise_filename,
+    upload_chat_file,
+    validate_upload_extension,
+)
+from src.services.rag_client import build_rag_headers
+from src.services.rag_context import (
+    FileContextBuildResult,
+    build_conversation_history_from_messages,
+    build_file_context,
+    build_file_context_result,
+    build_patient_context,
+    extract_text,
+    select_rag_citations,
+)
 from src.utils.cache import cache, cache_keys
+from src.utils.sse import SSEEvent, chat_event_bus
 
-
-RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag_service:8001")
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
-MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024  # 3 MB per file
-MAX_FILES_PER_CHAT = 5
-RAG_REQUEST_TIMEOUT_SECONDS = float(
-    os.getenv("RAG_REQUEST_TIMEOUT_SECONDS", "120"))
+RAG_SERVICE_URL = settings.RAG_SERVICE_URL
+RAG_REQUEST_TIMEOUT_SECONDS = settings.RAG_REQUEST_TIMEOUT_SECONDS
+CHAT_RAG_TOP_K = settings.CHAT_RAG_TOP_K
+UPLOAD_DIR = chat_uploads.UPLOAD_DIR
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_rag_response(rag_json: Any) -> dict:
+    """Validate that a RAG service response is a dict with an 'answer' string.
+
+    Returns the validated dict, or raises ValueError if the shape is wrong.
+    """
+    if not isinstance(rag_json, dict):
+        raise ValueError(f"Expected dict from RAG service, got {type(rag_json).__name__}")
+    answer = rag_json.get("answer")
+    if answer is not None and not isinstance(answer, str):
+        raise ValueError(f"Expected 'answer' to be a string, got {type(answer).__name__}")
+    return rag_json
+
+
+def _invalidate_specialist_caches(
+    *,
+    specialty: str | None = None,
+    specialist_id: int | None = None,
+) -> None:
+    invalidate_specialist_lists_sync(
+        specialty=specialty,
+        specialist_id=specialist_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +89,16 @@ logger = logging.getLogger(__name__)
 
 
 def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
+    """Create a new chat with optional patient context.
+
+    Args:
+        db: Database session.
+        user: The GP user creating the chat.
+        data: Chat creation payload including title, specialty, and patient info.
+
+    Returns:
+        The newly created chat as a ChatResponse.
+    """
     patient_context = {
         k: v
         for k, v in {
@@ -67,6 +123,8 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
     cache.delete_pattern_sync(
         cache_keys.chat_list_pattern(user.id), user_id=user.id, resource="chat_list"
     )
+    invalidate_admin_chat_caches_sync(chat.id)
+    invalidate_admin_stats_sync()
     return chat_to_response(chat)
 
 
@@ -87,12 +145,27 @@ def list_chats(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> list[ChatResponse]:
+    """List chats belonging to a user with optional filters and pagination.
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        skip: Number of records to skip for pagination.
+        limit: Maximum number of records to return.
+        status: Optional chat status filter.
+        specialty: Optional specialty filter.
+        search: Optional free-text search term.
+        date_from: Optional ISO-8601 start date filter.
+        date_to: Optional ISO-8601 end date filter.
+
+    Returns:
+        A list of ChatResponse objects matching the criteria.
+    """
     if status:
         try:
             ChatStatus(status)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid status: {status}")
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
     parsed_date_from = None
     parsed_date_to = None
@@ -100,7 +173,9 @@ def list_chats(
         try:
             parsed_date_from = datetime.fromisoformat(date_from)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid date_from: {date_from}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid date_from: {date_from}"
+            )
     if date_to:
         try:
             parsed_date_to = datetime.fromisoformat(date_to)
@@ -113,7 +188,8 @@ def list_chats(
     if should_cache:
         page = skip // limit if limit else 0
         cache_key = cache_keys.chat_list(
-            user.id, page, limit, status=status, specialty=specialty)
+            user.id, page, limit, status=status, specialty=specialty
+        )
         cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_list")
         if cached is not None:
             return [ChatResponse(**item) for item in cached]
@@ -147,11 +223,19 @@ def list_chats(
 
 
 def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
-    cache_key = cache_keys.chat_detail(user.id, chat_id)
-    cached = cache.get_sync(cache_key, user_id=user.id, resource="chat_detail")
-    if cached is not None:
-        return ChatWithMessages(**cached)
+    """Retrieve a single chat with all its messages and file attachments.
 
+    Args:
+        db: Database session.
+        user: The owning user.
+        chat_id: Primary key of the chat.
+
+    Returns:
+        The chat details including messages and files.
+
+    Raises:
+        HTTPException: If the chat is not found.
+    """
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -172,13 +256,6 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
         )
         for f in (chat.files or [])
     ]
-    cache.set_sync(
-        cache_key,
-        response.model_dump(),
-        ttl=settings.CACHE_CHAT_DETAIL_TTL,
-        user_id=user.id,
-        resource="chat_detail",
-    )
     return response
 
 
@@ -190,6 +267,20 @@ def get_chat(db: Session, user: User, chat_id: int) -> ChatWithMessages:
 def update_chat(
     db: Session, user: User, chat_id: int, payload: ChatUpdate
 ) -> ChatResponse:
+    """Update editable metadata on a chat (title, specialty, severity, status).
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        chat_id: Primary key of the chat.
+        payload: Fields to update.
+
+    Returns:
+        The updated ChatResponse.
+
+    Raises:
+        HTTPException: If the chat is not found or is no longer editable.
+    """
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -226,6 +317,7 @@ def update_chat(
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
+    invalidate_admin_chat_caches_sync(chat_id)
     return chat_to_response(chat)
 
 
@@ -235,9 +327,19 @@ def update_chat(
 
 
 def archive_chat(db: Session, user: User, chat_id: int) -> None:
+    """Archive a chat and remove associated file attachments from disk."""
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Clean up uploaded files from the filesystem before archiving
+    attachments = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).all()
+    for att in attachments:
+        if att.file_path and os.path.exists(att.file_path):
+            try:
+                os.remove(att.file_path)
+            except OSError:
+                logger.warning("Failed to remove file %s for chat %s", att.file_path, chat_id)
 
     chat_repository.archive(db, chat)
     audit_repository.log(
@@ -249,6 +351,7 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
     )
+    invalidate_admin_chat_caches_sync(chat_id)
 
 
 # ---------------------------------------------------------------------------
@@ -256,17 +359,23 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _extract_text(file_path: str, file_type: Optional[str]) -> str:
-    """Extract plain text from an uploaded file (PDF or plain text)."""
-    try:
-        if file_type and "pdf" in file_type.lower():
-            from pypdf import PdfReader  # lazy import — only used when PDF is uploaded
-            reader = PdfReader(file_path)
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        else:
-            return Path(file_path).read_text(errors="replace")
-    except Exception:
-        return ""
+_extract_text = extract_text
+_build_conversation_history_from_messages = build_conversation_history_from_messages
+_select_rag_citations = select_rag_citations
+_sanitise_filename = sanitise_filename
+_validate_upload_extension = validate_upload_extension
+
+
+def _build_patient_context(chat: Chat, messages: list[Message]) -> dict | None:
+    return build_patient_context(chat, messages)
+
+
+def _build_file_context(chat: Chat) -> str | None:
+    return build_file_context(chat, extract_text_fn=_extract_text)
+
+
+def _build_file_context_result(chat: Chat) -> FileContextBuildResult:
+    return build_file_context_result(chat, extract_text_fn=_extract_text)
 
 
 async def upload_file(
@@ -275,61 +384,19 @@ async def upload_file(
     chat_id: int,
     file: UploadFile,
 ) -> FileAttachmentResponse:
-    from src.core.chat_policy import can_upload_to_chat
+    """Upload a file attachment to an existing chat.
 
-    chat = chat_repository.get(db, chat_id)
-    if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+    Args:
+        db: Database session.
+        user: The uploading user.
+        chat_id: Target chat primary key.
+        file: The uploaded file from the request.
 
-    if not can_upload_to_chat(user, chat):
-        raise HTTPException(status_code=403, detail="Not authorised to upload to this chat")
-
-    dest_dir = UPLOAD_DIR / str(chat_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / (file.filename or "upload")
-
-    contents = await file.read()
-
-    if len(contents) > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File exceeds the 3 MB limit ({len(contents) // 1024} KB uploaded).",
-        )
-
-    existing_count = db.query(FileAttachment).filter(
-        FileAttachment.chat_id == chat_id).count()
-    if existing_count >= MAX_FILES_PER_CHAT:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Chat already has {existing_count} files. Maximum is {MAX_FILES_PER_CHAT}.",
-        )
-
-    dest_path.write_bytes(contents)
-
-    attachment = FileAttachment(
-        filename=file.filename or "upload",
-        file_path=str(dest_path),
-        file_type=file.content_type,
-        file_size=len(contents),
-        chat_id=chat_id,
-        uploader_id=user.id,
-    )
-    db.add(attachment)
-    db.commit()
-    db.refresh(attachment)
-
-    audit_repository.log(
-        db,
-        user_id=user.id,
-        action="UPLOAD_FILE",
-        details=f"Uploaded {file.filename} to chat {chat_id}",
-    )
-    await cache.delete_pattern(
-        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
-    )
-    await cache.delete_pattern(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
-    )
+    Returns:
+        Metadata about the persisted file attachment.
+    """
+    chat_uploads.UPLOAD_DIR = UPLOAD_DIR
+    attachment = await upload_chat_file(db, user, chat_id, file)
 
     return FileAttachmentResponse(
         id=attachment.id,
@@ -343,175 +410,47 @@ async def upload_file(
 # ---------------------------------------------------------------------------
 # Send message
 # ---------------------------------------------------------------------------
-
-
-def _generate_ai_response_task(chat_id: int, user_id: int, content: str) -> None:
-    db = SessionLocal()
-    try:
-        _generate_ai_response(db, chat_id, user_id, content)
-    finally:
-        db.close()
-
-
-def _generate_ai_response(db: Session, chat_id: int, user_id: int, content: str) -> None:
-    try:
-        chat = chat_repository.get(db, chat_id)
-        if not chat:
-            return
-
-        ctx = chat.patient_context or {}
-        patient_context = {
-            **ctx,
-            **({"specialty": chat.specialty} if chat.specialty else {}),
-            **({"severity": chat.severity} if chat.severity else {}),
-        } or None
-
-        file_texts = []
-        for attachment in (chat.files or []):
-            text = _extract_text(attachment.file_path, attachment.file_type)
-            if text.strip():
-                file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
-        FILE_CONTEXT_CHAR_LIMIT = 8_000
-        file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
-        if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
-            file_context = file_context[:FILE_CONTEXT_CHAR_LIMIT] + \
-                "\n\n[Document truncated to fit context window]"
-
-        rag_payload: dict = {
-            "query": content,
-            "top_k": 4,
-            "specialty": chat.specialty,
-            "severity": chat.severity,
-            "patient_context": patient_context,
-        }
-        if file_context:
-            rag_payload["file_context"] = file_context
-
-        rag_action = "RAG_ERROR"
-        rag_details = f"query_len={len(content)} error=unknown"
-        try:
-            rag_response = httpx.post(
-                f"{RAG_SERVICE_URL}/answer",
-                json=rag_payload,
-                timeout=RAG_REQUEST_TIMEOUT_SECONDS,
-            )
-            rag_response.raise_for_status()
-            rag_json = rag_response.json()
-            ai_content = rag_json.get("answer", "")
-            # Use only citations the model actually cited; empty list means no sources shown.
-            citations = rag_json.get("citations") or None
-            rag_action = "RAG_ANSWER"
-            rag_details = f"query_len={len(content)} top_k=4 chunks_used={len(citations) if citations else 0}"
-        except Exception as exc:  # pragma: no cover - network fallback
-            ai_content = (
-                "RAG service unavailable right now. Echoing your question while the "
-                f"service recovers: {content} (detail: {exc})"
-            )
-            citations = None
-            rag_details = f"query_len={len(content)} error={type(exc).__name__}"
-
-        audit_repository.log(db, user_id=user_id,
-                             action=rag_action, details=rag_details)
-
-        message_repository.create(
-            db,
-            chat_id=chat.id,
-            content=ai_content,
-            sender="ai",
-            citations=citations,
-        )
-        cache.delete_pattern_sync(
-            cache_keys.chat_detail_pattern(chat_id), user_id=user_id, resource="chat_detail"
-        )
-        cache.delete_pattern_sync(
-            cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
-        )
-
-        audit_repository.log(
-            db,
-            user_id=user_id,
-            action="AI_RESPONSE_GENERATED",
-            details=f"AI response generated for chat {chat_id}",
-        )
-    except Exception:
-        db.rollback()
-        raise
-
-
-def send_message(
-    db: Session,
-    user: User,
-    chat_id: int,
-    content: str,
-    background_tasks: BackgroundTasks,
-) -> dict:
-    chat = chat_repository.get(db, chat_id, user_id=user.id)
-    if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
-
-    # GP can only send messages before a specialist picks up the chat
-    if chat.status not in (ChatStatus.OPEN, ChatStatus.SUBMITTED):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot send messages in {chat.status.value} state",
-        )
-
-    message_repository.create(
-        db, chat_id=chat.id, content=content, sender="user")
-
-    if chat.status == ChatStatus.OPEN:
-        chat_repository.update(db, chat, status=ChatStatus.SUBMITTED)
-        audit_repository.log(
-            db,
-            user_id=user.id,
-            action="AUTO_SUBMIT_FOR_REVIEW",
-            details=f"Chat {chat_id} auto-submitted after first GP message",
-        )
-
-    cache.delete_pattern_sync(
-        cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
-    )
-    cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
-    )
-
-    if db.bind and db.bind.dialect.name == "sqlite":
-        _generate_ai_response(db, chat.id, user.id, content)
-    else:
-        background_tasks.add_task(
-            _generate_ai_response_task, chat.id, user.id, content)
-
-    return {
-        "status": "Message sent",
-        "ai_response": f"AI response is being generated for: {content}",
-        "ai_generating": True,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Async send message  (chat/RAG path — non-blocking)
 # ---------------------------------------------------------------------------
 
 
-async def _async_generate_ai_response(
-    chat_id: int, user_id: int, content: str
-) -> None:
+async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) -> None:
     """Generate an AI response using async HTTP + async DB.
+
+    Includes a concurrency guard: if another generation is already in
+    progress for this chat (``is_generating=True``), the call is skipped.
 
     Publishes SSE lifecycle events so connected clients receive real-time
     updates.  The flow:
-      1. Create a placeholder message with ``is_generating=True``.
-      2. Publish ``stream_start``.
-      3. Call the RAG service with streaming enabled.
-      4. Publish cumulative ``content`` events as tokens arrive.
-      5. Finalise the message (content, citations, ``is_generating=False``).
-      6. Publish ``complete`` with citations.
-      7. Close the chat's event bus so SSE clients disconnect cleanly.
+      1. Check for an existing in-progress generation; bail out if found.
+      2. Create a placeholder message with ``is_generating=True``.
+      3. Publish ``stream_start``.
+      4. Call the RAG service with streaming enabled.
+      5. Publish cumulative ``content`` events as tokens arrive.
+      6. Finalise the message (content, citations, ``is_generating=False``).
+      7. Publish ``complete`` with citations.
+      8. Close the chat's event bus so SSE clients disconnect cleanly.
     """
     async with AsyncSessionLocal() as db:
         try:
-            chat = await chat_repository.async_get(db, chat_id)
+            chat = await chat_repository.async_get_for_update(db, chat_id)
             if not chat:
+                return
+
+            # Concurrency guard: skip if another generation is already running
+            existing = (
+                await db.execute(
+                    select(Message).where(
+                        Message.chat_id == chat_id,
+                        Message.is_generating == True,  # noqa: E712
+                    )
+                )
+            )
+            if existing.scalars().first() is not None:
+                logger.info(
+                    "Skipping AI generation for chat %s – already generating", chat_id
+                )
                 return
 
             # 1. Placeholder message
@@ -532,30 +471,19 @@ async def _async_generate_ai_response(
                 ),
             )
 
-            ctx = chat.patient_context or {}
-            patient_context = {
-                **ctx,
-                **({"specialty": chat.specialty} if chat.specialty else {}),
-                **({"severity": chat.severity} if chat.severity else {}),
-            } or None
-
-            file_texts = []
-            for attachment in (chat.files or []):
-                text = _extract_text(attachment.file_path, attachment.file_type)
-                if text.strip():
-                    file_texts.append(f"[{attachment.filename}]\n{text.strip()}")
-
-            FILE_CONTEXT_CHAR_LIMIT = 8_000
-            file_context = "\n\n---\n\n".join(file_texts) if file_texts else None
-            if file_context and len(file_context) > FILE_CONTEXT_CHAR_LIMIT:
-                file_context = (
-                    file_context[:FILE_CONTEXT_CHAR_LIMIT]
-                    + "\n\n[Document truncated to fit context window]"
-                )
+            message_rows = await db.execute(
+                select(Message)
+                .where(Message.chat_id == chat.id)
+                .order_by(Message.created_at.asc())
+            )
+            messages = list(message_rows.scalars())
+            patient_context = _build_patient_context(chat, messages)
+            file_context_result = _build_file_context_result(chat)
+            file_context = file_context_result.file_context
 
             rag_payload: dict = {
                 "query": content,
-                "top_k": 4,
+                "top_k": CHAT_RAG_TOP_K,
                 "stream": True,
                 "specialty": chat.specialty,
                 "severity": chat.severity,
@@ -563,46 +491,60 @@ async def _async_generate_ai_response(
             }
             if file_context:
                 rag_payload["file_context"] = file_context
+            rag_payload["file_context_truncated"] = file_context_result.was_truncated
 
             rag_action = "RAG_ERROR"
             rag_details = f"query_len={len(content)} error=unknown"
             ai_content = ""
             citations = None
+            rag_failed = False
             try:
-                # Tests run on SQLite and rely on patched non-stream calls to inspect
-                # payloads; prefer a non-stream request there. Production keeps NDJSON.
-                if db.bind and db.bind.dialect.name == "sqlite":
+                if settings.INLINE_AI_TASKS:
                     try:
+                        rag_headers = build_rag_headers()
+                        request_kwargs_inline: dict[str, Any] = {}
+                        if rag_headers:
+                            request_kwargs_inline["headers"] = rag_headers
                         rag_response = httpx.post(
                             f"{RAG_SERVICE_URL}/answer",
                             json=rag_payload,
                             timeout=RAG_REQUEST_TIMEOUT_SECONDS,
+                            **request_kwargs_inline,
                         )
                         rag_response.raise_for_status()
-                        rag_json = rag_response.json()
+                        rag_json = _validate_rag_response(rag_response.json())
                     except Exception:
                         # Compatibility for tests that patch AsyncClient.post.
-                        async with httpx.AsyncClient(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
+                        async with httpx.AsyncClient(
+                            timeout=RAG_REQUEST_TIMEOUT_SECONDS
+                        ) as client:
+                            rag_headers = build_rag_headers()
+                            request_kwargs_fallback: dict[str, Any] = {}
+                            if rag_headers:
+                                request_kwargs_fallback["headers"] = rag_headers
                             rag_response = await client.post(
                                 f"{RAG_SERVICE_URL}/answer",
                                 json=rag_payload,
+                                **request_kwargs_fallback,
                             )
                             rag_response.raise_for_status()
-                            rag_json = rag_response.json()
+                            rag_json = _validate_rag_response(rag_response.json())
 
                     ai_content = rag_json.get("answer", "")
-                    citations = (
-                        rag_json.get("citations_used")
-                        or rag_json.get("citations")
-                        or rag_json.get("citations_retrieved")
-                        or None
-                    )
+                    citations = _select_rag_citations(rag_json)
                 else:
-                    async with httpx.AsyncClient(timeout=RAG_REQUEST_TIMEOUT_SECONDS) as client:
+                    async with httpx.AsyncClient(
+                        timeout=RAG_REQUEST_TIMEOUT_SECONDS
+                    ) as client:
+                        rag_headers = build_rag_headers()
+                        request_kwargs_stream: dict[str, Any] = {}
+                        if rag_headers:
+                            request_kwargs_stream["headers"] = rag_headers
                         async with client.stream(
                             "POST",
                             f"{RAG_SERVICE_URL}/answer",
                             json=rag_payload,
+                            **request_kwargs_stream,
                         ) as rag_response:
                             rag_response.raise_for_status()
                             async for line in rag_response.aiter_lines():
@@ -615,39 +557,31 @@ async def _async_generate_ai_response(
 
                                 if chunk.get("type") == "chunk":
                                     ai_content += chunk.get("delta", "")
-                                    await chat_event_bus.publish(
-                                        chat_id,
-                                        SSEEvent(
-                                            event="content",
-                                            data={
-                                                "chat_id": chat_id,
-                                                "message_id": placeholder.id,
-                                                "content": ai_content,
-                                            },
-                                        ),
-                                    )
+                                    # Do not emit raw token drafts to the GP UI.
+                                    # The RAG service performs citation and scope
+                                    # cleanup at stream completion, so intermediate
+                                    # drafts can visibly rewrite later.
                                 elif chunk.get("type") == "done":
                                     ai_content = chunk.get("answer", ai_content)
-                                    citations = (
-                                        chunk.get("citations_used")
-                                        or chunk.get("citations")
-                                        or chunk.get("citations_retrieved")
-                                        or None
-                                    )
+                                    citations = _select_rag_citations(chunk)
                                 elif chunk.get("type") == "error":
-                                    raise RuntimeError(chunk.get("error", "RAG streaming error"))
+                                    raise RuntimeError(
+                                        chunk.get("error", "RAG streaming error")
+                                    )
 
                 rag_action = "RAG_ANSWER"
                 rag_details = (
-                    f"query_len={len(content)} top_k=4 "
+                    f"query_len={len(content)} top_k={CHAT_RAG_TOP_K} "
                     f"chunks_used={len(citations) if citations else 0}"
                 )
             except Exception as exc:
+                logger.warning("RAG request failed for chat %s: %s", chat_id, exc)
                 ai_content = (
-                    "RAG service unavailable right now. Echoing your question while the "
-                    f"service recovers: {content} (detail: {exc})"
+                    "The clinical knowledge service is temporarily unavailable. "
+                    "Please try again shortly or contact support if the issue persists."
                 )
                 citations = None
+                rag_failed = True
                 rag_details = f"query_len={len(content)} error={type(exc).__name__}"
 
             await audit_repository.async_log(
@@ -675,6 +609,7 @@ async def _async_generate_ai_response(
                 content=ai_content,
                 citations=citations,
                 is_generating=False,
+                is_error=rag_failed,
             )
 
             await audit_repository.async_log(
@@ -682,6 +617,13 @@ async def _async_generate_ai_response(
                 user_id=user_id,
                 action="AI_RESPONSE_GENERATED",
                 details=f"AI response generated for chat {chat_id}",
+            )
+
+            await invalidate_chat_related_async(
+                chat_id=chat_id,
+                user_id=chat.user_id,
+                specialty=chat.specialty,
+                specialist_id=chat.specialist_id,
             )
 
             # 6. complete event
@@ -694,14 +636,13 @@ async def _async_generate_ai_response(
                         "message_id": placeholder.id,
                         "content": ai_content,
                         "citations": citations,
+                        "file_context_truncated": file_context_result.was_truncated,
                     },
                 ),
             )
         except Exception:
             await db.rollback()
-            logger.exception(
-                "Async AI generation failed for chat %s", chat_id
-            )
+            logger.exception("Async AI generation failed for chat %s", chat_id)
             # Notify any waiting SSE subscribers about the failure
             await chat_event_bus.publish(
                 chat_id,
@@ -719,13 +660,54 @@ async def _async_generate_ai_response(
             await chat_event_bus.close_chat(chat_id)
 
 
+class _GenerationTaskLike(Protocol):
+    def cancelled(self) -> bool: ...
+
+    def exception(self) -> BaseException | None: ...
+
+    def get_name(self) -> str: ...
+
+
+def _on_generation_task_done(task: _GenerationTaskLike) -> None:
+    """Log unhandled exceptions from background AI generation tasks."""
+    if task.cancelled():
+        logger.info("AI generation task %s was cancelled", task.get_name())
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(
+            "AI generation task %s failed: %s",
+            task.get_name(),
+            exc,
+            exc_info=exc,
+        )
+
+
 async def async_send_message(
     db: AsyncSession,
     user: User,
     chat_id: int,
     content: str,
 ) -> dict:
-    chat = await chat_repository.async_get(db, chat_id, user_id=user.id)
+    """Send a user message and trigger asynchronous AI response generation.
+
+    Args:
+        db: Async database session.
+        user: The GP user sending the message.
+        chat_id: Target chat primary key.
+        content: The message text.
+
+    Returns:
+        A dict indicating the message was sent and AI generation has started.
+
+    Raises:
+        HTTPException: If the chat is not found or not in a messageable state.
+    """
+    if hasattr(db, "execute"):
+        chat = await chat_repository.async_get_for_update(db, chat_id, user_id=user.id)
+    else:
+        # Test doubles may provide only minimal DB shape.
+        chat = await chat_repository.async_get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
@@ -748,14 +730,23 @@ async def async_send_message(
             details=f"Chat {chat_id} auto-submitted after first GP message",
         )
 
-    # Fire-and-forget async task for AI generation.
+    # Async task for AI generation.
     # Under SQLite (tests) run inline so assertions can see the result.
-    if db.bind.dialect.name == "sqlite":
+    if settings.INLINE_AI_TASKS:
         await _async_generate_ai_response(chat.id, user.id, content)
     else:
-        asyncio.create_task(
-            _async_generate_ai_response(chat.id, user.id, content)
+        task = asyncio.create_task(
+            _async_generate_ai_response(chat.id, user.id, content),
+            name=f"ai-gen-chat-{chat.id}",
         )
+        task.add_done_callback(_on_generation_task_done)
+
+    await invalidate_chat_related_async(
+        chat_id=chat_id,
+        user_id=chat.user_id,
+        specialty=chat.specialty,
+        specialist_id=chat.specialist_id,
+    )
 
     return {
         "status": "Message sent",
@@ -770,6 +761,19 @@ async def async_send_message(
 
 
 def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
+    """Transition an OPEN chat to SUBMITTED status for specialist review.
+
+    Args:
+        db: Database session.
+        user: The owning user.
+        chat_id: Primary key of the chat.
+
+    Returns:
+        The updated ChatResponse.
+
+    Raises:
+        HTTPException: If the chat is not found or not in OPEN status.
+    """
     chat = chat_repository.get(db, chat_id, user_id=user.id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -792,5 +796,11 @@ def submit_for_review(db: Session, user: User, chat_id: int) -> ChatResponse:
     )
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), user_id=user.id, resource="chat_detail"
+    )
+    invalidate_chat_related_sync(
+        chat_id=chat_id,
+        user_id=chat.user_id,
+        specialty=chat.specialty,
+        specialist_id=chat.specialist_id,
     )
     return chat_to_response(chat)

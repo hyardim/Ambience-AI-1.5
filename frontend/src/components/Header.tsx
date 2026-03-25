@@ -18,7 +18,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
   const isAdminActive = location.pathname.startsWith('/admin');
 
   const handleLogout = () => {
-    if (onLogout) onLogout();
+    onLogout?.();
     navigate('/login');
   };
 
@@ -26,7 +26,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
     userRole === 'gp' ? 'For GPs' : userRole === 'specialist' ? 'For Specialists' : 'Admin';
 
   return (
-    <header className="bg-[#005eb8] shadow-lg sticky top-0 z-40">
+    <header className="bg-[var(--nhs-blue)] shadow-lg sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -41,7 +41,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
               <Link
                 to={`${basePath}/queries`}
                 className={`text-white font-medium hover:text-white/80 transition-colors px-3 py-2 rounded ${
-                  isQueriesActive ? 'bg-[#003087]' : ''
+                  isQueriesActive ? 'bg-[var(--nhs-dark-blue)]' : ''
                 }`}
               >
                 Queries
@@ -52,7 +52,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
               <Link
                 to="/admin/users"
                 className={`text-white font-medium hover:text-white/80 transition-colors px-3 py-2 rounded ${
-                  isAdminActive ? 'bg-[#003087]' : ''
+                  isAdminActive ? 'bg-[var(--nhs-dark-blue)]' : ''
                 }`}
               >
                 <span className="inline-flex items-center gap-1.5">
@@ -71,7 +71,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
                 title="My Profile"
               >
                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
-                  <User className="w-6 h-6 text-[#005eb8]" />
+                  <User className="w-6 h-6 text-[var(--nhs-blue)]" />
                 </div>
                 {userName && (
                   <span className="hidden md:block text-sm font-medium">{userName}</span>

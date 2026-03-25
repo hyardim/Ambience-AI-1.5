@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, UserX, Save, X } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { StatusBadge } from '../../components/Badges';
 import { adminGetUsers, adminUpdateUser, adminDeactivateUser } from '../../services/api';
 import type { UserProfile } from '../../types/api';
 import type { UserUpdateAdmin } from '../../types/api';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { coalesce } from '../../utils/value';
 
 export function AdminUsersPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -17,23 +19,32 @@ export function AdminUsersPage() {
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
   const [editForm, setEditForm] = useState<UserUpdateAdmin>({});
   const [saving, setSaving] = useState(false);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [roleFilter]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      const data = await adminGetUsers(roleFilter || undefined);
+      const data = await adminGetUsers(roleFilter || undefined, { signal: controller.signal });
       setUsers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load users');
+      ifNotAbortError(err, () => {
+        setError(getErrorMessage(err, 'Failed to load users'));
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [roleFilter]);
+
+  useEffect(() => {
+    void fetchUsers();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
+  }, [fetchUsers]);
 
   const handleDeactivate = async (userId: number) => {
     if (!confirm('Deactivate this user? They will no longer be able to log in.')) return;
@@ -41,7 +52,7 @@ export function AdminUsersPage() {
       const updated = await adminDeactivateUser(userId);
       setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to deactivate user');
+      setError(getErrorMessage(err, 'Failed to deactivate user'));
     }
   };
 
@@ -55,15 +66,14 @@ export function AdminUsersPage() {
     });
   };
 
-  const handleSave = async () => {
-    if (!editUser) return;
+  const handleSave = async (userId: number) => {
     setSaving(true);
     try {
-      const updated = await adminUpdateUser(editUser.id, editForm);
-      setUsers(prev => prev.map(u => (u.id === editUser.id ? updated : u)));
+      const updated = await adminUpdateUser(userId, editForm);
+      setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
       setEditUser(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update user');
+      setError(getErrorMessage(err, 'Failed to update user'));
     } finally {
       setSaving(false);
     }
@@ -94,13 +104,13 @@ export function AdminUsersPage() {
                 placeholder="Search by identifier or specialty..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <select
               value={roleFilter}
               onChange={e => setRoleFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white cursor-pointer"
+              className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white cursor-pointer"
             >
               <option value="">All Roles</option>
               <option value="gp">GP</option>
@@ -121,11 +131,13 @@ export function AdminUsersPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 
         {/* User Table */}
+        {/* Intentionally no delete action — users are deactivated (not deleted)
+            to preserve audit trail and data integrity */}
         {!loading && (
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <table className="w-full">
@@ -163,7 +175,7 @@ export function AdminUsersPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(user)}
-                          className="px-3 py-1.5 text-xs font-medium text-[#005eb8] border border-[#005eb8] rounded-lg hover:bg-[#005eb8] hover:text-white transition-colors"
+                          className="px-3 py-1.5 text-xs font-medium text-[var(--nhs-blue)] border border-[var(--nhs-blue)] rounded-lg hover:bg-[var(--nhs-blue)] hover:text-white transition-colors"
                         >
                           Edit
                         </button>
@@ -211,15 +223,15 @@ export function AdminUsersPage() {
                   type="text"
                   value={editForm.full_name || ''}
                   onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
-                  value={editForm.role || ''}
+                  value={coalesce(editForm.role, '')}
                   onChange={e => setEditForm({ ...editForm, role: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="gp">GP</option>
                   <option value="specialist">Specialist</option>
@@ -232,7 +244,7 @@ export function AdminUsersPage() {
                   type="text"
                   value={editForm.specialty || ''}
                   onChange={e => setEditForm({ ...editForm, specialty: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="e.g. neurology, rheumatology"
                 />
               </div>
@@ -240,9 +252,9 @@ export function AdminUsersPage() {
                 <input
                   type="checkbox"
                   id="is_active"
-                  checked={editForm.is_active ?? true}
+                  checked={coalesce(editForm.is_active, true)}
                   onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })}
-                  className="w-4 h-4 text-[#005eb8] rounded border-gray-300"
+                  className="w-4 h-4 text-[var(--nhs-blue)] rounded border-gray-300"
                 />
                 <label htmlFor="is_active" className="text-sm text-gray-700">Active</label>
               </div>
@@ -256,9 +268,9 @@ export function AdminUsersPage() {
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave(editUser.id)}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#005eb8] text-white rounded-lg font-medium hover:bg-[#003087] disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--nhs-blue)] text-white rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
                 {saving ? 'Saving…' : 'Save Changes'}

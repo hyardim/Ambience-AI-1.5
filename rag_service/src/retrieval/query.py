@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import math
+import re
 import time
+from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer
 
+from ..config import embed_config
+from ..ingestion.embed import load_embedder
 from ..utils.logger import setup_logger
+from ..utils.tokenizer import count_tokens
 
 logger = setup_logger(__name__)
 
@@ -14,12 +17,12 @@ logger = setup_logger(__name__)
 # Constants
 # -----------------------------------------------------------------------
 
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_DIMENSIONS = 384
-MAX_TOKENS = 512
+EMBEDDING_MODEL_NAME = f"sentence-transformers/{embed_config.embedding_model}"
+EMBEDDING_DIMENSIONS = embed_config.embedding_dimension
 
 # Simple rule-based expansion dictionary for medical terminology
 EXPANSION_DICT: dict[str, list[str]] = {
+    "aspirin": ["acetylsalicylic acid", "asa"],
     "gout": ["urate", "hyperuricemia", "uric acid"],
     "ra": ["rheumatoid arthritis"],
     "oa": ["osteoarthritis"],
@@ -30,22 +33,133 @@ EXPANSION_DICT: dict[str, list[str]] = {
     "dmard": ["disease modifying antirheumatic drug"],
     "nsaid": ["non-steroidal anti-inflammatory", "anti-inflammatory"],
     "methotrexate": ["mtx", "disease modifying antirheumatic drug"],
+    "neutropenia": ["low neutrophils", "drug toxicity", "bone marrow suppression"],
+    "gca": ["giant cell arteritis", "temporal arteritis"],
+    "pmr": ["polymyalgia rheumatica"],
+    "proteinuria": ["renal involvement", "kidney disease", "nephritis"],
+    "creatinine": ["renal impairment", "kidney dysfunction"],
+    "tnf": ["tumor necrosis factor"],
+    "csf": ["cerebrospinal fluid"],
+    "mri": ["magnetic resonance imaging"],
+    "ct": ["computed tomography"],
+    "tremor": ["essential tremor", "parkinsonian tremor"],
+    "edss": ["expanded disability status scale"],
+    "rrms": ["relapsing remitting multiple sclerosis"],
+    "spms": ["secondary progressive multiple sclerosis"],
+    "ppms": ["primary progressive multiple sclerosis"],
+    "cis": ["clinically isolated syndrome"],
+    "dmt": ["disease modifying therapy"],
 }
 
-# -----------------------------------------------------------------------
-# Model — loaded once at module level
-# -----------------------------------------------------------------------
+RED_FLAG_PATTERNS: tuple[tuple[tuple[str, ...], list[str]], ...] = (
+    (
+        (
+            r"\b(methotrexate|mtx)\b",
+            r"\b(fever|pyrexia)\b",
+            r"\b(sore throat|pharyngitis|neutropenia|low neutrophils)\b",
+        ),
+        [
+            "DMARD toxicity",
+            "drug-induced neutropenia",
+            "urgent blood count review",
+            "csDMARD monitoring",
+        ],
+    ),
+    (
+        (
+            r"\b(sle|systemic lupus erythematosus|lupus)\b",
+            r"\b(proteinuria|albuminuria)\b",
+            r"\b(creatinine|renal impairment|kidney dysfunction)\b",
+        ),
+        [
+            "lupus nephritis",
+            "renal involvement",
+            "nephrology referral",
+            "urgent specialist assessment",
+        ],
+    ),
+    (
+        (
+            r"\b(joint swelling|synovitis|swollen joints)\b",
+            r"\b(knees?|wrists?)\b",
+            r"\b(referral|referred|specialist)\b",
+        ),
+        [
+            "early inflammatory arthritis",
+            "baseline blood tests",
+            "plain radiographs",
+            "rheumatology triage",
+        ],
+    ),
+    (
+        (
+            r"\bback pain\b",
+            (
+                r"\b(urinary retention|urinary incontinence|bladder dysfunction|"
+                r"bowel dysfunction)\b"
+            ),
+            (
+                r"\b(bilateral leg weakness|leg weakness|progressive "
+                r"neurological deficit|saddle anaesthesia)\b"
+            ),
+        ),
+        [
+            "cauda equina syndrome",
+            "progressive neurological deficit",
+            "spinal emergency",
+            "sciatica",
+        ],
+    ),
+    (
+        (
+            r"\b(gait disturbance|gait apraxia|walking difficulty)\b",
+            r"\b(urinary incontinence|urinary urgency)\b",
+            r"\b(ventriculomegaly|hydrocephalus)\b",
+        ),
+        [
+            "normal pressure hydrocephalus",
+            "NPH",
+            "gait apraxia",
+        ],
+    ),
+    (
+        (
+            r"\b(transient visual disturbance|visual disturbance)\b",
+            r"\bheadache\b",
+            r"\b(transient|lasting)\b",
+        ),
+        [
+            "migraine aura",
+            "TIA",
+            "transient ischaemic attack",
+        ],
+    ),
+)
+_COMPARISON_QUERY_RE = re.compile(
+    r"\b(distinguish\w*|differentiat\w*|compare|comparison|vs|versus)\b",
+    re.IGNORECASE,
+)
+_MIGRAINE_TIA_COMPARISON_RE = re.compile(
+    r"\b(migraine aura|migraine)\b.*\b(tia|transient ischaemic attack)\b|"
+    r"\b(tia|transient ischaemic attack)\b.*\b(migraine aura|migraine)\b",
+    re.IGNORECASE,
+)
 
-_MODEL: SentenceTransformer | None = None
+
+def _load_model() -> object:
+    """Load and return the shared embedding model."""
+    logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
+    return load_embedder(model_name=EMBEDDING_MODEL_NAME)
 
 
-def _load_model() -> SentenceTransformer:
-    """Load and return the embedding model. Cached after first call."""
-    global _MODEL
-    if _MODEL is None:
-        logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
-        _MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    return _MODEL
+class _EmbeddingModel(Protocol):
+    def encode(
+        self,
+        texts: list[str],
+        *,
+        normalize_embeddings: bool,
+        show_progress_bar: bool,
+    ) -> object: ...
 
 
 # -----------------------------------------------------------------------
@@ -143,12 +257,11 @@ def process_query(
 
 def _validate_token_length(query: str) -> None:
     """Raise ValueError if query exceeds MAX_TOKENS tokens."""
-    word_count = len(query.split())
-    estimated_tokens = math.ceil(word_count * 1.3)
-    if estimated_tokens > MAX_TOKENS:
+    max_tokens = embed_config.query_max_tokens
+    token_count = count_tokens(query)
+    if token_count > max_tokens:
         raise ValueError(
-            f"Query exceeds {MAX_TOKENS} token limit "
-            f"(estimated {estimated_tokens} tokens)"
+            f"Query exceeds {max_tokens} token limit ({token_count} tokens)"
         )
 
 
@@ -173,19 +286,73 @@ def _expand_query(query: str) -> str:
                     added.add(synonym_lower)
 
     if not additions:
-        return query
+        query_with_red_flags = _expand_red_flag_patterns(query, query_lower)
+        return query_with_red_flags
 
+    expanded = query + " " + " ".join(additions)
+    return _expand_red_flag_patterns(expanded, expanded.lower())
+
+
+def _expand_red_flag_patterns(query: str, query_lower: str) -> str:
+    if _is_migraine_tia_comparison_query(query_lower):
+        comparison_additions = _balanced_migraine_tia_comparison_terms(query_lower)
+        if not comparison_additions:
+            return query
+        return query + " " + " ".join(comparison_additions)
+
+    additions: list[str] = []
+    for patterns, synonyms in RED_FLAG_PATTERNS:
+        if all(re.search(pattern, query_lower) for pattern in patterns):
+            for synonym in synonyms:
+                synonym_lower = synonym.lower()
+                if synonym_lower not in query_lower and synonym_lower not in additions:
+                    additions.append(synonym)
+    if not additions:
+        return query
     return query + " " + " ".join(additions)
 
 
-def _embed(model: SentenceTransformer, text: str) -> list[float]:
+def _is_migraine_tia_comparison_query(query_lower: str) -> bool:
+    return bool(
+        _COMPARISON_QUERY_RE.search(query_lower)
+        and _MIGRAINE_TIA_COMPARISON_RE.search(query_lower)
+    )
+
+
+def _balanced_migraine_tia_comparison_terms(query_lower: str) -> list[str]:
+    additions: list[str] = []
+    for synonym in (
+        "migraine aura",
+        "transient ischaemic attack",
+        "positive visual symptoms",
+        "gradual spread",
+        "fully reversible",
+        "5 to 60 minutes",
+        "sudden negative symptoms",
+    ):
+        synonym_lower = synonym.lower()
+        if synonym_lower not in query_lower and synonym_lower not in additions:
+            additions.append(synonym)
+    return additions
+
+
+def expand_query_text(query: str) -> str:
+    """Return the rule-based expanded query text without embedding it."""
+    return _expand_query(query)
+
+
+def _embed(model: object, text: str) -> list[float]:
     """Embed text and return normalised float vector.
 
     Normalisation required for cosine similarity to work correctly
     with pgvector's <=> operator.
     """
-    vector = model.encode([text], normalize_embeddings=True, show_progress_bar=False)
-    return vector[0].tolist()
+    encoder = cast(_EmbeddingModel, model)
+    vector = cast(
+        Any,
+        encoder.encode([text], normalize_embeddings=True, show_progress_bar=False),
+    )
+    return cast(list[float], vector[0].tolist())
 
 
 # -----------------------------------------------------------------------

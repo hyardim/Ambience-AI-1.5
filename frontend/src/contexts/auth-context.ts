@@ -1,0 +1,25 @@
+import { createContext } from 'react';
+import type { RegisterRequest } from '../types/api';
+import type { UserRole } from '../types';
+
+interface AuthState {
+  token: string | null;
+  username: string | null;
+  email: string | null;
+  role: UserRole | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+export interface AuthContextValue extends AuthState {
+  login: (username: string, password: string) => Promise<UserRole>;
+  register: (payload: RegisterRequest) => Promise<{
+    role: UserRole | null;
+    requiresEmailVerification: boolean;
+    message: string;
+  }>;
+  logout: () => void;
+  setUserProfile: (user: { full_name: string | null; email: string; role: UserRole }) => void;
+}
+
+export const AuthContext = createContext<AuthContextValue | null>(null);

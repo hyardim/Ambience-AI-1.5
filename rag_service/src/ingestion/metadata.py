@@ -2,43 +2,265 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import fitz  # PyMuPDF
+import yaml
 
+from ..config import path_config
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-VALID_SPECIALTIES = {"neurology", "rheumatology", "general"}
-VALID_SOURCE_NAMES = {"NICE", "BSR", "Others", "NICE_NEURO", "BNF_RHEUMATOLOGY", "OTHER_RHEUMATOLOGY", "OTHER"}
-VALID_DOC_TYPES = {"guideline", "protocol", "policy", "standard", "formulary", "document"}
+VALID_DOC_TYPES = {
+    "guideline",
+    "protocol",
+    "policy",
+    "standard",
+    "formulary",
+    "document",
+}
 TITLE_FONT_SIZE_THRESHOLD = 18
 
 
-def _derive_source_url(source_info: dict[str, Any]) -> str:
-    """Return a per-document source URL when we can infer it from the filename.
+def _derive_source_url(
+    source_info: dict[str, Any],
+    *,
+    pdf_metadata: dict[str, Any] | None = None,
+    resolved_title: str | None = None,
+) -> str:
+    """Return the best public source URL available for a document.
 
-    For NICE PDFs named like NG128.pdf, generate https://www.nice.org.uk/guidance/ng128.
-    Otherwise fall back to the provided source_url if present.
+    Resolution order:
+    1. If the provided ``source_url`` already has a meaningful path (not just
+       the domain root), keep it as the caller-specified canonical citation URL.
+    2. Try to extract a NICE guideline code from the filename or document title
+       and construct ``https://www.nice.org.uk/guidance/{code}``.
+    3. Fall back to the provided ``source_url`` (may be empty).
+
+    Supported NICE guideline code prefixes: NG, CG, QS, TA, PH, MPG, IPG, DG,
+    HST, MTG, ES, ECD, SC (case-insensitive).
     """
-
     provided = source_info.get("source_url", "") or ""
+
+    # If the URL already has a meaningful path, keep it.
+    if provided:
+        path = urlparse(provided).path.strip("/")
+        if path:
+            return provided
+
     source_path = Path(source_info.get("source_path", ""))
     stem = source_path.stem.lower()
 
-    if "nice.org.uk" in provided and stem.startswith("ng") and stem[2:].isdigit():
-        return f"https://www.nice.org.uk/guidance/{stem}"
+    # Match well-known NICE guideline code prefixes in the filename stem.
+    nice_prefixes = (
+        "ng",
+        "cg",
+        "qs",
+        "ta",
+        "ph",
+        "mpg",
+        "ipg",
+        "dg",
+        "hst",
+        "mtg",
+        "es",
+        "ecd",
+        "sc",
+    )
+    guide_code = _extract_nice_code(stem, nice_prefixes)
+
+    # Also attempt extraction from the raw filename when the stem contains
+    # extra suffixes (e.g. ``ng128-abc1234abcd.pdf``).
+    if guide_code is None:
+        guide_code = _extract_nice_code(
+            source_path.name.lower().split("-")[0],
+            nice_prefixes,
+        )
+
+    title_candidates = [
+        str(pdf_metadata.get("title", "")).strip() if pdf_metadata else "",
+        (resolved_title or "").strip(),
+    ]
+    if guide_code is None:
+        for candidate in title_candidates:
+            if not candidate:
+                continue
+            guide_code = _extract_nice_code(candidate.lower(), nice_prefixes)
+            if guide_code is not None:
+                break
+
+    if guide_code is not None:
+        return f"https://www.nice.org.uk/guidance/{guide_code}"
 
     return provided
+
+
+def _extract_nice_code(text: str, prefixes: tuple[str, ...]) -> str | None:
+    """Extract a NICE guideline code (e.g. 'ng128') from *text*.
+
+    Returns the lowercased code if *text* starts with a known prefix followed
+    by digits, otherwise ``None``.
+    """
+    import re
+
+    for prefix in prefixes:
+        match = re.search(rf"\b({re.escape(prefix)}\d+)\b", text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _resolve_document_dates(
+    source_info: dict[str, Any],
+    pdf_metadata: dict[str, Any],
+    table_aware_doc: dict[str, Any] | None = None,
+) -> tuple[str, str, str]:
+    """Return creation, publish, and last-updated dates for a document.
+
+    ``publish_date`` and ``last_updated_date`` prefer explicit source metadata
+    when present. If the source metadata is absent, PDF metadata is used first,
+    then document front-matter date extraction as a best-effort fallback so
+    citations do not silently lose all document dates.
+    """
+
+    creation_date = str(pdf_metadata.get("creationDate", "") or "")
+    mod_date = str(pdf_metadata.get("modDate", "") or "")
+    extracted_dates = _extract_document_dates_from_text(table_aware_doc)
+    publish_date = str(
+        source_info.get("publish_date", "")
+        or creation_date
+        or extracted_dates.get("publish_date", "")
+    )
+    last_updated_date = str(
+        source_info.get("last_updated_date", "")
+        or mod_date
+        or extracted_dates.get("last_updated_date", "")
+        or publish_date
+    )
+    return creation_date, publish_date, last_updated_date
+
+
+def _extract_document_dates_from_text(
+    table_aware_doc: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Best-effort extract publication/update dates from front-matter text.
+
+    Many NICE PDFs print reliable dates on the first page even when the embedded
+    PDF metadata is blank. We inspect the first few pages/blocks and look for
+    source-agnostic labels such as ``Published`` or ``Last updated``.
+    """
+    if not table_aware_doc:
+        return {}
+
+    front_matter = _build_front_matter_text(table_aware_doc)
+    if not front_matter:
+        return {}
+
+    published = _extract_labeled_date(
+        front_matter,
+        (
+            "published",
+            "date published",
+            "publication date",
+            "issue date",
+        ),
+    )
+    last_updated = _extract_labeled_date(
+        front_matter,
+        (
+            "last updated",
+            "updated",
+            "date updated",
+            "reviewed",
+            "review date",
+        ),
+    )
+    return {
+        "publish_date": published or "",
+        "last_updated_date": last_updated or "",
+    }
+
+
+def _build_front_matter_text(
+    table_aware_doc: dict[str, Any],
+    *,
+    max_pages: int = 3,
+) -> str:
+    """Collect normalized text from the first few document pages."""
+    pages = table_aware_doc.get("pages", []) or []
+    parts: list[str] = []
+    for page in pages[:max_pages]:
+        for block in page.get("blocks", []) or []:
+            text = str(block.get("text", "") or "").strip()
+            if text:
+                parts.append(text)
+    return "\n".join(parts)
+
+
+def _extract_labeled_date(text: str, labels: tuple[str, ...]) -> str | None:
+    """Extract and normalize the first human-readable date after known labels."""
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    match = re.search(
+        rf"(?im)\b(?:{label_pattern})\b\s*[:\-]\s*([0-9]{{1,2}}\s+[A-Za-z]+\s+[0-9]{{4}})",
+        text,
+    )
+    if not match:
+        return None
+    return _parse_human_date(match.group(1))
+
+
+def _parse_human_date(value: str) -> str | None:
+    """Parse dates like '15 January 2019' into ISO format."""
+    from datetime import datetime
+
+    cleaned = " ".join(value.replace("\u2011", "-").replace("\u2013", "-").split())
+    for fmt in ("%d %B %Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(cleaned, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 class MetadataValidationError(Exception):
     """Raised when metadata validation fails."""
 
     pass
+
+
+@lru_cache(maxsize=1)
+def _load_allowed_sources() -> tuple[set[str], set[str]]:
+    sources_path = path_config.root / "configs" / "sources.yaml"
+    try:
+        with sources_path.open("r", encoding="utf-8") as handle:
+            raw = yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        logger.warning(
+            "sources.yaml missing at %s; using inferred-only validation",
+            sources_path,
+        )
+        return set(), {"general"}
+
+    if not isinstance(raw, dict):
+        logger.warning(
+            "sources.yaml has invalid structure; using inferred-only validation"
+        )
+        return set(), {"general"}
+
+    source_names = {str(key) for key in raw}
+    specialties = {"general"}
+    for value in raw.values():
+        if isinstance(value, dict):
+            specialty = value.get("specialty")
+            if isinstance(specialty, str) and specialty.strip():
+                specialties.add(specialty.strip())
+    return source_names, specialties
 
 
 def attach_metadata(
@@ -78,7 +300,7 @@ def attach_metadata(
 
     inferred = infer_from_path(source_path)
 
-    # Fill missing specialty/source_name from path; if both exist but differ, keep caller input
+    # Fill missing specialty/source_name from the path; otherwise keep caller input.
     if not source_info.get("specialty") and inferred.get("specialty"):
         source_info["specialty"] = inferred["specialty"]
     elif (
@@ -123,8 +345,17 @@ def attach_metadata(
     title = extract_title(table_aware_doc, pdf_metadata, source_info)
 
     # Step 7: create doc_meta
+    creation_date, publish_date, last_updated_date = _resolve_document_dates(
+        source_info,
+        pdf_metadata,
+        table_aware_doc,
+    )
     # Derive a more specific source_url when possible (e.g., NICE NG### PDFs).
-    inferred_url = _derive_source_url(source_info)
+    inferred_url = _derive_source_url(
+        source_info,
+        pdf_metadata=pdf_metadata,
+        resolved_title=title,
+    )
 
     doc_meta: dict[str, Any] = {
         "doc_id": doc_id,
@@ -136,9 +367,9 @@ def attach_metadata(
         "specialty": source_info["specialty"],
         "author_org": source_info.get("author_org", ""),
         "source_url": inferred_url,
-        "creation_date": pdf_metadata.get("creationDate", ""),
-        "publish_date": source_info.get("publish_date", ""),
-        "last_updated_date": source_info.get("last_updated_date", ""),
+        "creation_date": creation_date,
+        "publish_date": publish_date,
+        "last_updated_date": last_updated_date,
         "ingestion_date": date.today().isoformat(),
     }
 
@@ -226,16 +457,18 @@ def validate_source_info(source_info: dict[str, Any]) -> None:
                 f"source_info missing required field: {field}"
             )
 
-    if source_info["specialty"] not in VALID_SPECIALTIES:
+    valid_source_names, valid_specialties = _load_allowed_sources()
+
+    if source_info["specialty"] not in valid_specialties:
         raise MetadataValidationError(
             f"Invalid specialty '{source_info['specialty']}'. "
-            f"Must be one of: {VALID_SPECIALTIES}"
+            f"Must be one of: {valid_specialties}"
         )
 
-    if source_info["source_name"] not in VALID_SOURCE_NAMES:
+    if valid_source_names and source_info["source_name"] not in valid_source_names:
         raise MetadataValidationError(
             f"Invalid source_name '{source_info['source_name']}'. "
-            f"Must be one of: {VALID_SOURCE_NAMES}"
+            f"Must be one of: {valid_source_names}"
         )
 
     if source_info["doc_type"] not in VALID_DOC_TYPES:

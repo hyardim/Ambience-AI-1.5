@@ -7,8 +7,11 @@ import numpy as np
 import psycopg2
 import psycopg2.extras
 from pgvector.psycopg2 import register_vector
+from psycopg2.extensions import connection as PsycopgConnection
 from pydantic import BaseModel
 
+from ..config import db_config
+from ..utils.db import db
 from ..utils.logger import setup_logger
 from .query import EMBEDDING_DIMENSIONS, RetrievalError
 
@@ -35,29 +38,33 @@ class VectorSearchResult(BaseModel):
 
 def vector_search(
     query_embedding: list[float],
-    db_url: str,
+    db_url: str | None = None,
     top_k: int = 20,
     specialty: str | None = None,
     source_name: str | None = None,
     doc_type: str | None = None,
 ) -> list[VectorSearchResult]:
-    """
-    Retrieve top-k most similar chunks via pgvector cosine similarity.
+    """Retrieve top-k most similar chunks via pgvector cosine similarity.
+
+    Uses the shared :class:`DatabaseManager` connection pool by default.  An
+    explicit *db_url* can still be passed (e.g. in tests) in which case a
+    one-off connection is created instead.
 
     Args:
-        query_embedding: Normalised query vector
-        db_url: Postgres connection string
-        top_k: Maximum number of results to return
-        specialty: Optional metadata filter
-        source_name: Optional metadata filter
-        doc_type: Optional metadata filter
+        query_embedding: Normalised query vector.
+        db_url: Optional Postgres connection string.  When ``None`` the global
+            ``DatabaseManager`` pool is used.
+        top_k: Maximum number of results to return.
+        specialty: Optional metadata filter.
+        source_name: Optional metadata filter.
+        doc_type: Optional metadata filter.
 
     Returns:
-        List of VectorSearchResult ordered by similarity descending
+        List of VectorSearchResult ordered by similarity descending.
 
     Raises:
         RetrievalError: On DB connection failure, missing pgvector extension,
-                        invalid embedding dimensions, or invalid top_k
+                        invalid embedding dimensions, or invalid top_k.
     """
     if len(query_embedding) != EMBEDDING_DIMENSIONS:
         raise RetrievalError(
@@ -88,21 +95,30 @@ def vector_search(
 
     logger.debug(f"Running vector search, top_k={top_k}, filters={filters}")
 
+    use_pool = db_url is None or db_url == db_config.database_url
     try:
-        conn = psycopg2.connect(db_url)
-    except Exception as e:
-        raise RetrievalError(
-            stage="VECTOR_SEARCH",
-            query="",
-            message=f"DB connection failed: {e}",
-        ) from e
-
-    try:
-        register_vector(conn)
-        psycopg2.extras.register_default_jsonb(conn)
-        results = _run_query(
-            conn, query_embedding, top_k, specialty, source_name, doc_type
-        )
+        if use_pool:
+            with db.raw_connection() as conn:
+                register_vector(conn)
+                psycopg2.extras.register_default_jsonb(conn)
+                results = _run_query(
+                    conn, query_embedding, top_k, specialty, source_name, doc_type
+                )
+        else:
+            direct_conn: PsycopgConnection = psycopg2.connect(db_url)
+            try:
+                register_vector(direct_conn)
+                psycopg2.extras.register_default_jsonb(direct_conn)
+                results = _run_query(
+                    direct_conn,
+                    query_embedding,
+                    top_k,
+                    specialty,
+                    source_name,
+                    doc_type,
+                )
+            finally:
+                direct_conn.close()
     except RetrievalError:
         raise
     except Exception as e:
@@ -111,8 +127,6 @@ def vector_search(
             query="",
             message=f"Vector search failed: {e}",
         ) from e
-    finally:
-        conn.close()
 
     return results
 
@@ -146,6 +160,18 @@ def _run_query(
             metadata->>'content_type'                      AS content_type,
             metadata->>'section_title'                     AS section_title,
             metadata->>'title'                             AS title,
+            COALESCE(
+                metadata->>'creation_date',
+                metadata->'citation'->>'creation_date'
+            )                                             AS creation_date,
+            COALESCE(
+                metadata->>'publish_date',
+                metadata->'citation'->>'publish_date'
+            )                                             AS publish_date,
+            COALESCE(
+                metadata->>'last_updated_date',
+                metadata->'citation'->>'last_updated_date'
+            )                                             AS last_updated_date,
             (COALESCE(metadata->>'page_start', '0'))::int  AS page_start,
             (COALESCE(metadata->>'page_end', '0'))::int    AS page_end,
             metadata->'section_path'                       AS section_path
@@ -198,9 +224,12 @@ def _run_query(
                     "content_type": row[8],
                     "section_title": row[9],
                     "title": row[10],
-                    "page_start": row[11] if row[11] is not None else 0,
-                    "page_end": row[12] if row[12] is not None else 0,
-                    "section_path": row[13],
+                    "creation_date": row[11],
+                    "publish_date": row[12],
+                    "last_updated_date": row[13],
+                    "page_start": row[14] if row[14] is not None else 0,
+                    "page_end": row[15] if row[15] is not None else 0,
+                    "section_path": row[16],
                 },
             )
         )

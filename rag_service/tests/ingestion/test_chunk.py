@@ -8,6 +8,7 @@ import pytest
 import src.ingestion.chunk as chunk_module
 from src.ingestion.chunk import (
     MAX_CHUNK_TOKENS,
+    _resolve_chunk_settings,
     build_citation,
     chunk_document,
     chunk_section_group,
@@ -19,6 +20,7 @@ from src.ingestion.chunk import (
     merge_short_sections,
     split_into_sentences,
 )
+from src.utils import tokenizer as tokenizer_module
 
 # -----------------------------------------------------------------------
 # Helpers
@@ -63,6 +65,7 @@ def make_doc_meta(
     specialty: str = "rheumatology",
     author_org: str = "NICE",
     creation_date: str = "2020-01-01",
+    publish_date: str = "2021-06-30",
     last_updated_date: str = "2024-01-15",
     source_url: str = "https://nice.org.uk",
     ingestion_date: str = "2024-06-01",
@@ -75,6 +78,7 @@ def make_doc_meta(
         "specialty": specialty,
         "author_org": author_org,
         "creation_date": creation_date,
+        "publish_date": publish_date,
         "last_updated_date": last_updated_date,
         "source_url": source_url,
         "ingestion_date": ingestion_date,
@@ -123,6 +127,24 @@ class TestCountTokens:
         text = "The patient was prescribed methotrexate."
         assert count_tokens(text) == count_tokens(text)
 
+    def test_falls_back_when_shared_tokenizer_encoder_unavailable(self) -> None:
+        tokenizer_module._load_encoder.cache_clear()
+        with patch(
+            "src.utils.tokenizer.tiktoken.get_encoding",
+            side_effect=RuntimeError,
+        ):
+            assert count_tokens("hello world") == 2
+        tokenizer_module._load_encoder.cache_clear()
+
+    def test_uses_loaded_shared_tokenizer_encoder_when_available(self) -> None:
+        class FakeEncoder:
+            def encode(self, text: str) -> list[int]:
+                assert text == "hello world"
+                return [1, 2, 3]
+
+        with patch("src.utils.tokenizer._load_encoder", return_value=FakeEncoder()):
+            assert count_tokens("hello world") == 3
+
 
 # -----------------------------------------------------------------------
 # split_into_sentences
@@ -153,9 +175,11 @@ class TestSplitIntoSentences:
 
     def test_raises_runtime_error_if_nltk_data_missing(self) -> None:
         chunk_module._NLTK_INITIALISED = False
-        with patch("nltk.data.find", side_effect=LookupError):
-            with pytest.raises(RuntimeError, match="punkt"):
-                chunk_module._ensure_nltk_data()
+        with (
+            patch("nltk.data.find", side_effect=LookupError),
+            pytest.raises(RuntimeError, match="punkt"),
+        ):
+            chunk_module._ensure_nltk_data()
 
         chunk_module._NLTK_INITIALISED = True
 
@@ -233,6 +257,7 @@ class TestBuildCitation:
             "title",
             "author_org",
             "creation_date",
+            "publish_date",
             "last_updated_date",
             "section_path",
             "section_title",
@@ -255,6 +280,29 @@ class TestBuildCitation:
             make_doc_meta(ingestion_date="2024-06-01"),
         )
         assert citation["access_date"] == "2024-06-01"
+
+    def test_publish_date_carried_through(self) -> None:
+        citation = build_citation(
+            {"section_path": [], "section_title": "", "page_range": "1"},
+            make_doc_meta(publish_date="2021-06-30"),
+        )
+        assert citation["publish_date"] == "2021-06-30"
+
+
+class TestResolveChunkSettings:
+    def test_uses_explicit_overlap_tokens_when_provided(self) -> None:
+        settings = _resolve_chunk_settings(
+            {"target_chunk_size": 512, "overlap_tokens": 64}
+        )
+        assert settings["max_chunk_tokens"] == 512
+        assert settings["overlap_tokens"] == 64
+
+    def test_derives_overlap_tokens_from_percentage(self) -> None:
+        settings = _resolve_chunk_settings(
+            {"target_chunk_size": 500, "overlap_percentage": 0.2}
+        )
+        assert settings["max_chunk_tokens"] == 500
+        assert settings["overlap_tokens"] == 100
 
 
 # -----------------------------------------------------------------------
@@ -429,6 +477,120 @@ class TestChunkSectionGroup:
             [make_block(text="Some text.", block_uid="abc123")], make_doc_meta(), 0, []
         )
         assert "abc123" in chunks[0]["block_uids"]
+
+    def test_internal_overlap_preserves_block_uids_from_overlap_sentences(self) -> None:
+        blocks = [
+            make_block(
+                text=" ".join([f"Sentence {i}." for i in range(1, 40)]),
+                block_uid="block-a",
+            ),
+            make_block(
+                text=" ".join([f"Sentence {i}." for i in range(40, 80)]),
+                block_uid="block-b",
+            ),
+        ]
+        chunks, _ = chunk_section_group(
+            blocks,
+            make_doc_meta(),
+            0,
+            [],
+            max_chunk_tokens=60,
+            overlap_tokens=20,
+        )
+
+        assert len(chunks) > 1
+        assert any("block-a" in chunk["block_uids"] for chunk in chunks[:2])
+
+    def test_oversized_sentence_after_overlap_does_not_loop_forever(self) -> None:
+        blocks = [
+            make_block(text="Lead sentence. Follow up sentence.", block_uid="block-a"),
+            make_block(text="Oversized sentence placeholder.", block_uid="block-b"),
+        ]
+
+        with (
+            patch(
+                "src.ingestion.chunk.split_into_sentences",
+                side_effect=[
+                    ["Lead sentence.", "Follow up sentence."],
+                    ["Oversized sentence placeholder."],
+                ],
+            ),
+            patch(
+                "src.ingestion.chunk.count_tokens",
+                side_effect=lambda text: (
+                    900
+                    if text == "Oversized sentence placeholder."
+                    else 5
+                    if text in {"Lead sentence.", "Follow up sentence."}
+                    else 10
+                    if text == "Lead sentence. Follow up sentence."
+                    else 910
+                    if text
+                    == (
+                        "Lead sentence. Follow up sentence. "
+                        "Oversized sentence placeholder."
+                    )
+                    else 905
+                    if text == "Follow up sentence. Oversized sentence placeholder."
+                    else 1
+                ),
+            ),
+        ):
+            chunks, _ = chunk_section_group(
+                blocks,
+                make_doc_meta(),
+                0,
+                [],
+                max_chunk_tokens=100,
+                overlap_tokens=10,
+            )
+
+        assert len(chunks) == 2
+        assert chunks[0]["text"] == "Lead sentence. Follow up sentence."
+        assert chunks[1]["text"] == "Oversized sentence placeholder."
+        assert chunks[1]["token_count"] == 900
+        assert chunks[1]["block_uids"] == ["block-b"]
+
+    def test_overlap_that_would_preserve_whole_chunk_is_dropped(self) -> None:
+        blocks = [
+            make_block(text="First. Second.", block_uid="block-a"),
+            make_block(text="Third.", block_uid="block-b"),
+        ]
+
+        with (
+            patch(
+                "src.ingestion.chunk.split_into_sentences",
+                side_effect=[
+                    ["First.", "Second."],
+                    ["Third."],
+                ],
+            ),
+            patch(
+                "src.ingestion.chunk.count_tokens",
+                side_effect=lambda text: (
+                    20
+                    if text in {"First.", "Second."}
+                    else 5
+                    if text == "Third."
+                    else 40
+                    if text == "First. Second."
+                    else 45
+                    if text == "First. Second. Third."
+                    else 1
+                ),
+            ),
+        ):
+            chunks, _ = chunk_section_group(
+                blocks,
+                make_doc_meta(),
+                0,
+                [],
+                max_chunk_tokens=40,
+                overlap_tokens=100,
+            )
+
+        assert [chunk["text"] for chunk in chunks] == ["First. Second.", "Third."]
+        assert chunks[1]["block_uids"] == ["block-b"]
 
     def test_page_start_page_end_set(self) -> None:
         blocks = [

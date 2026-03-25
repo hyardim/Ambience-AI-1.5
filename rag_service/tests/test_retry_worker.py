@@ -3,6 +3,7 @@
 Verifies that the Worker is constructed correctly after removing the
 deprecated `rq.Connection` context manager (removed in rq >= 1.16).
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -13,16 +14,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-_SCRIPT_PATH = Path(__file__).parent.parent / "scripts" / "run_retry_worker.py"
+_SCRIPT_PATH = (
+    Path(__file__).parent.parent / "scripts" / "workers" / "run_retry_worker.py"
+)
 
 
 @pytest.fixture(autouse=True)
-def _restore_stubbed_modules_after_test():
+def _restore_stubbed_modules_after_test() -> None:
     module_names = [
         "redis",
         "rq",
         "src.config",
-        "src.retry_queue",
+        "src.jobs.retry",
         "run_retry_worker",
     ]
     originals = {name: sys.modules.get(name) for name in module_names}
@@ -36,7 +39,9 @@ def _restore_stubbed_modules_after_test():
                 sys.modules[name] = original
 
 
-def _load_worker_module(fake_redis_cls: MagicMock, fake_worker_cls: MagicMock) -> ModuleType:
+def _load_worker_module(
+    fake_redis_cls: MagicMock, fake_worker_cls: MagicMock
+) -> ModuleType:
     """Load run_retry_worker with redis and rq stubbed out."""
     # Stub redis package
     redis_mod = ModuleType("redis")
@@ -49,20 +54,19 @@ def _load_worker_module(fake_redis_cls: MagicMock, fake_worker_cls: MagicMock) -
     rq_mod.Worker = fake_worker_cls  # type: ignore[attr-defined]
     sys.modules["rq"] = rq_mod
 
-    # Stub src.config and src.retry_queue
+    # Stub src.config and src.jobs.retry
     cfg_mod = ModuleType("src.config")
-    # type: ignore[attr-defined]
-    cfg_mod.REDIS_URL = "redis://localhost:6379/0"
+    cfg_mod.retry_config = ModuleType("retry_config")  # type: ignore[attr-defined]
+    cfg_mod.retry_config.redis_url = "redis://localhost:6379/0"  # type: ignore[attr-defined]
     sys.modules["src.config"] = cfg_mod
 
-    rq_src = ModuleType("src.retry_queue")
+    rq_src = ModuleType("src.jobs.retry")
     rq_src.QUEUE_NAME = "rag_retry"  # type: ignore[attr-defined]
-    sys.modules["src.retry_queue"] = rq_src
+    sys.modules["src.jobs.retry"] = rq_src
 
     # Force re-load
     sys.modules.pop("run_retry_worker", None)
-    spec = importlib.util.spec_from_file_location(
-        "run_retry_worker", _SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location("run_retry_worker", _SCRIPT_PATH)
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
@@ -120,3 +124,26 @@ def test_rq_connection_not_imported():
     assert "Connection" not in source_code, (
         "Deprecated rq.Connection must not be used — it was removed in rq >= 1.16"
     )
+
+
+def test_worker_registers_signal_handlers(monkeypatch):
+    """Worker registers SIGTERM/SIGINT handlers that trigger request_stop()."""
+    fake_redis_cls = MagicMock()
+    fake_redis_cls.from_url.return_value = MagicMock()
+    fake_worker_instance = MagicMock()
+    fake_worker_cls = MagicMock(return_value=fake_worker_instance)
+
+    mod = _load_worker_module(fake_redis_cls, fake_worker_cls)
+
+    captured: list[object] = []
+
+    def fake_signal(_sig, handler):
+        captured.append(handler)
+
+    monkeypatch.setattr(mod.signal, "signal", fake_signal)
+    mod.main()
+
+    assert len(captured) == 2
+    for handler in captured:
+        handler(0, None)
+    assert fake_worker_instance.request_stop.call_count == 2

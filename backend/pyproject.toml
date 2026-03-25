@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ambience-backend"
+version = "1.5.0"
+description = "Backend API for Ambience-AI-1.5"
+requires-python = ">=3.11"
+dependencies = [
+  "alembic",
+  "aiosqlite",
+  "asyncpg",
+  "bcrypt==4.0.1",
+  "email-validator",
+  "fastapi",
+  "httpx",
+  "passlib",
+  "psycopg2-binary",
+  "pydantic",
+  "pydantic-settings",
+  "pypdf",
+  "pyjwt",
+  "python-dotenv",
+  "python-multipart",
+  "redis>=5.0.0",
+  "requests",
+  "sqlalchemy",
+  "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+  "aiosqlite",
+  "greenlet",
+  "httpx",
+  "mypy",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+filterwarnings = [
+  "ignore:'crypt' is deprecated and slated for removal in Python 3.13:DeprecationWarning:passlib.utils",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"backend/tests/conftest.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = true
+pretty = true
+exclude = ["tests"]

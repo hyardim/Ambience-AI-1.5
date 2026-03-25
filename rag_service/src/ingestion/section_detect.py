@@ -312,10 +312,7 @@ def is_bold_heading(block: dict[str, Any]) -> bool:
 
     # Skip if all-caps — already caught by Rule B
     alpha_chars = [c for c in text if c.isalpha()]
-    if alpha_chars and all(c.isupper() for c in alpha_chars):
-        return False
-
-    return True
+    return not (alpha_chars and all(c.isupper() for c in alpha_chars))
 
 
 def is_fontsize_heading(

@@ -1,13 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Clock, Loader2, RefreshCw } from 'lucide-react';
+import { Search, Filter, Clock, RefreshCw } from 'lucide-react';
 import { Header } from '../../components/Header';
+import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { getSpecialistQueue, getAssignedChats } from '../../services/api';
 import type { BackendChat } from '../../types/api';
+import { ifNotAbortError } from '../../utils/errors';
+import { filterSpecialistChats, formatSpecialtyLabel } from '../../utils/specialistQueries';
+import { orFallback } from '../../utils/value';
 
 type TabKey = 'queue' | 'assigned';
+type SortKey = 'created_at' | 'assigned_at' | 'title' | 'specialty' | 'status' | 'severity';
+type SortDirection = 'asc' | 'desc';
 
 export function SpecialistQueriesPage() {
   const navigate = useNavigate();
@@ -21,23 +27,34 @@ export function SpecialistQueriesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    fetchAll();
+    void fetchAll();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, []);
 
   const fetchAll = async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
       const [queue, assigned] = await Promise.all([
-        getSpecialistQueue(),
-        getAssignedChats(),
+        getSpecialistQueue({ signal: controller.signal }),
+        getAssignedChats({ signal: controller.signal }),
       ]);
       setQueueChats(queue);
       setAssignedChatsState(assigned);
-    } catch {
-      setError('Failed to load chats. Is the backend running?');
+    } catch (error) {
+      ifNotAbortError(error, () => {
+        setError('Failed to load chats. Is the backend running?');
+      });
     } finally {
       setLoading(false);
     }
@@ -45,24 +62,26 @@ export function SpecialistQueriesPage() {
 
   const currentList = tab === 'queue' ? queueChats : assignedChats;
 
-  const filteredChats = currentList.filter(chat => {
-    const matchesSearch =
-      (chat.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (chat.specialty || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || chat.status === statusFilter;
-    const matchesSeverity = severityFilter === 'all' || chat.severity === severityFilter;
-    return matchesSearch && matchesStatus && matchesSeverity;
+  const filteredChats = [...filterSpecialistChats(currentList, searchTerm, statusFilter, severityFilter)].sort((a, b) => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    if (sortKey === 'created_at' || sortKey === 'assigned_at') {
+      const aTime = a[sortKey] ? new Date(a[sortKey] as string).getTime() : 0;
+      const bTime = b[sortKey] ? new Date(b[sortKey] as string).getTime() : 0;
+      return (aTime - bTime) * direction;
+    }
+    const aValue = (a[sortKey] ?? '').toString().toLowerCase();
+    const bValue = (b[sortKey] ?? '').toString().toLowerCase();
+    return aValue.localeCompare(bValue) * direction;
   });
 
   const pendingCount = queueChats.length + assignedChats.filter(c => ['assigned', 'reviewing'].includes(c.status)).length;
 
-  const formatSpecialty = (s: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—');
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+      <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
@@ -94,7 +113,7 @@ export function SpecialistQueriesPage() {
             onClick={() => setTab('queue')}
             className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
               tab === 'queue'
-                ? 'bg-[#005eb8] text-white'
+                ? 'bg-[var(--nhs-blue)] text-white'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
@@ -104,7 +123,7 @@ export function SpecialistQueriesPage() {
             onClick={() => setTab('assigned')}
             className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
               tab === 'assigned'
-                ? 'bg-[#005eb8] text-white'
+                ? 'bg-[var(--nhs-blue)] text-white'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
@@ -122,16 +141,16 @@ export function SpecialistQueriesPage() {
                 placeholder="Search by title or specialty..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <div className="relative">
                 <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent appearance-none bg-white cursor-pointer"
+                  className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
                 >
                   <option value="all">All Status</option>
                   <option value="submitted">Submitted</option>
@@ -144,13 +163,35 @@ export function SpecialistQueriesPage() {
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent appearance-none bg-white cursor-pointer"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
               >
                 <option value="all">All Severity</option>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
+              </select>
+              <select
+                aria-label="Sort by"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
+              >
+                <option value="created_at">Created date</option>
+                <option value="assigned_at">Assigned date</option>
+                <option value="title">Title</option>
+                <option value="specialty">Specialty</option>
+                <option value="status">Status</option>
+                <option value="severity">Severity</option>
+              </select>
+              <select
+                aria-label="Sort direction"
+                value={sortDirection}
+                onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent appearance-none bg-white cursor-pointer"
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
               </select>
             </div>
           </div>
@@ -166,8 +207,8 @@ export function SpecialistQueriesPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <LoadingSkeleton lines={5} />
           </div>
         )}
 
@@ -179,15 +220,15 @@ export function SpecialistQueriesPage() {
                 <div
                   key={chat.id}
                   onClick={() => navigate(`/specialist/query/${chat.id}`)}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#005eb8] cursor-pointer transition-all"
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[var(--nhs-blue)] cursor-pointer transition-all"
                 >
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">
                       {chat.title || 'Untitled Consultation'}
                     </h3>
-                    {chat.specialty && (
+                        {chat.specialty && (
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium shrink-0">
-                        {formatSpecialty(chat.specialty)}
+                        {formatSpecialtyLabel(chat.specialty)}
                       </span>
                     )}
                   </div>

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
-import { adminGetStats } from '../../services/api';
-import type { AdminStatsResponse } from '../../types/api';
+import { adminGetLogs, adminGetStats } from '../../services/api';
+import type { AdminStatsResponse, AuditLogResponse } from '../../types/api';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { coalesce } from '../../utils/value';
 
 const STATUS_COLOURS: Record<string, string> = {
   open:       '#94a3b8',
@@ -19,7 +21,14 @@ const STATUS_COLOURS: Record<string, string> = {
   flagged:    '#f97316',
 };
 
-const SPECIALTY_COLOURS = ['#005eb8', '#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#e0f2fe'];
+const SPECIALTY_COLOURS = [
+  'var(--nhs-blue)',
+  'var(--nhs-dark-blue)',
+  'var(--nhs-bright-blue)',
+  'var(--nhs-light-blue)',
+  'var(--nhs-aqua-blue)',
+  'var(--nhs-pale-grey)',
+];
 
 function StatCard({ label, value, sub, icon: Icon, colour }: {
   label: string; value: string | number; sub?: string;
@@ -41,22 +50,51 @@ function StatCard({ label, value, sub, icon: Icon, colour }: {
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
+  const [ragLogs, setRagLogs] = useState<AuditLogResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestControllerRef = useRef<AbortController | null>(null);
 
+  /**
+   * Fetches dashboard stats and RAG logs independently using Promise.allSettled
+   * so that a failure in one request does not prevent the other from rendering.
+   */
   const fetchStats = async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      setStats(await adminGetStats());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load stats');
+      const [statsResult, ragLogResult] = await Promise.allSettled([
+        adminGetStats({ signal: controller.signal }),
+        adminGetLogs({ category: 'RAG', limit: 8 }, { signal: controller.signal }),
+      ]);
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value);
+      } else {
+        ifNotAbortError(statsResult.reason, () => {
+          setError(getErrorMessage(statsResult.reason, 'Failed to load stats'));
+        });
+      }
+      if (ragLogResult.status === 'fulfilled') {
+        setRagLogs(ragLogResult.value);
+      } else {
+        ifNotAbortError(ragLogResult.reason, () => {
+          setError(prev => prev ? prev : getErrorMessage(ragLogResult.reason, 'Failed to load RAG logs'));
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => {
+    void fetchStats();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
+  }, []);
 
   const ragPct = stats
     ? stats.total_ai_responses > 0
@@ -77,6 +115,15 @@ export default function AdminDashboardPage() {
   const specialtyData = stats
     ? Object.entries(stats.chats_by_specialty).map(([name, value]) => ({ name, value }))
     : [];
+
+  const formatTimestamp = (iso: string) =>
+    new Date(iso).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+
+  const activeUsersSummary = stats
+    ? `${coalesce(stats.active_users_by_role['gp'], 0)} GPs · ${coalesce(stats.active_users_by_role['specialist'], 0)} specialists`
+    : undefined;
 
   return (
     <AdminLayout>
@@ -102,7 +149,7 @@ export default function AdminDashboardPage() {
 
         {loading && !stats ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         ) : stats && (
           <>
@@ -112,7 +159,7 @@ export default function AdminDashboardPage() {
                 label="Total AI Responses"
                 value={stats.total_ai_responses}
                 icon={MessageSquare}
-                colour="bg-[#005eb8]"
+                colour="bg-[var(--nhs-blue)]"
               />
               <StatCard
                 label="RAG-Grounded"
@@ -130,7 +177,7 @@ export default function AdminDashboardPage() {
               <StatCard
                 label="Active Users"
                 value={activeUsers}
-                sub={`${stats.active_users_by_role['gp'] ?? 0} GPs · ${stats.active_users_by_role['specialist'] ?? 0} specialists`}
+                sub={activeUsersSummary}
                 icon={Users}
                 colour="bg-amber-500"
               />
@@ -187,34 +234,54 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Daily AI queries area chart */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-sm font-medium text-gray-700 mb-4">AI Queries — Last 30 Days</h2>
-              {stats.daily_ai_queries.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-12">No query data in the last 30 days</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="aiGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#005eb8" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#005eb8" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip labelFormatter={(d) => `Date: ${d}`} />
-                    <Area
-                      type="monotone"
-                      dataKey="count"
-                      stroke="#005eb8"
-                      strokeWidth={2}
-                      fill="url(#aiGradient)"
-                      name="AI Queries"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h2 className="text-sm font-medium text-gray-700 mb-4">AI Queries — Last 30 Days</h2>
+                {stats.daily_ai_queries.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-12">No query data in the last 30 days</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip labelFormatter={(d) => `Date: ${d}`} />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke="var(--nhs-blue)"
+                        strokeWidth={2}
+                        fill="rgba(0, 94, 184, 0.16)"
+                        name="AI Queries"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-medium text-gray-700">Recent RAG Logs</h2>
+                  <span className="text-xs text-gray-400">Last 8 events</span>
+                </div>
+                {ragLogs.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-12">No recent RAG activity</p>
+                ) : (
+                  <div className="space-y-3">
+                    {ragLogs.map((log) => (
+                      <div key={log.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
+                            {log.action}
+                          </span>
+                          <span className="text-xs text-gray-400">{formatTimestamp(log.timestamp)}</span>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600 break-words">{log.details || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

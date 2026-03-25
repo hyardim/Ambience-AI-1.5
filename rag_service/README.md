@@ -1,295 +1,203 @@
-# RAG Service — Ambience AI 1.5
+# RAG Service
 
-A production-ready Retrieval-Augmented Generation (RAG) service for medical guidelines. Ingests PDFs from sources like NICE and BSR, chunks and embeds them, stores vectors in pgvector, and serves semantically relevant context for AI-generated clinical responses with proper citations.
+Clinical retrieval-augmented generation service for Ambience AI 1.5. It ingests
+medical documents, stores chunk embeddings in pgvector, retrieves relevant
+guideline passages, and generates grounded answers with citations.
 
----
+## Current structure
 
-## Architecture
-
-```
+```text
 src/
-├── ingestion/      # PDF extraction, chunking, embedding, storage
-├── retrieval/      # Vector similarity search, context ranking
-├── generation/     # LLM integration, response generation, citations
-└── utils/          # Shared database and logging utilities
+├── api/             # FastAPI app, routes, schemas, streaming, citation shaping
+├── config/          # Structured settings package and shared config objects
+├── generation/      # Prompt building, provider routing, local/cloud LLM clients
+├── ingestion/       # Extract, clean, chunk, embed, and store documents
+├── jobs/            # Retry queue logic
+├── orchestration/   # Retrieve-then-generate pipeline helpers
+├── retrieval/       # Vector, keyword, fusion, rerank, and citation assembly
+├── utils/           # Shared DB and logging utilities
+└── main.py          # Thin compatibility entrypoint / public re-export
 ```
 
-The pipeline flows in one direction:
+## Prerequisites
 
-```
-PDF → Extract → Clean → Chunk → Embed → Store → Retrieve → Generate
-```
+- Python 3.10+
+- Docker with the Compose plugin (`docker compose`)
+- A running local Ollama instance if you want the default local model path
 
----
-
-## Tech Stack
-
-| Component       | Technology                          |
-|-----------------|-------------------------------------|
-| Vector Database | PostgreSQL + pgvector (HNSW index)  |
-| Embeddings      | sentence-transformers (MiniLM-L6)   |
-| ORM             | SQLAlchemy                          |
-| Raw DB queries  | psycopg2 (vector search)            |
-| Config          | pydantic-settings                   |
-| PDF Extraction  | PyMuPDF                             |
-| Chunking        | langchain-text-splitters            |
-
----
-
-## Getting Started
-
-### Prerequisites
-- Python 3.10+ (3.12 recommended on macOS to avoid PyMuPDF build issues)
-- Docker + Docker Compose
-
-### Setup
+## Local setup
 
 ```bash
-# 1. Clone the repo and navigate to rag_service
 cd rag_service
-
-# 2. Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# 3. Install dependencies
+python -m venv .venv
+source .venv/bin/activate
 make install-dev
-
-# 4. Set up environment and directories
 make setup
-# Edit .env with your configuration
+```
 
-# 5. Start the database
+`make setup` creates the local directories, copies `.env.example` to `.env` if
+needed, and verifies the NLTK tokenizer data used by ingestion.
+
+## Environment
+
+The service reads settings from `.env` via the `src/config/` package.
+
+Important groups in [`.env.example`](.env.example):
+
+- Database: `POSTGRES_*`, optional `DATABASE_URL`
+- Embeddings: `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`
+- Chunking: `CHUNK_SIZE`, `CHUNK_OVERLAP`
+- Logging: `LOG_LEVEL`, `LOG_FILE`
+- Local model: `OLLAMA_*`, `LOCAL_LLM_*`
+- Docker local model override: `DOCKER_OLLAMA_BASE_URL`
+- Cloud model: `RUNPOD_*`, `LLM_*`, `CLOUD_LLM_*`
+- Routing: `LLM_ROUTE_THRESHOLD`, `ROUTE_REVISIONS_TO_CLOUD`, `FORCE_CLOUD_LLM`
+- Retry queue: `REDIS_URL`, `RETRY_*`
+- Optional alerting webhook: `LLM_FALLBACK_ALERT_WEBHOOK_URL`, `LLM_FALLBACK_ALERT_TIMEOUT_SECONDS`
+
+If `DATABASE_URL` is blank, the service builds it from the individual
+`POSTGRES_*` settings.
+
+## Running with Docker Compose
+
+This folder's [`docker-compose.yml`](docker-compose.yml) is scoped to the RAG service only:
+
+- `db_vector`
+- `redis`
+- `rag_service`
+- `rag_worker`
+
+Start dependencies:
+
+```bash
 make db-up
 ```
 
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```env
-# Database
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=your_password
-POSTGRES_DB=ambience_knowledge
-
-# Embeddings
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-EMBEDDING_DIMENSION=384
-
-# Chunking
-CHUNK_SIZE=450
-CHUNK_OVERLAP=100
-
-# Logging
-LOG_LEVEL=INFO
-LOG_FILE=logs/rag.log
-
-# Retry queue
-REDIS_URL=redis://localhost:6379/0
-RETRY_ENABLED=true
-RETRY_MAX_ATTEMPTS=3
-RETRY_BACKOFF_SECONDS=10
-RETRY_BACKOFF_MULTIPLIER=2
-RETRY_JOB_TTL_SECONDS=86400
-
-# Guideline web sync
-GUIDELINE_SYNC_ENABLED=false
-GUIDELINE_SYNC_INTERVAL_MINUTES=720
-GUIDELINE_SYNC_RUN_ON_STARTUP=true
-GUIDELINE_SYNC_TIMEOUT_SECONDS=900
-```
-
-### Ingestion Quick Reference
-
-Manual file ingestion (existing flow):
+Start the API container:
 
 ```bash
-python -m src.ingestion.cli ingest \
-  --input data/raw/rheumatology/NICE \
-  --source-name NICE \
-  --db-url postgresql://admin:password@localhost:5432/ambience_knowledge
+docker compose up -d rag_service
 ```
 
-Manual web sync trigger (new flow):
-
-```bash
-python -m src.ingestion.cli sync-web --log-level INFO
-python -m src.ingestion.cli sync-web --source NICE --source NICE_NEURO --source BSR --dry-run
-```
-
-API trigger/status:
-
-```bash
-curl -X POST http://localhost:8001/guidelines/sync \
-  -H "Content-Type: application/json" \
-  -d '{"source_names": ["NICE", "NICE_NEURO", "BSR"], "dry_run": false}'
-
-curl http://localhost:8001/guidelines/sync/status
-```
-
-Expected sync log pattern:
-
-- `sync.run.start source_filter=... dry_run=...`
-- `sync.complete discovered=... new=... updated=... unchanged=... ingest_ok=... ingest_failed=...`
-- `sync.run.end last_error=...`
-
-Troubleshooting:
-
-- If discovery is blocked by `robots.txt`, the source is skipped and sync continues.
-- If files are unchanged (same etag/last-modified/hash), they are skipped.
-- If a document disappears from the source page, it is marked stale in sync state and not deleted locally.
-- If `/guidelines/sync` is slow for full runs, use `dry_run=true` first to validate discovery quickly.
-
----
-
-## Retry Queue (Redis + Worker)
-
-When `/answer` or `/revise` fails due to transient provider/network/timeouts, the
-request is queued and retried asynchronously. The API returns `202` with a job id
-that can be polled via `/jobs/{job_id}`.
-
-### Run Redis locally
-
-```bash
-docker run --name ambience-redis -p 6379:6379 -d redis:7-alpine
-```
-
-Or via Docker Compose:
-
-```bash
-docker compose up -d redis
-```
-
-### Start the retry worker
-
-```bash
-python scripts/run_retry_worker.py
-```
-
-Or via Docker Compose:
+Start the retry worker:
 
 ```bash
 docker compose up -d rag_worker
 ```
 
-### Example request flow
-
-```text
-POST /answer -> 202 { job_id: "...", status: "queued" }
-GET  /jobs/{job_id} -> { status: "retrying", attempt_count: 1 }
-GET  /jobs/{job_id} -> { status: "succeeded", response: { ... } }
-```
-
-Validation errors and 4xx provider responses are not retried and return
-immediate failures.
-
----
-
-## Development
-
-### Citation links (what to expect)
-
-- The RAG service now caps citations to the top 3 retrieved chunks and tells the model to only cite passages it actually used, so you should not see unused citation numbers.
-- Source links in the UI point to `http://localhost:8001/docs/{doc_id}#page={page}` and open inline in the browser PDF viewer (no forced download) as long as `rag_service` is running.
-- To refresh citations after code changes, re-run ingestion so chunk metadata (including `source_path`) is stored in Postgres, then retest a chat message.
-
-### Common Commands
+Stop everything in this local RAG stack:
 
 ```bash
-make install-dev    # Install all dependencies including dev tools
-make db-up          # Start postgres database
-make db-down        # Stop database
-make db-reset       # Wipe and restart database
-make format         # Auto-fix formatting and imports (ruff)
-make lint           # Run ruff + mypy
-make test           # Run tests with coverage report
-make run-ingest     # Run ingestion pipeline
-make run-query      # Run RAG query
+make db-down
 ```
 
-### Before Every Commit
+Notes:
+
+- The compose file mounts `src/`, `scripts/`, `configs/`, `data/`, and `logs/`
+  into the container so local edits, ingestion output, and `/docs/{doc_id}`
+  file serving work correctly.
+- Docker containers use `DOCKER_OLLAMA_BASE_URL` so they can reach an Ollama
+  instance running on the host machine without having to change the normal
+  local `OLLAMA_BASE_URL=http://localhost:11434` setting used outside Docker.
+- For the full product stack (`backend`, `frontend`, `rag_service`, database),
+  use the repo-root [`docker-compose.yml`](../docker-compose.yml) instead.
+
+## Running without Docker
+
+Start only Postgres and Redis:
 
 ```bash
+make db-up
+```
+
+Then run the FastAPI app directly:
+
+```bash
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+Run the retry worker in another terminal:
+
+```bash
+make run-retry-worker
+```
+
+## Common commands
+
+```bash
+make install-dev
 make format
 make lint
 make test
+make type-check
+make run-ingest INPUT=data/raw/neurology/NICE SOURCE=NICE
+make run-retry-worker
 ```
 
-All three must pass before pushing.
+`make lint` runs:
 
----
+- Ruff lint
+- Ruff format check
+- MyPy
 
-## Database Schema
+## Ingestion
 
-### `documents`
-One row per ingested PDF.
+CLI ingestion entrypoint:
 
-| Column        | Type      | Description                        |
-|--------------|-----------|------------------------------------|
-| id           | SERIAL    | Primary key                        |
-| filename     | TEXT      | Original PDF filename              |
-| specialty    | TEXT      | Medical specialty (e.g. neurology) |
-| publisher    | TEXT      | Source (e.g. NICE, BSR)            |
-| file_path    | TEXT      | Path to source PDF                 |
-| total_pages  | INTEGER   | Page count                         |
-| total_chunks | INTEGER   | Number of chunks generated         |
-| ingested_at  | TIMESTAMP | Ingestion timestamp                |
-| metadata     | JSONB     | Additional document metadata       |
-
-### `chunks`
-One row per text chunk with its embedding.
-
-| Column        | Type        | Description                      |
-|--------------|-------------|----------------------------------|
-| id           | SERIAL      | Primary key                      |
-| document_id  | INTEGER     | Foreign key to documents         |
-| chunk_index  | INTEGER     | Position within document         |
-| content      | TEXT        | Chunk text                       |
-| embedding    | vector(384) | Sentence embedding               |
-| page_number  | INTEGER     | Source page                      |
-| section_title| TEXT        | Section heading                  |
-| chunk_type   | TEXT        | Type of content                  |
-| token_count  | INTEGER     | Token count                      |
-| metadata     | JSONB       | Additional chunk metadata        |
-
----
-
-## Data Directory Structure
-
-```
-data/
-├── raw/
-│   ├── rheumatology/
-│   │   ├── NICE/
-│   │   └── BSR/
-│   └── neurology/
-│       ├── NICE_NEURO/
-│       └── BSR/
-└── processed/
+```bash
+python -m src.ingestion.cli ingest --input data/raw/neurology/NICE --source-name NICE
 ```
 
----
+Or via the Makefile:
 
-## Streaming (Token-by-Token AI Responses)
+```bash
+make run-ingest INPUT=data/raw/neurology/NICE SOURCE=NICE
+```
 
-The `/answer` and `/revise` endpoints support an optional `"stream": true` field in the
-request body. When enabled, the response is an **NDJSON** stream
-(`application/x-ndjson`) rather than a single JSON object.
+The ingestion pipeline:
 
-### Wire format
+```text
+Extract -> Clean -> Chunk -> Attach metadata -> Embed -> Store
+```
 
-Each line is a self-contained JSON object with a `type` discriminator:
+## DB bootstrap assets
 
-| type    | Payload                                                      | Meaning                       |
-|---------|--------------------------------------------------------------|-------------------------------|
-| `chunk` | `{"type":"chunk","delta":"token"}`                           | One LLM token                 |
-| `done`  | `{"type":"done","answer":"…","citations_used":[],"citations_retrieved":[],"citations":[]}` | Final answer + citations      |
-| `error` | `{"type":"error","error":"message"}`                         | Generation failure             |
+The RAG database bootstrap assets live under `scripts/db/migrations/`:
 
-### Example request
+- `001_create_rag_chunks.sql`
+- `002_indexes.sql`
+- `003_add_text_search_vector.sql`
+- `004_seed_rag_chunks.sql.gz`
+
+The `004` file is a data-only seed for `rag_chunks`. In the repo-root
+Docker stack it is mounted into Postgres init so a fresh local database starts
+with a ready-to-query corpus and markers do not need to run ingestion manually.
+
+It is stored as `.sql.gz` simply to keep the repo smaller; Postgres Docker init
+supports gzipped SQL files directly.
+
+## API surface
+
+Main endpoints exposed by the FastAPI app:
+
+- `POST /query`
+- `POST /answer`
+- `POST /revise`
+- `POST /ingest`
+- `GET /jobs/{job_id}`
+- `GET /docs/{doc_id}`
+- `GET /health`
+- `POST /ask` (alternate lightweight route)
+
+### Streaming
+
+`/answer` and `/revise` support `"stream": true` and return NDJSON events:
+
+- `chunk`
+- `done`
+- `error`
+
+Example:
 
 ```bash
 curl -s -N http://localhost:8001/answer \
@@ -297,71 +205,30 @@ curl -s -N http://localhost:8001/answer \
   -d '{"query":"What is migraine?","specialty":"neurology","stream":true}'
 ```
 
-### Streaming helper
+## Retry queue
 
-`src/generation/streaming.py` provides `stream_generate(prompt, max_tokens)`, an async
-iterator over Ollama's `/api/generate` endpoint that yields individual tokens. Both
-`/answer` and `/revise` re-use this helper when `stream=True`.
+Transient generation failures can be queued and retried asynchronously through
+Redis + RQ. The API returns `202 Accepted` with a `job_id`, and clients can poll
+`GET /jobs/{job_id}` for progress.
 
-### Non-streaming (default)
-
-When `stream` is omitted or `false`, the endpoints behave exactly as before — returning a
-single JSON response with the complete answer. No client changes are required for the
-non-streaming path.
-
----
-
-## Testing
+## Testing and quality
 
 ```bash
 make test
+make lint
 ```
 
-Tests are in `tests/` mirroring the `src/` structure. Coverage is enforced at 90% minimum in CI.
+Tests mirror the `src/` structure under [`tests/`](tests/).
 
-```
-tests/
-├── ingestion/
-├── retrieval/
-└── generation/
-```
+At the time of this cleanup pass:
 
----
+- lint passes
+- type checks pass
+- tests pass
+- coverage is at 100%
 
-## CI/CD
+## Notes for maintainers
 
-GitHub Actions runs on every PR and push to `main`:
-
-1. Ruff lint
-2. Ruff format check
-3. MyPy type check
-4. Pytest with coverage
-
-PRs cannot be merged unless all checks pass.
-
----
-
-## Project Structure
-
-```
-rag_service/
-├── .github/workflows/ci.yml   # CI pipeline
-├── .vscode/settings.json      # VS Code config
-├── data/                      # Raw and processed documents
-├── logs/                      # Runtime logs
-├── scripts/
-│   └── init_db.sql            # Database schema
-├── src/
-│   ├── config.py              # Pydantic settings
-│   ├── generation/            # LLM + response generation
-│   ├── ingestion/             # PDF pipeline
-│   ├── retrieval/             # Vector search
-│   └── utils/
-│       ├── db.py              # Database manager
-│       └── logger.py          # Logging setup
-├── tests/                     # Test suite
-├── docker-compose.yml
-├── Dockerfile
-├── Makefile
-└── pyproject.toml
-```
+- The authoritative settings live in [`src/config/__init__.py`](src/config/__init__.py).
+- The main app entrypoint is [`src.main:app`](src/main.py).
+- [`src/api/ask_routes.py`](src/api/ask_routes.py) is still live because the app includes the `/ask` router.

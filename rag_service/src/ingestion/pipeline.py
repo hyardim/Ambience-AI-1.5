@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -105,10 +106,8 @@ def _backfill_debug_artifacts(doc_id: str, temp_id: str) -> None:
         if not target.exists():
             artifact.rename(target)
 
-    try:
+    with contextlib.suppress(OSError):
         pending_dir.rmdir()
-    except OSError:
-        pass
 
 
 # -----------------------------------------------------------------------
@@ -122,6 +121,8 @@ def run_pipeline(
     db_url: str | None,
     dry_run: bool,
     write_debug_artifacts: bool,
+    chunking_config: dict[str, Any] | None = None,
+    embedding_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Run all pipeline stages for a single PDF.
@@ -201,7 +202,7 @@ def run_pipeline(
 
     # ---- Stage 6: Chunk ----
     try:
-        chunked_doc = chunk_document(metadata_doc)
+        chunked_doc = chunk_document(metadata_doc, chunking_config=chunking_config)
     except Exception as e:
         raise PipelineError(STAGE_CHUNK, path_str, str(e)) from e
 
@@ -210,7 +211,7 @@ def run_pipeline(
 
     # ---- Stage 7: Embed ----
     try:
-        embedded_doc = embed_chunks(chunked_doc)
+        embedded_doc = embed_chunks(chunked_doc, embedding_config=embedding_config)
     except Exception as e:
         raise PipelineError(STAGE_EMBED, path_str, str(e)) from e
 
@@ -292,7 +293,7 @@ def discover_pdfs(
 
     Args:
         input_path: Path to PDF file or folder
-        since: Only include files modified after this date
+        since: Only include files modified on or after this date
         max_files: Maximum number of files to return
 
     Returns:
@@ -311,7 +312,7 @@ def discover_pdfs(
         raise ValueError(f"Input path does not exist: {input_path}")
 
     if since is not None:
-        pdfs = [p for p in pdfs if date.fromtimestamp(p.stat().st_mtime) > since]
+        pdfs = [p for p in pdfs if date.fromtimestamp(p.stat().st_mtime) >= since]
 
     if max_files is not None:
         pdfs = pdfs[:max_files]
@@ -347,6 +348,20 @@ def load_ingestion_config(config_path: Path) -> dict[str, Any]:
     return result
 
 
+def _resolve_chunking_config(config: dict[str, Any]) -> dict[str, Any] | None:
+    chunking = config.get("chunking")
+    if not isinstance(chunking, dict):
+        return None
+    return chunking
+
+
+def _resolve_embedding_config(config: dict[str, Any]) -> dict[str, Any] | None:
+    embedding = config.get("embedding")
+    if not isinstance(embedding, dict):
+        return None
+    return embedding
+
+
 def run_ingestion(
     input_path: Path,
     source_name: str,
@@ -355,6 +370,7 @@ def run_ingestion(
     since: date | None = None,
     max_files: int | None = None,
     write_debug_artifacts: bool = False,
+    source_url: str | None = None,
 ) -> dict[str, Any]:
     """
     Discover PDFs, run pipeline per file, return summary report.
@@ -385,10 +401,13 @@ def run_ingestion(
         )
     source_info = sources[source_name]
 
-    # TODO(#10): wire ingestion_config into chunk_document and embed_chunks
-    # so that configs/ingestion.yaml values for chunk size, overlap, and
-    # embedding model are applied at runtime rather than using stage defaults.
-    _ = load_ingestion_config(config_path)
+    # Allow callers to override the citation URL for a specific ingestion run.
+    if source_url:
+        source_info = {**source_info, "source_url": source_url}
+
+    ingestion_config = load_ingestion_config(config_path)
+    chunking_config = _resolve_chunking_config(ingestion_config)
+    embedding_config = _resolve_embedding_config(ingestion_config)
 
     # Discover PDFs
     pdfs = discover_pdfs(input_path, since=since, max_files=max_files)
@@ -426,6 +445,8 @@ def run_ingestion(
                 db_url=db_url,
                 dry_run=dry_run,
                 write_debug_artifacts=write_debug_artifacts,
+                chunking_config=chunking_config,
+                embedding_config=embedding_config,
             )
             summary["files_succeeded"] += 1
             summary["total_chunks"] += report["chunks"]

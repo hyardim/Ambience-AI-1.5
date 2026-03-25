@@ -1,37 +1,70 @@
+from __future__ import annotations
+
+from typing import Any
+
 from pydantic import BaseModel, Field
 
+from ..config import llm_config
+from ..jobs.retry import RetryJobStatus
 
-class AskRequest(BaseModel):
-    query: str = Field(min_length=1)
+
+class QueryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=5000)
     top_k: int = Field(default=5, ge=1, le=20)
     specialty: str | None = None
+    severity: str | None = None
+
+
+class SearchResult(BaseModel):
+    text: str
+    source: str
+    score: float
+    doc_id: str | None = None
+    doc_version: str | None = None
+    chunk_id: str | None = None
+    chunk_index: int | None = None
+    content_type: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    section_path: str | None = None
+    creation_date: str | None = None
+    publish_date: str | None = None
+    last_updated_date: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class AnswerRequest(QueryRequest):
     source_name: str | None = None
     doc_type: str | None = None
     score_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
-    expand_query: bool = False
+    expand_query: bool = True
+    max_tokens: int = llm_config.llm_max_tokens
+    patient_context: dict[str, Any] | None = None
+    file_context: str | None = None
+    file_context_truncated: bool = False
+    stream: bool = False
 
 
-class CitationResponse(BaseModel):
-    title: str
-    source_name: str
-    specialty: str
-    section_title: str
-    page_start: int
-    page_end: int
-    source_url: str
+class ReviseRequest(BaseModel):
+    """Request body for the /revise endpoint."""
+
+    original_query: str
+    previous_answer: str
+    feedback: str
+    top_k: int = 5
+    max_tokens: int = llm_config.llm_max_tokens
+    patient_context: dict[str, Any] | None = None
+    file_context: str | None = None
+    specialty: str | None = None
+    severity: str | None = None
+    stream: bool = False
 
 
-class SourceResponse(BaseModel):
-    chunk_id: str
-    rerank_score: float
-    citation: CitationResponse
-
-
-class AskResponse(BaseModel):
+class AnswerResponse(BaseModel):
     answer: str
-    sources: list[SourceResponse]
-    query: str
-    model: str
+    citations_used: list[SearchResult]
+    citations_retrieved: list[SearchResult]
+    citations: list[SearchResult]
 
 
 class IngestResponse(BaseModel):
@@ -43,4 +76,19 @@ class IngestResponse(BaseModel):
     total_chunks: int
     embeddings_succeeded: int
     embeddings_failed: int
-    db: dict  # keys: inserted, updated, skipped, failed
+    db: dict[str, Any]
+
+
+class RetryAcceptedResponse(BaseModel):
+    job_id: str
+    status: RetryJobStatus
+
+
+class RetryJobResponse(BaseModel):
+    job_id: str
+    status: RetryJobStatus
+    attempt_count: int
+    last_error: str | None = None
+    created_at: str
+    updated_at: str
+    response: dict[str, Any] | None = None

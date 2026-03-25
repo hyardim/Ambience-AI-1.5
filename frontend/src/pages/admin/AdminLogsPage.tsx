@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, RefreshCw } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminGetLogs } from '../../services/api';
 import type { AuditLogResponse } from '../../types/api';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { formatAuditUserIdentifier } from '../../utils/audit';
 
 export function AdminLogsPage() {
   const [logs, setLogs] = useState<AuditLogResponse[]>([]);
@@ -17,12 +19,12 @@ export function AdminLogsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [limitFilter, setLimitFilter] = useState(200);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
@@ -34,14 +36,23 @@ export function AdminLogsPage() {
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         limit: limitFilter,
-      });
+      }, { signal: controller.signal });
       setLogs(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit logs');
+      ifNotAbortError(err, () => {
+        setError(getErrorMessage(err, 'Failed to load audit logs'));
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [actionFilter, categoryFilter, dateFrom, dateTo, limitFilter, searchFilter, userIdFilter]);
+
+  useEffect(() => {
+    void fetchLogs();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
+  }, [fetchLogs]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,13 +118,13 @@ export function AdminLogsPage() {
                 placeholder="Search action or details…"
                 value={searchFilter}
                 onChange={e => setSearchFilter(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               />
             </div>
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm"
             >
               <option value="">All categories</option>
               <option value="AUTH">AUTH</option>
@@ -126,7 +137,7 @@ export function AdminLogsPage() {
               placeholder="Exact action (e.g. LOGIN)"
               value={actionFilter}
               onChange={e => setActionFilter(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
             />
           </div>
           {/* Row 2: User ID + Dates + Limit + Apply */}
@@ -136,26 +147,26 @@ export function AdminLogsPage() {
               placeholder="User ID"
               value={userIdFilter}
               onChange={e => setUserIdFilter(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
             />
             <input
               type="datetime-local"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               title="From date"
             />
             <input
               type="datetime-local"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               title="To date"
             />
             <select
               value={limitFilter}
               onChange={e => setLimitFilter(Number(e.target.value))}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm"
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm"
             >
               <option value={50}>50 rows</option>
               <option value={100}>100 rows</option>
@@ -164,7 +175,7 @@ export function AdminLogsPage() {
             </select>
             <button
               type="submit"
-              className="px-4 py-2.5 bg-[#005eb8] text-white rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors"
+              className="px-4 py-2.5 bg-[var(--nhs-blue)] text-white rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
             >
               Apply
             </button>
@@ -182,7 +193,7 @@ export function AdminLogsPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
         )}
 
@@ -224,7 +235,7 @@ export function AdminLogsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {log.user_identifier || (log.user_id ? `#${log.user_id}` : '—')}
+                      {formatAuditUserIdentifier(log.user_identifier, log.user_id)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={log.details || ''}>
                       {log.details || '—'}

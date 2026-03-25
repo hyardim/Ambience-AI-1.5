@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Literal
 
-from ..config import FORCE_CLOUD_LLM, LLM_ROUTE_THRESHOLD, ROUTE_REVISIONS_TO_CLOUD
+from pydantic import BaseModel, ConfigDict
 
-ProviderName = Literal["local", "cloud"]
+from ..config import cloud_llm_config, routing_config
+from .client import ProviderName
 
 _COMPLEXITY_TERMS = {
     "differential",
@@ -40,12 +39,24 @@ _RISK_TERMS = {
 }
 
 
-@dataclass(frozen=True)
-class RouteDecision:
+class RouteDecision(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     provider: ProviderName
     score: float
     threshold: float
     reasons: tuple[str, ...]
+
+
+def _cloud_available() -> bool:
+    try:
+        from ..config.llm import cloud_llm_is_configured
+
+        return cloud_llm_is_configured(cloud_llm_config)
+    except Exception:
+        base_url = str(getattr(cloud_llm_config, "base_url", "")).strip().lower()
+        api_key = str(getattr(cloud_llm_config, "api_key", "")).strip().lower()
+        return bool(base_url and api_key and "example.invalid" not in base_url)
 
 
 def select_generation_provider(
@@ -54,14 +65,42 @@ def select_generation_provider(
     retrieved_chunks: list[dict],
     severity: str | None = None,
     is_revision: bool = False,
-    threshold: float = LLM_ROUTE_THRESHOLD,
+    prompt_length_chars: int | None = None,
+    threshold: float | None = None,
 ) -> RouteDecision:
-    if FORCE_CLOUD_LLM:
+    """Route a generation request to the local or cloud LLM provider.
+
+    Scores the request across four dimensions -- complexity, prompt size,
+    clinical risk, and retrieval ambiguity -- and compares the aggregate
+    against a configurable threshold.  When ``force_cloud_llm`` is set in
+    the routing config, the cloud provider is returned unconditionally.
+
+    Args:
+        query: The user's clinical question.
+        retrieved_chunks: Top retrieval results (used for ambiguity scoring).
+        severity: Optional clinical severity label (e.g. "urgent").
+        is_revision: Whether this is a revision flow (feedback loop).
+        prompt_length_chars: Character length of the assembled prompt.
+        threshold: Override for the default routing threshold.
+
+    Returns:
+        A frozen ``RouteDecision`` containing the chosen provider, score,
+        threshold, and a tuple of human-readable reason strings.
+    """
+    resolved_threshold = (
+        routing_config.llm_route_threshold if threshold is None else threshold
+    )
+    cloud_available = _cloud_available()
+
+    if routing_config.force_cloud_llm:
+        forced_reasons = ["force_cloud_llm"]
+        if not cloud_available:
+            forced_reasons.append("cloud_unavailable")
         return RouteDecision(
-            provider="cloud",
+            provider="cloud" if cloud_available else "local",
             score=1.0,
-            threshold=threshold,
-            reasons=("force_cloud_llm",),
+            threshold=resolved_threshold,
+            reasons=tuple(forced_reasons),
         )
 
     reasons: list[str] = []
@@ -71,6 +110,11 @@ def select_generation_provider(
     if complexity_score:
         score += complexity_score
         reasons.extend(complexity_reasons)
+
+    prompt_score, prompt_reasons = _score_prompt_size(prompt_length_chars)
+    if prompt_score:
+        score += prompt_score
+        reasons.extend(prompt_reasons)
 
     risk_score, risk_reasons = _score_risk(query, severity)
     if risk_score:
@@ -82,21 +126,29 @@ def select_generation_provider(
         score += ambiguity_score
         reasons.extend(ambiguity_reasons)
 
-    if is_revision and ROUTE_REVISIONS_TO_CLOUD:
+    if is_revision and routing_config.route_revisions_to_cloud and cloud_available:
         reasons.append("revision_flow")
-        score = max(score, threshold)
+        score = max(score, resolved_threshold)
 
     score = min(score, 1.0)
-    provider: ProviderName = "cloud" if score >= threshold else "local"
+    provider: ProviderName = "cloud" if score >= resolved_threshold else "local"
+    if provider == "cloud" and not cloud_available:
+        reasons.append("cloud_unavailable")
+        provider = "local"
     return RouteDecision(
         provider=provider,
         score=round(score, 3),
-        threshold=threshold,
+        threshold=resolved_threshold,
         reasons=tuple(reasons),
     )
 
 
 def _score_complexity(query: str) -> tuple[float, list[str]]:
+    """Score query complexity based on length, sentence count, and terminology.
+
+    Returns:
+        Tuple of (score contribution, list of reason strings).
+    """
     query_lower = query.lower()
     reasons: list[str] = []
     score = 0.0
@@ -108,8 +160,7 @@ def _score_complexity(query: str) -> tuple[float, list[str]]:
         score += 0.10
         reasons.append("medium_query")
 
-    sentence_count = len(
-        [part for part in re.split(r"[.!?]+", query) if part.strip()])
+    sentence_count = len([part for part in re.split(r"[.!?]+", query) if part.strip()])
     if sentence_count >= 3:
         score += 0.12
         reasons.append("multi_sentence")
@@ -122,7 +173,37 @@ def _score_complexity(query: str) -> tuple[float, list[str]]:
     return score, reasons
 
 
+def _score_prompt_size(prompt_length_chars: int | None) -> tuple[float, list[str]]:
+    """Score based on assembled prompt character length.
+
+    Long prompts typically contain more context and benefit from a more
+    capable cloud model.
+
+    Returns:
+        Tuple of (score contribution, list of reason strings).
+    """
+    if prompt_length_chars is None or prompt_length_chars <= 0:
+        return 0.0, []
+
+    score = 0.0
+    reasons: list[str] = []
+
+    if prompt_length_chars >= routing_config.long_prompt_chars:
+        score += 0.70
+        reasons.append("long_prompt")
+    elif prompt_length_chars >= routing_config.medium_prompt_chars:
+        score += 0.30
+        reasons.append("medium_prompt")
+
+    return score, reasons
+
+
 def _score_risk(query: str, severity: str | None) -> tuple[float, list[str]]:
+    """Score clinical risk based on severity label and risk-related terminology.
+
+    Returns:
+        Tuple of (score contribution, list of reason strings).
+    """
     query_lower = query.lower()
     reasons: list[str] = []
     score = 0.0

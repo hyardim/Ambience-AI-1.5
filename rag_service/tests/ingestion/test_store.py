@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -8,7 +7,8 @@ import pytest
 
 from src.ingestion.store import (
     _build_metadata,
-    _metadata_json,
+    _metadata_equals,
+    _rollback_to_savepoint,
     _upsert_chunk,
     store_chunks,
 )
@@ -141,30 +141,11 @@ class TestBuildMetadata:
         assert metadata["source_path"] == "data/raw/neurology/test.pdf"
 
 
-# -----------------------------------------------------------------------
-# _metadata_json
-# -----------------------------------------------------------------------
-
-
-class TestMetadataJson:
-    def test_returns_string(self) -> None:
-        assert isinstance(_metadata_json({"a": 1}), str)
-
-    def test_sorted_keys(self) -> None:
-        result = _metadata_json({"b": 2, "a": 1})
-        assert result.index('"a"') < result.index('"b"')
-
-    def test_deterministic(self) -> None:
-        meta = {"b": 2, "a": 1, "c": [1, 2, 3]}
-        assert _metadata_json(meta) == _metadata_json(meta)
-
-    def test_different_metadata_different_json(self) -> None:
-        assert _metadata_json({"a": 1}) != _metadata_json({"a": 2})
-
-    def test_handles_string_input(self) -> None:
-        meta = {"b": 2, "a": 1}
-        as_string = json.dumps(meta)
-        assert _metadata_json(as_string) == _metadata_json(meta)
+class TestMetadataEquals:
+    def test_compares_semantically_equal_metadata(self) -> None:
+        left = {"b": 2, "a": {"y": 2, "x": 1}}
+        right = {"a": {"x": 1, "y": 2}, "b": 2}
+        assert _metadata_equals(left, right) is True
 
 
 # -----------------------------------------------------------------------
@@ -178,13 +159,13 @@ class TestUpsertChunk:
         result = _upsert_chunk(conn, make_chunk(), "doc123", "v1")
         assert result == "inserted"
         assert cur.execute.call_count == 2  # SELECT + INSERT
-        conn.commit.assert_called_once()
+        conn.commit.assert_not_called()
 
     def test_skips_identical_chunk(self) -> None:
         chunk = make_chunk()
         metadata = _build_metadata(chunk)
         existing_row = (chunk["text"], metadata)
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "skipped"
         conn.commit.assert_not_called()
@@ -192,10 +173,10 @@ class TestUpsertChunk:
     def test_updates_on_text_change(self) -> None:
         chunk = make_chunk(text="New text.")
         existing_row = ("Old text.", _build_metadata(chunk))
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "updated"
-        conn.commit.assert_called_once()
+        conn.commit.assert_not_called()
 
     def test_updates_on_metadata_change(self) -> None:
         chunk = make_chunk()
@@ -209,10 +190,10 @@ class TestUpsertChunk:
             "citation": {},
         }
         existing_row = (chunk["text"], old_metadata)
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         result = _upsert_chunk(conn, chunk, "doc123", "v1")
         assert result == "updated"
-        conn.commit.assert_called_once()
+        conn.commit.assert_not_called()
 
     def test_raises_on_db_error(self) -> None:
         conn, cur = make_mock_conn(existing_row=None)
@@ -229,7 +210,7 @@ class TestUpsertChunk:
 class TestStoreChunks:
     def test_inserts_new_chunk(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -240,13 +221,14 @@ class TestStoreChunks:
         assert report["updated"] == 0
         assert report["skipped"] == 0
         assert report["failed"] == 0
+        conn.commit.assert_called_once()
 
     def test_skips_identical_chunk(self) -> None:
         chunk = make_chunk()
         metadata = _build_metadata(chunk)
         existing_row = (chunk["text"], metadata)
         doc = make_embedded_doc(chunks=[chunk])
-        conn, cur = make_mock_conn(existing_row=existing_row)
+        conn, _cur = make_mock_conn(existing_row=existing_row)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -255,6 +237,7 @@ class TestStoreChunks:
             report = store_chunks(doc)
         assert report["skipped"] == 1
         assert report["inserted"] == 0
+        conn.commit.assert_called_once()
 
     def test_failed_embedding_not_written(self) -> None:
         chunk = make_chunk(embedding_status="failed")
@@ -296,12 +279,13 @@ class TestStoreChunks:
 
         assert report["failed"] >= 1
         assert report["inserted"] + report["failed"] == 2
+        conn.commit.assert_called_once()
 
     def test_mixed_batch_counts_correct(self) -> None:
         chunk_new = make_chunk("new")
         chunk_fail = make_chunk("fail", embedding_status="failed")
         doc = make_embedded_doc(chunks=[chunk_new, chunk_fail])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -310,6 +294,7 @@ class TestStoreChunks:
             report = store_chunks(doc)
         assert report["inserted"] == 1
         assert report["failed"] == 1
+        conn.commit.assert_called_once()
 
     def test_empty_document_returns_zero_counts(self) -> None:
         doc = make_embedded_doc(chunks=[])
@@ -324,7 +309,7 @@ class TestStoreChunks:
 
     def test_report_has_all_keys(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -336,7 +321,7 @@ class TestStoreChunks:
 
     def test_connection_closed_after_run(self) -> None:
         doc = make_embedded_doc(chunks=[make_chunk()])
-        conn, cur = make_mock_conn(existing_row=None)
+        conn, _cur = make_mock_conn(existing_row=None)
         with (
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
@@ -353,6 +338,7 @@ class TestStoreChunks:
             patch("src.ingestion.store.db.get_raw_connection", return_value=conn),
             patch("src.ingestion.store.register_vector"),
             patch("src.ingestion.store.psycopg2.extras.register_default_jsonb"),
+            pytest.raises(Exception, match="connection dropped"),
         ):
             store_chunks(doc)
         conn.close.assert_called_once()
@@ -368,3 +354,15 @@ class TestStoreChunks:
             report = store_chunks(doc)
         mock_conn.assert_not_called()
         assert report["failed"] == 3
+
+
+def test_rollback_to_savepoint_falls_back_to_connection_rollback() -> None:
+    conn = MagicMock()
+    cur = MagicMock()
+    cur.execute.side_effect = Exception("savepoint missing")
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    _rollback_to_savepoint(conn, "chunk-1")
+
+    conn.rollback.assert_called_once()

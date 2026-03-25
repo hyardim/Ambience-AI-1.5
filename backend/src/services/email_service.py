@@ -23,7 +23,7 @@ def _build_password_reset_message(to_email: str, reset_link: str) -> EmailMessag
 
     html_body = (
         "<p>We received a request to reset your password.</p>"
-        f"<p><a href=\"{reset_link}\">Reset your password</a></p>"
+        f'<p><a href="{reset_link}">Reset your password</a></p>'
         "<p>If you did not request a password reset, you can safely ignore this email.</p>"
         "<p>This link will expire soon.</p>"
     )
@@ -47,7 +47,7 @@ def _build_verification_message(to_email: str, verify_link: str) -> EmailMessage
 
     html_body = (
         "<p>Welcome to Ambience AI.</p>"
-        f"<p><a href=\"{verify_link}\">Verify your email</a></p>"
+        f'<p><a href="{verify_link}">Verify your email</a></p>'
         "<p>If you did not create this account, you can ignore this email.</p>"
         "<p>This link will expire soon.</p>"
     )
@@ -57,8 +57,9 @@ def _build_verification_message(to_email: str, verify_link: str) -> EmailMessage
 
 def send_password_reset_email(to_email: str, reset_link: str) -> None:
     if settings.PASSWORD_RESET_EMAIL_LOG_ONLY or not settings.SMTP_HOST:
-        logger.info("Password reset email (log mode) to=%s link=%s",
-                    to_email, reset_link)
+        logger.info(
+            "Password reset email (log mode) to=%s link=%s", to_email, reset_link
+        )
         return
 
     message = _build_password_reset_message(to_email, reset_link)
@@ -75,8 +76,9 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
 
 def send_verification_email(to_email: str, verify_link: str) -> None:
     if settings.EMAIL_VERIFICATION_EMAIL_LOG_ONLY or not settings.SMTP_HOST:
-        logger.info("Verification email (log mode) to=%s link=%s",
-                    to_email, verify_link)
+        logger.info(
+            "Verification email (log mode) to=%s link=%s", to_email, verify_link
+        )
         return
 
     message = _build_verification_message(to_email, verify_link)

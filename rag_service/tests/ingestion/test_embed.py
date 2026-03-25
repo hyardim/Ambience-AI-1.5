@@ -17,6 +17,8 @@ from src.ingestion.embed import (
     _make_failure_fields,
     _make_success_fields,
     embed_chunks,
+    get_vector_dim,
+    load_embedder,
 )
 
 # -----------------------------------------------------------------------
@@ -182,9 +184,8 @@ class TestEmbedBatch:
 
     def test_raises_after_max_retries(self) -> None:
         model = make_mock_model(fail=True)
-        with patch("src.ingestion.embed.time.sleep"):
-            with pytest.raises(RuntimeError):
-                _embed_batch(model, ["text"])
+        with patch("src.ingestion.embed.time.sleep"), pytest.raises(RuntimeError):
+            _embed_batch(model, ["text"])
 
     def test_encode_called_once_on_success(self) -> None:
         model = make_mock_model()
@@ -237,6 +238,26 @@ class TestEmbedSingle:
         assert vector is not None
         assert error is None
         assert call_count == 2
+
+
+class TestPublicHelpers:
+    def test_load_embedder_returns_shared_model(self) -> None:
+        sentinel = MagicMock()
+        with patch("src.ingestion.embed._load_model", return_value=sentinel):
+            assert load_embedder() is sentinel
+
+    def test_get_vector_dim_returns_integer_dimension(self) -> None:
+        model = MagicMock()
+        model.get_sentence_embedding_dimension.return_value = 768.0
+
+        assert get_vector_dim(model) == 768
+
+    def test_get_vector_dim_raises_when_missing(self) -> None:
+        model = MagicMock()
+        model.get_sentence_embedding_dimension.return_value = None
+
+        with pytest.raises(ValueError, match="vector dimension"):
+            get_vector_dim(model)
 
 
 # -----------------------------------------------------------------------

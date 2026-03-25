@@ -1,5 +1,5 @@
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_
@@ -7,60 +7,88 @@ from sqlalchemy.orm import Session
 
 from src.core.config import settings
 from src.db.models import AuditLog, Chat, ChatStatus, Message, User, UserRole
-from src.repositories import audit_repository, chat_repository, message_repository, user_repository
+from src.repositories import chat_repository, message_repository, user_repository
+from src.schemas.admin import UserUpdateAdmin
 from src.schemas.auth import UserOut
 from src.schemas.chat import ChatUpdate, ChatWithMessages
 from src.services._mappers import chat_to_response, msg_to_response
+from src.services.cache_invalidation import (
+    invalidate_admin_chat_caches_sync,
+    invalidate_admin_stats_sync,
+)
 from src.utils.cache import cache, cache_keys
-
 
 # ---------------------------------------------------------------------------
 # Dashboard stats
 # ---------------------------------------------------------------------------
 
+
 def get_stats(db: Session) -> dict:
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    cache_key = cache_keys.admin_stats()
+    cached = cache.get_sync(cache_key, resource="admin_stats")
+    if cached is not None:
+        return cached
 
-    total_ai = db.query(func.count(Message.id)).filter(
-        Message.sender == "ai").scalar() or 0
-    rag_grounded = db.query(func.count(Message.id)).filter(
-        Message.sender == "ai", Message.citations.isnot(None)
-    ).scalar() or 0
-    specialist_responses = db.query(func.count(Message.id)).filter(
-        Message.sender == "specialist").scalar() or 0
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
 
-    active_statuses = [ChatStatus.OPEN, ChatStatus.SUBMITTED,
-                       ChatStatus.ASSIGNED, ChatStatus.REVIEWING]
-    active_consultations = db.query(func.count(Chat.id)).filter(
-        Chat.status.in_(active_statuses)).scalar() or 0
+    total_ai = (
+        db.query(func.count(Message.id)).filter(Message.sender == "ai").scalar() or 0
+    )
+    rag_grounded = sum(
+        1
+        for (citations,) in db.query(Message.citations)
+        .filter(Message.sender == "ai")
+        .all()
+        if citations
+    )
+    specialist_responses = (
+        db.query(func.count(Message.id)).filter(Message.sender == "specialist").scalar()
+        or 0
+    )
+
+    active_statuses = [
+        ChatStatus.OPEN,
+        ChatStatus.SUBMITTED,
+        ChatStatus.ASSIGNED,
+        ChatStatus.REVIEWING,
+    ]
+    active_consultations = (
+        db.query(func.count(Chat.id)).filter(Chat.status.in_(active_statuses)).scalar()
+        or 0
+    )
 
     chats_by_status = {
         row[0].value: row[1]
-        for row in db.query(Chat.status, func.count(Chat.id)).group_by(Chat.status).all()
+        for row in db.query(Chat.status, func.count(Chat.id))
+        .group_by(Chat.status)
+        .all()
     }
     chats_by_specialty = {
         (row[0] or "unknown"): row[1]
-        for row in db.query(Chat.specialty, func.count(Chat.id)).group_by(Chat.specialty).all()
+        for row in db.query(Chat.specialty, func.count(Chat.id))
+        .group_by(Chat.specialty)
+        .all()
     }
     active_users_by_role = {
         row[0].value: row[1]
         for row in db.query(User.role, func.count(User.id))
-        .filter(User.is_active == True)
-        .group_by(User.role).all()
+        .filter(User.is_active)
+        .group_by(User.role)
+        .all()
     }
 
     daily_rows = (
-        db.query(func.date(Message.created_at).label(
-            "day"), func.count(Message.id))
+        db.query(func.date(Message.created_at).label("day"), func.count(Message.id))
         .filter(Message.sender == "ai", Message.created_at >= thirty_days_ago)
         .group_by("day")
         .order_by("day")
         .all()
     )
     daily_ai_queries = [
-        {"date": str(row[0])[:10], "count": row[1]} for row in daily_rows]
+        {"date": str(row[0])[:10], "count": row[1]} for row in daily_rows
+    ]
 
-    return {
+    stats = {
         "total_ai_responses": total_ai,
         "rag_grounded_responses": rag_grounded,
         "specialist_responses": specialist_responses,
@@ -70,24 +98,13 @@ def get_stats(db: Session) -> dict:
         "active_users_by_role": active_users_by_role,
         "daily_ai_queries": daily_ai_queries,
     }
-
-
-# ---------------------------------------------------------------------------
-# User management
-# ---------------------------------------------------------------------------
-
-class UserUpdateAdmin:
-    def __init__(
-        self,
-        full_name: Optional[str] = None,
-        specialty: Optional[str] = None,
-        role: Optional[str] = None,
-        is_active: Optional[bool] = None,
-    ):
-        self.full_name = full_name
-        self.specialty = specialty
-        self.role = role
-        self.is_active = is_active
+    cache.set_sync(
+        cache_key,
+        stats,
+        ttl=settings.CACHE_ADMIN_STATS_TTL,
+        resource="admin_stats",
+    )
+    return stats
 
 
 def list_users(db: Session, role: Optional[str] = None) -> list[UserOut]:
@@ -96,17 +113,17 @@ def list_users(db: Session, role: Optional[str] = None) -> list[UserOut]:
         try:
             query = query.filter(User.role == UserRole(role))
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid role: {role}")
+            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
     users = query.order_by(User.id).all()
     return [UserOut.model_validate(u) for u in users]
 
 
 def get_user(db: Session, user_id: int) -> UserOut:
     cache_key = cache_keys.user_profile(user_id)
-    cached = cache.get_sync(cache_key, user_id=user_id,
-                            resource="user_profile")
+    cached = cache.get_sync(cache_key, user_id=user_id, resource="user_profile")
     if cached is not None:
+        if "email_verified" not in cached:
+            cached = {**cached, "email_verified": False}
         return UserOut(**cached)
 
     user = user_repository.get_by_id(db, user_id)
@@ -123,10 +140,18 @@ def get_user(db: Session, user_id: int) -> UserOut:
     return response
 
 
-def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
+def update_user(
+    db: Session, user_id: int, payload: UserUpdateAdmin, *, current_user: User
+) -> UserOut:
+    """Update a user's profile as admin. Prevents self-deactivation and self-role-change."""
     user = user_repository.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user_id == current_user.id and payload.is_active is False:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    if user_id == current_user.id and payload.role is not None:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
 
     fields: dict = {}
     if payload.full_name is not None:
@@ -139,28 +164,35 @@ def update_user(db: Session, user_id: int, payload: UserUpdateAdmin) -> UserOut:
         try:
             fields["role"] = UserRole(payload.role)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid role: {payload.role}")
+            raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
 
     user = user_repository.update(db, user, **fields)
-    cache.delete_sync(cache_keys.user_profile(user_id),
-                      user_id=user_id, resource="user_profile")
+    cache.delete_sync(
+        cache_keys.user_profile(user_id), user_id=user_id, resource="user_profile"
+    )
+    invalidate_admin_stats_sync()
     return UserOut.model_validate(user)
 
 
-def deactivate_user(db: Session, user_id: int) -> UserOut:
+def deactivate_user(db: Session, user_id: int, *, current_user: User) -> UserOut:
+    """Deactivate a user account. Admins cannot deactivate themselves."""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
     user = user_repository.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user = user_repository.update(db, user, is_active=False)
-    cache.delete_sync(cache_keys.user_profile(user_id),
-                      user_id=user_id, resource="user_profile")
+    cache.delete_sync(
+        cache_keys.user_profile(user_id), user_id=user_id, resource="user_profile"
+    )
+    invalidate_admin_stats_sync()
     return UserOut.model_validate(user)
 
 
 # ---------------------------------------------------------------------------
 # Chat management
 # ---------------------------------------------------------------------------
+
 
 def list_all_chats(
     db: Session,
@@ -171,13 +203,24 @@ def list_all_chats(
     skip: int = 0,
     limit: int = 100,
 ) -> list[dict]:
+    cache_key = cache_keys.admin_chat_list(
+        status=status,
+        specialty=specialty,
+        user_id=user_id,
+        specialist_id=specialist_id,
+        skip=skip,
+        limit=limit,
+    )
+    cached = cache.get_sync(cache_key, resource="admin_chat_list")
+    if cached is not None:
+        return cached
+
     query = db.query(Chat)
     if status:
         try:
             query = query.filter(Chat.status == ChatStatus(status))
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid status: {status}")
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
     if specialty:
         query = query.filter(Chat.specialty == specialty)
     if user_id:
@@ -185,15 +228,24 @@ def list_all_chats(
     if specialist_id:
         query = query.filter(Chat.specialist_id == specialist_id)
 
-    chats = query.order_by(Chat.created_at.desc()).offset(
-        skip).limit(limit).all()
+    chats = query.order_by(Chat.created_at.desc()).offset(skip).limit(limit).all()
 
     result = []
     for c in chats:
         entry = chat_to_response(c).model_dump()
-        entry["owner_identifier"] = f"{c.owner.role.value}_{c.owner.id}" if c.owner else None
-        entry["specialist_identifier"] = f"{c.specialist.role.value}_{c.specialist.id}" if c.specialist else None
+        entry["owner_identifier"] = (
+            f"{c.owner.role.value}_{c.owner.id}" if c.owner else None
+        )
+        entry["specialist_identifier"] = (
+            f"{c.specialist.role.value}_{c.specialist.id}" if c.specialist else None
+        )
         result.append(entry)
+    cache.set_sync(
+        cache_key,
+        result,
+        ttl=settings.CACHE_ADMIN_CHAT_TTL,
+        resource="admin_chat_list",
+    )
     return result
 
 
@@ -224,18 +276,29 @@ def update_any_chat(db: Session, chat_id: int, payload: ChatUpdate) -> dict:
             fields["status"] = ChatStatus(payload.status)
         except ValueError:
             raise HTTPException(
-                status_code=400, detail=f"Invalid status: {payload.status}")
+                status_code=400, detail=f"Invalid status: {payload.status}"
+            )
 
     chat = chat_repository.update(db, chat, **fields)
     cache.delete_pattern_sync(
         cache_keys.chat_detail_pattern(chat_id), resource="chat_detail"
     )
     cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
     )
+    invalidate_admin_chat_caches_sync(chat_id)
+    invalidate_admin_stats_sync()
     entry = chat_to_response(chat).model_dump()
-    entry["owner_identifier"] = f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
-    entry["specialist_identifier"] = f"{chat.specialist.role.value}_{chat.specialist.id}" if chat.specialist else None
+    entry["owner_identifier"] = (
+        f"{chat.owner.role.value}_{chat.owner.id}" if chat.owner else None
+    )
+    entry["specialist_identifier"] = (
+        f"{chat.specialist.role.value}_{chat.specialist.id}"
+        if chat.specialist
+        else None
+    )
     return entry
 
 
@@ -248,8 +311,12 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
         cache_keys.chat_detail_pattern(chat_id), resource="chat_detail"
     )
     cache.delete_pattern_sync(
-        cache_keys.chat_list_pattern(chat.user_id), user_id=chat.user_id, resource="chat_list"
+        cache_keys.chat_list_pattern(chat.user_id),
+        user_id=chat.user_id,
+        resource="chat_list",
     )
+    invalidate_admin_chat_caches_sync(chat_id)
+    invalidate_admin_stats_sync()
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +324,7 @@ def delete_any_chat(db: Session, chat_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 _ACTION_CATEGORIES: dict[str, set[str]] = {
-    "AUTH":       {
+    "AUTH": {
         "LOGIN",
         "LOGOUT",
         "REGISTER",
@@ -269,9 +336,23 @@ _ACTION_CATEGORIES: dict[str, set[str]] = {
         "EMAIL_VERIFICATION_SENT",
         "EMAIL_VERIFIED",
     },
-    "CHAT":       {"CREATE_CHAT", "VIEW_CHAT", "UPDATE_CHAT", "DELETE_CHAT", "SUBMIT_FOR_REVIEW", "AUTO_SUBMIT_FOR_REVIEW", "AI_RESPONSE_GENERATED"},
-    "SPECIALIST": {"ASSIGN_SPECIALIST", "REVIEW_APPROVE", "REVIEW_REJECT", "REVIEW_REQUEST_CHANGES", "SPECIALIST_MESSAGE"},
-    "RAG":        {"RAG_ANSWER", "RAG_ERROR", "RAG_REVISE"},
+    "CHAT": {
+        "CREATE_CHAT",
+        "VIEW_CHAT",
+        "UPDATE_CHAT",
+        "DELETE_CHAT",
+        "SUBMIT_FOR_REVIEW",
+        "AUTO_SUBMIT_FOR_REVIEW",
+        "AI_RESPONSE_GENERATED",
+    },
+    "SPECIALIST": {
+        "ASSIGN_SPECIALIST",
+        "REVIEW_APPROVE",
+        "REVIEW_REJECT",
+        "REVIEW_REQUEST_CHANGES",
+        "SPECIALIST_MESSAGE",
+    },
+    "RAG": {"RAG_ANSWER", "RAG_ERROR", "RAG_REVISE"},
 }
 
 
@@ -292,6 +373,19 @@ def list_audit_logs(
     date_to: Optional[datetime] = None,
     limit: int = 200,
 ) -> list[dict]:
+    cache_key = cache_keys.admin_audit_logs(
+        action=action.upper() if action else None,
+        category=category.upper() if category else None,
+        search=search,
+        user_id=user_id,
+        date_from=date_from.isoformat() if date_from else None,
+        date_to=date_to.isoformat() if date_to else None,
+        limit=limit,
+    )
+    cached = cache.get_sync(cache_key, resource="admin_audit_logs")
+    if cached is not None:
+        return cached
+
     query = db.query(AuditLog)
     if category:
         allowed = _ACTION_CATEGORIES.get(category.upper(), set())
@@ -307,18 +401,28 @@ def list_audit_logs(
     if search:
         term = f"%{search}%"
         query = query.filter(
-            or_(AuditLog.action.ilike(term), AuditLog.details.ilike(term)))
+            or_(AuditLog.action.ilike(term), AuditLog.details.ilike(term))
+        )
 
     logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
-    return [
+    result = [
         {
             "id": log.id,
             "user_id": log.user_id,
-            "user_identifier": f"{log.user.role.value}_{log.user.id}" if log.user else None,
+            "user_identifier": f"{log.user.role.value}_{log.user.id}"
+            if log.user
+            else None,
             "action": log.action,
-            "category": _action_category(log.action),
+            "category": _action_category(log.action or ""),
             "details": log.details,
             "timestamp": log.timestamp,
         }
         for log in logs
     ]
+    cache.set_sync(
+        cache_key,
+        result,
+        ttl=settings.CACHE_ADMIN_AUDIT_LOG_TTL,
+        resource="admin_audit_logs",
+    )
+    return result

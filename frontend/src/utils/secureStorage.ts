@@ -11,10 +11,18 @@ export const secureStorage = {
   setItem(key: string, value: string): void {
     try {
       const encrypted = AES.encrypt(value, STORAGE_KEY).toString();
-      localStorage.setItem(key, encrypted);
+      try {
+        localStorage.setItem(key, encrypted);
+      } catch (e) {
+        console.warn('localStorage write failed:', e);
+      }
     } catch {
       // Fallback to plain text if encryption fails (should not happen)
-      localStorage.setItem(key, value);
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.warn('localStorage write failed:', e);
+      }
     }
   },
 

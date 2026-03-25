@@ -13,6 +13,8 @@ from src.ingestion.pipeline import (
     PipelineError,
     _backfill_debug_artifacts,
     _make_temp_id,
+    _resolve_chunking_config,
+    _resolve_embedding_config,
     _strip_embeddings,
     discover_pdfs,
     load_ingestion_config,
@@ -266,6 +268,15 @@ class TestDiscoverPdfs:
         assert new in result
         assert old not in result
 
+    def test_since_includes_same_day_files(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "same-day.pdf"
+        pdf.touch()
+        same_day = date.fromtimestamp(pdf.stat().st_mtime)
+
+        result = discover_pdfs(tmp_path, since=same_day)
+
+        assert pdf in result
+
     def test_nonexistent_path_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="does not exist"):
             discover_pdfs(tmp_path / "nonexistent")
@@ -331,6 +342,28 @@ class TestLoadIngestionConfig:
         f.write_text("- just\n- a\n- list\n")
         result = load_ingestion_config(f)
         assert result == {}
+
+
+class TestResolveIngestionRuntimeConfig:
+    def test_resolve_chunking_config_returns_mapping(self) -> None:
+        result = _resolve_chunking_config(
+            {"chunking": {"target_chunk_size": 512, "overlap_percentage": 0.2}}
+        )
+        assert result == {"target_chunk_size": 512, "overlap_percentage": 0.2}
+
+    def test_resolve_embedding_config_returns_mapping(self) -> None:
+        result = _resolve_embedding_config(
+            {
+                "embedding": {
+                    "model_name": "sentence-transformers/test",
+                    "dimensions": 768,
+                }
+            }
+        )
+        assert result == {
+            "model_name": "sentence-transformers/test",
+            "dimensions": 768,
+        }
 
 
 # -----------------------------------------------------------------------
@@ -459,6 +492,60 @@ class TestRunPipeline:
                 write_debug_artifacts=False,
             )
         mock_store.assert_called_once()
+
+    def test_chunk_and_embed_receive_runtime_config(self) -> None:
+        raw_doc = make_raw_doc()
+        embedded_doc = make_embedded_doc()
+        chunking_config = {"target_chunk_size": 512, "overlap_percentage": 0.2}
+        embedding_config = {
+            "model_name": "sentence-transformers/test",
+            "dimensions": 768,
+        }
+        with (
+            patch(
+                "src.ingestion.pipeline.extract_raw_document",
+                return_value=raw_doc,
+            ),
+            patch("src.ingestion.pipeline.clean_document", return_value=raw_doc),
+            patch(
+                "src.ingestion.pipeline.add_section_metadata",
+                return_value=raw_doc,
+            ),
+            patch(
+                "src.ingestion.pipeline.detect_and_convert_tables",
+                return_value=raw_doc,
+            ),
+            patch(
+                "src.ingestion.pipeline.attach_metadata",
+                return_value=embedded_doc,
+            ),
+            patch(
+                "src.ingestion.pipeline.chunk_document",
+                return_value=embedded_doc,
+            ) as mock_chunk_document,
+            patch(
+                "src.ingestion.pipeline.embed_chunks",
+                return_value=embedded_doc,
+            ) as mock_embed_chunks,
+        ):
+            run_pipeline(
+                pdf_path=Path(PDF_PATH_STR),
+                source_info=FAKE_SOURCE_INFO,
+                db_url=None,
+                dry_run=True,
+                write_debug_artifacts=False,
+                chunking_config=chunking_config,
+                embedding_config=embedding_config,
+            )
+
+        mock_chunk_document.assert_called_once_with(
+            embedded_doc,
+            chunking_config=chunking_config,
+        )
+        mock_embed_chunks.assert_called_once_with(
+            embedded_doc,
+            embedding_config=embedding_config,
+        )
 
     def test_extract_failure_raises_pipeline_error(self) -> None:
         with patch(
@@ -1090,6 +1177,45 @@ class TestRunIngestion:
             )
         assert summary["files_scanned"] == 0
         assert summary["files_succeeded"] == 0
+
+    def test_source_url_override_is_passed_to_pipeline(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "test.pdf"
+        pdf.touch()
+        seen: dict[str, object] = {}
+
+        def _fake_run_pipeline(**kwargs):
+            seen["source_info"] = kwargs["source_info"]
+            return {
+                "chunks": 1,
+                "embeddings_succeeded": 1,
+                "embeddings_failed": 0,
+                "db": {"inserted": 1, "updated": 0, "skipped": 0, "failed": 0},
+            }
+
+        with (
+            patch(
+                "src.ingestion.pipeline.load_sources",
+                return_value={"NICE": FAKE_SOURCE_INFO},
+            ),
+            patch("src.ingestion.pipeline.load_ingestion_config", return_value={}),
+            patch("src.ingestion.pipeline.discover_pdfs", return_value=[pdf]),
+            patch(
+                "src.ingestion.pipeline.run_pipeline",
+                side_effect=_fake_run_pipeline,
+            ),
+            patch("src.ingestion.pipeline.path_config") as mock_path,
+        ):
+            mock_path.root = tmp_path
+            summary = run_ingestion(
+                input_path=tmp_path,
+                source_name="NICE",
+                source_url="https://example.org/guidance/ng1",
+                db_url=None,
+                dry_run=True,
+            )
+
+        assert summary["files_succeeded"] == 1
+        assert seen["source_info"]["source_url"] == "https://example.org/guidance/ng1"
 
     def test_successful_run_increments_counts(self, tmp_path: Path) -> None:
         pdf = tmp_path / "test.pdf"

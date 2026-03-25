@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Paperclip, X } from 'lucide-react';
 import { Header } from '../../components/Header';
-import { useAuth } from '../../contexts/AuthContext';
-import { createChat, sendMessage, uploadChatFile } from '../../services/api';
+import { useAuth } from '../../contexts/useAuth';
+import { createChat, uploadChatFile } from '../../services/api';
 import type { Severity } from '../../types';
+import { orFallback } from '../../utils/value';
 
 export function GPNewQueryPage() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export function GPNewQueryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [fileNotice, setFileNotice] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     patientAge: '',
@@ -22,6 +24,15 @@ export function GPNewQueryPage() {
     message: ''
   });
 
+  const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [`${files[index]?.name ?? 'Unknown file'}: ${result.reason instanceof Error ? result.reason.message : 'Upload failed'}`]
+        : [],
+    );
+    return failures;
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
@@ -29,9 +40,20 @@ export function GPNewQueryPage() {
     }));
   };
 
+  /** Validates required fields and creates a new consultation with optional file attachments. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!formData.title.trim()) {
+      setError('Please enter a consultation title.');
+      return;
+    }
+
+    if (!formData.message.trim()) {
+      setError('Please enter a clinical question before submitting.');
+      return;
+    }
 
     if (!formData.specialty) {
       setError('Please select a specialty before submitting. Without it, the consultation cannot be routed to a specialist.');
@@ -40,6 +62,12 @@ export function GPNewQueryPage() {
 
     if (!formData.patientAge) {
       setError('Please enter the patient\'s age.');
+      return;
+    }
+
+    const age = parseInt(formData.patientAge, 10);
+    if (isNaN(age) || age < 0 || age > 150) {
+      setError('Please enter a valid patient age between 0 and 150.');
       return;
     }
 
@@ -58,17 +86,25 @@ export function GPNewQueryPage() {
     try {
       // 1. Create the chat with structured patient demographics
       const chat = await createChat({
-        title: formData.title || 'New Consultation',
+        title: formData.title.trim(),
         specialty: formData.specialty,
-        severity: formData.severity || undefined,
-        patient_age: formData.patientAge ? parseInt(formData.patientAge, 10) : undefined,
-        patient_gender: formData.sex || undefined,
+        severity: formData.severity,
+        patient_age: parseInt(formData.patientAge, 10),
+        patient_gender: formData.sex,
         patient_notes: formData.patientNotes || undefined,
       });
 
       // 2. Upload any attached files now that we have a chat ID
       if (attachedFiles.length > 0) {
-        await Promise.all(attachedFiles.map(f => uploadChatFile(chat.id, f)));
+        const uploadResults = await Promise.allSettled(
+          attachedFiles.map((file) => uploadChatFile(chat.id, file)),
+        );
+        const failures = formatUploadFailures(uploadResults, attachedFiles);
+        if (failures.length > 0) {
+          setError(
+            `Consultation created, but some files failed to upload: ${failures.join(' | ')}`,
+          );
+        }
       }
 
       // 3. Navigate to the detail page immediately, passing the draft message
@@ -76,15 +112,15 @@ export function GPNewQueryPage() {
       //    sending the first GP message. Attachments are already persisted.
       navigate(`/gp/query/${chat.id}`, { state: { draftMessage: formData.message } });
     } catch {
-      setError('Failed to create consultation. Is the backend running?');
+      setError('Unable to create consultation. Please try again or contact support if the issue persists.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+      <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
@@ -103,7 +139,7 @@ export function GPNewQueryPage() {
           </div>
 
           {error && (
-            <div className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div role="alert" aria-live="polite" className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
@@ -121,10 +157,12 @@ export function GPNewQueryPage() {
                   name="title"
                   value={formData.title}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Brief description of your clinical question"
+                  maxLength={200}
                   required
                 />
+                <span className={`text-xs ${formData.title.length > 180 ? 'text-red-500' : 'text-gray-400'}`}>{formData.title.length}/200</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -140,7 +178,7 @@ export function GPNewQueryPage() {
                     onChange={handleChange}
                     min="0"
                     max="150"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="e.g. 42"
                     required
                   />
@@ -154,7 +192,7 @@ export function GPNewQueryPage() {
                     name="sex"
                     value={formData.sex}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="">Select sex...</option>
@@ -171,7 +209,7 @@ export function GPNewQueryPage() {
                     name="specialty"
                     value={formData.specialty}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="">Select specialty...</option>
@@ -188,7 +226,7 @@ export function GPNewQueryPage() {
                     name="severity"
                     value={formData.severity}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     required
                   >
                     <option value="low">Low</option>
@@ -209,9 +247,11 @@ export function GPNewQueryPage() {
                   value={formData.patientNotes}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none"
                   placeholder="Relevant comorbidities, current medications, allergies, recent investigations..."
+                  maxLength={2000}
                 />
+                <span className={`text-xs ${formData.patientNotes.length > 1800 ? 'text-red-500' : 'text-gray-400'}`}>{formData.patientNotes.length}/2000</span>
               </div>
 
               <div>
@@ -224,7 +264,7 @@ export function GPNewQueryPage() {
                   value={formData.message}
                   onChange={handleChange}
                   rows={6}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent resize-none"
                   placeholder="Describe your clinical question, including relevant patient history, symptoms, current medications, and what advice you're seeking..."
                   required
                 />
@@ -235,13 +275,14 @@ export function GPNewQueryPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Attach files <span className="text-gray-400 font-normal">(optional — PDFs or text files)</span>
                 </label>
+                <p className="text-xs text-gray-500 mb-2">Max 3MB per file · PDF, TXT, MD, DOC, DOCX</p>
                 <label className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                   <Paperclip className="w-4 h-4" />
                   Choose files
                   <input
                     type="file"
                     multiple
-                    accept=".pdf,.txt"
+                    accept=".pdf,.txt,.md,.doc,.docx"
                     className="hidden"
                     onChange={(e) => {
                       if (!e.target.files) return;
@@ -254,10 +295,27 @@ export function GPNewQueryPage() {
                         return;
                       }
                       setError('');
-                      setAttachedFiles(selected);
+                      setAttachedFiles(prev => {
+                        const existingNames = new Set(prev.map(f => f.name));
+                        const duplicates = selected.filter(f => existingNames.has(f.name));
+                        const newFiles = selected.filter(f => !existingNames.has(f.name));
+                        if (duplicates.length > 0) {
+                          setFileNotice(`Already added: ${duplicates.map(f => f.name).join(', ')}`);
+                          setTimeout(() => setFileNotice(''), 4000);
+                        } else {
+                          setFileNotice('');
+                        }
+                        return [...prev, ...newFiles];
+                      });
+                      e.target.value = '';
                     }}
                   />
                 </label>
+                {fileNotice && (
+                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                    {fileNotice}
+                  </p>
+                )}
                 {attachedFiles.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {attachedFiles.map((f, i) => (
@@ -290,7 +348,7 @@ export function GPNewQueryPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>

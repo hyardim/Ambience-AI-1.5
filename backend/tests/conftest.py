@@ -9,10 +9,6 @@ test, and the schema is created fresh and torn down after each test
 function.
 """
 
-from src.services import auth_service
-from src.api import auth, chats, specialist, admin, notifications
-from src.db.session import get_async_db, get_db
-from src.db.base import Base
 import atexit
 import os
 import tempfile
@@ -26,13 +22,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import src.db.models.email_verification_token  # noqa: F401
+import src.db.models.password_reset_token  # noqa: F401
+from src.api.endpoints import admin, auth, chats, notifications, specialist
+from src.core.config import settings
+from src.db.base import Base
+from src.db.session import get_async_db, get_db
+from src.services import auth_service
+from src.utils.cache import cache
+
 # SQLite has no native JSONB type. Teach the SQLite type compiler to render
 # JSONB columns as plain JSON so that Base.metadata.create_all() works against
 # the in-memory test database without modifying production models.
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
-
-import src.db.password_reset_models  # noqa: F401
-import src.db.email_verification_models  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # File-based temp SQLite shared by the sync and async engines so that data
@@ -60,8 +62,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
-TestingSessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=engine)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 async_engine = create_async_engine(
     ASYNC_SQLALCHEMY_DATABASE_URL,
@@ -69,27 +70,22 @@ async_engine = create_async_engine(
     poolclass=StaticPool,
 )
 TestingAsyncSessionLocal = sessionmaker(
-    bind=async_engine, class_=AsyncSession, expire_on_commit=False,
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _build_app() -> FastAPI:
     """Create a minimal FastAPI app with only the routers under test."""
     app = FastAPI()
-    app.include_router(auth.router,          prefix="/auth",
-                       tags=["auth"])
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(chats.router, prefix="/chats", tags=["chats"])
+    app.include_router(specialist.router, prefix="/specialist", tags=["specialist"])
+    app.include_router(admin.router, prefix="/admin", tags=["admin"])
     app.include_router(
-        chats.router,         prefix="/chats",         tags=["chats"])
-    app.include_router(specialist.router,
-                       prefix="/specialist",    tags=["specialist"])
-    app.include_router(
-        admin.router,         prefix="/admin",         tags=["admin"])
-    app.include_router(notifications.router,
-                       prefix="/notifications", tags=["notifications"])
+        notifications.router, prefix="/notifications", tags=["notifications"]
+    )
 
     @app.get("/health")
     def health_check():
@@ -97,10 +93,6 @@ def _build_app() -> FastAPI:
 
     return app
 
-
-# ---------------------------------------------------------------------------
-# Core fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture()
 def db_session():
@@ -125,21 +117,23 @@ def clear_forgot_password_rate_limit_state():
 
 @pytest.fixture(autouse=True)
 def default_email_verification_flags(monkeypatch):
-    monkeypatch.setattr(
-        "src.core.config.settings.NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
-    monkeypatch.setattr(
-        "src.core.config.settings.ALLOW_LEGACY_UNVERIFIED_LOGIN", False)
+    monkeypatch.setattr(settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
+    monkeypatch.setattr(settings, "ALLOW_LEGACY_UNVERIFIED_LOGIN", False)
 
 
 @pytest.fixture()
 def client(db_session, monkeypatch):
     """HTTP test client wired to the file-based test database."""
 
+    # API tests should not share Redis-backed cache state between test cases.
+    monkeypatch.setattr(settings, "CACHE_ENABLED", False)
+    cache._client = None
+
     def override_get_db():
         try:
             yield db_session
         finally:
-            pass  # session lifecycle managed by db_session fixture
+            pass
 
     async def override_get_async_db():
         async with TestingAsyncSessionLocal() as session:
@@ -149,8 +143,8 @@ def client(db_session, monkeypatch):
                 await session.rollback()
                 raise
 
-    # Ensure the background AI generation also uses the test async session
     import src.services.chat_service as _cs
+
     monkeypatch.setattr(_cs, "AsyncSessionLocal", TestingAsyncSessionLocal)
 
     app = _build_app()
@@ -161,9 +155,10 @@ def client(db_session, monkeypatch):
         yield c
 
 
-# ---------------------------------------------------------------------------
-# User data fixtures
-# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def enable_inline_ai_tasks(monkeypatch):
+    monkeypatch.setattr(settings, "INLINE_AI_TASKS", True)
+
 
 @pytest.fixture()
 def gp_user_payload():
@@ -211,89 +206,79 @@ def second_gp_payload():
     }
 
 
-# ---------------------------------------------------------------------------
-# Pre-registered user + token fixtures
-# ---------------------------------------------------------------------------
-
 @pytest.fixture()
 def registered_gp(client, gp_user_payload):
-    """Register a GP user and return the full AuthResponse JSON."""
     resp = client.post("/auth/register", json=gp_user_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
 @pytest.fixture()
 def registered_specialist(client, specialist_user_payload):
-    """Register a specialist user and return the full AuthResponse JSON."""
     resp = client.post("/auth/register", json=specialist_user_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
 @pytest.fixture()
 def registered_admin(client, admin_user_payload):
-    """Register an admin user and return the full AuthResponse JSON."""
     resp = client.post("/auth/register", json=admin_user_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
 @pytest.fixture()
 def registered_second_gp(client, second_gp_payload):
-    """Register a second GP user (for ownership isolation tests)."""
     resp = client.post("/auth/register", json=second_gp_payload)
     assert resp.status_code == 201, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
 @pytest.fixture()
 def gp_headers(registered_gp):
-    """Bearer token headers for the GP user."""
     return {"Authorization": f"Bearer {registered_gp['access_token']}"}
 
 
 @pytest.fixture()
 def specialist_headers(registered_specialist):
-    """Bearer token headers for the specialist user."""
     return {"Authorization": f"Bearer {registered_specialist['access_token']}"}
 
 
 @pytest.fixture()
 def admin_headers(registered_admin):
-    """Bearer token headers for the admin user."""
     return {"Authorization": f"Bearer {registered_admin['access_token']}"}
 
 
 @pytest.fixture()
 def second_gp_headers(registered_second_gp):
-    """Bearer token headers for the second GP user."""
     return {"Authorization": f"Bearer {registered_second_gp['access_token']}"}
 
 
-# ---------------------------------------------------------------------------
-# Chat fixture
-# ---------------------------------------------------------------------------
-
 @pytest.fixture()
 def created_chat(client, gp_headers):
-    """Create a chat owned by the GP user and return the ChatResponse JSON."""
     resp = client.post(
-        "/chats/", json={"title": "Test Chat", "specialty": "neurology"}, headers=gp_headers)
+        "/chats/",
+        json={"title": "Test Chat", "specialty": "neurology"},
+        headers=gp_headers,
+    )
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
 @pytest.fixture()
 def submitted_chat(client, gp_headers):
-    """Create a neurology chat and auto-submit it by sending a message."""
     chat = client.post(
-        "/chats/", json={"title": "Submitted Chat", "specialty": "neurology"}, headers=gp_headers
+        "/chats/",
+        json={"title": "Submitted Chat", "specialty": "neurology"},
+        headers=gp_headers,
     ).json()
     client.post(
         f"/chats/{chat['id']}/message",
         json={"role": "user", "content": "Patient has wrist pain and swelling."},
         headers=gp_headers,
     )
-    # Sending the first message auto-submits the chat to SUBMITTED status.
     return client.get(f"/chats/{chat['id']}", headers=gp_headers).json()

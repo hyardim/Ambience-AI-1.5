@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
 from src.db.models import AuditLog, User
-from src.db.password_reset_models import PasswordResetToken
+from src.db.models.password_reset_token import PasswordResetToken
+from src.services import auth_service
 
 
 def _capture_reset_link(monkeypatch) -> dict[str, str]:
@@ -31,7 +32,9 @@ def test_forgot_password_generic_success_for_existing_and_non_existing(
 ):
     captured = _capture_reset_link(monkeypatch)
 
-    existing = client.post("/auth/forgot-password", json={"email": gp_user_payload["email"]})
+    existing = client.post(
+        "/auth/forgot-password", json={"email": gp_user_payload["email"]}
+    )
     non_existing = client.post("/auth/forgot-password", json={"email": "ghost@nhs.uk"})
 
     assert existing.status_code == 200
@@ -50,7 +53,9 @@ def test_forgot_password_creates_hashed_token_record(
 ):
     captured = _capture_reset_link(monkeypatch)
 
-    resp = client.post("/auth/forgot-password", json={"email": gp_user_payload["email"]})
+    resp = client.post(
+        "/auth/forgot-password", json={"email": gp_user_payload["email"]}
+    )
     assert resp.status_code == 200
 
     token_row = db_session.query(PasswordResetToken).one()
@@ -119,7 +124,7 @@ def test_expired_token_rejected(
     client.post("/auth/forgot-password", json={"email": gp_user_payload["email"]})
 
     token_row = db_session.query(PasswordResetToken).one()
-    token_row.expires_at = datetime.utcnow() - timedelta(minutes=1)
+    token_row.expires_at = auth_service._utcnow() - timedelta(minutes=1)
     db_session.commit()
 
     token = _token_from_link(captured["reset_link"])
@@ -156,8 +161,7 @@ def test_password_policy_enforced_during_reset(
         json={"token": token, "new_password": "weak"},
     )
 
-    assert resp.status_code == 400
-    assert "password must contain" in resp.json()["detail"].lower()
+    assert resp.status_code == 422
 
 
 def test_audit_entries_created_for_request_and_completion(

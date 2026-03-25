@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
+import src.ingestion.metadata as metadata_module
 from src.ingestion.metadata import (
     MetadataValidationError,
+    _build_front_matter_text,
+    _derive_source_url,
+    _extract_document_dates_from_text,
+    _extract_labeled_date,
+    _load_allowed_sources,
+    _parse_human_date,
+    _resolve_document_dates,
     attach_metadata,
     extract_pdf_metadata,
     extract_title,
@@ -162,6 +172,170 @@ class TestInferFromPath:
         assert result["source_name"] == "Others"
 
 
+def test_derive_source_url_keeps_specific_url() -> None:
+    """When the provided URL already has a meaningful path, keep it as-is."""
+    source_url = _derive_source_url(
+        {
+            "source_url": "https://www.nice.org.uk/guidance/ng100",
+            "source_path": "data/raw/neurology/NICE/NG128.pdf",
+        }
+    )
+    assert source_url == "https://www.nice.org.uk/guidance/ng100"
+
+
+def test_derive_source_url_builds_nice_guidance_link() -> None:
+    """When the URL is just the base domain, infer from NG### filename."""
+    source_url = _derive_source_url(
+        {
+            "source_url": "https://www.nice.org.uk",
+            "source_path": "data/raw/neurology/NICE/NG128.pdf",
+        }
+    )
+
+    assert source_url == "https://www.nice.org.uk/guidance/ng128"
+
+
+def test_derive_source_url_builds_nice_guidance_link_from_title() -> None:
+    """Infer a NICE guidance URL from the resolved title when filename is opaque."""
+    source_url = _derive_source_url(
+        {
+            "source_url": "https://www.nice.org.uk",
+            "source_path": (
+                "data/raw/rheumatology/NICE/"
+                "delirium-prevention-diagnosis-and-management-100f9aad90.pdf"
+            ),
+        },
+        resolved_title="NG103 Delirium: prevention, diagnosis and management",
+    )
+
+    assert source_url == "https://www.nice.org.uk/guidance/ng103"
+
+
+def test_resolve_document_dates_prefers_source_info_then_pdf_fallbacks() -> None:
+    creation, publish, last_updated = _resolve_document_dates(
+        {
+            "publish_date": "2023-01-01",
+            "last_updated_date": "2024-02-01",
+        },
+        make_pdf_metadata(
+            creation_date="2022-12-31",
+            mod_date="2024-01-15",
+        ),
+    )
+
+    assert creation == "2022-12-31"
+    assert publish == "2023-01-01"
+    assert last_updated == "2024-02-01"
+
+
+def test_resolve_document_dates_falls_back_to_pdf_metadata() -> None:
+    creation, publish, last_updated = _resolve_document_dates(
+        {},
+        make_pdf_metadata(
+            creation_date="2022-12-31",
+            mod_date="2024-01-15",
+        ),
+    )
+
+    assert creation == "2022-12-31"
+    assert publish == "2022-12-31"
+    assert last_updated == "2024-01-15"
+
+
+def test_parse_human_date_parses_full_month_name() -> None:
+    assert _parse_human_date("15 January 2019") == "2019-01-15"
+
+
+def test_extract_labeled_date_reads_published_line() -> None:
+    text = "NICE guideline\nPublished: 15 January 2019\nwww.nice.org.uk/guidance/ng119"
+    assert _extract_labeled_date(text, ("published",)) == "2019-01-15"
+
+
+def test_build_front_matter_text_uses_first_pages_only() -> None:
+    doc = make_table_aware_doc(
+        pages=[
+            make_page(page_number=1, blocks=[make_block("Published: 1 May 2019")]),
+            make_page(
+                page_number=2,
+                blocks=[make_block("Last updated: 2 October 2023")],
+            ),
+            make_page(page_number=3, blocks=[make_block("Page 3 body")]),
+            make_page(page_number=4, blocks=[make_block("Ignored page")]),
+        ]
+    )
+    front_matter = _build_front_matter_text(doc)
+    assert "Published: 1 May 2019" in front_matter
+    assert "Last updated: 2 October 2023" in front_matter
+    assert "Ignored page" not in front_matter
+
+
+def test_extract_document_dates_from_text_reads_nice_front_matter() -> None:
+    doc = make_table_aware_doc(
+        pages=[
+            make_page(
+                page_number=1,
+                blocks=[
+                    make_block(
+                        "Suspected neurological conditions: recognition and referral"
+                    ),
+                    make_block("Published: 1 May 2019"),
+                    make_block("Last updated: 2 October 2023"),
+                ],
+            )
+        ]
+    )
+    assert _extract_document_dates_from_text(doc) == {
+        "publish_date": "2019-05-01",
+        "last_updated_date": "2023-10-02",
+    }
+
+
+def test_resolve_document_dates_falls_back_to_front_matter_text() -> None:
+    doc = make_table_aware_doc(
+        pages=[
+            make_page(
+                blocks=[
+                    make_block("Cerebral palsy in adults"),
+                    make_block("Published: 15 January 2019"),
+                ]
+            )
+        ]
+    )
+
+    creation, publish, last_updated = _resolve_document_dates(
+        {},
+        make_pdf_metadata(),
+        doc,
+    )
+
+    assert creation == ""
+    assert publish == "2019-01-15"
+    assert last_updated == "2019-01-15"
+
+
+def test_resolve_document_dates_prefers_pdf_before_front_matter() -> None:
+    doc = make_table_aware_doc(
+        pages=[
+            make_page(
+                blocks=[
+                    make_block("Published: 15 January 2019"),
+                    make_block("Last updated: 2 October 2023"),
+                ]
+            )
+        ]
+    )
+
+    creation, publish, last_updated = _resolve_document_dates(
+        {},
+        make_pdf_metadata(creation_date="2022-12-31", mod_date="2024-01-15"),
+        doc,
+    )
+
+    assert creation == "2022-12-31"
+    assert publish == "2022-12-31"
+    assert last_updated == "2024-01-15"
+
+
 # -----------------------------------------------------------------------
 # validate_source_info
 # -----------------------------------------------------------------------
@@ -196,6 +370,62 @@ class TestValidateSourceInfo:
     def test_all_valid_source_names_pass(self) -> None:
         for source_name in ["NICE", "BSR", "Others"]:
             validate_source_info(make_source_info(source_name=source_name))
+
+
+def test_load_allowed_sources_falls_back_when_yaml_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(metadata_module, "path_config", SimpleNamespace(root=tmp_path))
+    _load_allowed_sources.cache_clear()
+
+    source_names, specialties = _load_allowed_sources()
+
+    assert source_names == set()
+    assert specialties == {"general"}
+    _load_allowed_sources.cache_clear()
+
+
+def test_load_allowed_sources_falls_back_when_yaml_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    configs_dir = tmp_path / "configs"
+    configs_dir.mkdir(parents=True)
+    (configs_dir / "sources.yaml").write_text("- invalid\n- list\n", encoding="utf-8")
+    monkeypatch.setattr(metadata_module, "path_config", SimpleNamespace(root=tmp_path))
+    _load_allowed_sources.cache_clear()
+
+    source_names, specialties = _load_allowed_sources()
+
+    assert source_names == set()
+    assert specialties == {"general"}
+    _load_allowed_sources.cache_clear()
+
+
+def test_load_allowed_sources_reads_specialties_from_yaml(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    configs_dir = tmp_path / "configs"
+    configs_dir.mkdir(parents=True)
+    (configs_dir / "sources.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "NICE": {"specialty": "neurology"},
+                "BSR": {"specialty": "rheumatology"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(metadata_module, "path_config", SimpleNamespace(root=tmp_path))
+    _load_allowed_sources.cache_clear()
+
+    source_names, specialties = _load_allowed_sources()
+
+    assert source_names == {"NICE", "BSR"}
+    assert specialties == {"general", "neurology", "rheumatology"}
+    _load_allowed_sources.cache_clear()
 
 
 # -----------------------------------------------------------------------
@@ -508,19 +738,21 @@ class TestValidateMetadata:
     def test_missing_doc_field_raises(self) -> None:
         doc = self._make_valid_doc()
         del doc["doc_meta"]["doc_id"]
-        with pytest.raises(MetadataValidationError, match="Missing doc_meta.doc_id"):
+        with pytest.raises(MetadataValidationError, match=r"Missing doc_meta\.doc_id"):
             validate_metadata(doc)
 
     def test_empty_doc_field_raises(self) -> None:
         doc = self._make_valid_doc()
         doc["doc_meta"]["title"] = ""
-        with pytest.raises(MetadataValidationError, match="Empty doc_meta.title"):
+        with pytest.raises(MetadataValidationError, match=r"Empty doc_meta\.title"):
             validate_metadata(doc)
 
     def test_missing_specialty_raises(self) -> None:
         doc = self._make_valid_doc()
         del doc["doc_meta"]["specialty"]
-        with pytest.raises(MetadataValidationError, match="Missing doc_meta.specialty"):
+        with pytest.raises(
+            MetadataValidationError, match=r"Missing doc_meta\.specialty"
+        ):
             validate_metadata(doc)
 
     def test_missing_block_field_raises(self) -> None:
@@ -649,25 +881,29 @@ class TestAttachMetadata:
         assert result["doc_meta"]["source_name"] == "BSR"
 
     def test_invalid_specialty_raises(self) -> None:
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="Invalid specialty"):
-                attach_metadata(
-                    make_table_aware_doc(), make_source_info(specialty="cardiology")
-                )
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="Invalid specialty"),
+        ):
+            attach_metadata(
+                make_table_aware_doc(), make_source_info(specialty="cardiology")
+            )
 
     def test_invalid_source_name_raises(self) -> None:
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="Invalid source_name"):
-                attach_metadata(
-                    make_table_aware_doc(), make_source_info(source_name="NHS")
-                )
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="Invalid source_name"),
+        ):
+            attach_metadata(make_table_aware_doc(), make_source_info(source_name="NHS"))
 
     def test_invalid_doc_type_raises(self) -> None:
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="Invalid doc_type"):
-                attach_metadata(
-                    make_table_aware_doc(), make_source_info(doc_type="leaflet")
-                )
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="Invalid doc_type"),
+        ):
+            attach_metadata(
+                make_table_aware_doc(), make_source_info(doc_type="leaflet")
+            )
 
     def test_deterministic_block_uids(self) -> None:
         doc = make_table_aware_doc()
@@ -703,6 +939,39 @@ class TestAttachMetadata:
         assert meta["author_org"] == "British Society for Rheumatology"
         assert meta["source_url"] == "https://bsr.org.uk/guidelines"
 
+    def test_attach_metadata_uses_pdf_dates_when_source_dates_missing(self) -> None:
+        with patch_pdf_meta(
+            creation_date="2022-12-31",
+            mod_date="2024-01-15",
+        ):
+            result = attach_metadata(make_table_aware_doc(), make_source_info())
+
+        meta = result["doc_meta"]
+        assert meta["creation_date"] == "2022-12-31"
+        assert meta["publish_date"] == "2022-12-31"
+        assert meta["last_updated_date"] == "2024-01-15"
+
+    def test_attach_metadata_can_infer_nice_url_from_pdf_title(self) -> None:
+        doc = make_table_aware_doc(
+            source_path=(
+                "data/raw/rheumatology/NICE/"
+                "delirium-prevention-diagnosis-and-management-100f9aad90.pdf"
+            )
+        )
+        source_info = make_source_info(
+            source_path=doc["source_path"],
+            source_url="https://www.nice.org.uk",
+        )
+
+        with patch_pdf_meta(
+            title="NG103 Delirium: prevention, diagnosis and management"
+        ):
+            result = attach_metadata(doc, source_info)
+
+        assert (
+            result["doc_meta"]["source_url"] == "https://www.nice.org.uk/guidance/ng103"
+        )
+
     def test_missing_source_path_raises_metadata_validation_error(self) -> None:
         doc = make_table_aware_doc(source_path="")
         source_info = {
@@ -711,9 +980,11 @@ class TestAttachMetadata:
             "specialty": "rheumatology",
             # source_path deliberately omitted
         }
-        with patch_pdf_meta():
-            with pytest.raises(MetadataValidationError, match="source_path"):
-                attach_metadata(doc, source_info)
+        with (
+            patch_pdf_meta(),
+            pytest.raises(MetadataValidationError, match="source_path"),
+        ):
+            attach_metadata(doc, source_info)
 
     def test_block_page_number_set_from_page(self) -> None:
         block = make_block("Some text")
@@ -766,3 +1037,18 @@ class TestGetPageText:
         from src.ingestion.metadata import _get_page_text
 
         assert _get_page_text(make_table_aware_doc(pages=[]), 0) == ""
+
+
+# -----------------------------------------------------------------------
+# _parse_human_date - edge cases
+# -----------------------------------------------------------------------
+
+
+def test_parse_human_date_returns_none_for_unparseable_string() -> None:
+    result = _parse_human_date("not a date at all")
+    assert result is None
+
+
+def test_parse_human_date_parses_valid_date() -> None:
+    result = _parse_human_date("15 March 2024")
+    assert result == "2024-03-15"

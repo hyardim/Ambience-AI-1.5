@@ -1,14 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, CheckCircle, XCircle, AlertTriangle,
-  Loader2, UserPlus, MessageSquare, PenLine, Lock,
-} from 'lucide-react';
-import { Header } from '../../components/Header';
-import { ChatMessage } from '../../components/ChatMessage';
-import { ChatInput } from '../../components/ChatInput';
-import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useChatStream } from '../../hooks/useChatStream';
 import { toFrontendMessage } from '../../utils/messageMapping';
 import {
@@ -22,10 +14,20 @@ import {
 } from '../../services/api';
 import type { BackendChatWithMessages } from '../../types/api';
 import type { Message } from '../../types';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { orFallback } from '../../utils/value';
+import { runUnlessSilent } from '../../utils/control';
+import { getCloseReviewTitle, getTerminalConsultationState } from '../../utils/specialist';
+import {
+  canAssignSpecialist,
+  shouldAutoConnectSpecialistStream,
+} from '../../utils/specialistQueryDetail';
+import { SpecialistQueryDetailView } from './SpecialistQueryDetailView';
 
 export function SpecialistQueryDetailPage() {
   const { username, logout } = useAuth();
   const { queryId } = useParams<{ queryId: string }>();
+  const chatId = Number(queryId);
   const navigate = useNavigate();
 
   const [chat, setChat] = useState<BackendChatWithMessages | null>(null);
@@ -41,38 +43,103 @@ export function SpecialistQueryDetailPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [showManualResponseModal, setShowManualResponseModal] = useState(false);
   const [manualResponseContent, setManualResponseContent] = useState('');
+  const [manualResponseSources, setManualResponseSources] = useState('');
+  const [manualResponseFiles, setManualResponseFiles] = useState<File[]>([]);
+  const [showEditResponseModal, setShowEditResponseModal] = useState(false);
+  const [editResponseContent, setEditResponseContent] = useState('');
+  const [editResponseSources, setEditResponseSources] = useState('');
+  const [editResponseFeedback, setEditResponseFeedback] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // Consultation-level actions
+  const [showConsultationRejectModal, setShowConsultationRejectModal] = useState(false);
+  const [consultationRejectReason, setConsultationRejectReason] = useState('');
+  const [showSendCommentModal, setShowSendCommentModal] = useState(false);
+  const [commentContent, setCommentContent] = useState('');
+  const [showUnassignConfirm, setShowUnassignConfirm] = useState(false);
+  const [showConsultationManualResponseModal, setShowConsultationManualResponseModal] = useState(false);
+  const [consultationManualContent, setConsultationManualContent] = useState('');
+  const [consultationManualSources, setConsultationManualSources] = useState('');
+  const [consultationManualFiles, setConsultationManualFiles] = useState<File[]>([]);
 
   // Which message the current modal action targets
   const [reviewTargetMessageId, setReviewTargetMessageId] = useState<number | null>(null);
 
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
+  const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
+    const failedFiles = results.flatMap((result, index) =>
+      result.status === 'rejected' ? [files[index]?.name ?? `file ${index + 1}`] : [],
+    );
+    return failedFiles.length > 0 ? failedFiles.join(', ') : null;
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   // ── Streaming state machine ────────────────────────────────────────────
   const refreshData = useCallback(async () => {
-    if (!queryId) return;
     try {
       const [profile, chatData] = await Promise.all([
         getProfile(),
-        getSpecialistChatDetail(Number(queryId)),
+        getSpecialistChatDetail(chatId),
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
-    } catch (err) { console.warn('[QueryDetail] Background refresh failed:', err); }
-  }, [queryId, username]);
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
+    } catch { /* silent refresh */ }
+  }, [chatId, username]);
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
     setMessages,
-    { chatId: chat?.id ?? null, onRefresh: refreshData },
+    {
+      chatId: chat?.id ?? null,
+      onRefresh: refreshData,
+      onFileContextTruncated: () => {
+        setError(
+          'Attached file context was truncated before AI revision. Ask for a shorter upload if key details are missing.',
+        );
+      },
+    },
   );
+
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const isSilent = options?.silent;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    runUnlessSilent(isSilent, () => {
+      setLoading(true);
+      setError('');
+    });
+    try {
+      const [profile, chatData] = await Promise.all([
+        getProfile({ signal: controller.signal }),
+        getSpecialistChatDetail(chatId, { signal: controller.signal }),
+      ]);
+      setMyUserId(profile.id);
+      setChat(chatData);
+      setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
+    } catch (err) {
+      ifNotAbortError(err, () => {
+        runUnlessSilent(isSilent, () => {
+          setError(getErrorMessage(err, 'Failed to load consultation'));
+        });
+      });
+    } finally {
+      runUnlessSilent(isSilent, () => {
+        setLoading(false);
+      });
+    }
+  }, [chatId, username]);
 
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
-    loadData();
-  }, [queryId]);
+    void loadData();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
+  }, [loadData]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -92,45 +159,23 @@ export function SpecialistQueryDetailPage() {
 
   // Delegate polling to the hook
   useEffect(() => {
-    if (!queryId) return;
     if (shouldPoll) {
       startPolling();
     } else {
       stopPolling();
     }
-  }, [queryId, shouldPoll, startPolling, stopPolling]);
-
-  const loadData = async (options?: { silent?: boolean }) => {
-    if (!queryId) return;
-    if (!options?.silent) {
-      setLoading(true);
-      setError('');
-    }
-    try {
-      const [profile, chatData] = await Promise.all([
-        getProfile(),
-        getSpecialistChatDetail(Number(queryId)),
-      ]);
-      setMyUserId(profile.id);
-      setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, username || 'Specialist User', 'specialist')));
-    } catch (err) {
-      if (!options?.silent) {
-        setError(err instanceof Error ? err.message : 'Failed to load consultation');
-      }
-    } finally {
-      if (!options?.silent) {
-        setLoading(false);
-      }
-    }
-  };
+  }, [shouldPoll, startPolling, stopPolling]);
 
   // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
     if (!chat) return;
-    if (streamConnected) return;
-    if (streamPhase !== 'idle' && streamPhase !== 'fallback_polling') return;
-    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+    if (!shouldAutoConnectSpecialistStream({
+      hasChat: true,
+      streamConnected,
+      streamPhase,
+      hasPendingAIResponse,
+      hasRevisionInProgress,
+    })) return;
 
     void connectStream(chat.id);
   }, [
@@ -145,113 +190,247 @@ export function SpecialistQueryDetailPage() {
   // ── Actions ──────────────────────────────────────────────────
 
   const handleAssign = async () => {
-    if (!chat || myUserId === null) return;
+    const currentChat = chat!;
     setActionLoading(true);
     setError('');
     try {
-      const updated = await assignChat(chat.id, myUserId);
-      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+      const updated = await assignChat(currentChat.id, myUserId!);
+      setChat({ ...currentChat, ...updated });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to assign chat');
+      setError(getErrorMessage(err, 'Failed to assign chat'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleApprove = async () => {
-    if (!chat || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
     setActionLoading(true);
     setError('');
     try {
-      await reviewMessage(chat.id, reviewTargetMessageId, 'approve');
+      await reviewMessage(currentChat.id, reviewTargetMessageId!, 'approve');
       setShowApproveConfirm(false);
       setReviewTargetMessageId(null);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to approve');
+      setError(getErrorMessage(err, 'Failed to approve'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleApproveWithComment = async () => {
-    if (!chat || !approveComment.trim() || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
     setActionLoading(true);
     setError('');
     try {
-      await sendSpecialistMessage(chat.id, approveComment.trim());
-      await reviewMessage(chat.id, reviewTargetMessageId, 'approve', approveComment.trim());
+      await sendSpecialistMessage(currentChat.id, approveComment.trim());
+      await reviewMessage(currentChat.id, targetMessageId, 'approve', approveComment.trim());
       setShowApproveWithCommentModal(false);
       setApproveComment('');
       setReviewTargetMessageId(null);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to approve');
+      setError(getErrorMessage(err, 'Failed to approve'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleRequestChanges = async () => {
-    if (!chat || !rejectReason.trim() || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
     setActionLoading(true);
     setError('');
     try {
       // Open SSE *before* the API call so we catch the revision stream events
-      await connectStream(chat.id);
-      await reviewMessage(chat.id, reviewTargetMessageId, 'request_changes', rejectReason.trim());
+      await connectStream(currentChat.id);
+      await reviewMessage(currentChat.id, targetMessageId, 'request_changes', rejectReason.trim());
       setShowRejectModal(false);
       setRejectReason('');
       setReviewTargetMessageId(null);
       // Reconcile with persisted state (streaming will update progressively)
       await loadData({ silent: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to request changes');
+      setError(getErrorMessage(err, 'Failed to request changes'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleManualResponse = async () => {
-    if (!chat || !manualResponseContent.trim() || reviewTargetMessageId === null) return;
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
     setActionLoading(true);
     setError('');
     try {
-      await reviewMessage(chat.id, reviewTargetMessageId, 'manual_response', undefined, manualResponseContent.trim());
+      let uploadWarning = '';
+      if (manualResponseFiles.length > 0) {
+        const uploadResults = await Promise.allSettled(
+          manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)),
+        );
+        const failures = formatUploadFailures(uploadResults, manualResponseFiles);
+        if (failures) {
+          uploadWarning = `Manual response sent, but some files failed to upload: ${failures}`;
+        }
+      }
+      const sources = manualResponseSources
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      await reviewMessage(
+        currentChat.id,
+        targetMessageId,
+        'manual_response',
+        undefined,
+        manualResponseContent.trim(),
+        sources,
+      );
       setShowManualResponseModal(false);
       setManualResponseContent('');
+      setManualResponseSources('');
+      setManualResponseFiles([]);
+      setReviewTargetMessageId(null);
+      await loadData();
+      if (uploadWarning) {
+        setError(uploadWarning);
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to submit manual response'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEditResponse = async () => {
+    const currentChat = chat!;
+    const targetMessageId = reviewTargetMessageId!;
+    setActionLoading(true);
+    setError('');
+    try {
+      const sources = editResponseSources
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      await reviewMessage(
+        currentChat.id,
+        targetMessageId,
+        'edit_response',
+        editResponseFeedback.trim() || undefined,
+        undefined,
+        sources,
+        editResponseContent.trim(),
+      );
+      setShowEditResponseModal(false);
+      setEditResponseContent('');
+      setEditResponseSources('');
+      setEditResponseFeedback('');
       setReviewTargetMessageId(null);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit manual response');
+      setError(getErrorMessage(err, 'Failed to save edited response'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleCloseAndApprove = async () => {
-    if (!chat) return;
+    const currentChat = chat!;
     setActionLoading(true);
     setError('');
     try {
-      await reviewChat(chat.id, 'approve');
+      await reviewChat(currentChat.id, 'approve');
       setShowCloseConfirm(false);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to close consultation');
+      setError(getErrorMessage(err, 'Failed to close consultation'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConsultationRequestRevision = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      await connectStream(currentChat.id);
+      await reviewChat(currentChat.id, 'request_changes', consultationRejectReason.trim());
+      setShowConsultationRejectModal(false);
+      setConsultationRejectReason('');
+      await loadData({ silent: true });
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to request revision'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendComment = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      await reviewChat(currentChat.id, 'send_comment', commentContent.trim());
+      setShowSendCommentModal(false);
+      setCommentContent('');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to send comment'));
+    } finally {
+      setActionLoading(false);
+    }
+    void loadData({ silent: true });
+  };
+
+  const handleUnassign = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      await reviewChat(currentChat.id, 'unassign');
+      setShowUnassignConfirm(false);
+      navigate('/specialist/queries');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to unassign'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConsultationManualResponse = async () => {
+    const currentChat = chat!;
+    setActionLoading(true);
+    setError('');
+    try {
+      if (consultationManualFiles.length > 0) {
+        await Promise.all(consultationManualFiles.map((f) => uploadChatFile(currentChat.id, f)));
+      }
+      const sources = consultationManualSources
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      await reviewChat(currentChat.id, 'manual_response', undefined, consultationManualContent.trim(), sources);
+      setShowConsultationManualResponseModal(false);
+      setConsultationManualContent('');
+      setConsultationManualSources('');
+      setConsultationManualFiles([]);
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to submit manual response'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleSendMessage = async (content: string, files?: File[]) => {
-    if (!chat) return;
+    const currentChat = chat!;
     // Optimistically add the specialist message
     const tempId = `temp-${Date.now()}`;
     const optimistic: Message = {
       id: tempId,
       senderId: 'specialist',
-      senderName: username || 'Specialist User',
+      senderName: orFallback(username, 'Specialist User'),
       senderType: 'specialist',
       content,
       timestamp: new Date(),
@@ -267,13 +446,17 @@ export function SpecialistQueryDetailPage() {
           setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
           return;
         }
-        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+        const uploadResults = await Promise.allSettled(files.map(f => uploadChatFile(currentChat.id, f)));
+        const failures = formatUploadFailures(uploadResults, files);
+        if (failures) {
+          setError(`Message sent, but some files failed to upload: ${failures}`);
+        }
       }
-      await sendSpecialistMessage(chat.id, content);
+      await sendSpecialistMessage(currentChat.id, content);
     } catch (err) {
       // Remove the optimistic message on failure
       setMessages(prev => prev.filter(m => m.id !== tempId));
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+      setError(getErrorMessage(err, 'Failed to send message'));
     }
   };
 
@@ -283,7 +466,7 @@ export function SpecialistQueryDetailPage() {
   const isSubmitted = chatStatus === 'submitted';
   const isAssignedOrReviewing = chatStatus === 'assigned' || chatStatus === 'reviewing';
   const isTerminal = ['approved', 'rejected', 'closed'].includes(chatStatus);
-  const canAssign = isSubmitted;
+  const canAssign = isSubmitted && canAssignSpecialist(myUserId);
   const canReview = isAssignedOrReviewing;
 
   // IDs of all unreviewed AI messages (specialist can act on any of them)
@@ -297,411 +480,138 @@ export function SpecialistQueryDetailPage() {
   const aiMessages = messages.filter(m => m.senderType === 'ai');
   const anyGenerating = aiMessages.some(m => m.isGenerating);
   const allAIReviewed = aiMessages.length > 0 && unreviewedAIIds.size === 0 && !anyGenerating;
-
-  const formatSpecialty = (s: string | null) =>
-    s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
-
-  // ── Loading / not-found states ───────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
-        </main>
-      </div>
-    );
-  }
-
-  if (!chat) {
-    return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Query not found</h1>
-            {error && <p className="text-red-600 mb-4">{error}</p>}
-            <button
-              onClick={() => navigate('/specialist/queries')}
-              className="text-[#005eb8] hover:text-[#003087] font-medium"
-            >
-              Back to Queries
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // ── Render ───────────────────────────────────────────────────
-
+  const closeReviewTitle = getCloseReviewTitle(anyGenerating, allAIReviewed) ?? '';
+  const terminalState = getTerminalConsultationState(chatStatus);
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="specialist" userName={username || 'Specialist User'} onLogout={logout} />
-
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/specialist/queries')}
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          Back to Queries
-        </button>
-
-        <div className="bg-white rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
-          {/* Query Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div className="flex-1">
-                <h1 className="text-xl font-bold text-gray-900 mb-2">
-                  {chat.title || 'Untitled Consultation'}
-                </h1>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                  <span className="capitalize">{formatSpecialty(chat.specialty)}</span>
-                  <span>·</span>
-                  <span>
-                    {new Date(chat.created_at).toLocaleDateString('en-GB', {
-                      day: 'numeric', month: 'short', year: 'numeric',
-                    })}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {chat.severity && <SeverityBadge severity={chat.severity} />}
-                <StatusBadge status={chat.status} />
-              </div>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
-            )}
-
-            {/* Action area */}
-            <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-200">
-              {/* Assign button */}
-              {canAssign && (
-                <button
-                  onClick={handleAssign}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
-                >
-                  <UserPlus className="w-5 h-5" />
-                  {actionLoading ? 'Assigning…' : 'Assign to Me'}
-                </button>
-              )}
-
-              {/* Hint when reviewing — actions are on messages */}
-              {canReview && (
-                <>
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 bg-gray-50 border border-gray-200">
-                    Review actions are available on each AI response below.
-                  </div>
-                  <button
-                    onClick={() => setShowCloseConfirm(true)}
-                    disabled={actionLoading || !allAIReviewed}
-                    title={anyGenerating ? 'Wait for AI response generation to finish' : !allAIReviewed ? 'All AI responses must be reviewed before closing' : undefined}
-                    className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Lock className="w-5 h-5" />
-                    Close &amp; Approve Consultation
-                  </button>
-                </>
-              )}
-
-              {/* Terminal status banner */}
-              {isTerminal && (
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                  chatStatus === 'approved'
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-red-50 text-red-700'
-                }`}>
-                  {chatStatus === 'approved' ? (
-                    <><CheckCircle className="w-5 h-5" /> Consultation Approved</>
-                  ) : (
-                    <><XCircle className="w-5 h-5" /> Consultation Rejected</>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {messages.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No messages yet.</p>
-            ) : (
-              messages.map(message => {
-                const isUnreviewedAI = canReview && unreviewedAIIds.has(message.id);
-
-                return (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    isOwnMessage={message.senderType === 'specialist'}
-                    showReviewStatus={canReview || isTerminal}
-                    showReviewActions={isUnreviewedAI}
-                    onApprove={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowApproveConfirm(true);
-                    }}
-                    onApproveWithComment={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowApproveWithCommentModal(true);
-                    }}
-                    onRequestChanges={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowRejectModal(true);
-                    }}
-                    onManualResponse={() => {
-                      setReviewTargetMessageId(Number(message.id));
-                      setShowManualResponseModal(true);
-                    }}
-                    actionLoading={actionLoading}
-                  />
-                );
-              })
-            )}
-            {hasPendingAIResponse && (
-              <div className="flex gap-4">
-                <div className="shrink-0">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />
-                  </div>
-                </div>
-                <div className="flex-1 max-w-3xl">
-                  <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
-                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* All reviewed — bottom close banner */}
-          {canReview && allAIReviewed && (
-            <div className="border-t border-gray-200 bg-green-50 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
-                <CheckCircle className="w-5 h-5" />
-                All AI responses have been reviewed.
-              </div>
-              <button
-                onClick={() => setShowCloseConfirm(true)}
-                disabled={actionLoading}
-                className="inline-flex items-center gap-2 bg-[#007f3b] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
-              >
-                <Lock className="w-5 h-5" />
-                Close &amp; Approve Consultation
-              </button>
-            </div>
-          )}
-
-          {/* Chat Input (disabled for terminal states) */}
-          {!isTerminal && (
-            <div className="border-t border-gray-200 p-4">
-              <ChatInput
-                onSendMessage={handleSendMessage}
-                placeholder="Add a comment or ask for clarification..."
-              />
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Approve Confirmation Modal */}
-      {showApproveConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[#007f3b] mb-4">
-              <CheckCircle className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Approve Response</h2>
-            </div>
-            <p className="text-gray-600 mb-6">
-              By approving, you confirm that the AI-generated response is clinically accurate
-              and appropriate to send to the GP.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowApproveConfirm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApprove}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
-              >
-                {actionLoading ? 'Approving…' : 'Confirm Approval'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Approve with Comment Modal */}
-      {showApproveWithCommentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[#005eb8] mb-4">
-              <MessageSquare className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Approve with Comment</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Your comment will be sent as a message to the GP before the consultation is approved.
-            </p>
-            <textarea
-              value={approveComment}
-              onChange={(e) => setApproveComment(e.target.value)}
-              rows={4}
-              autoFocus
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none mb-6"
-              placeholder="Add your comment for the GP..."
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowApproveWithCommentModal(false);
-                  setApproveComment('');
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApproveWithComment}
-                disabled={!approveComment.trim() || actionLoading}
-                className="px-4 py-2 bg-[#005eb8] text-white rounded-lg font-medium hover:bg-[#003087] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Approving…' : 'Send & Approve'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reject Modal */}
-      {showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-amber-600 mb-4">
-              <AlertTriangle className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Request Changes</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Please describe what changes are needed to the AI response:
-            </p>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent resize-none mb-6"
-              placeholder="Describe the required changes..."
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowRejectModal(false);
-                  setRejectReason('');
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRequestChanges}
-                disabled={!rejectReason.trim() || actionLoading}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Submitting…' : 'Submit Feedback'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Response Modal */}
-      {showManualResponseModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-purple-600 mb-4">
-              <PenLine className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Manual Response</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              The AI response will be rejected. Type your replacement response below —
-              it will be sent to the GP as a specialist message.
-            </p>
-            <textarea
-              value={manualResponseContent}
-              onChange={(e) => setManualResponseContent(e.target.value)}
-              rows={6}
-              autoFocus
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none mb-6"
-              placeholder="Type your replacement response..."
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowManualResponseModal(false);
-                  setManualResponseContent('');
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleManualResponse}
-                disabled={!manualResponseContent.trim() || actionLoading}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Sending…' : 'Send Manual Response'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Close & Approve Confirmation Modal */}
-      {showCloseConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 text-[#007f3b] mb-4">
-              <Lock className="w-8 h-8" />
-              <h2 className="text-xl font-bold">Close & Approve Consultation</h2>
-            </div>
-            <p className="text-gray-600 mb-6">
-              This will close the consultation and mark it as approved. The GP will be
-              notified that the review is complete. This action cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowCloseConfirm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCloseAndApprove}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#007f3b] text-white rounded-lg font-medium hover:bg-[#00662f] disabled:opacity-50"
-              >
-                {actionLoading ? 'Closing…' : 'Confirm Close & Approve'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    <SpecialistQueryDetailView
+      username={username}
+      logout={logout}
+      chat={chat}
+      messages={messages}
+      loading={loading}
+      error={error}
+      actionLoading={actionLoading}
+      canAssign={canAssign}
+      canReview={canReview}
+      isTerminal={isTerminal}
+      hasPendingAIResponse={hasPendingAIResponse}
+      allAIReviewed={allAIReviewed}
+      closeReviewTitle={closeReviewTitle}
+      terminalState={terminalState}
+      unreviewedAIIds={unreviewedAIIds}
+      approveComment={approveComment}
+      rejectReason={rejectReason}
+      manualResponseContent={manualResponseContent}
+      manualResponseSources={manualResponseSources}
+      manualResponseFiles={manualResponseFiles}
+      editResponseContent={editResponseContent}
+      editResponseSources={editResponseSources}
+      editResponseFeedback={editResponseFeedback}
+      showEditResponseModal={showEditResponseModal}
+      showApproveConfirm={showApproveConfirm}
+      showApproveWithCommentModal={showApproveWithCommentModal}
+      showRejectModal={showRejectModal}
+      showManualResponseModal={showManualResponseModal}
+      showCloseConfirm={showCloseConfirm}
+      messagesEndRef={messagesEndRef}
+      onBack={() => navigate('/specialist/queries')}
+      onAssign={handleAssign}
+      onApprove={handleApprove}
+      onApproveCommentChange={setApproveComment}
+      onApproveWithComment={handleApproveWithComment}
+      onRejectReasonChange={setRejectReason}
+      onRequestChanges={handleRequestChanges}
+      onManualResponseContentChange={setManualResponseContent}
+      onManualResponseSourcesChange={setManualResponseSources}
+      onManualResponseFilesChange={setManualResponseFiles}
+      onManualResponse={handleManualResponse}
+      onEditResponseContentChange={setEditResponseContent}
+      onEditResponseSourcesChange={setEditResponseSources}
+      onEditResponseFeedbackChange={setEditResponseFeedback}
+      onEditResponse={handleEditResponse}
+      onSendMessage={handleSendMessage}
+      onOpenApproveConfirm={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowApproveConfirm(true);
+      }}
+      onOpenApproveWithComment={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowApproveWithCommentModal(true);
+      }}
+      onOpenRequestChanges={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowRejectModal(true);
+      }}
+      onOpenManualResponse={(messageId) => {
+        setReviewTargetMessageId(Number(messageId));
+        setShowManualResponseModal(true);
+      }}
+      onOpenEditResponse={(messageId, currentContent) => {
+        setReviewTargetMessageId(Number(messageId));
+        setEditResponseContent(currentContent);
+        setShowEditResponseModal(true);
+      }}
+      onCloseAndApprove={handleCloseAndApprove}
+      onCloseApproveConfirm={() => setShowApproveConfirm(false)}
+      onCloseApproveWithComment={() => {
+        setShowApproveWithCommentModal(false);
+        setApproveComment('');
+      }}
+      onCloseRejectModal={() => {
+        setShowRejectModal(false);
+        setRejectReason('');
+      }}
+      onCloseManualResponseModal={() => {
+        setShowManualResponseModal(false);
+        setManualResponseContent('');
+        setManualResponseSources('');
+        setManualResponseFiles([]);
+      }}
+      onCloseEditResponseModal={() => {
+        setShowEditResponseModal(false);
+        setEditResponseContent('');
+        setEditResponseSources('');
+        setEditResponseFeedback('');
+      }}
+      onOpenCloseConfirm={() => setShowCloseConfirm(true)}
+      onCloseCloseConfirm={() => setShowCloseConfirm(false)}
+      showConsultationRejectModal={showConsultationRejectModal}
+      consultationRejectReason={consultationRejectReason}
+      showSendCommentModal={showSendCommentModal}
+      commentContent={commentContent}
+      showUnassignConfirm={showUnassignConfirm}
+      showConsultationManualResponseModal={showConsultationManualResponseModal}
+      consultationManualContent={consultationManualContent}
+      consultationManualSources={consultationManualSources}
+      onOpenConsultationRequestRevision={() => setShowConsultationRejectModal(true)}
+      onConsultationRejectReasonChange={setConsultationRejectReason}
+      onConsultationRequestRevision={handleConsultationRequestRevision}
+      onCloseConsultationRejectModal={() => {
+        setShowConsultationRejectModal(false);
+        setConsultationRejectReason('');
+      }}
+      onOpenSendComment={() => setShowSendCommentModal(true)}
+      onCommentContentChange={setCommentContent}
+      onSendComment={handleSendComment}
+      onCloseSendCommentModal={() => {
+        setShowSendCommentModal(false);
+        setCommentContent('');
+      }}
+      onOpenUnassignConfirm={() => setShowUnassignConfirm(true)}
+      onUnassign={handleUnassign}
+      onCloseUnassignConfirm={() => setShowUnassignConfirm(false)}
+      onOpenConsultationManualResponse={() => setShowConsultationManualResponseModal(true)}
+      consultationManualFiles={consultationManualFiles}
+      onConsultationManualContentChange={setConsultationManualContent}
+      onConsultationManualSourcesChange={setConsultationManualSources}
+      onConsultationManualFilesChange={setConsultationManualFiles}
+      onConsultationManualResponse={handleConsultationManualResponse}
+      onCloseConsultationManualResponseModal={() => {
+        setShowConsultationManualResponseModal(false);
+        setConsultationManualContent('');
+        setConsultationManualSources('');
+        setConsultationManualFiles([]);
+      }}
+    />
   );
 }

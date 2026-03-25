@@ -13,7 +13,6 @@ from src.retrieval.fusion import FusedResult
 from src.retrieval.query import RetrievalError
 from src.retrieval.rerank import (
     RankedResult,
-    _jaccard_similarity,
     deduplicate,
     rerank,
 )
@@ -158,7 +157,10 @@ class TestRerank:
         output = rerank(QUERY, [])
         assert output == []
 
-    def test_model_load_failure_raises_retrieval_error(self):
+    def test_model_load_failure_degrades_gracefully(self):
+        """When the cross-encoder model fails to load, rerank() returns results
+        in their existing fusion order with rerank_score=0.0 instead of raising."""
+        results = [make_fused_result("c1"), make_fused_result("c2")]
         with patch(
             "src.retrieval.rerank._load_model",
             side_effect=RetrievalError(
@@ -167,9 +169,11 @@ class TestRerank:
                 message="Failed to load model",
             ),
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank(QUERY, [make_fused_result("c1")])
-        assert exc_info.value.stage == "RERANK"
+            output = rerank(QUERY, results)
+        assert len(output) == 2
+        assert all(r.rerank_score == 0.0 for r in output)
+        assert output[0].chunk_id == "c1"
+        assert output[1].chunk_id == "c2"
 
     def test_single_pair_scoring_failure_assigns_zero_score(self):
         results = [make_fused_result("c1"), make_fused_result("c2")]
@@ -193,11 +197,13 @@ class TestRerank:
     def test_large_input_logs_warning(self):
         results = [make_fused_result(f"c{i}") for i in range(51)]
         logits = [1.0] * 51
-        with patch(
-            "src.retrieval.rerank._load_model", return_value=make_mock_model(logits)
+        with (
+            patch(
+                "src.retrieval.rerank._load_model", return_value=make_mock_model(logits)
+            ),
+            patch("src.retrieval.rerank.logger") as mock_logger,
         ):
-            with patch("src.retrieval.rerank.logger") as mock_logger:
-                rerank(QUERY, results)
+            rerank(QUERY, results)
         warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
         assert any("51" in c for c in warning_calls)
 
@@ -231,14 +237,18 @@ class TestRerank:
                 rerank(QUERY, results)
         mock_cls.assert_not_called()
 
-    def test_scoring_failure_raises_retrieval_error(self):
+    def test_scoring_failure_degrades_gracefully(self):
+        """When cross-encoder scoring fails, rerank() returns results in their
+        existing fusion order with rerank_score=0.0 instead of raising."""
+        results = [make_fused_result("c1"), make_fused_result("c2")]
         mock_model = MagicMock()
         mock_model.predict.side_effect = Exception("predict failed")
         with patch("src.retrieval.rerank._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank(QUERY, [make_fused_result("c1")])
-        assert exc_info.value.stage == "RERANK"
-        assert "scoring" in exc_info.value.message.lower()
+            output = rerank(QUERY, results)
+        assert len(output) == 2
+        assert all(r.rerank_score == 0.0 for r in output)
+        assert output[0].chunk_id == "c1"
+        assert output[1].chunk_id == "c2"
 
     def test_zero_top_k_raises_retrieval_error(self):
         with pytest.raises(RetrievalError) as exc_info:
@@ -260,9 +270,11 @@ class TestRerank:
 
     def test_logits_length_mismatch_raises_retrieval_error(self):
         mock_model = make_mock_model([1.0, 2.0])  # 2 logits for 1 result
-        with patch("src.retrieval.rerank._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank(QUERY, [make_fused_result("c1")])
+        with (
+            patch("src.retrieval.rerank._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            rerank(QUERY, [make_fused_result("c1")])
         assert exc_info.value.stage == "RERANK"
         assert "logits" in exc_info.value.message
 
@@ -382,32 +394,15 @@ class TestDeduplicate:
 
 
 # -----------------------------------------------------------------------
-# _jaccard_similarity() tests
+# _jaccard_similarity_from_sets() edge case
 # -----------------------------------------------------------------------
 
 
-class TestJaccardSimilarity:
-    def test_identical_strings_return_one(self):
-        assert _jaccard_similarity("hello world", "hello world") == 1.0
+class TestJaccardSimilarityFromSets:
+    def test_both_empty_sets_return_one(self) -> None:
+        from src.retrieval.rerank import _jaccard_similarity_from_sets
 
-    def test_completely_different_strings_return_zero(self):
-        assert _jaccard_similarity("hello world", "foo bar") == 0.0
-
-    def test_partial_overlap_computed_correctly(self):
-        # tokens_a = {a, b, c}, tokens_b = {b, c, d}
-        # intersection = {b, c}, union = {a, b, c, d}
-        # jaccard = 2/4 = 0.5
-        result = _jaccard_similarity("a b c", "b c d")
-        assert abs(result - 0.5) < 1e-9
-
-    def test_both_empty_strings_return_one(self):
-        assert _jaccard_similarity("", "") == 1.0
-
-    def test_case_insensitive(self):
-        assert _jaccard_similarity("Hello World", "hello world") == 1.0
-
-    def test_one_empty_string_returns_zero(self):
-        assert _jaccard_similarity("hello world", "") == 0.0
+        assert _jaccard_similarity_from_sets(set(), set()) == 1.0
 
 
 # -----------------------------------------------------------------------
@@ -419,12 +414,14 @@ class TestLoadModel:
     def test_load_model_failure_raises_retrieval_error(self):
         rerank_module._model = None
         rerank_module._model_name_loaded = None
-        with patch(
-            "src.retrieval.rerank._CrossEncoder",
-            side_effect=Exception("model not found"),
+        with (
+            patch(
+                "src.retrieval.rerank._CrossEncoder",
+                side_effect=Exception("model not found"),
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                rerank_module._load_model("bad-model-name")
+            rerank_module._load_model("bad-model-name")
         assert exc_info.value.stage == "RERANK"
         assert "bad-model-name" in exc_info.value.message
 

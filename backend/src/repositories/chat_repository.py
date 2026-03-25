@@ -31,6 +31,23 @@ async def async_get(
     return result.scalar_one_or_none()
 
 
+async def async_get_for_update(
+    db: AsyncSession,
+    chat_id: int,
+    user_id: Optional[int] = None,
+) -> Optional[Chat]:
+    stmt = (
+        select(Chat)
+        .options(selectinload(Chat.files))
+        .where(Chat.id == chat_id)
+        .with_for_update()
+    )
+    if user_id is not None:
+        stmt = stmt.where(Chat.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 def list_for_user(
     db: Session,
     user_id: int,
@@ -46,7 +63,7 @@ def list_for_user(
 ) -> list[Chat]:
     query = db.query(Chat).filter(Chat.user_id == user_id)
     if not include_archived:
-        query = query.filter(Chat.is_archived == False)
+        query = query.filter(Chat.is_archived.is_(False))
     if status:
         query = query.filter(Chat.status == ChatStatus(status))
     if specialty:

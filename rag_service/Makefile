@@ -1,7 +1,10 @@
 -include .env
 export
 
-.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check clean run-ingest run-query run-retry-worker
+COMPOSE := docker compose
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
+.PHONY: help install install-dev setup nltk-download db-up db-down db-reset db-migrate db-migrate-reset test lint format type-check typecheck clean run-ingest run-retry-worker
 
 help:
 	@echo "Available commands:"
@@ -18,12 +21,12 @@ help:
 	@echo "  make lint               - Run linter (ruff)"
 	@echo "  make format             - Format code (ruff)"
 	@echo "  make type-check         - Run type checker (mypy)"
+	@echo "  make typecheck          - Alias for make type-check"
 	@echo "  make clean              - Clean cache and temp files"
 	@echo "  make run-ingest         - Run ingestion pipeline"
 	@echo "                           Required: INPUT=... SOURCE=..."
 	@echo "                           Optional: DRY_RUN=1 DB_URL=... SINCE=YYYY-MM-DD MAX_FILES=N WRITE_DEBUG=1 LOG_LEVEL=..."
 	@echo "  make run-retry-worker   - Start Redis retry worker for /answer and /revise"
-# 	@echo "  make run-query          - Run RAG query"
 
 install:
 	pip install -e .
@@ -33,8 +36,8 @@ install-dev:
 	$(MAKE) nltk-download
 
 nltk-download:
-	python -m nltk.downloader punkt punkt_tab
-	python scripts/verify_nltk.py
+	$(PYTHON) -m nltk.downloader punkt punkt_tab
+	$(PYTHON) scripts/setup/verify_nltk.py
 
 setup:
 	mkdir -p data/raw data/processed data/debug logs configs
@@ -43,24 +46,24 @@ setup:
 	@echo "Setup complete! Edit .env with your configuration"
 
 db-up:
-	docker-compose up -d
-	@echo "Waiting for database to be ready..."
+	$(COMPOSE) up -d db_vector redis
+	@echo "Waiting for services to be ready..."
 	@sleep 5
-	@echo "Database is ready!"
+	@echo "Database and Redis are ready."
 
 db-down:
-	docker-compose down
+	$(COMPOSE) down
 
 db-reset:
-	docker-compose down -v
-	docker-compose up -d
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d db_vector redis
 	@sleep 5
 
 db-migrate:
 	@test -n "$(DATABASE_URL)" || (echo "ERROR: DATABASE_URL is not set. Check your .env file." && exit 1)
-	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/003_add_text_search_vector.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/001_create_rag_chunks.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/003_add_text_search_vector.sql
 	@echo "Migrations applied."
 
 db-migrate-reset:
@@ -68,25 +71,27 @@ db-migrate-reset:
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS rag_chunks CASCADE;"
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS chunks CASCADE;"
 	@psql $(DATABASE_URL) -c "DROP TABLE IF EXISTS documents CASCADE;"
-	@psql $(DATABASE_URL) -f scripts/migrations/001_create_rag_chunks.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/002_indexes.sql
-	@psql $(DATABASE_URL) -f scripts/migrations/003_add_text_search_vector.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/001_create_rag_chunks.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/002_indexes.sql
+	@psql $(DATABASE_URL) -f scripts/db/migrations/003_add_text_search_vector.sql
 	@echo "Migration reset complete."
 
 test:
-	pytest
+	$(PYTHON) -m pytest
 
 lint:
 	ruff check src/ tests/ scripts/
 	ruff format --check src/ tests/ scripts/
-	mypy src/
+	$(PYTHON) -m mypy src/
 
 format:
 	ruff format src/ tests/ scripts/
 	ruff check src/ tests/ scripts/ --fix
 
 type-check:
-	mypy src/
+	$(PYTHON) -m mypy src/
+
+typecheck: type-check
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -96,7 +101,7 @@ clean:
 	rm -rf htmlcov/ .coverage
 
 run-ingest:
-	python -m src.ingestion.cli ingest \
+	$(PYTHON) -m src.ingestion.cli ingest \
 	  --input $(INPUT) \
 	  --source-name $(SOURCE) \
 	  --log-level $(or $(LOG_LEVEL),INFO) \
@@ -107,7 +112,4 @@ run-ingest:
 	  $(if $(WRITE_DEBUG),--write-debug-artifacts)
 
 run-retry-worker:
-	python scripts/run_retry_worker.py
-
-# run-query:
-# 	python scripts/query.py
+	$(PYTHON) scripts/workers/run_retry_worker.py

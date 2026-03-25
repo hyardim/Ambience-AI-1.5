@@ -27,16 +27,23 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     try {
       const data = await getNotifications();
       setNotifications(data);
-    } catch (err) {
-      console.warn('[Notifications] Failed to fetch:', err);
+    } catch {
+      // Keep stale notifications if polling fails.
     }
   }, []);
 
   // Initial fetch + polling every 15s
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    const initialTimer = window.setTimeout(() => {
+      void fetchNotifications();
+    }, 0);
+    const interval = window.setInterval(() => {
+      void fetchNotifications();
+    }, POLL_INTERVAL);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+    };
   }, [fetchNotifications]);
 
   // Close on outside click
@@ -58,8 +65,8 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
         setNotifications(prev =>
           prev.map(n => (n.id === notification.id ? { ...n, is_read: true } : n)),
         );
-      } catch (err) {
-        console.warn('[Notifications] Failed to mark as read:', err);
+      } catch {
+        // Leave the notification unread when the request fails.
       }
     }
 
@@ -75,8 +82,8 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     try {
       await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    } catch (err) {
-      console.warn('[Notifications] Failed to mark all as read:', err);
+    } catch {
+      // Keep existing unread states if mark-all fails.
     }
   };
 
@@ -96,7 +103,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-white hover:bg-[#003087] rounded-lg transition-colors"
+        className="relative p-2 text-white hover:bg-[var(--nhs-dark-blue)] rounded-lg transition-colors"
       >
         <Bell className="w-6 h-6" />
         {unreadCount > 0 && (
@@ -113,7 +120,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="inline-flex items-center gap-1 text-xs text-[#005eb8] hover:text-[#003087] font-medium"
+                className="inline-flex items-center gap-1 text-xs text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -136,7 +143,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
                 >
                   <div className="flex items-start gap-3">
                     <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                      !notification.is_read ? 'bg-[#005eb8]' : 'bg-gray-300'
+                      !notification.is_read ? 'bg-[var(--nhs-blue)]' : 'bg-gray-300'
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 text-sm truncate">

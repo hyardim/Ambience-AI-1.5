@@ -1,4 +1,10 @@
-from src.generation.router import select_generation_provider
+import src.generation.router as router
+from src.generation.router import (
+    _score_ambiguity,
+    _score_complexity,
+    _score_prompt_size,
+    select_generation_provider,
+)
 
 
 def test_select_generation_provider_routes_simple_queries_local() -> None:
@@ -11,7 +17,8 @@ def test_select_generation_provider_routes_simple_queries_local() -> None:
     assert decision.score < decision.threshold
 
 
-def test_select_generation_provider_routes_risky_queries_cloud() -> None:
+def test_select_generation_provider_routes_risky_queries_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     decision = select_generation_provider(
         query=(
             "A patient has sudden vision loss and progressive weakness. "
@@ -26,7 +33,8 @@ def test_select_generation_provider_routes_risky_queries_cloud() -> None:
     assert "severity_urgent" in decision.reasons
 
 
-def test_select_generation_provider_routes_revisions_cloud() -> None:
+def test_select_generation_provider_routes_revisions_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
     decision = select_generation_provider(
         query="Please revise the treatment plan.",
         retrieved_chunks=[{"score": 0.61}, {"score": 0.59}],
@@ -35,3 +43,227 @@ def test_select_generation_provider_routes_revisions_cloud() -> None:
 
     assert decision.provider == "cloud"
     assert "revision_flow" in decision.reasons
+
+
+def test_select_generation_provider_force_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router.routing_config, "force_cloud_llm", True)
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
+
+    decision = select_generation_provider(query="q", retrieved_chunks=[])
+
+    assert decision.provider == "cloud"
+    assert decision.reasons == ("force_cloud_llm",)
+
+
+def test_select_generation_provider_falls_back_local_when_cloud_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: False)
+
+    decision = select_generation_provider(
+        query=(
+            "A patient has sudden vision loss and progressive weakness. "
+            "What investigations and urgent management steps are recommended?"
+        ),
+        retrieved_chunks=[{"score": 0.33}, {"score": 0.31}, {"score": 0.29}],
+        severity="urgent",
+    )
+
+    assert decision.provider == "local"
+    assert "cloud_unavailable" in decision.reasons
+
+
+def test_select_generation_provider_revision_stays_local_when_cloud_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: False)
+
+    decision = select_generation_provider(
+        query="Please revise the treatment plan.",
+        retrieved_chunks=[{"score": 0.61}, {"score": 0.59}],
+        is_revision=True,
+    )
+
+    assert decision.provider == "local"
+    assert "revision_flow" not in decision.reasons
+
+
+def test_select_generation_provider_force_cloud_falls_back_when_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router.routing_config, "force_cloud_llm", True)
+    monkeypatch.setattr(router, "_cloud_available", lambda: False)
+
+    decision = select_generation_provider(query="q", retrieved_chunks=[])
+
+    assert decision.provider == "local"
+    assert decision.reasons == ("force_cloud_llm", "cloud_unavailable")
+
+
+def test_select_generation_provider_scores_ambiguity_and_complexity() -> None:
+    decision = select_generation_provider(
+        query="Compare investigations. Another sentence! Third sentence?",
+        retrieved_chunks=[{"score": 0.34}, {"score": 0.33}],
+    )
+
+    assert "multi_sentence" in decision.reasons
+    assert "complex_reasoning_terms" in decision.reasons
+    assert "low_top_score" in decision.reasons
+    assert "small_top_gap" in decision.reasons
+
+
+def test_select_generation_provider_scores_emergency_severity() -> None:
+    decision = select_generation_provider(
+        query="Acute issue",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.5}, {"score": 0.49}],
+        severity="emergency",
+    )
+
+    assert "severity_emergency" in decision.reasons
+
+
+def test_select_generation_provider_routes_large_prompts_cloud(monkeypatch) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
+    decision = select_generation_provider(
+        query="What is migraine guidance?",
+        retrieved_chunks=[{"score": 0.72}, {"score": 0.66}, {"score": 0.51}],
+        prompt_length_chars=8000,
+    )
+
+    assert decision.provider == "cloud"
+    assert "long_prompt" in decision.reasons
+
+
+def test_score_complexity_medium_query_reason() -> None:
+    query = "x" * 150
+
+    score, reasons = _score_complexity(query)
+
+    assert score > 0
+    assert "medium_query" in reasons
+
+
+def test_score_complexity_long_query_reason() -> None:
+    query = "x" * 250
+
+    score, reasons = _score_complexity(query)
+
+    assert score > 0
+    assert "long_query" in reasons
+
+
+def test_score_prompt_size_medium_prompt_reason() -> None:
+    score, reasons = _score_prompt_size(4000)
+
+    assert score > 0
+    assert "medium_prompt" in reasons
+
+
+def test_score_prompt_size_long_prompt_reason() -> None:
+    score, reasons = _score_prompt_size(8000)
+
+    assert score > 0
+    assert "long_prompt" in reasons
+
+
+def test_score_ambiguity_no_hits() -> None:
+    score, reasons = _score_ambiguity([])
+
+    assert score == 0.22
+    assert reasons == ["no_retrieval_hits"]
+
+
+def test_score_ambiguity_moderate_branches() -> None:
+    score, reasons = _score_ambiguity([{"score": 0.4}, {"score": 0.35}, {"score": 0.2}])
+
+    assert score > 0
+    assert "moderate_top_score" in reasons
+    assert "moderate_top_gap" in reasons
+
+
+def test_select_generation_provider_routes_cloud_when_score_equals_threshold(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router, "_cloud_available", lambda: True)
+    decision = select_generation_provider(
+        query="Simple question",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],
+        is_revision=True,
+        threshold=0.65,
+    )
+
+    assert decision.score == 0.65
+    assert decision.threshold == 0.65
+    assert decision.provider == "cloud"
+
+
+def test_select_generation_provider_routes_local_when_score_just_below_threshold() -> (
+    None
+):
+    decision = select_generation_provider(
+        query="What is migraine guidance?",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],
+        prompt_length_chars=4000,
+        threshold=0.301,
+    )
+
+    assert decision.score == 0.3
+    assert decision.threshold == 0.301
+    assert decision.provider == "local"
+
+
+def test_select_generation_provider_revision_not_forced_when_toggle_off(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(router.routing_config, "route_revisions_to_cloud", False)
+    decision = select_generation_provider(
+        query="Simple question",
+        retrieved_chunks=[{"score": 0.9}, {"score": 0.7}],
+        threshold=0.65,
+        is_revision=True,
+    )
+
+    assert decision.provider == "local"
+    assert "revision_flow" not in decision.reasons
+
+
+def test_cloud_available_exception_fallback_returns_true(
+    monkeypatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://api.realhost.com/v1",
+        api_key="sk-real-key",
+    )
+    monkeypatch.setattr(router, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert router._cloud_available() is True
+
+
+def test_cloud_available_exception_fallback_rejects_placeholder(
+    monkeypatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import src.config.llm as llm_mod
+
+    fake_config = SimpleNamespace(
+        base_url="https://example.invalid/v1",
+        api_key="sk-real-key",
+    )
+    monkeypatch.setattr(router, "cloud_llm_config", fake_config)
+
+    def _boom(_cfg: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_mod, "cloud_llm_is_configured", _boom)
+
+    assert router._cloud_available() is False

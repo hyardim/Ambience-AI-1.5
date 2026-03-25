@@ -34,6 +34,9 @@ class Citation(BaseModel):
     source_name: str
     specialty: str
     doc_type: str
+    creation_date: str | None = None
+    publish_date: str | None = None
+    last_updated_date: str | None = None
     section_path: list[str]
     section_title: str
     page_start: int
@@ -48,6 +51,7 @@ class CitedResult(BaseModel):
     chunk_id: str
     text: str
     rerank_score: float
+    final_score: float = 0.0
     rrf_score: float
     vector_score: float | None
     keyword_rank: float | None
@@ -63,7 +67,6 @@ _REQUIRED_FIELDS = (
     "source_name",
     "specialty",
     "doc_type",
-    "source_url",
     "content_type",
     "section_title",
     "section_path",
@@ -109,6 +112,7 @@ def assemble_citations(
                 chunk_id=result.chunk_id,
                 text=result.text,
                 rerank_score=result.rerank_score,
+                final_score=result.final_score,
                 rrf_score=result.rrf_score,
                 vector_score=result.vector_score,
                 keyword_rank=result.keyword_rank,
@@ -154,7 +158,7 @@ def format_citation(citation: Citation) -> str:
     return (
         f"{citation.title} — {citation.source_name} ({citation.specialty})\n"
         f"Section: {section}\n"
-        f"Pages: {citation.page_start}–{citation.page_end}\n"
+        f"Pages: {citation.page_start}-{citation.page_end}\n"
         f"Source: {citation.source_url}"
     )
 
@@ -202,16 +206,30 @@ def _build_citation(result: RankedResult) -> Citation:
     else:
         page_end = metadata["page_end"]
 
+    source_url = metadata.get("source_url")
+    if isinstance(source_url, str):
+        source_url = source_url.strip()
+    if not source_url:
+        logger.warning(
+            "Missing source_url for chunk '%s' — relying on "
+            "doc_id-backed document access",
+            result.chunk_id,
+        )
+        source_url = ""
+
     return Citation(
         title=metadata["title"],
         source_name=metadata["source_name"],
         specialty=metadata["specialty"],
         doc_type=metadata["doc_type"],
+        creation_date=metadata.get("creation_date"),
+        publish_date=metadata.get("publish_date"),
+        last_updated_date=metadata.get("last_updated_date"),
         section_path=section_path,
         section_title=metadata["section_title"],
         page_start=page_start,
         page_end=page_end,
-        source_url=metadata["source_url"],
+        source_url=source_url,
         doc_id=result.doc_id,
         chunk_id=result.chunk_id,
         content_type=metadata["content_type"],

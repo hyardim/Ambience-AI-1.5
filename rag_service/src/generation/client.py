@@ -1,25 +1,29 @@
-from typing import Literal
+from typing import Any, Literal, cast
 
 import httpx
 
 from ..config import (
-    CLOUD_LLM_API_KEY,
-    CLOUD_LLM_BASE_URL,
-    CLOUD_LLM_MAX_TOKENS,
-    CLOUD_LLM_MODEL,
-    CLOUD_LLM_TEMPERATURE,
-    CLOUD_LLM_TIMEOUT_SECONDS,
-    LOCAL_LLM_BASE_URL,
-    LOCAL_LLM_MAX_TOKENS,
-    LOCAL_LLM_MODEL,
-    LOCAL_LLM_TIMEOUT_SECONDS,
+    alerting_config,
+    cloud_llm_config,
+    local_llm_config,
+    path_config,
 )
+from ..utils.logger import setup_logger
+from ..utils.telemetry import append_jsonl
 
 ProviderName = Literal["local", "cloud"]
+logger = setup_logger(__name__)
+PROVIDER_ALERTS_PATH = path_config.logs / "provider_alerts.jsonl"
 
 
 class ProviderRequestError(RuntimeError):
-    """Provider-specific generation failure with retry metadata."""
+    """Provider-specific generation failure with retry metadata.
+
+    Attributes:
+        provider: Which provider ("local" or "cloud") raised the error.
+        retryable: Whether the caller should attempt a retry or fallback.
+        status_code: HTTP status code when available, else None.
+    """
 
     def __init__(
         self,
@@ -36,7 +40,12 @@ class ProviderRequestError(RuntimeError):
 
 
 class ModelGenerationError(RuntimeError):
-    """Raised when both primary and fallback model providers fail."""
+    """Raised when both primary and fallback model providers fail.
+
+    Attributes:
+        retryable: True only if every individual provider error was retryable,
+            signalling that an async retry job may succeed later.
+    """
 
     def __init__(self, message: str, *, retryable: bool) -> None:
         super().__init__(message)
@@ -47,51 +56,96 @@ def _fallback_provider(provider: ProviderName) -> ProviderName:
     return "cloud" if provider == "local" else "local"
 
 
+def _emit_provider_alert(
+    *,
+    event: str,
+    primary_provider: ProviderName,
+    fallback_provider: ProviderName | None,
+    detail: str,
+) -> None:
+    payload = {
+        "event": event,
+        "primary_provider": primary_provider,
+        "fallback_provider": fallback_provider,
+        "detail": detail,
+    }
+    append_jsonl(PROVIDER_ALERTS_PATH, payload)
+    _send_provider_alert_webhook(payload)
+
+
+def _send_provider_alert_webhook(payload: dict[str, Any]) -> None:
+    webhook_url = alerting_config.llm_fallback_alert_webhook_url.strip()
+    if not webhook_url:
+        return
+
+    try:
+        response = httpx.post(
+            webhook_url,
+            json=payload,
+            timeout=alerting_config.llm_fallback_alert_timeout_seconds,
+        )
+        response.raise_for_status()
+    except Exception as exc:
+        logger.warning("Provider alert webhook delivery failed: %s", exc)
+
+
 async def warmup_model(provider: ProviderName = "local") -> None:
     """Warm up the local model when applicable.
 
     Cloud models are managed remotely, so warmup is a no-op for the cloud path.
     """
     if provider != "local":
-        print("ℹ️ Cloud model warmup skipped; remote endpoint manages model lifecycle.")
+        logger.info(
+            "Cloud model warmup skipped; remote endpoint manages model lifecycle."
+        )
         return
 
     payload = {
-        "model": LOCAL_LLM_MODEL,
+        "model": local_llm_config.model,
         "prompt": "warmup",
         "stream": False,
         "keep_alive": -1,
         "options": {"num_predict": 1},
     }
     try:
-        async with httpx.AsyncClient(timeout=LOCAL_LLM_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=local_llm_config.timeout_seconds
+        ) as client:
             resp = await client.post(
-                f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
+                f"{local_llm_config.base_url.rstrip('/')}/api/generate",
+                json=payload,
             )
             resp.raise_for_status()
-        print(f"✅ Local model '{LOCAL_LLM_MODEL}' warmed up and kept alive.")
+        logger.info(
+            "Local model '%s' warmed up and kept alive.",
+            local_llm_config.model,
+        )
     except Exception as exc:  # pragma: no cover
-        print(
-            f"⚠️  Local model warmup failed (model may still be loading): {exc}")
+        logger.warning(
+            "Local model warmup failed (model may still be loading): %s", exc
+        )
 
 
 async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> str:
     payload = {
-        "model": LOCAL_LLM_MODEL,
+        "model": local_llm_config.model,
         "prompt": prompt,
         "stream": False,
         "keep_alive": -1,
-        "options": {"num_predict": max_tokens or LOCAL_LLM_MAX_TOKENS},
+        "options": {"num_predict": max_tokens or local_llm_config.max_tokens},
     }
 
     try:
-        async with httpx.AsyncClient(timeout=LOCAL_LLM_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=local_llm_config.timeout_seconds
+        ) as client:
             resp = await client.post(
-                f"{LOCAL_LLM_BASE_URL.rstrip('/')}/api/generate", json=payload
+                f"{local_llm_config.base_url.rstrip('/')}/api/generate",
+                json=payload,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return data.get("response", "").strip()
+            data = cast(dict[str, Any], resp.json())
+            return str(data.get("response", "")).strip()
     except httpx.TimeoutException as exc:
         raise ProviderRequestError(
             f"Local model request timed out: {exc}",
@@ -121,59 +175,149 @@ async def _generate_local_answer(prompt: str, max_tokens: int | None = None) -> 
 
 
 async def _generate_cloud_answer(prompt: str, max_tokens: int | None = None) -> str:
+    return await request_chat_completion(
+        provider="cloud",
+        base_url=cloud_llm_config.base_url,
+        api_key=cloud_llm_config.api_key,
+        model=cloud_llm_config.model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens or cloud_llm_config.max_tokens,
+        temperature=cloud_llm_config.temperature,
+        timeout_seconds=cloud_llm_config.timeout_seconds,
+    )
+
+
+def _extract_chat_completion_text(data: dict[str, Any]) -> str:
+    choices = cast(list[dict[str, Any]], data.get("choices", []))
+    if not choices:
+        return ""
+    return str(
+        cast(dict[str, Any], choices[0]).get("message", {}).get("content", "")
+    ).strip()
+
+
+def _auth_headers(api_key: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
+def _wrap_provider_request_error(
+    exc: httpx.HTTPError,
+    *,
+    provider: ProviderName,
+) -> ProviderRequestError:
+    provider_name = "Cloud" if provider == "cloud" else "Local"
+    if isinstance(exc, httpx.TimeoutException):
+        return ProviderRequestError(
+            f"{provider_name} model request timed out: {exc}",
+            provider=provider,
+            retryable=True,
+        )
+    if isinstance(exc, httpx.ConnectError):
+        return ProviderRequestError(
+            f"{provider_name} model connection failed: {exc}",
+            provider=provider,
+            retryable=True,
+        )
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        return ProviderRequestError(
+            f"{provider_name} model returned HTTP {status_code}",
+            provider=provider,
+            retryable=status_code >= 500,
+            status_code=status_code,
+        )
+    return ProviderRequestError(
+        f"{provider_name} model request failed: {exc}",
+        provider=provider,
+        retryable=True,
+    )
+
+
+def _request_chat_completion_sync(
+    *,
+    provider: ProviderName,
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    temperature: float,
+    timeout_seconds: float,
+) -> str:
     payload = {
-        "model": CLOUD_LLM_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens or CLOUD_LLM_MAX_TOKENS,
-        "temperature": CLOUD_LLM_TEMPERATURE,
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
         "stream": False,
     }
 
-    headers: dict[str, str] = {}
-    if CLOUD_LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {CLOUD_LLM_API_KEY}"
-
     try:
-        async with httpx.AsyncClient(timeout=CLOUD_LLM_TIMEOUT_SECONDS) as client:
-            resp = await client.post(
-                f"{CLOUD_LLM_BASE_URL.rstrip('/')}/chat/completions",
+        with httpx.Client(timeout=timeout_seconds) as client:
+            resp = client.post(
+                f"{base_url.rstrip('/')}/chat/completions",
                 json=payload,
-                headers=headers,
+                headers=_auth_headers(api_key),
             )
             resp.raise_for_status()
-            data = resp.json()
-            return (
-                data.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-                .strip()
+            data = cast(dict[str, Any], resp.json())
+            return _extract_chat_completion_text(data)
+    except httpx.HTTPError as exc:
+        raise _wrap_provider_request_error(exc, provider=provider) from exc
+
+
+async def request_chat_completion(
+    *,
+    provider: ProviderName,
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    temperature: float,
+    timeout_seconds: float,
+) -> str:
+    """Send an async chat-completion request to an OpenAI-compatible endpoint.
+
+    Args:
+        provider: Label used for error attribution ("local" or "cloud").
+        base_url: Base URL of the OpenAI-compatible API.
+        api_key: Bearer token for the API (may be empty for local).
+        model: Model identifier string.
+        messages: Chat messages in OpenAI format.
+        max_tokens: Maximum tokens to generate.
+        temperature: Sampling temperature.
+        timeout_seconds: HTTP request timeout.
+
+    Returns:
+        The assistant's response text, stripped of leading/trailing whitespace.
+
+    Raises:
+        ProviderRequestError: On any HTTP-level failure.
+    """
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+            resp = await client.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                json=payload,
+                headers=_auth_headers(api_key),
             )
-    except httpx.TimeoutException as exc:
-        raise ProviderRequestError(
-            f"Cloud model request timed out: {exc}",
-            provider="cloud",
-            retryable=True,
-        ) from exc
-    except httpx.ConnectError as exc:
-        raise ProviderRequestError(
-            f"Cloud model connection failed: {exc}",
-            provider="cloud",
-            retryable=True,
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        status_code = exc.response.status_code
-        raise ProviderRequestError(
-            f"Cloud model returned HTTP {status_code}",
-            provider="cloud",
-            retryable=status_code >= 500,
-            status_code=status_code,
-        ) from exc
-    except httpx.RequestError as exc:
-        raise ProviderRequestError(
-            f"Cloud model request failed: {exc}",
-            provider="cloud",
-            retryable=True,
-        ) from exc
+            resp.raise_for_status()
+            data = cast(dict[str, Any], resp.json())
+            return _extract_chat_completion_text(data)
+    except httpx.HTTPError as exc:
+        raise _wrap_provider_request_error(exc, provider=provider) from exc
 
 
 async def _call_local_model(prompt: str, max_tokens: int | None = None) -> str:
@@ -189,7 +333,23 @@ async def generate_answer(
     max_tokens: int | None = None,
     provider: ProviderName = "local",
 ) -> str:
-    """Generate an answer using the selected provider with fallback."""
+    """Generate an answer using the selected provider with automatic fallback.
+
+    Tries the *primary* provider first; on failure, falls back to the
+    alternate provider.  If both fail, raises ``ModelGenerationError``.
+
+    Args:
+        prompt: Fully assembled prompt string (including grounded context).
+        max_tokens: Optional cap on generated tokens; defaults to each
+            provider's configured maximum.
+        provider: Starting provider ("local" or "cloud").
+
+    Returns:
+        Non-empty answer string from whichever provider succeeded.
+
+    Raises:
+        ModelGenerationError: When both primary and fallback providers fail.
+    """
     attempts: list[str] = []
     attempt_errors: list[ProviderRequestError] = []
 
@@ -204,13 +364,25 @@ async def generate_answer(
                 response = await _call_local_model(prompt, max_tokens=max_tokens)
 
             if not response.strip():
-                raise RuntimeError(
-                    f"{current_provider.capitalize()} model returned an empty response"
+                raise ProviderRequestError(
+                    f"{current_provider.capitalize()} model returned an empty response",
+                    provider=current_provider,
+                    retryable=False,  # empty content is not a transient error
                 )
 
             if index > 1:
-                print(
-                    f"🔁 Generation fallback succeeded with provider={current_provider}"
+                logger.info(
+                    "Generation fallback succeeded with provider=%s",
+                    current_provider,
+                )
+                _emit_provider_alert(
+                    event="provider_fallback_succeeded",
+                    primary_provider=provider,
+                    fallback_provider=current_provider,
+                    detail=(
+                        "Primary provider failed and fallback provider returned a "
+                        "response"
+                    ),
                 )
 
             return response
@@ -219,14 +391,29 @@ async def generate_answer(
             if isinstance(exc, ProviderRequestError):
                 attempt_errors.append(exc)
             if index == 1:
-                print(
-                    f"⚠️ Primary generation provider failed (provider={current_provider}): {exc}. "
-                    f"Trying fallback provider={_fallback_provider(current_provider)}."
+                fallback_provider = _fallback_provider(current_provider)
+                logger.warning(
+                    "Primary generation provider failed (provider=%s): %s. "
+                    "Trying fallback provider=%s.",
+                    current_provider,
+                    exc,
+                    fallback_provider,
+                )
+                _emit_provider_alert(
+                    event="provider_fallback_attempt",
+                    primary_provider=current_provider,
+                    fallback_provider=fallback_provider,
+                    detail=str(exc),
                 )
 
-    retryable = (
-        len(attempt_errors) == len(attempts)
-        and all(error.retryable for error in attempt_errors)
+    retryable = len(attempt_errors) == len(attempts) and all(
+        error.retryable for error in attempt_errors
+    )
+    _emit_provider_alert(
+        event="provider_all_failed",
+        primary_provider=provider,
+        fallback_provider=_fallback_provider(provider),
+        detail=" | ".join(attempts),
     )
     raise ModelGenerationError(
         "All model providers failed. " + " | ".join(attempts),

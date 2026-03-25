@@ -8,20 +8,30 @@ const RULES = [
 
 const BAR_COLOURS = ['bg-gray-200', 'bg-red-500', 'bg-red-500', 'bg-amber-400', 'bg-yellow-400', 'bg-green-500'];
 
+const STRENGTH_LABELS = ['none', 'weak', 'weak', 'fair', 'good', 'strong'];
+
 interface Props {
   password: string;
 }
 
+/** Visual password strength meter with ARIA progressbar attributes. */
 export function PasswordStrengthMeter({ password }: Props) {
   if (!password.length) return null;
 
   const passed = RULES.filter(r => r.test(password)).length;
   const barColour = BAR_COLOURS[passed];
+  const strengthLabel = STRENGTH_LABELS[passed];
 
   return (
     <div className="mt-2 space-y-2">
       {/* Strength bar */}
-      <div className="flex gap-1">
+      <div
+        className="flex gap-1"
+        role="progressbar"
+        aria-valuenow={passed}
+        aria-valuemax={5}
+        aria-label={`Password strength: ${strengthLabel}`}
+      >
         {RULES.map((_, i) => (
           <div
             key={i}

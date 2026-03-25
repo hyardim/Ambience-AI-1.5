@@ -1,4 +1,4 @@
-import { FileText, Bot, User, CheckCircle, XCircle, Clock, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
+import { FileText, Bot, User, CheckCircle, Clock, Edit2, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
 import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
@@ -16,6 +16,8 @@ interface ChatMessageProps {
   onApproveWithComment?: () => void;
   /** Callback when specialist clicks "Manual Response" on this message */
   onManualResponse?: () => void;
+  /** Callback when specialist clicks "Edit" on this message */
+  onEditResponse?: () => void;
   /** Whether an action is currently loading */
   actionLoading?: boolean;
 }
@@ -29,9 +31,34 @@ export function ChatMessage({
   onRequestChanges,
   onApproveWithComment,
   onManualResponse,
+  onEditResponse,
   actionLoading = false,
 }: ChatMessageProps) {
-  const formatTime = (date: Date) => {
+  /**
+   * Attempts to parse an unknown value into a valid Date.
+   * Returns null when the value cannot be parsed, so callers can
+   * display an "Unknown time" fallback instead of silently using now.
+   */
+  const toSafeDate = (value: unknown): Date | null => {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
+  /** Formats a timestamp for display, returning "Unknown time" for invalid dates. */
+  const formatTime = (value: unknown) => {
+    const date = toSafeDate(value);
+    if (!date) return 'Unknown time';
+
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
     const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -44,12 +71,12 @@ export function ChatMessage({
 
   const getAvatarContent = () => {
     if (isGenerating) {
-      return <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />;
+      return <Loader2 className="w-5 h-5 text-[var(--nhs-blue)] animate-spin" />;
     }
     if (message.senderType === 'ai') {
-      return <Bot className="w-5 h-5 text-[#005eb8]" />;
+      return <Bot className="w-5 h-5 text-[var(--nhs-blue)]" />;
     }
-    return <User className="w-5 h-5 text-[#005eb8]" />;
+    return <User className="w-5 h-5 text-[var(--nhs-blue)]" />;
   };
 
   const getSenderLabel = () => {
@@ -64,8 +91,7 @@ export function ChatMessage({
   const reviewStatus = message.reviewStatus;
 
   const renderCitations = () => {
-    if (!isAI) return null;
-    const citations = message.citations || [];
+    const citations = message.citations ?? [];
     if (citations.length === 0) return null;
 
     const formatSection = (c: Citation) => {
@@ -75,10 +101,17 @@ export function ChatMessage({
     };
 
     const formatPage = (c: Citation) => {
-      if (c.page_start && c.page_end && c.page_start !== c.page_end) {
+      if (c.page_start != null && c.page_end != null && c.page_start !== c.page_end) {
         return `pages ${c.page_start}-${c.page_end}`;
       }
-      if (c.page_start) return `page ${c.page_start}`;
+      if (c.page_start != null) return `page ${c.page_start}`;
+      return null;
+    };
+
+    const formatDate = (c: Citation) => {
+      if (c.publish_date) return `Published ${c.publish_date}`;
+      if (c.last_updated_date) return `Updated ${c.last_updated_date}`;
+      if (c.creation_date) return `Created ${c.creation_date}`;
       return null;
     };
 
@@ -89,7 +122,15 @@ export function ChatMessage({
           {citations.map((c, idx) => {
             const page = formatPage(c);
             const section = formatSection(c);
-            const href = c.doc_id ? `http://localhost:8001/docs/${c.doc_id}${c.page_start ? `#page=${c.page_start}` : ''}` : undefined;
+            const docDate = formatDate(c);
+            // Prefer the authenticated in-app PDF route when available so
+            // citations open directly to the document, not a landing page.
+            const targetUrl = c.document_url || c.source_url;
+            const href = targetUrl
+              ? c.page_start != null
+                ? `${targetUrl}#page=${c.page_start}`
+                : targetUrl
+              : undefined;
             return (
               <div key={idx} className="text-sm text-gray-800 flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
@@ -99,7 +140,7 @@ export function ChatMessage({
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#005eb8] hover:underline"
+                      className="text-[var(--nhs-blue)] hover:underline"
                     >
                       {c.title || 'Source'}
                     </a>
@@ -110,6 +151,7 @@ export function ChatMessage({
                 <div className="text-xs text-gray-600">
                   {[c.source_name, page, section].filter(Boolean).join(' • ')}
                 </div>
+                {docDate ? <div className="text-xs text-gray-500">{docDate}</div> : null}
               </div>
             );
           })}
@@ -120,11 +162,10 @@ export function ChatMessage({
 
   // Determine the border colour for AI messages based on review status
   const getAIBorderClass = () => {
-    if (!isAI) return '';
     if (reviewStatus === 'approved') return 'border-l-4 border-[#007f3b]';
     if (reviewStatus === 'rejected' || reviewStatus === 'replaced') return 'border-l-4 border-[#da291c]';
     if (showReviewStatus && !reviewStatus) return 'border-l-4 border-amber-400';
-    return 'border-l-4 border-[#005eb8]';
+    return 'border-l-4 border-[var(--nhs-blue)]';
   };
 
   // Review status badge for AI messages
@@ -212,9 +253,9 @@ export function ChatMessage({
           <div className="whitespace-pre-wrap text-gray-800 leading-relaxed text-sm sm:text-base">
               {isGenerating && !message.content ? (
               <div className="flex items-center gap-1.5 py-1">
-                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce"></span>
               </div>
             ) : (
               message.content
@@ -229,7 +270,7 @@ export function ChatMessage({
                   key={file.id}
                   className="flex items-center gap-3 bg-gray-100 rounded-lg px-4 py-3 hover:bg-gray-200 cursor-pointer transition-colors"
                 >
-                  <FileText className="w-5 h-5 text-[#005eb8]" />
+                  <FileText className="w-5 h-5 text-[var(--nhs-blue)]" />
                   <div>
                     <p className="font-medium text-gray-900 text-sm">{file.name}</p>
                     <p className="text-gray-500 text-xs">{file.size}</p>
@@ -241,8 +282,8 @@ export function ChatMessage({
 
           {/* Guideline reference */}
           {message.guidelineReference && (
-            <div className="mt-4 bg-blue-50 rounded-lg px-4 py-3 border-l-4 border-[#005eb8]">
-              <p className="font-semibold text-[#005eb8] text-sm">{message.guidelineReference.title}</p>
+            <div className="mt-4 bg-blue-50 rounded-lg px-4 py-3 border-l-4 border-[var(--nhs-blue)]">
+              <p className="font-semibold text-[var(--nhs-blue)] text-sm">{message.guidelineReference.title}</p>
               <p className="text-gray-600 text-sm">Reference No: {message.guidelineReference.referenceNo}</p>
               <p className="text-gray-500 text-xs italic mt-1">Last Updated: {message.guidelineReference.lastUpdated}</p>
             </div>
@@ -258,44 +299,58 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Inline specialist review actions */}
+          {/* Inline specialist review actions (secondary / advanced) */}
           {showReviewActions && (
             <div className="mt-4 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-2">Review this AI response:</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={onApprove}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[#007f3b] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve
-                </button>
-                <button
-                  onClick={onApproveWithComment}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[#005eb8] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  Approve with Comment
-                </button>
-                <button
-                  onClick={onRequestChanges}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-amber-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Request Changes
-                </button>
-                <button
-                  onClick={onManualResponse}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 bg-[#da291c] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#b51f14] transition-colors disabled:opacity-50"
-                >
-                  <PenLine className="w-4 h-4" />
-                  Manual Response
-                </button>
-              </div>
+              <details className="group">
+                <summary className="text-xs text-gray-500 cursor-pointer select-none list-none flex items-center gap-1 mb-2 hover:text-gray-700">
+                  <span className="group-open:hidden">▶</span>
+                  <span className="hidden group-open:inline">▼</span>
+                  Advanced message actions
+                </summary>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={onApprove}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-[#007f3b] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#00662f] transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve
+                  </button>
+                  <button
+                    onClick={onApproveWithComment}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-[var(--nhs-blue)] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Approve with Comment
+                  </button>
+                  <button
+                    onClick={onRequestChanges}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-amber-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Request Changes
+                  </button>
+                  <button
+                    onClick={onManualResponse}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-[#da291c] text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#b51f14] transition-colors disabled:opacity-50"
+                  >
+                    <PenLine className="w-4 h-4" />
+                    Manual Response
+                  </button>
+                  <button
+                    onClick={onEditResponse}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit
+                  </button>
+                </div>
+              </details>
             </div>
           )}
         </div>

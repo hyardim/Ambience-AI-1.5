@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Loader2, Filter, X } from 'lucide-react';
+import { Plus, Search, Archive, Filter, X } from 'lucide-react';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
+import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 import { Header } from '../../components/Header';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { getChats, deleteChat } from '../../services/api';
 import type { ChatListFilters } from '../../services/api';
 import type { BackendChat } from '../../types/api';
+import { ifNotAbortError } from '../../utils/errors';
+import { createGpQueriesSearchFetcher } from '../../utils/gpQueries';
+import { formatSpecialtyLabel } from '../../utils/specialistQueries';
+import { resetTimeoutWithValue } from '../../utils/timers';
+import { orFallback } from '../../utils/value';
 
 type TabKey = 'submitted' | 'under_review' | 'closed';
 
@@ -18,16 +24,11 @@ const TAB_STATUSES: Record<TabKey, string[]> = {
 
 const SPECIALTY_OPTIONS = [
   'neurology',
-  'cardiology',
   'rheumatology',
-  'dermatology',
-  'orthopedics',
-  'psychiatry',
-  'gastroenterology',
-  'endocrinology',
-  'pulmonology',
-  'oncology',
 ];
+
+type SortKey = 'created_at' | 'title' | 'specialty' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 export function GPQueriesPage() {
   const navigate = useNavigate();
@@ -41,7 +42,10 @@ export function GPQueriesPage() {
   const [dateTo, setDateTo] = useState('');
   const [tab, setTab] = useState<TabKey>('submitted');
   const [showFilters, setShowFilters] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   const hasActiveFilters = !!(specialty || dateFrom || dateTo);
 
@@ -60,44 +64,70 @@ export function GPQueriesPage() {
 
   const fetchChats = useCallback(
     async (filters?: ChatListFilters) => {
+      // Validate date range before fetching
+      if (dateFrom && dateTo && dateFrom > dateTo) {
+        setError('Start date must be before end date');
+        return;
+      }
+      requestControllerRef.current?.abort();
+      const controller = new AbortController();
+      requestControllerRef.current = controller;
       setLoading(true);
       setError('');
       try {
-        const data = await getChats(filters ?? buildFilters());
+        const data = await getChats(filters ?? buildFilters(), { signal: controller.signal });
         setChats(data);
-      } catch {
-        setError('Failed to load consultations. Is the backend running?');
+      } catch (error) {
+        ifNotAbortError(error, () => {
+          setError('Failed to load consultations. Is the backend running?');
+        });
       } finally {
         setLoading(false);
       }
     },
-    [buildFilters],
+    [buildFilters, dateFrom, dateTo],
   );
 
   useEffect(() => {
-    fetchChats();
-  }, []);
+    const debounceTimer = debounceRef.current;
+    void fetchChats();
+    return () => {
+      requestControllerRef.current?.abort();
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+    };
+  }, [fetchChats]);
 
   // Refetch when specialty or date filters change
   useEffect(() => {
-    fetchChats(buildFilters());
-  }, [specialty, dateFrom, dateTo]);
+    void fetchChats(buildFilters());
+  }, [buildFilters, fetchChats]);
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchChats(buildFilters(value));
-    }, 300);
+    const searchFetcher = createGpQueriesSearchFetcher(fetchChats, buildFilters);
+    resetTimeoutWithValue(
+      debounceRef,
+      searchFetcher,
+      value,
+      300,
+    );
   };
 
+  /**
+   * Archives a consultation with optimistic removal.
+   * Restores the previous state on failure so the item reappears.
+   */
   const handleArchive = async (e: React.MouseEvent, chatId: number) => {
     e.stopPropagation();
     if (!confirm('Archive this consultation? It will be hidden from your list but the record will be preserved.')) return;
+    const prevChats = chats;
+    setChats(prev => prev.filter(c => c.id !== chatId));
     try {
       await deleteChat(chatId);
-      setChats(prev => prev.filter(c => c.id !== chatId));
     } catch {
+      setChats(prevChats);
       setError('Failed to archive consultation');
     }
   };
@@ -107,15 +137,21 @@ export function GPQueriesPage() {
     setSpecialty('');
     setDateFrom('');
     setDateTo('');
-    fetchChats({});
+    void fetchChats({});
   };
 
   const tabChats = (key: TabKey) =>
     chats.filter(c => TAB_STATUSES[key].includes(c.status));
 
-  const filteredChats = tabChats(tab);
-
-  const formatSpecialty = (s: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : null);
+  const filteredChats = [...tabChats(tab)].sort((a, b) => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    if (sortKey === 'created_at') {
+      return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * direction;
+    }
+    const aValue = (a[sortKey] ?? '').toString().toLowerCase();
+    const bValue = (b[sortKey] ?? '').toString().toLowerCase();
+    return aValue.localeCompare(bValue) * direction;
+  });
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -127,8 +163,8 @@ export function GPQueriesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+      <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
@@ -139,7 +175,7 @@ export function GPQueriesPage() {
           </div>
           <button
             onClick={() => navigate('/gp/queries/new')}
-            className="inline-flex items-center justify-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
           >
             <Plus className="w-5 h-5" />
             New Consultation
@@ -160,7 +196,7 @@ export function GPQueriesPage() {
               onClick={() => setTab(key)}
               className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                 tab === key
-                  ? 'bg-[#005eb8] text-white'
+                  ? 'bg-[var(--nhs-blue)] text-white'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -179,14 +215,14 @@ export function GPQueriesPage() {
                 placeholder="Search consultations..."
                 value={searchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
                 showFilters || hasActiveFilters
-                  ? 'bg-[#005eb8] text-white border-[#005eb8]'
+                  ? 'bg-[var(--nhs-blue)] text-white border-[var(--nhs-blue)]'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
               aria-label="Toggle filters"
@@ -194,7 +230,7 @@ export function GPQueriesPage() {
               <Filter className="w-4 h-4" />
               Filters
               {hasActiveFilters && (
-                <span className="bg-white text-[#005eb8] text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="bg-white text-[var(--nhs-blue)] text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {[specialty, dateFrom, dateTo].filter(Boolean).length}
                 </span>
               )}
@@ -204,7 +240,7 @@ export function GPQueriesPage() {
           {/* Expanded filter controls */}
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <label htmlFor="filter-specialty" className="block text-sm font-medium text-gray-700 mb-1">
                     Specialty
@@ -213,7 +249,7 @@ export function GPQueriesPage() {
                     id="filter-specialty"
                     value={specialty}
                     onChange={(e) => setSpecialty(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   >
                     <option value="">All specialties</option>
                     {SPECIALTY_OPTIONS.map(s => (
@@ -230,7 +266,7 @@ export function GPQueriesPage() {
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   />
                 </div>
                 <div>
@@ -242,8 +278,38 @@ export function GPQueriesPage() {
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   />
+                </div>
+                <div>
+                  <label htmlFor="sort-key" className="block text-sm font-medium text-gray-700 mb-1">
+                    Sort by
+                  </label>
+                  <select
+                    id="sort-key"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value as SortKey)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                  >
+                    <option value="created_at">Created date</option>
+                    <option value="title">Title</option>
+                    <option value="specialty">Specialty</option>
+                    <option value="status">Status</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="sort-direction" className="block text-sm font-medium text-gray-700 mb-1">
+                    Direction
+                  </label>
+                  <select
+                    id="sort-direction"
+                    value={sortDirection}
+                    onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
+                  >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                  </select>
                 </div>
               </div>
               {hasActiveFilters && (
@@ -271,8 +337,8 @@ export function GPQueriesPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <LoadingSkeleton lines={5} />
           </div>
         )}
 
@@ -284,7 +350,7 @@ export function GPQueriesPage() {
                 <div
                   key={chat.id}
                   onClick={() => navigate(`/gp/query/${chat.id}`)}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[#005eb8] cursor-pointer transition-all"
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-[var(--nhs-blue)] cursor-pointer transition-all"
                 >
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">
@@ -299,7 +365,7 @@ export function GPQueriesPage() {
                     <div className="flex items-center gap-3 shrink-0">
                       {chat.specialty && (
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium">
-                          {formatSpecialty(chat.specialty)}
+                          {formatSpecialtyLabel(chat.specialty)}
                         </span>
                       )}
                       {chat.severity && <SeverityBadge severity={chat.severity} />}
@@ -329,7 +395,7 @@ export function GPQueriesPage() {
                 {!searchTerm && !hasActiveFilters && tab === 'submitted' && (
                   <button
                     onClick={() => navigate('/gp/queries/new')}
-                    className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors"
+                    className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors"
                   >
                     <Plus className="w-5 h-5" />
                     New Consultation

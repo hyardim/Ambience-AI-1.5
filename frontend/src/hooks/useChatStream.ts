@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { subscribeToChatStream } from '../services/api';
+import { nextTimeoutPhase, settleResolver } from '../utils/chatStream';
 import { mapCitations } from '../utils/messageMapping';
 import type { Message } from '../types';
 
@@ -21,6 +22,8 @@ export interface UseChatStreamOptions {
   pollInterval?: number;
   /** SSE connect timeout in ms. Default: 500. */
   connectTimeout?: number;
+  /** Optional callback when backend reports truncated file context. */
+  onFileContextTruncated?: () => void;
 }
 
 export interface UseChatStreamReturn {
@@ -80,11 +83,12 @@ export function useChatStream(
     onRefresh,
     pollInterval = 2000,
     connectTimeout = 500,
+    onFileContextTruncated,
   } = options;
 
   const [phase, setPhase] = useState<StreamPhase>('idle');
   const cleanupRef = useRef<(() => void) | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard against calling setPhase after unmount
   const mountedRef = useRef(true);
 
@@ -96,7 +100,7 @@ export function useChatStream(
       cleanupRef.current?.();
       cleanupRef.current = null;
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
     };
@@ -108,26 +112,38 @@ export function useChatStream(
       cleanupRef.current?.();
       cleanupRef.current = null;
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
       if (mountedRef.current) setPhase('idle');
     };
   }, [chatId]);
 
-  // ── Polling logic ─────────────────────────────────────────────────────
+  // ── Polling logic (exponential backoff) ──────────────────────────────
+  const pollDelayRef = useRef(pollInterval);
+
+  /**
+   * Starts polling with exponential backoff.
+   * Each successive poll increases the delay by 1.5x, capping at 30 seconds.
+   */
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return; // already polling
     if (!mountedRef.current) return;
     setPhase('fallback_polling');
-    pollTimerRef.current = setInterval(() => {
-      void onRefresh();
-    }, pollInterval);
+    pollDelayRef.current = pollInterval;
+    const poll = () => {
+      void onRefresh().then(() => {
+        if (!mountedRef.current) return;
+        pollDelayRef.current = Math.min(pollDelayRef.current * 1.5, 30000);
+        pollTimerRef.current = setTimeout(poll, pollDelayRef.current);
+      });
+    };
+    pollTimerRef.current = setTimeout(poll, pollDelayRef.current);
   }, [onRefresh, pollInterval]);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
+      clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
     if (mountedRef.current) setPhase('idle');
@@ -154,10 +170,7 @@ export function useChatStream(
       return new Promise<void>((resolve) => {
         let resolved = false;
         const settle = () => {
-          if (!resolved) {
-            resolved = true;
-            resolve();
-          }
+          resolved = settleResolver(resolved, resolve);
         };
 
         // Timeout fallback — don't block the caller forever
@@ -165,7 +178,7 @@ export function useChatStream(
           settle();
           // If still in connecting state, fall through to polling
           if (mountedRef.current) {
-            setPhase((prev) => (prev === 'connecting' ? 'fallback_polling' : prev));
+            setPhase((prev) => nextTimeoutPhase(prev));
             startPolling();
           }
         }, connectTimeout);
@@ -182,11 +195,21 @@ export function useChatStream(
             setPhase('streaming');
             // Stop polling if it was running (e.g. reconnect scenario)
             if (pollTimerRef.current) {
-              clearInterval(pollTimerRef.current);
+              clearTimeout(pollTimerRef.current);
               pollTimerRef.current = null;
             }
             // Insert placeholder AI message if not already present
             setMessages((prev) => {
+              const existingGenerating = prev.find(
+                (m) => m.isGenerating && m.senderType === 'ai',
+              );
+              if (existingGenerating) {
+                return existingGenerating.id === String(messageId)
+                  ? prev
+                  : prev.map((m) =>
+                      m.id === existingGenerating.id ? { ...m, id: String(messageId) } : m,
+                    );
+              }
               if (prev.find((m) => m.id === String(messageId))) return prev;
               const placeholder: Message = {
                 id: String(messageId),
@@ -234,7 +257,11 @@ export function useChatStream(
             });
           },
 
-          onError(_messageId, _errorMsg) {
+          onFileContextTruncated() {
+            onFileContextTruncated?.();
+          },
+
+          onError() {
             if (!mountedRef.current) return;
             cleanupRef.current = null;
             // Fall back to polling
@@ -256,7 +283,7 @@ export function useChatStream(
         cleanupRef.current = cleanup;
       });
     },
-    [connectTimeout, onRefresh, setMessages, startPolling],
+    [connectTimeout, onFileContextTruncated, onRefresh, setMessages, startPolling],
   );
 
   return {

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import psycopg2
 import psycopg2.extras
+import psycopg2.sql
 from pgvector.psycopg2 import register_vector
+from psycopg2.extensions import connection as PsycopgConnection
 
+from ..config import db_config
 from ..utils.db import db
 from ..utils.logger import setup_logger
 
@@ -17,20 +20,24 @@ logger = setup_logger(__name__)
 def store_chunks(
     embedded_doc: dict[str, Any], db_url: str | None = None
 ) -> dict[str, Any]:
-    """
-    Persist embedded chunks into Postgres + pgvector.
+    """Persist embedded chunks into Postgres + pgvector.
+
+    Before inserting, **all** existing chunks for the document are deleted to
+    prevent orphaned rows from prior versions whose chunk IDs may differ.
 
     Args:
         embedded_doc: EmbeddedDocument dict from embed.py
+        db_url: Optional explicit database URL (used in tests).
 
     Returns:
-        Report dict with inserted, updated, skipped, failed counts
+        Report dict with inserted, updated, skipped, failed counts.
 
     Processing steps:
         1. Filter out failed chunks (embedding_status != "success")
         2. Connect to Postgres via db.get_raw_connection()
-        3. For each chunk: determine upsert case and execute
-        4. Return report
+        3. Delete existing chunks for the doc_id
+        4. For each chunk: insert
+        5. Return report
     """
     chunks = embedded_doc.get("chunks", [])
     doc_meta = embedded_doc.get("doc_meta", {})
@@ -54,22 +61,22 @@ def store_chunks(
         "failed": n_failed,
     }
 
-    conn = psycopg2.connect(db_url) if db_url else db.get_raw_connection()
-    try:
-        register_vector(conn)
-        psycopg2.extras.register_default_jsonb(conn)
-        for chunk in eligible:
-            chunk_id = chunk.get("chunk_id", "")
-            try:
-                action = _upsert_chunk(conn, chunk, doc_id, doc_version)
-                report[action] += 1
-                logger.debug(f"Chunk {chunk_id}: {action}")
-            except Exception as e:
-                report["failed"] += 1
-                logger.warning(f"Chunk {chunk_id} failed to write: {e}")
-                conn.rollback()
-    finally:
-        conn.close()
+    use_pool = db_url is None or db_url == db_config.database_url
+    if use_pool:
+        with db.raw_connection() as conn:
+            register_vector(conn)
+            psycopg2.extras.register_default_jsonb(conn)
+            _store_chunks_with_connection(conn, eligible, doc_id, doc_version, report)
+    else:
+        direct_conn: PsycopgConnection = psycopg2.connect(db_url)
+        try:
+            register_vector(direct_conn)
+            psycopg2.extras.register_default_jsonb(direct_conn)
+            _store_chunks_with_connection(
+                direct_conn, eligible, doc_id, doc_version, report
+            )
+        finally:
+            direct_conn.close()
 
     logger.info(
         f"Store report: inserted={report['inserted']} "
@@ -78,6 +85,38 @@ def store_chunks(
         f"failed={report['failed']}"
     )
     return report
+
+
+def _store_chunks_with_connection(
+    conn: Any,
+    eligible: list[dict[str, Any]],
+    doc_id: str,
+    doc_version: str,
+    report: dict[str, int],
+) -> None:
+    """Write eligible chunks using an already-open connection."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM rag_chunks WHERE doc_id = %s", (doc_id,))
+        deleted = cur.rowcount
+        if deleted:
+            logger.info(
+                f"Deleted {deleted} existing chunks for doc_id={doc_id} "
+                f"before re-ingestion"
+            )
+
+    for chunk in eligible:
+        chunk_id = chunk.get("chunk_id", "")
+        try:
+            _begin_savepoint(conn, chunk_id)
+            action = _upsert_chunk(conn, chunk, doc_id, doc_version)
+            _release_savepoint(conn, chunk_id)
+            report[action] += 1
+            logger.debug(f"Chunk {chunk_id}: {action}")
+        except Exception as e:
+            report["failed"] += 1
+            logger.warning(f"Chunk {chunk_id} failed to write: {e}")
+            _rollback_to_savepoint(conn, chunk_id)
+    conn.commit()
 
 
 def _upsert_chunk(
@@ -94,7 +133,6 @@ def _upsert_chunk(
     chunk_id = chunk["chunk_id"]
     text = chunk["text"]
     metadata = _build_metadata(chunk)
-    metadata_str = _metadata_json(metadata)
 
     with conn.cursor() as cur:
         # Look up existing row
@@ -129,12 +167,9 @@ def _upsert_chunk(
                     json.dumps(metadata),
                 ),
             )
-            conn.commit()
             return "inserted"
 
         existing_text, existing_metadata = existing
-        existing_metadata_str = _metadata_json(existing_metadata)
-
         if existing_text != text:
             # Case B — text changed, update text + embedding + metadata
             embedding = np.array(chunk["embedding"], dtype=np.float32)
@@ -156,10 +191,9 @@ def _upsert_chunk(
                     chunk_id,
                 ),
             )
-            conn.commit()
             return "updated"
 
-        if existing_metadata_str != metadata_str:
+        if not _metadata_equals(existing_metadata, metadata):
             # Case C — metadata only changed
             cur.execute(
                 """
@@ -170,7 +204,6 @@ def _upsert_chunk(
                 """,
                 (json.dumps(metadata), doc_id, doc_version, chunk_id),
             )
-            conn.commit()
             return "updated"
 
         # Case D — identical, skip
@@ -193,12 +226,53 @@ def _build_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
         "section_title": chunk.get("section_title", ""),
         "page_start": chunk.get("page_start", 0),
         "page_end": chunk.get("page_end", 0),
+        "creation_date": citation.get("creation_date", ""),
+        "publish_date": citation.get("publish_date", ""),
+        "last_updated_date": citation.get("last_updated_date", ""),
         "citation": citation,
     }
 
 
-def _metadata_json(metadata: dict[str, Any]) -> str:
-    """Serialise metadata to sorted JSON string for comparison."""
-    if isinstance(metadata, str):
-        metadata = json.loads(metadata)
-    return json.dumps(metadata, sort_keys=True)
+def _metadata_equals(left: Any, right: Any) -> bool:
+    return bool(_normalise_metadata(left) == _normalise_metadata(right))
+
+
+def _normalise_metadata(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return _normalise_metadata(json.loads(value))
+        except json.JSONDecodeError:
+            return value
+    if isinstance(value, dict):
+        return {key: _normalise_metadata(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_normalise_metadata(item) for item in value]
+    return value
+
+
+def _savepoint_name(chunk_id: str) -> str:
+    # Use only digits to guarantee the name is safe for SQL identifiers.
+    return f"chunk_{abs(hash(chunk_id))}"
+
+
+def _begin_savepoint(conn: Any, chunk_id: str) -> None:
+    name = psycopg2.sql.Identifier(_savepoint_name(chunk_id))
+    with conn.cursor() as cur:
+        cur.execute(psycopg2.sql.SQL("SAVEPOINT {}").format(name))
+
+
+def _release_savepoint(conn: Any, chunk_id: str) -> None:
+    name = psycopg2.sql.Identifier(_savepoint_name(chunk_id))
+    with conn.cursor() as cur:
+        cur.execute(psycopg2.sql.SQL("RELEASE SAVEPOINT {}").format(name))
+
+
+def _rollback_to_savepoint(conn: Any, chunk_id: str) -> None:
+    try:
+        name = psycopg2.sql.Identifier(_savepoint_name(chunk_id))
+        with conn.cursor() as cur:
+            cur.execute(psycopg2.sql.SQL("ROLLBACK TO SAVEPOINT {}").format(name))
+    except Exception:
+        rollback = cast(Any, getattr(conn, "rollback", None))
+        if callable(rollback):
+            rollback()

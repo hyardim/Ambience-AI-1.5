@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { Users, MessageSquare, ClipboardList, LayoutDashboard, Upload } from 'lucide-react';
+import { Users, MessageSquare, ClipboardList, LayoutDashboard, Upload, Database } from 'lucide-react';
 import { Header } from './Header';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -13,13 +13,14 @@ const NAV_ITEMS = [
   { to: '/admin/chats',       label: 'Chats',       icon: MessageSquare   },
   { to: '/admin/logs',        label: 'Audit Logs',  icon: ClipboardList   },
   { to: '/admin/guidelines',  label: 'Guidelines',  icon: Upload          },
+  { to: '/admin/rag',         label: 'RAG Pipeline', icon: Database        },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { username, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <Header userRole="admin" userName={username || 'Admin'} onLogout={logout} />
 
       <div className="flex-1 flex">
@@ -33,7 +34,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-[#005eb8] text-white'
+                      ? 'bg-[var(--nhs-blue)] text-white'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`
                 }

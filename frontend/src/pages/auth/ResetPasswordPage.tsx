@@ -4,6 +4,17 @@ import { ArrowLeft, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter';
 import { resetPasswordConfirm } from '../../services/api';
+import { getErrorMessage } from '../../utils/errors';
+
+function isStrongPassword(password: string): boolean {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(password)
+  );
+}
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -11,6 +22,7 @@ export function ResetPasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -31,21 +43,24 @@ export function ResetPasswordPage() {
       setError('Passwords do not match');
       return;
     }
+    if (!isStrongPassword(newPassword)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+      return;
+    }
 
     setSubmitting(true);
     try {
       await resetPasswordConfirm(token, newPassword);
       setSuccess(true);
     } catch (err) {
-      const fallback = 'Invalid or expired reset link. Request a new one.';
-      setError(err instanceof Error ? err.message || fallback : fallback);
+      setError(getErrorMessage(err, 'Invalid or expired reset link. Request a new one.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <AuthHeader />
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -63,7 +78,7 @@ export function ResetPasswordPage() {
                 </p>
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-2 text-[#005eb8] hover:text-[#003087] font-medium"
+                  className="inline-flex items-center gap-2 text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   Back to Login
@@ -82,7 +97,7 @@ export function ResetPasswordPage() {
                 )}
 
                 {error && (
-                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     {error}
                   </div>
                 )}
@@ -98,9 +113,10 @@ export function ResetPasswordPage() {
                         type={showPassword ? 'text' : 'password'}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                         placeholder="At least 8 characters"
                         autoComplete="new-password"
+                        required
                       />
                       <button
                         type="button"
@@ -117,21 +133,32 @@ export function ResetPasswordPage() {
                     <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
                       Confirm new password
                     </label>
-                    <input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
-                      placeholder="Re-enter new password"
-                      autoComplete="new-password"
-                    />
+                    <div className="relative">
+                      <input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
+                        placeholder="Re-enter new password"
+                        autoComplete="new-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={submitting || !token}
-                    className="w-full bg-[#005eb8] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#003087] transition-colors focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full bg-[var(--nhs-blue)] text-white py-3 px-4 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {submitting ? 'Resetting…' : 'Reset Password'}
                   </button>
@@ -139,7 +166,7 @@ export function ResetPasswordPage() {
 
                 <Link
                   to="/forgot-password"
-                  className="flex items-center justify-center gap-2 text-[#005eb8] hover:text-[#003087] font-medium mt-6"
+                  className="flex items-center justify-center gap-2 text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium mt-6"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   Back to Forgot Password

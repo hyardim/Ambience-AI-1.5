@@ -216,10 +216,11 @@ def find_table_caption(
             distance = table_top - block_bottom
             if distance < CAPTION_PROXIMITY_PX:
                 text = block.get("text", "").strip()
-                if CAPTION_PATTERN.match(text) or block.get("is_bold", False):
-                    if distance < best_distance:
-                        best_distance = distance
-                        best_text = str(text)
+                if (
+                    CAPTION_PATTERN.match(text) or block.get("is_bold", False)
+                ) and distance < best_distance:
+                    best_distance = distance
+                    best_text = str(text)
 
     return best_text
 

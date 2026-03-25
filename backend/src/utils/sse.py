@@ -5,8 +5,8 @@ Events are keyed by chat_id so every SSE client watching a chat receives
 the same generation lifecycle events.  Each subscriber gets its own
 asyncio.Queue so back-pressure on one client does not block others.
 
-A short-lived **replay buffer** retains the latest ``stream_start``,
-``content``, and terminal (``complete`` / ``error``) events per chat so
+A short-lived **replay buffer** retains the latest ``stream_start`` and
+``content`` events per chat so
 that late-connecting clients still receive current state instead of
 missing the generation entirely.
 
@@ -24,16 +24,24 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
 
+_REPLAY_BUFFER_TTL_SECONDS = 600  # Remove replay entries older than 10 minutes
+_REPLAY_BUFFER_MAX_SIZE = 1000  # Maximum number of chats tracked in the replay buffer
+
+
 @dataclass
 class SSEEvent:
+    """A single Server-Sent Event with an event type and JSON payload."""
+
     event: str  # stream_start | content | complete | error
     data: dict[str, Any]
+    created_at: float = field(default_factory=time.monotonic)
 
     def encode(self) -> str:
         """Format as an SSE text frame."""
@@ -58,7 +66,6 @@ class _ChatEventBus:
         # Replay buffer per chat
         self._stream_start: dict[int, SSEEvent] = {}
         self._last_content: dict[int, SSEEvent] = {}
-        self._terminal: dict[int, SSEEvent] = {}
         self._active_streams: set[int] = set()
         # Reference to the main event loop (set on first subscribe)
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -69,11 +76,15 @@ class _ChatEventBus:
     # Async API (use from coroutines on the main event loop)
     # ------------------------------------------------------------------
 
+    _MAX_SUBSCRIBER_QUEUE_SIZE = 256
+
     async def subscribe(self, chat_id: int) -> asyncio.Queue[SSEEvent | None]:
         async with self._lock:
             if self._loop is None:
                 self._loop = asyncio.get_running_loop()
-            q: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+            q: asyncio.Queue[SSEEvent | None] = asyncio.Queue(
+                maxsize=self._MAX_SUBSCRIBER_QUEUE_SIZE,
+            )
             self._subscribers.setdefault(chat_id, []).append(q)
             # Replay buffered events only while a stream is currently active.
             # Completed streams are already persisted in the database; replaying
@@ -88,7 +99,9 @@ class _ChatEventBus:
                     q.put_nowait(last)
             return q
 
-    async def unsubscribe(self, chat_id: int, q: asyncio.Queue[SSEEvent | None]) -> None:
+    async def unsubscribe(
+        self, chat_id: int, q: asyncio.Queue[SSEEvent | None]
+    ) -> None:
         async with self._lock:
             subs = self._subscribers.get(chat_id)
             if subs:
@@ -98,6 +111,8 @@ class _ChatEventBus:
                     pass
                 if not subs:
                     del self._subscribers[chat_id]
+                    if chat_id not in self._active_streams:
+                        self._clear_buffer(chat_id)
 
     async def publish(self, chat_id: int, event: SSEEvent) -> None:
         async with self._lock:
@@ -107,12 +122,15 @@ class _ChatEventBus:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                logger.warning("Dropping SSE event for chat %s – subscriber queue full", chat_id)
+                logger.warning(
+                    "Dropping SSE event for chat %s – subscriber queue full", chat_id
+                )
 
     async def close_chat(self, chat_id: int) -> None:
         """Send a sentinel (None) to all subscribers so they can exit cleanly."""
         async with self._lock:
             subs = list(self._subscribers.get(chat_id, []))
+            self._clear_buffer(chat_id)
         for q in subs:
             try:
                 q.put_nowait(None)
@@ -158,17 +176,51 @@ class _ChatEventBus:
     # ------------------------------------------------------------------
 
     def _update_buffer(self, chat_id: int, event: SSEEvent) -> None:
-        """Update the per-chat replay buffer (called under a lock)."""
+        """Update the per-chat replay buffer (called under a lock).
+
+        Enforces a TTL and max-size limit to prevent unbounded memory growth.
+        Expired entries and entries beyond the max size are pruned periodically.
+        """
         if event.event == "stream_start":
             self._active_streams.add(chat_id)
             self._stream_start[chat_id] = event
             self._last_content.pop(chat_id, None)
-            self._terminal.pop(chat_id, None)
         elif event.event == "content":
             self._last_content[chat_id] = event
         elif event.event in ("complete", "error"):
             self._active_streams.discard(chat_id)
-            self._terminal[chat_id] = event
+
+        # Periodic cleanup: expire old entries and enforce max buffer size
+        self._cleanup_expired_buffers()
+
+    def _cleanup_expired_buffers(self) -> None:
+        """Remove replay buffer entries older than TTL and enforce max size."""
+        now = time.monotonic()
+        expired_ids = []
+        for cid, evt in list(self._stream_start.items()):
+            if cid not in self._active_streams and (now - evt.created_at) > _REPLAY_BUFFER_TTL_SECONDS:
+                expired_ids.append(cid)
+        for cid in expired_ids:
+            self._stream_start.pop(cid, None)
+            self._last_content.pop(cid, None)
+
+        # Enforce max size by removing oldest non-active entries
+        if len(self._stream_start) > _REPLAY_BUFFER_MAX_SIZE:
+            inactive = [
+                (cid, evt) for cid, evt in self._stream_start.items()
+                if cid not in self._active_streams
+            ]
+            inactive.sort(key=lambda x: x[1].created_at)
+            excess = len(self._stream_start) - _REPLAY_BUFFER_MAX_SIZE
+            for cid, _ in inactive[:excess]:
+                self._stream_start.pop(cid, None)
+                self._last_content.pop(cid, None)
+
+    def _clear_buffer(self, chat_id: int) -> None:
+        """Drop replay state for a chat once streaming is done/closed."""
+        self._active_streams.discard(chat_id)
+        self._stream_start.pop(chat_id, None)
+        self._last_content.pop(chat_id, None)
 
     def _sync_put(self, chat_id: int, event: SSEEvent) -> None:
         """Put an event into all subscriber queues (runs on the event loop)."""
@@ -176,7 +228,9 @@ class _ChatEventBus:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                logger.warning("Dropping SSE event for chat %s – subscriber queue full", chat_id)
+                logger.warning(
+                    "Dropping SSE event for chat %s – subscriber queue full", chat_id
+                )
 
     def _sync_close(self, chat_id: int) -> None:
         """Send sentinel to all subscribers (runs on the event loop)."""
@@ -185,10 +239,14 @@ class _ChatEventBus:
                 q.put_nowait(None)
             except asyncio.QueueFull:
                 pass
+        self._clear_buffer(chat_id)
 
 
 # Module-level singleton
 chat_event_bus = _ChatEventBus()
+
+
+_SSE_IDLE_TIMEOUT = 300  # seconds — drop idle connections to prevent subscriber leaks
 
 
 async def sse_event_generator(
@@ -197,11 +255,22 @@ async def sse_event_generator(
     """Async generator that yields SSE-formatted strings for a chat.
 
     Use with ``StreamingResponse(sse_event_generator(chat_id), media_type="text/event-stream")``.
+
+    Includes an idle timeout so that connections dropped without a clean close
+    (e.g. network failure) are eventually cleaned up rather than leaking
+    subscriber queues indefinitely.
     """
     q = await chat_event_bus.subscribe(chat_id)
     try:
         while True:
-            event = await q.get()
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=_SSE_IDLE_TIMEOUT)
+            except asyncio.TimeoutError:
+                # Send a keep-alive comment to detect dead connections.
+                # If the client has disconnected, the write will fail and
+                # the generator will be closed, triggering unsubscribe.
+                yield ": keep-alive\n\n"
+                continue
             if event is None:
                 # Sentinel – stream finished
                 break

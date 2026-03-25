@@ -5,10 +5,10 @@ import re
 from typing import Any
 
 import nltk
-import tiktoken
-from nltk.tokenize import sent_tokenize  # noqa: E402
+from nltk.tokenize import sent_tokenize
 
 from ..utils.logger import setup_logger
+from ..utils.tokenizer import count_tokens as shared_count_tokens
 
 logger = setup_logger(__name__)
 
@@ -24,8 +24,6 @@ SHORT_SECTION_TOKENS = 150
 MAX_MERGE_SECTIONS = 2
 
 _NLTK_INITIALISED = False
-
-_ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
 def _ensure_nltk_data() -> None:
@@ -52,7 +50,10 @@ def _ensure_nltk_data() -> None:
 # -----------------------------------------------------------------------
 
 
-def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
+def chunk_document(
+    metadata_doc: dict[str, Any],
+    chunking_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Split a MetadataDocument into citation-safe chunks.
 
@@ -83,6 +84,10 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
             if block.get("include_in_chunks", False):
                 all_blocks.append(block)
 
+    chunk_settings = _resolve_chunk_settings(chunking_config)
+    max_chunk_tokens = chunk_settings["max_chunk_tokens"]
+    overlap_tokens = chunk_settings["overlap_tokens"]
+
     # Step 2: separate tables from text
     table_blocks = [b for b in all_blocks if b.get("content_type") == "table"]
     text_blocks = [b for b in all_blocks if b.get("content_type") != "table"]
@@ -110,6 +115,8 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
             doc_meta=doc_meta,
             chunk_index_start=chunk_index,
             overlap_sentences=overlap_sentences,
+            max_chunk_tokens=max_chunk_tokens,
+            overlap_tokens=overlap_tokens,
         )
         chunks.extend(new_chunks)
         chunk_index += len(new_chunks)
@@ -141,6 +148,27 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _resolve_chunk_settings(config: dict[str, Any] | None) -> dict[str, int]:
+    """Resolve runtime chunking settings with backward-compatible defaults."""
+    settings = config or {}
+    target_chunk_size = int(settings.get("target_chunk_size", MAX_CHUNK_TOKENS))
+
+    if "overlap_tokens" in settings:
+        overlap_tokens = int(settings["overlap_tokens"])
+    elif "overlap_percentage" in settings:
+        overlap_tokens = max(
+            int(target_chunk_size * float(settings["overlap_percentage"])),
+            0,
+        )
+    else:
+        overlap_tokens = OVERLAP_TOKENS
+
+    return {
+        "max_chunk_tokens": target_chunk_size,
+        "overlap_tokens": overlap_tokens,
+    }
+
+
 # -----------------------------------------------------------------------
 # Token counting + sentence splitting
 # -----------------------------------------------------------------------
@@ -148,7 +176,7 @@ def chunk_document(metadata_doc: dict[str, Any]) -> dict[str, Any]:
 
 def count_tokens(text: str) -> int:
     """Count tokens using cl100k_base encoding."""
-    return len(_ENCODER.encode(text))
+    return shared_count_tokens(text)
 
 
 def split_into_sentences(text: str) -> list[str]:
@@ -285,6 +313,8 @@ def chunk_section_group(
     doc_meta: dict[str, Any],
     chunk_index_start: int,
     overlap_sentences: list[str],
+    max_chunk_tokens: int = MAX_CHUNK_TOKENS,
+    overlap_tokens: int = OVERLAP_TOKENS,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Split a section group into sentence-aligned chunks with overlap.
 
@@ -307,19 +337,59 @@ def chunk_section_group(
     chunks: list[dict[str, Any]] = []
     chunk_index = chunk_index_start
 
-    current_sentences: list[str] = list(overlap_sentences)
-    current_blocks: list[dict[str, Any]] = []
+    current_pairs: list[tuple[str, dict[str, Any]]] = [
+        (sentence, blocks[0]) for sentence in overlap_sentences
+    ]
 
     i = 0
     while i < len(sentence_block_pairs):
         sentence, block = sentence_block_pairs[i]
-        candidate = current_sentences + [sentence]
+        sentence_tokens = count_tokens(sentence)
+
+        # If a single sentence exceeds the chunk budget, emit any pending
+        # content first, then emit the oversized sentence on its own. This
+        # avoids getting stuck retrying the same sentence forever when
+        # overlap text is already present.
+        if sentence_tokens > max_chunk_tokens:
+            if current_pairs:
+                chunk = _build_text_chunk(
+                    sentences=[
+                        current_sentence for current_sentence, _ in current_pairs
+                    ],
+                    contributing_blocks=[
+                        current_block for _, current_block in current_pairs
+                    ],
+                    doc_meta=doc_meta,
+                    chunk_index=chunk_index,
+                )
+                if chunk:
+                    chunks.append(chunk)
+                    chunk_index += 1
+                current_pairs = []
+                continue
+
+            chunk = _build_text_chunk(
+                sentences=[sentence],
+                contributing_blocks=[block],
+                doc_meta=doc_meta,
+                chunk_index=chunk_index,
+            )
+            if chunk:
+                chunks.append(chunk)
+                chunk_index += 1
+            i += 1
+            continue
+
+        candidate_pairs = [*current_pairs, (sentence, block)]
+        candidate = [current_sentence for current_sentence, _ in candidate_pairs]
         candidate_tokens = count_tokens(" ".join(candidate))
 
-        if candidate_tokens > MAX_CHUNK_TOKENS and current_blocks:
+        if candidate_tokens > max_chunk_tokens and current_pairs:
             chunk = _build_text_chunk(
-                sentences=current_sentences,
-                contributing_blocks=current_blocks,
+                sentences=[current_sentence for current_sentence, _ in current_pairs],
+                contributing_blocks=[
+                    current_block for _, current_block in current_pairs
+                ],
                 doc_meta=doc_meta,
                 chunk_index=chunk_index,
             )
@@ -327,19 +397,29 @@ def chunk_section_group(
                 chunks.append(chunk)
                 chunk_index += 1
 
-            overlap_sentences = _compute_overlap(current_sentences)
-            current_sentences = list(overlap_sentences)
-            current_blocks = []
+            overlap_sentences = _compute_overlap(
+                [current_sentence for current_sentence, _ in current_pairs],
+                overlap_tokens=overlap_tokens,
+            )
+            overlap_count = len(overlap_sentences)
+            if overlap_count >= len(current_pairs):
+                # If overlap would preserve the whole emitted chunk, the next
+                # iteration cannot make progress and can loop forever under
+                # tighter chunk budgets. Drop overlap in that case.
+                current_pairs = []
+            else:
+                current_pairs = (
+                    current_pairs[-overlap_count:] if overlap_count > 0 else []
+                )
         else:
-            current_sentences.append(sentence)
-            current_blocks.append(block)
+            current_pairs.append((sentence, block))
             i += 1
 
     # Emit remaining
-    if current_blocks:
+    if current_pairs:
         chunk = _build_text_chunk(
-            sentences=current_sentences,
-            contributing_blocks=current_blocks,
+            sentences=[current_sentence for current_sentence, _ in current_pairs],
+            contributing_blocks=[current_block for _, current_block in current_pairs],
             doc_meta=doc_meta,
             chunk_index=chunk_index,
         )
@@ -407,12 +487,15 @@ def _build_text_chunk(
     }
 
 
-def _compute_overlap(sentences: list[str]) -> list[str]:
+def _compute_overlap(
+    sentences: list[str],
+    overlap_tokens: int = OVERLAP_TOKENS,
+) -> list[str]:
     """Take sentences from end of list until overlap token budget is reached."""
     overlap: list[str] = []
     for sentence in reversed(sentences):
-        candidate = [sentence] + overlap
-        if count_tokens(" ".join(candidate)) > OVERLAP_TOKENS:
+        candidate = [sentence, *overlap]
+        if count_tokens(" ".join(candidate)) > overlap_tokens:
             break
         overlap = candidate
     return overlap
@@ -436,6 +519,7 @@ def build_citation(
         "title": doc_meta.get("title", ""),
         "author_org": doc_meta.get("author_org", ""),
         "creation_date": doc_meta.get("creation_date", ""),
+        "publish_date": doc_meta.get("publish_date", ""),
         "last_updated_date": doc_meta.get("last_updated_date", ""),
         "section_path": chunk_meta.get("section_path", []),
         "section_title": chunk_meta.get("section_title", ""),

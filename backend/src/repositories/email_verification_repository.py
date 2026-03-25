@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from src.db.email_verification_models import EmailVerificationToken
+from src.db.models.email_verification_token import EmailVerificationToken
 
 
 def create(

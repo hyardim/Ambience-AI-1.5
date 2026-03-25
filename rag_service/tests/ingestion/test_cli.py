@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 import tempfile
 from datetime import date
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -67,12 +70,12 @@ class TestResolveDbUrl:
         with (
             patch.dict(os.environ, {}, clear=True),
             runner.isolated_filesystem(),
+            tempfile.TemporaryDirectory() as tmp,
         ):
-            with tempfile.TemporaryDirectory() as tmp:
-                result = runner.invoke(
-                    cli,
-                    ["ingest", "--input", tmp, "--source-name", "NICE"],
-                )
+            result = runner.invoke(
+                cli,
+                ["ingest", "--input", tmp, "--source-name", "NICE"],
+            )
         assert result.exit_code == 1
 
 
@@ -102,6 +105,46 @@ class TestConfigureLogLevel:
         _configure_log_level("ERROR")
         assert logging.getLogger().level == logging.ERROR
 
+    def test_updates_existing_console_handlers(self) -> None:
+        logger = logging.getLogger("test.ingestion.cli")
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        logger.handlers[:] = [handler]
+
+        _configure_log_level("DEBUG")
+
+        assert handler.level == logging.DEBUG
+        logger.handlers.clear()
+
+    def test_ignores_non_logger_entries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = logging.Logger.manager.loggerDict
+        monkeypatch.setattr(
+            logging.Logger.manager,
+            "loggerDict",
+            {"placeholder": object()},
+            raising=False,
+        )
+        _configure_log_level("INFO")
+        monkeypatch.setattr(
+            logging.Logger.manager,
+            "loggerDict",
+            original,
+            raising=False,
+        )
+
+
+def test_module_entrypoint_invokes_main() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "src.ingestion.cli", "--help"],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+
 
 # -----------------------------------------------------------------------
 # ingest command
@@ -109,11 +152,11 @@ class TestConfigureLogLevel:
 
 
 class TestIngestCommand:
-    @pytest.fixture()
+    @pytest.fixture
     def runner(self) -> CliRunner:
         return CliRunner()
 
-    @pytest.fixture()
+    @pytest.fixture
     def input_dir(self, tmp_path: Any) -> str:
         (tmp_path / "test.pdf").touch()
         return str(tmp_path)

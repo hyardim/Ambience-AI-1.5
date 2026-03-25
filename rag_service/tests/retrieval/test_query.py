@@ -89,20 +89,24 @@ class TestProcessQuery:
         assert result.embedding_model == EMBEDDING_MODEL_NAME
 
     def test_process_query_wraps_model_load_failure_as_retrieval_error(self):
-        with patch(
-            "src.retrieval.query._load_model",
-            side_effect=RuntimeError("model not found"),
+        with (
+            patch(
+                "src.retrieval.query._load_model",
+                side_effect=RuntimeError("model not found"),
+            ),
+            pytest.raises(RetrievalError) as exc_info,
         ):
-            with pytest.raises(RetrievalError) as exc_info:
-                process_query("gout treatment")
+            process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
     def test_embedding_failure_raises_retrieval_error(self):
         mock_model = _make_mock_model()
         mock_model.encode.side_effect = RuntimeError("CUDA out of memory")
-        with patch("src.retrieval.query._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                process_query("gout treatment")
+        with (
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
 
     def test_wrong_embedding_dimensions_raises_validation_error(self):
@@ -115,9 +119,11 @@ class TestProcessQuery:
             )
 
     def test_query_exceeding_token_limit_raises_value_error(self):
-        # math.ceil(394 * 1.3) = ceil(512.2) = 513 — correctly exceeds limit
-        long_query = " ".join(["gout"] * 394)
-        with pytest.raises(ValueError, match="exceeds 512 token limit"):
+        long_query = " ".join(["gout"] * 2000)
+        with (
+            patch("src.retrieval.query.embed_config.query_max_tokens", 32),
+            pytest.raises(ValueError, match="exceeds 32 token limit"),
+        ):
             process_query(long_query)
 
     def test_expanded_query_exceeding_token_limit_raises_value_error(self):
@@ -125,22 +131,35 @@ class TestProcessQuery:
         # simulating expansion pushing query over the limit
         long_expansion = "gout " + " ".join(["urate"] * 400)
         mock_model = _make_mock_model()
-        with patch("src.retrieval.query._load_model", return_value=mock_model):
-            with patch(
-                "src.retrieval.query._expand_query", return_value=long_expansion
-            ):
-                with pytest.raises(ValueError, match="exceeds 512 token limit"):
-                    process_query("gout", expand=True)
+        with (
+            patch("src.retrieval.query.embed_config.query_max_tokens", 32),
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            patch("src.retrieval.query._expand_query", return_value=long_expansion),
+            pytest.raises(ValueError, match="exceeds 32 token limit"),
+        ):
+            process_query("gout", expand=True)
 
     def test_invalid_embedding_wraps_as_retrieval_error(self):
         # Force _embed to return wrong dimensions so ProcessedQuery construction fails
         mock_model = _make_mock_model(
             embedding=np.array([[0.1] * 100], dtype=np.float32)  # wrong dims
         )
-        with patch("src.retrieval.query._load_model", return_value=mock_model):
-            with pytest.raises(RetrievalError) as exc_info:
-                process_query("gout treatment")
+        with (
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            pytest.raises(RetrievalError) as exc_info,
+        ):
+            process_query("gout treatment")
         assert exc_info.value.stage == "QUERY"
+
+    def test_token_length_uses_shared_counter(self):
+        mock_model = _make_mock_model()
+        with (
+            patch("src.retrieval.query.count_tokens", return_value=99),
+            patch("src.retrieval.query.embed_config.query_max_tokens", 32),
+            patch("src.retrieval.query._load_model", return_value=mock_model),
+            pytest.raises(ValueError, match="exceeds 32 token limit"),
+        ):
+            process_query("gout treatment")
 
 
 # -----------------------------------------------------------------------
@@ -149,30 +168,15 @@ class TestProcessQuery:
 
 
 class TestLoadModel:
-    def setup_method(self):
-        # Reset the module-level cache before each test
-        import src.retrieval.query as q
-
-        q._MODEL = None
-
-    def test_load_model_instantiates_sentence_transformer(self):
-        with patch("src.retrieval.query.SentenceTransformer") as mock_st:
-            mock_st.return_value = MagicMock()
+    def test_load_model_uses_shared_ingestion_cache(self):
+        with patch("src.retrieval.query.load_embedder") as mock_load_embedder:
+            mock_load_embedder.return_value = MagicMock()
             from src.retrieval.query import _load_model
 
             result = _load_model()
-        mock_st.assert_called_once_with(EMBEDDING_MODEL_NAME)
+
+        mock_load_embedder.assert_called_once_with(model_name=EMBEDDING_MODEL_NAME)
         assert result is not None
-
-    def test_load_model_caches_after_first_call(self):
-        with patch("src.retrieval.query.SentenceTransformer") as mock_st:
-            mock_st.return_value = MagicMock()
-            from src.retrieval.query import _load_model
-
-            _load_model()
-            _load_model()
-        # SentenceTransformer() should only be instantiated once
-        mock_st.assert_called_once()
 
 
 # -----------------------------------------------------------------------
@@ -208,6 +212,70 @@ class TestExpandQuery:
         # both "dmard" and "methotrexate" map to "disease modifying antirheumatic drug"
         result = _expand_query("methotrexate dmard dosage")
         assert result.count("disease modifying antirheumatic drug") == 1
+
+    def test_new_medical_abbreviation_expansion(self):
+        result = _expand_query("GCA headache")
+        assert "giant cell arteritis" in result
+
+    def test_aspirin_expansion(self):
+        result = _expand_query("aspirin management")
+        assert "acetylsalicylic acid" in result
+
+    def test_red_flag_back_pain_cluster_expands_to_cauda_equina(self):
+        result = _expand_query(
+            "Severe back pain with bilateral leg weakness and urinary retention."
+        )
+        assert "cauda equina syndrome" in result
+        assert "progressive neurological deficit" in result
+
+    def test_nph_pattern_expands_to_normal_pressure_hydrocephalus(self):
+        result = _expand_query(
+            "Gait disturbance with urinary incontinence and ventriculomegaly."
+        )
+        assert "normal pressure hydrocephalus" in result
+        assert "NPH" in result
+        assert "gait apraxia" in result
+
+    def test_visual_headache_pattern_expands_to_migraine_aura_and_tia(self):
+        result = _expand_query(
+            "Transient visual disturbance followed by headache for 10 minutes."
+        )
+        assert "migraine aura" in result
+        assert "transient ischaemic attack" in result
+
+    def test_migraine_tia_comparison_expansion_adds_balanced_comparison_terms(self):
+        result = _expand_query(
+            "How can migraine aura be distinguished from TIA in primary care?"
+        )
+        assert "migraine aura" in result
+        assert "transient ischaemic attack" in result
+        assert "positive visual symptoms" in result
+        assert "sudden negative symptoms" in result
+
+    def test_methotrexate_toxicity_pattern_expands_to_monitoring_terms(self):
+        result = _expand_query(
+            "Methotrexate with fever, sore throat, and neutropenia on blood count."
+        )
+        assert "DMARD toxicity" in result
+        assert "drug-induced neutropenia" in result
+        assert "csDMARD monitoring" in result
+
+    def test_sle_renal_pattern_expands_to_lupus_nephritis_terms(self):
+        result = _expand_query(
+            "Known SLE with new proteinuria and rising creatinine."
+        )
+        assert "lupus nephritis" in result
+        assert "renal involvement" in result
+        assert "nephrology referral" in result
+
+    def test_inflammatory_arthritis_referral_pattern_expands_to_triage_terms(self):
+        result = _expand_query(
+            "Intermittent joint swelling in knees and wrists before "
+            "specialist referral."
+        )
+        assert "early inflammatory arthritis" in result
+        assert "baseline blood tests" in result
+        assert "plain radiographs" in result
 
 
 # -----------------------------------------------------------------------

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Loader2, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, ClipboardCheck, Paperclip } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useChatStream } from '../../hooks/useChatStream';
 import { toFrontendMessage } from '../../utils/messageMapping';
@@ -16,9 +16,13 @@ import {
 } from '../../services/api';
 import type { BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
 import type { Message } from '../../types';
+import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
+import { mergeStreamingMessage, shouldAutoConnectGpStream } from '../../utils/gpDetail';
+import { orFallback } from '../../utils/value';
 
 export function GPQueryDetailPage() {
   const { queryId } = useParams<{ queryId: string }>();
+  const chatId = Number(queryId);
   const navigate = useNavigate();
   const location = useLocation();
   const { username, logout } = useAuth();
@@ -31,84 +35,54 @@ export function GPQueryDetailPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [editMeta, setEditMeta] = useState<ChatUpdateRequest>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
   // Guard: auto-send the draft message from GPNewQueryPage only once
   const draftSentRef = useRef(false);
 
+  const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [`${files[index]?.name ?? 'Unknown file'}: ${getErrorMessage(result.reason, 'Upload failed')}`]
+        : [],
+    );
+    return failures;
+  };
+
   // ── Streaming state machine ────────────────────────────────────────────
   const refreshChat = useCallback(async () => {
-    if (!queryId) return;
     try {
-      const found = await getChat(Number(queryId));
+      const found = await getChat(chatId);
       setChat(found);
-      setMessages(found.messages.map(m => toFrontendMessage(m, username || 'GP User')));
-    } catch (err) { console.warn('[QueryDetail] Background refresh failed:', err); }
-  }, [queryId, username]);
+      setMessages(found.messages.map(m => toFrontendMessage(m, orFallback(username, 'GP User'))));
+    } catch { /* silent refresh */ }
+  }, [chatId, username]);
 
   const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
     setMessages,
-    { chatId: chat?.id ?? null, onRefresh: refreshChat },
+    {
+      chatId: chat?.id ?? null,
+      onRefresh: refreshChat,
+      onFileContextTruncated: () => {
+        setError(
+          'One or more attached files were too long and were truncated before AI generation. Consider uploading a shorter excerpt for best results.',
+        );
+      },
+    },
   );
-
-  useEffect(() => {
-    fetchChat();
-  }, [queryId]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
 
   // ── Auto-send draft message passed from GPNewQueryPage ───────────────
   const draftMessage = (location.state as { draftMessage?: string } | null)?.draftMessage;
 
-  useEffect(() => {
-    if (!chat || !draftMessage || draftSentRef.current) return;
-    draftSentRef.current = true;
-
-    // Clear router state so a page refresh won't re-send
-    navigate(location.pathname, { replace: true, state: {} });
-
-    // The optimistic user message was already added by fetchChat in the same
-    // render as loading=false, so no need to setMessages here.
-    setSending(true);
-
-    (async () => {
-      try {
-        // Open SSE *before* sending so we catch stream_start / content / complete
-        await connectStream(chat.id);
-        await apiSendMessage(chat.id, draftMessage);
-        // Reconcile user message id
-        const refreshed = await getChat(chat.id);
-        setChat(refreshed);
-        setMessages((prev) => {
-          const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
-          const fetched = refreshed.messages.map((m) =>
-            toFrontendMessage(m, username || 'GP User'),
-          );
-          if (streamingMsg) {
-            return fetched.map((m) =>
-              m.id === streamingMsg.id ? streamingMsg : m,
-            );
-          }
-          return fetched;
-        });
-      } catch (err) {
-        console.error('[GPQueryDetail] Failed to send message:', err);
-        setError('Failed to send message');
-      } finally {
-        setSending(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat?.id]);
-
+  /** Whether any message is still being generated by the AI. */
   const hasPendingAIResponse =
-    messages.length > 0 && messages[messages.length - 1].senderType === 'gp';
-
-  // Also poll when the latest AI message is still generating (revision in progress)
-  const hasRevisionInProgress =
     messages.length > 0 &&
-    messages[messages.length - 1].senderType === 'ai' &&
-    messages[messages.length - 1].isGenerating === true;
+    (messages[messages.length - 1].senderType === 'gp' || messages.some(m => m.isGenerating));
+
+  // Also poll when any AI message is still generating (revision in progress)
+  const hasRevisionInProgress = messages.some(
+    (message) => message.senderType === 'ai' && message.isGenerating === true,
+  );
 
   // Poll when the chat is in a review workflow and the status may change
   const chatStatus = chat?.status ?? '';
@@ -121,24 +95,23 @@ export function GPQueryDetailPage() {
 
   // Delegate polling to the hook — start/stop based on derived shouldPoll flag
   useEffect(() => {
-    if (!queryId) return;
     if (shouldPoll) {
       startPolling();
     } else {
       stopPolling();
     }
-  }, [queryId, shouldPoll, startPolling, stopPolling]);
+  }, [shouldPoll, startPolling, stopPolling]);
 
-  const fetchChat = async (options?: { silent?: boolean }) => {
-    if (!queryId) return;
-    if (!options?.silent) {
-      setLoading(true);
-    }
+  const fetchChat = useCallback(async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    setLoading(true);
     setError('');
     try {
-      const found = await getChat(Number(queryId));
+      const found = await getChat(chatId, { signal: controller.signal });
       setChat(found);
-      const mapped = found.messages.map(m => toFrontendMessage(m, username || 'GP User'));
+      const mapped = found.messages.map(m => toFrontendMessage(m, orFallback(username, 'GP User')));
       // When a draft message is about to be sent, pre-populate the optimistic
       // user message in the same batch as loading=false so there's no
       // empty-messages flash between fetchChat completing and the draft effect.
@@ -146,7 +119,7 @@ export function GPQueryDetailPage() {
         setMessages([...mapped, {
           id: 'temp-draft',
           senderId: 'user',
-          senderName: username || 'GP User',
+          senderName: orFallback(username, 'GP User'),
           senderType: 'gp' as const,
           content: draftMessage,
           timestamp: new Date(),
@@ -154,25 +127,74 @@ export function GPQueryDetailPage() {
       } else {
         setMessages(mapped);
       }
-    } catch (err) {
-      console.error('[GPQueryDetail] Failed to load consultation:', err);
-      setChat(null);
-      setError('Failed to load consultation');
+    } catch (error) {
+      ifNotAbortError(error, () => {
+        setChat(null);
+        setError('Failed to load consultation');
+      });
     } finally {
-      if (!options?.silent) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  };
+  }, [chatId, draftMessage, username]);
+
+  useEffect(() => {
+    void fetchChat();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
+  }, [fetchChat]);
+
+  /** Only auto-scroll if the user is near the bottom of the messages container. */
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+      if (isNearBottom) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (!chat || !draftMessage || draftSentRef.current) return;
+    draftSentRef.current = true;
+
+    navigate(location.pathname, { replace: true, state: {} });
+    setSending(true);
+
+    void (async () => {
+      try {
+        await connectStream(chat.id);
+        await apiSendMessage(chat.id, draftMessage);
+        const refreshed = await getChat(chat.id);
+        setChat(refreshed);
+        setMessages((prev) => {
+          const fetched = refreshed.messages.map((m) =>
+            toFrontendMessage(m, orFallback(username, 'GP User')),
+          );
+          return mergeStreamingMessage(prev, fetched);
+        });
+      } catch {
+        setError('Failed to send message');
+      } finally {
+        setSending(false);
+      }
+    })();
+  }, [chat, connectStream, draftMessage, location.pathname, navigate, username]);
 
   // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
     if (!chat) return;
-    if (streamConnected || sending) return;
-    // Only auto-connect from idle. When fallback polling is active, avoid
-    // tight reconnect loops against /stream under poor network conditions.
-    if (streamPhase !== 'idle') return;
-    if (!(hasPendingAIResponse || hasRevisionInProgress)) return;
+    if (!shouldAutoConnectGpStream({
+      hasChat: true,
+      streamConnected,
+      sending,
+      streamPhase,
+      hasPendingAIResponse,
+      hasRevisionInProgress,
+    })) return;
 
     void connectStream(chat.id);
   }, [
@@ -185,20 +207,35 @@ export function GPQueryDetailPage() {
     streamPhase,
   ]);
 
+  /**
+   * Sends a user message with optional file attachments.
+   * Adds an optimistic message immediately; removes it on failure.
+   */
   const handleSendMessage = async (content: string, files?: File[]) => {
-    if (!chat || sending) return;
+    const currentChat = chat!;
     setSending(true);
 
     // Optimistically add user message
+    const tempId = `temp-${Date.now()}`;
+    const tempAiId = `temp-ai-${Date.now()}`;
     const userMsg: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       senderId: 'user',
-      senderName: username || 'GP User',
+      senderName: orFallback(username, 'GP User'),
       senderType: 'gp',
       content,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMsg]);
+    const aiPlaceholder: Message = {
+      id: tempAiId,
+      senderId: 'ai',
+      senderName: 'NHS AI Assistant',
+      senderType: 'ai',
+      content: '',
+      timestamp: new Date(),
+      isGenerating: true,
+    };
+    setMessages(prev => [...prev, userMsg, aiPlaceholder]);
 
     const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
@@ -207,25 +244,34 @@ export function GPQueryDetailPage() {
         const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
         if (oversized.length > 0) {
           setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+          setMessages(prev => prev.filter(m => m.id !== tempId && m.id !== tempAiId));
           setSending(false);
           return;
         }
-        await Promise.all(files.map(f => uploadChatFile(chat.id, f)));
+        const uploadResults = await Promise.allSettled(
+          files.map((file) => uploadChatFile(currentChat.id, file)),
+        );
+        const failures = formatUploadFailures(uploadResults, files);
+        if (failures.length > 0) {
+          setError(
+            `Message sent, but some files failed to upload: ${failures.join(' | ')}`,
+          );
+        }
       }
 
       // Open SSE stream *once* before sending so we catch the AI generation events
-      await connectStream(chat.id);
+      await connectStream(currentChat.id);
 
-      await apiSendMessage(chat.id, content);
+      await apiSendMessage(currentChat.id, content);
       // Also do one fetch to reconcile the user message id
-      const refreshed = await getChat(chat.id);
+      const refreshed = await getChat(currentChat.id);
       setChat(refreshed);
 
       // Merge: keep streaming placeholder if present, else use fetched messages
       setMessages((prev) => {
         const streamingMsg = prev.find((m) => m.isGenerating && m.senderType === 'ai');
         const fetched = refreshed.messages.map((m) =>
-          toFrontendMessage(m, username || 'GP User'),
+          toFrontendMessage(m, orFallback(username, 'GP User')),
         );
         if (streamingMsg) {
           // Replace the generating message from the fetch with our streaming version
@@ -236,36 +282,37 @@ export function GPQueryDetailPage() {
         return fetched;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+      // Remove the optimistic message on failure so the UI stays consistent
+      setMessages(prev => prev.filter(m => m.id !== tempId && m.id !== tempAiId));
+      setError(getErrorMessage(err, 'Failed to send message'));
     } finally {
       setSending(false);
     }
   };
 
   const openMetaEditor = () => {
-    if (!chat) return;
+    const currentChat = chat!;
     setEditMeta({
-      title: chat.title,
-      specialty: chat.specialty,
-      severity: chat.severity,
+      title: currentChat.title,
+      specialty: currentChat.specialty,
+      severity: currentChat.severity,
     });
     setEditingMeta(true);
   };
 
   const saveMeta = async () => {
-    if (!chat) return;
+    const currentChat = chat!;
     setSavingMeta(true);
     setError('');
     try {
-      const updated = await apiUpdateChat(chat.id, {
+      const updated = await apiUpdateChat(currentChat.id, {
         title: editMeta.title,
         specialty: editMeta.specialty || undefined,
         severity: editMeta.severity || undefined,
       });
-      setChat(prev => (prev ? { ...prev, ...updated } : prev));
+      setChat({ ...currentChat, ...updated });
       setEditingMeta(false);
-    } catch (err) {
-      console.error('[GPQueryDetail] Failed to update consultation details:', err);
+    } catch {
       setError('Failed to update consultation details');
     } finally {
       setSavingMeta(false);
@@ -274,10 +321,10 @@ export function GPQueryDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+        <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
         </main>
       </div>
     );
@@ -285,14 +332,14 @@ export function GPQueryDetailPage() {
 
   if (!chat) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+        <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Consultation not found</h1>
             <button
               onClick={() => navigate('/gp/queries')}
-              className="text-[#005eb8] hover:text-[#003087] font-medium"
+              className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
             >
               Back to Consultations
             </button>
@@ -303,8 +350,8 @@ export function GPQueryDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole="gp" userName={username || 'GP User'} onLogout={logout} />
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+      <Header userRole="gp" userName={orFallback(username, 'GP User')} onLogout={logout} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
         {/* Back Button */}
@@ -323,7 +370,7 @@ export function GPQueryDetailPage() {
               <div className="flex-1">
                 <h1 className="text-xl font-bold text-gray-900 mb-2">{chat.title || 'Untitled Consultation'}</h1>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                  <span className="font-medium">{username || 'GP User'}</span>
+                  <span className="font-medium">{orFallback(username, 'GP User')}</span>
                   <span>•</span>
                   <span>{new Date(chat.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   {chat.specialty && (
@@ -340,35 +387,52 @@ export function GPQueryDetailPage() {
                 {!editingMeta && (chat.status === 'open' || chat.status === 'submitted') && (
                   <button
                     onClick={openMetaEditor}
-                    className="px-3 py-1.5 text-xs font-medium text-[#005eb8] border border-[#005eb8] rounded-lg hover:bg-[#005eb8] hover:text-white transition-colors"
+                    className="px-3 py-1.5 text-xs font-medium text-[var(--nhs-blue)] border border-[var(--nhs-blue)] rounded-lg hover:bg-[var(--nhs-blue)] hover:text-white transition-colors"
                   >
                     Edit details
                   </button>
                 )}
               </div>
-            </div>
+          </div>
 
-            {editingMeta && (
+          {chat.files && chat.files.length > 0 ? (
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Attached files</p>
+              <div className="flex flex-wrap gap-2">
+                {chat.files.map((file) => (
+                  <span
+                    key={file.id}
+                    className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-700 border border-gray-200"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-[var(--nhs-blue)]" />
+                    <span>{file.filename}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {editingMeta && (
               <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <input
                     type="text"
                     value={editMeta.title || ''}
                     onChange={(e) => setEditMeta(prev => ({ ...prev, title: e.target.value }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Consultation title"
                   />
                   <input
                     type="text"
                     value={editMeta.specialty || ''}
                     onChange={(e) => setEditMeta(prev => ({ ...prev, specialty: e.target.value || null }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Specialty"
                   />
                   <select
                     value={editMeta.severity || ''}
                     onChange={(e) => setEditMeta(prev => ({ ...prev, severity: e.target.value || null }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                   >
                     <option value="">No severity</option>
                     <option value="low">Low</option>
@@ -387,7 +451,7 @@ export function GPQueryDetailPage() {
                   <button
                     onClick={saveMeta}
                     disabled={savingMeta}
-                    className="px-3 py-1.5 bg-[#005eb8] text-white rounded-lg hover:bg-[#003087] disabled:opacity-50 text-sm"
+                    className="px-3 py-1.5 bg-[var(--nhs-blue)] text-white rounded-lg hover:bg-[var(--nhs-dark-blue)] disabled:opacity-50 text-sm"
                   >
                     {savingMeta ? 'Saving…' : 'Save'}
                   </button>
@@ -430,32 +494,33 @@ export function GPQueryDetailPage() {
           )}
 
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {messages.map(message => {
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+            {messages.map((message, index) => {
               const inReviewWorkflow = ['submitted', 'assigned', 'reviewing', 'approved', 'rejected'].includes(chat.status);
+              const timestampKey = message.timestamp instanceof Date ? message.timestamp.getTime() : '';
               return (
                 <ChatMessage
-                  key={message.id}
+                  key={`${message.id}-${timestampKey}-${index}`}
                   message={message}
                   isOwnMessage={message.senderType === 'gp'}
                   showReviewStatus={inReviewWorkflow}
                 />
               );
             })}
-            {hasPendingAIResponse && !streamConnected && (
+            {hasPendingAIResponse && !streamConnected && !hasRevisionInProgress && (
               <div className="flex gap-4">
                 <div className="shrink-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-[#005eb8] animate-spin" />
+                    <Loader2 className="w-5 h-5 text-[var(--nhs-blue)] animate-spin" />
                   </div>
                 </div>
                 <div className="flex-1 max-w-3xl">
                   <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
-                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[#005eb8] shadow-sm">
+                  <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[var(--nhs-blue)] shadow-sm">
                     <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.3s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce [animation-delay:-0.15s]"></span>
-                      <span className="w-2 h-2 rounded-full bg-[#005eb8] animate-bounce"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce"></span>
                     </div>
                   </div>
                 </div>
@@ -466,8 +531,29 @@ export function GPQueryDetailPage() {
 
           {/* Chat Input — only available before specialist picks up the chat */}
           {(chat.status === 'open' || chat.status === 'submitted') && (
-            <div className="border-t border-gray-200 p-4">
-              <ChatInput onSendMessage={handleSendMessage} disabled={sending} />
+            <div className="border-t border-gray-200">
+              {chat.files && chat.files.length > 0 && (
+                <div className="px-4 pt-3 pb-0">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1.5">
+                    <Paperclip className="w-3 h-3" />
+                    <span className="font-medium">Consultation files</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {chat.files.map((f) => (
+                      <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded text-xs text-blue-700">
+                        {f.filename}
+                        {f.file_size ? <span className="text-blue-400 ml-0.5">· {(f.file_size / 1024).toFixed(0)} KB</span> : null}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="px-4 pt-3 text-xs text-gray-500">Max 3MB per file · PDF, TXT, MD, RTF, DOC, DOCX, CSV, JSON, XML</p>
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                disabled={sending}
+                existingFileNames={chat.files?.map(f => f.filename) ?? []}
+              />
             </div>
           )}
 

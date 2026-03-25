@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Header } from '../components/Header';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { getProfile, updateProfile } from '../services/api';
 import type { UserProfile, ProfileUpdateRequest } from '../types/api';
-import { secureStorage } from '../utils/secureStorage';
+import { getErrorMessage, ifNotAbortError } from '../utils/errors';
+import { buildProfileUpdatePayload } from '../utils/profile';
+import { orFallback } from '../utils/value';
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { username, role, logout } = useAuth();
+  const { username, role, logout, setUserProfile } = useAuth();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,21 +28,32 @@ export function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<{ current?: string; new?: string }>({});
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    loadProfile();
+    void loadProfile();
+    return () => {
+      requestControllerRef.current?.abort();
+    };
   }, []);
 
   const loadProfile = async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError('');
     try {
-      const data = await getProfile();
+      const data = await getProfile({ signal: controller.signal });
       setProfile(data);
       setFullName(data.full_name || '');
       setSpecialty(data.specialty || '');
-    } catch {
-      setError('Failed to load profile');
+    } catch (error) {
+      ifNotAbortError(error, () => {
+        setError('Failed to load profile');
+      });
     } finally {
       setLoading(false);
     }
@@ -50,30 +63,55 @@ export function ProfilePage() {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
+    setPasswordErrors({});
+
+    // Validate name length
+    if (fullName.trim().length > 100) {
+      setError('Full name must be 100 characters or fewer.');
+      return;
+    }
 
     // Validate password fields
+    const pwErrors: { current?: string; new?: string } = {};
     if (newPassword && !currentPassword) {
-      setError('Current password is required to set a new password');
-      return;
+      pwErrors.current = 'Current password is required';
+    }
+    if (currentPassword && !newPassword) {
+      pwErrors.new = 'New password is required';
+    }
+    if (newPassword && newPassword.length < 8) {
+      pwErrors.new = 'Password must be at least 8 characters';
     }
     if (newPassword && newPassword !== confirmPassword) {
       setError('New passwords do not match');
+      setPasswordErrors(pwErrors);
       return;
     }
-
-    const payload: ProfileUpdateRequest = {};
-
-    // Only include changed fields
-    if (fullName !== (profile?.full_name || '')) {
-      payload.full_name = fullName;
-    }
-    if (specialty !== (profile?.specialty || '')) {
-      payload.specialty = specialty || null;
+    if (Object.keys(pwErrors).length > 0) {
+      setPasswordErrors(pwErrors);
+      setError(Object.values(pwErrors).join('. '));
+      return;
     }
     if (newPassword) {
-      payload.current_password = currentPassword;
-      payload.new_password = newPassword;
+      const strongEnough =
+        newPassword.length >= 8 &&
+        /[A-Z]/.test(newPassword) &&
+        /[a-z]/.test(newPassword) &&
+        /\d/.test(newPassword) &&
+        /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(newPassword);
+      if (!strongEnough) {
+        setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+        return;
+      }
     }
+
+    const payload: ProfileUpdateRequest = buildProfileUpdatePayload({
+      profile,
+      fullName,
+      specialty,
+      currentPassword,
+      newPassword,
+    });
 
     // Nothing to update
     if (Object.keys(payload).length === 0) {
@@ -91,14 +129,11 @@ export function ProfilePage() {
       setNewPassword('');
       setConfirmPassword('');
 
-      // Update stored username so Header name is in sync
-      if (updated.full_name) {
-        secureStorage.setItem('username', updated.full_name);
-      }
+      setUserProfile(updated);
 
       setSuccessMsg('Profile updated successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      setError(getErrorMessage(err, 'Failed to update profile'));
     } finally {
       setSaving(false);
     }
@@ -108,18 +143,18 @@ export function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-        <Header userRole={role || 'gp'} userName={username || 'User'} onLogout={logout} />
+      <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+        <Header userRole={orFallback(role, 'gp')} userName={orFallback(username, 'User')} onLogout={logout} />
         <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[#005eb8] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
         </main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
-      <Header userRole={role || 'gp'} userName={username || 'User'} onLogout={logout} />
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
+      <Header userRole={orFallback(role, 'gp')} userName={orFallback(username, 'User')} onLogout={logout} />
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back */}
@@ -157,7 +192,7 @@ export function ProfilePage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                 placeholder="Dr. Jane Smith"
               />
             </div>
@@ -172,7 +207,7 @@ export function ProfilePage() {
                   id="specialty"
                   value={specialty}
                   onChange={(e) => setSpecialty(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="">— Select —</option>
                   <option value="neurology">Neurology</option>
@@ -196,7 +231,7 @@ export function ProfilePage() {
                     type={showCurrentPw ? 'text' : 'password'}
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Enter current password"
                     autoComplete="current-password"
                   />
@@ -207,6 +242,9 @@ export function ProfilePage() {
                   >
                     {showCurrentPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
+                  {passwordErrors.current && (
+                    <p className="text-red-600 text-xs mt-1">{passwordErrors.current}</p>
+                  )}
                 </div>
 
                 {/* New password */}
@@ -219,7 +257,7 @@ export function ProfilePage() {
                     type={showNewPw ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                     placeholder="Enter new password"
                     autoComplete="new-password"
                   />
@@ -231,6 +269,9 @@ export function ProfilePage() {
                     {showNewPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                   <PasswordStrengthMeter password={newPassword} />
+                  {passwordErrors.new && (
+                    <p className="text-red-600 text-xs mt-1">{passwordErrors.new}</p>
+                  )}
                 </div>
 
                 {/* Confirm new password */}
@@ -238,27 +279,37 @@ export function ProfilePage() {
                   <label htmlFor="confirmPassword" className="block text-sm text-gray-600 mb-1">
                     Confirm New Password
                   </label>
-                  <input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
-                    placeholder="Re-enter new password"
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <input
+                      id="confirmPassword"
+                      type={showConfirmPw ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
+                      placeholder="Re-enter new password"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPw(!showConfirmPw)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      aria-label={showConfirmPw ? 'Hide confirm password' : 'Show confirm password'}
+                    >
+                      {showConfirmPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </fieldset>
 
             {/* Feedback */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" aria-live="polite" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
               </div>
             )}
             {successMsg && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+              <div role="status" aria-live="polite" className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 {successMsg}
               </div>
@@ -268,7 +319,7 @@ export function ProfilePage() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 bg-[#005eb8] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#003087] transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

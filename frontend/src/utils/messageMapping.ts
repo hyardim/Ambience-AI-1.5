@@ -1,5 +1,10 @@
 import type { BackendMessage } from '../types/api';
 import type { Message, Citation } from '../types';
+import { apiUrl } from '../services/api';
+
+type RawCitation = Record<string, unknown> & {
+  metadata?: Record<string, unknown>;
+};
 
 /** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
 export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
@@ -10,26 +15,57 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
       : [];
 
   return list
-    .map((c: any) => {
-      if (!c || typeof c !== 'object') return null;
-      const meta = (c as any).metadata || {};
-      const docId = (c as any).doc_id ?? meta.doc_id;
-      const sectionPath = (c as any).section_path ?? meta.section_path;
-      const pageStart = (c as any).page_start ?? meta.page_start;
-      const pageEnd = (c as any).page_end ?? meta.page_end;
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const citation = entry as RawCitation;
+      const meta = citation.metadata || {};
+      const docId = citation.doc_id ?? meta.doc_id;
+      const sectionPath = citation.section_path ?? meta.section_path;
+      const pageStart = citation.page_start ?? meta.page_start;
+      const pageEnd = citation.page_end ?? meta.page_end;
+      const creationDate = citation.creation_date ?? meta.creation_date;
+      const publishDate = citation.publish_date ?? meta.publish_date;
+      const lastUpdatedDate = citation.last_updated_date ?? meta.last_updated_date;
 
       return {
-        doc_id: docId || undefined,
-        title: meta.title || meta.filename || (c as any).source || 'Source',
-        source_name: meta.source_name || (c as any).source || 'Source',
-        specialty: meta.specialty,
-        section_path: sectionPath,
+        doc_id: typeof docId === 'string' ? docId : undefined,
+        title:
+          readString(citation.title)
+          || readString(meta.title)
+          || readString(meta.filename)
+          || readString(citation.source)
+          || 'Source',
+        source_name:
+          readString(citation.source_name)
+          || readString(meta.source_name)
+          || readString(citation.source)
+          || 'Source',
+        specialty: readString(citation.specialty) || readString(meta.specialty),
+        section_path: readSectionPath(sectionPath),
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
         page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
-        source_url: meta.source_url,
+        document_url: typeof docId === 'string' ? apiUrl(`/documents/${docId}`) : undefined,
+        source_url: readString(citation.source_url) || readString(meta.source_url),
+        creation_date: typeof creationDate === 'string' ? creationDate : undefined,
+        publish_date: typeof publishDate === 'string' ? publishDate : undefined,
+        last_updated_date: typeof lastUpdatedDate === 'string' ? lastUpdatedDate : undefined,
       } satisfies Citation;
     })
     .filter(Boolean) as Citation[];
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readSectionPath(value: unknown): string | string[] | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
+    return value;
+  }
+  return undefined;
 }
 
 /** Map a backend message to the frontend Message shape.
@@ -57,8 +93,8 @@ export function toFrontendMessage(msg: BackendMessage, currentUser: string, view
     content: msg.content,
     timestamp: new Date(msg.created_at),
     citations: mapCitations(
-      (msg.citations_used as unknown[] | null) ?? msg.citations_used,
-      (msg.citations as unknown[] | null) ?? (msg.citations_retrieved as unknown[] | null),
+      (msg as BackendMessage & { citations_used?: unknown[] | null }).citations_used,
+      msg.citations,
     ),
     isGenerating: msg.is_generating ?? false,
     reviewStatus: msg.review_status ?? null,

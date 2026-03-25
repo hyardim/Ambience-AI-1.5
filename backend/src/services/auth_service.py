@@ -1,11 +1,11 @@
+import hashlib
+import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-import logging
 from urllib.parse import quote
 
 from fastapi import HTTPException, status
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.core import security
@@ -31,7 +31,6 @@ from src.schemas.auth import (
 from src.services import email_service
 from src.utils.cache import cache, cache_keys
 
-
 GENERIC_FORGOT_PASSWORD_MESSAGE = {
     "message": "If that email is registered, a password reset link will be sent shortly"
 }
@@ -43,9 +42,40 @@ GENERIC_VERIFY_SUCCESS_MESSAGE = {"message": "Email verified successfully"}
 SAFE_INVALID_RESET_TOKEN_MESSAGE = "Invalid or expired reset token"
 SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE = "Invalid or expired verification token"
 
+# In-process fallback rate-limit dicts (used only when Redis is unavailable).
 _forgot_password_attempts: dict[str, list[datetime]] = defaultdict(list)
 _resend_verification_attempts: dict[str, list[datetime]] = defaultdict(list)
 logger = logging.getLogger(__name__)
+
+# Lazy-loaded sync Redis client for auth rate limiting.
+_auth_redis_client = None
+_auth_redis_attempted = False
+
+
+def _get_auth_redis():
+    """Return a sync Redis client, or None if unavailable."""
+    global _auth_redis_client, _auth_redis_attempted
+    if _auth_redis_attempted:
+        return _auth_redis_client
+    _auth_redis_attempted = True
+    if not settings.CACHE_ENABLED:
+        return None
+    try:
+        import redis
+
+        _auth_redis_client = redis.Redis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
+        _auth_redis_client.ping()
+    except Exception as exc:
+        logger.warning(
+            "Auth rate limiter: Redis unavailable (%s) — using in-process fallback",
+            exc,
+        )
+        _auth_redis_client = None
+    return _auth_redis_client
 
 
 def _utcnow() -> datetime:
@@ -53,13 +83,46 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _redis_rate_limited(
+    redis_key: str,
+    window_seconds: int,
+    max_attempts: int,
+) -> bool | None:
+    """Check and increment a rate-limit counter in Redis.
+
+    Uses the same atomic INCR pattern as the global rate limiter: increment
+    first, set TTL only on the first request so the window is not reset.
+    """
+    client = _get_auth_redis()
+    if client is None:
+        return None  # caller will fall through to in-process check
+
+    try:
+        count = client.incr(redis_key)
+        if count == 1:
+            client.expire(redis_key, window_seconds)
+        return count > max_attempts
+    except Exception as exc:
+        logger.warning("Auth rate-limit Redis error: %s", exc)
+        return None  # fall through to in-process
+
+
 def _is_rate_limited(
     *,
     key: str,
+    redis_prefix: str,
     attempts: dict[str, list[datetime]],
     window_seconds: int,
     max_attempts: int,
 ) -> bool:
+    # Hash the email so we don't store PII in Redis keys.
+    hashed = hashlib.sha256(key.lower().encode()).hexdigest()[:16]
+    redis_key = f"auth_rl:{redis_prefix}:{hashed}"
+    redis_limited = _redis_rate_limited(redis_key, window_seconds, max_attempts)
+    if redis_limited is not None:
+        return redis_limited
+
+    # In-process fallback (single-worker only).
     now = _utcnow()
     window_start = now - timedelta(seconds=window_seconds)
     bucket = attempts[key.lower()]
@@ -73,6 +136,7 @@ def _is_rate_limited(
 def _is_forgot_password_rate_limited(email: str) -> bool:
     return _is_rate_limited(
         key=email,
+        redis_prefix="forgot_pw",
         attempts=_forgot_password_attempts,
         window_seconds=settings.FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS,
         max_attempts=settings.FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS,
@@ -82,6 +146,7 @@ def _is_forgot_password_rate_limited(email: str) -> bool:
 def _is_resend_verification_rate_limited(email: str) -> bool:
     return _is_rate_limited(
         key=email,
+        redis_prefix="resend_verify",
         attempts=_resend_verification_attempts,
         window_seconds=settings.RESEND_VERIFICATION_RATE_LIMIT_WINDOW_SECONDS,
         max_attempts=settings.RESEND_VERIFICATION_RATE_LIMIT_MAX_ATTEMPTS,
@@ -102,31 +167,27 @@ def _validate_password(password: str) -> None:
         errors.append("a special character")
     if errors:
         raise HTTPException(
-            status_code=400, detail=f"Password must contain: {', '.join(errors)}")
+            status_code=400, detail=f"Password must contain: {', '.join(errors)}"
+        )
 
 
 def _make_auth_response(user: User) -> AuthResponse:
-    expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = security.create_access_token(
-        data={"sub": user.email, "role": user.role.value},
-        expires_delta=expires,
-    )
     return AuthResponse(
-        access_token=token,
+        access_token=security.create_access_token_for_user(user),
         token_type="bearer",
         user=UserOut.model_validate(user),
     )
 
 
 def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
-    _ensure_auth_token_tables(db)
+
     email_verification_repository.invalidate_active_for_user(
-        db, user_id=user.id, now=now)
+        db, user_id=user.id, now=now
+    )
 
     raw_token = security.generate_email_verification_token()
     token_hash = security.hash_email_verification_token(raw_token)
-    expires_at = now + \
-        timedelta(minutes=settings.EMAIL_VERIFICATION_TOKEN_TTL_MINUTES)
+    expires_at = now + timedelta(minutes=settings.EMAIL_VERIFICATION_TOKEN_TTL_MINUTES)
 
     email_verification_repository.create(
         db,
@@ -146,6 +207,8 @@ def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
 
 
 def login(db: Session, email: str, password: str) -> AuthResponse:
+    """Authenticate a user by email and password, returning tokens on success."""
+    email = email.lower().strip()
     user = user_repository.get_by_email(db, email)
     if not user or not security.verify_password(password, user.hashed_password):
         raise HTTPException(
@@ -154,30 +217,33 @@ def login(db: Session, email: str, password: str) -> AuthResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Account is deactivated")
+
     if not user.email_verified and not settings.ALLOW_LEGACY_UNVERIFIED_LOGIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Please verify your email before logging in. You can request a new verification email.",
         )
 
-    audit_repository.log(db, user_id=user.id, action="LOGIN",
-                         details=f"user_id={user.id}")
+    audit_repository.log(
+        db, user_id=user.id, action="LOGIN", details=f"user_id={user.id}"
+    )
     return _make_auth_response(user)
 
 
 def register(db: Session, payload: UserRegister) -> RegisterResponse:
+    """Register a new user account with normalized email."""
+    payload.email = payload.email.lower().strip()
     if user_repository.get_by_email(db, payload.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    try:
-        role = UserRole(payload.role)
-    except ValueError:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid role: {payload.role}")
+    role = UserRole(payload.role)
 
     if role == UserRole.SPECIALIST and not payload.specialty:
         raise HTTPException(
-            status_code=400, detail="Specialists must provide a specialty")
+            status_code=400, detail="Specialists must provide a specialty"
+        )
 
     _validate_password(payload.password)
 
@@ -194,8 +260,9 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
         email_verified_at=None if requires_verification else now,
     )
 
-    audit_repository.log(db, user_id=user.id,
-                         action="REGISTER", details=f"user_id={user.id}")
+    audit_repository.log(
+        db, user_id=user.id, action="REGISTER", details=f"user_id={user.id}"
+    )
 
     if requires_verification:
         audit_repository.log(
@@ -206,10 +273,12 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
         )
         try:
             _issue_verification_link(db, user, now)
-        except Exception as exc:
-            # Registration succeeds even if email transport fails.
+        except Exception as exc:  # pragma: no cover - defensive email transport path
             logger.exception(
-                "Verification email dispatch failed during register for user_id=%s: %s", user.id, exc)
+                "Verification email dispatch failed during register for user_id=%s: %s",
+                user.id,
+                exc,
+            )
         return RegisterResponse(
             user=UserOut.model_validate(user),
             requires_email_verification=True,
@@ -226,7 +295,9 @@ def register(db: Session, payload: UserRegister) -> RegisterResponse:
     )
 
 
-def resend_verification_email(db: Session, payload: EmailVerificationResendRequest) -> dict:
+def resend_verification_email(
+    db: Session, payload: EmailVerificationResendRequest
+) -> dict:
     if _is_resend_verification_rate_limited(payload.email):
         return GENERIC_RESEND_VERIFICATION_MESSAGE
 
@@ -252,23 +323,31 @@ def resend_verification_email(db: Session, payload: EmailVerificationResendReque
 
     try:
         _issue_verification_link(db, user, _utcnow())
-    except Exception as exc:
-        # Keep response generic to avoid sensitive-state disclosure.
+    except Exception as exc:  # pragma: no cover - defensive email transport path
         logger.exception(
-            "Verification email dispatch failed during resend for user_id=%s: %s", user.id, exc)
+            "Verification email dispatch failed during resend for user_id=%s: %s",
+            user.id,
+            exc,
+        )
 
     return GENERIC_RESEND_VERIFICATION_MESSAGE
 
 
-def confirm_email_verification(db: Session, payload: EmailVerificationConfirmRequest) -> dict:
+def confirm_email_verification(
+    db: Session, payload: EmailVerificationConfirmRequest
+) -> dict:
     now = _utcnow()
     token_hash = security.hash_email_verification_token(payload.token)
     token_row = email_verification_repository.get_valid_by_hash(
-        db, token_hash=token_hash, now=now)
+        db, token_hash=token_hash, now=now
+    )
 
-    if not token_row or not security.verify_email_verification_token(payload.token, token_row.token_hash):
+    if not token_row or not security.verify_email_verification_token(
+        payload.token, token_row.token_hash
+    ):
         raise HTTPException(
-            status_code=400, detail=SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE)
+            status_code=400, detail=SAFE_INVALID_VERIFICATION_TOKEN_MESSAGE
+        )
 
     user = token_row.user
     if not user or not user.is_active:
@@ -276,9 +355,16 @@ def confirm_email_verification(db: Session, payload: EmailVerificationConfirmReq
 
     if not user.email_verified:
         user_repository.update(
-            db, user, email_verified=True, email_verified_at=now)
-        cache.delete_sync(cache_keys.user_profile(user.id),
-                          user_id=user.id, resource="user_profile")
+            db,
+            user,
+            email_verified=True,
+            email_verified_at=now,
+        )
+        cache.delete_sync(
+            cache_keys.user_profile(user.id),
+            user_id=user.id,
+            resource="user_profile",
+        )
         audit_repository.log(
             db,
             user_id=user.id,
@@ -291,6 +377,18 @@ def confirm_email_verification(db: Session, payload: EmailVerificationConfirmReq
 
 
 def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
+    """Initiate a password-reset flow by emailing a one-time reset link.
+
+    Always returns a generic message regardless of whether the email exists
+    to prevent user enumeration.
+
+    Args:
+        db: Database session.
+        payload: Request containing the user's email address.
+
+    Returns:
+        A generic acknowledgement dict.
+    """
     if _is_forgot_password_rate_limited(payload.email):
         return GENERIC_FORGOT_PASSWORD_MESSAGE
 
@@ -313,15 +411,22 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
         )
         return GENERIC_FORGOT_PASSWORD_MESSAGE
 
+    if not user.email_verified:
+        audit_repository.log(
+            db,
+            user_id=user.id,
+            action="PASSWORD_RESET_REQUESTED",
+            details=f"user_id={user.id} email_unverified=true",
+        )
+        return GENERIC_FORGOT_PASSWORD_MESSAGE
+
     now = _utcnow()
-    _ensure_auth_token_tables(db)
-    password_reset_repository.invalidate_active_for_user(
-        db, user_id=user.id, now=now)
+
+    password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
 
     raw_token = security.generate_password_reset_token()
     token_hash = security.hash_password_reset_token(raw_token)
-    expires_at = now + \
-        timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
+    expires_at = now + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
     password_reset_repository.create(
         db,
         user_id=user.id,
@@ -332,9 +437,12 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
     reset_link = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={quote(raw_token)}"
     try:
         email_service.send_password_reset_email(user.email, reset_link)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - defensive email transport path
         logger.exception(
-            "Password reset email dispatch failed for user_id=%s: %s", user.id, exc)
+            "Password reset email dispatch failed for user_id=%s: %s",
+            user.id,
+            exc,
+        )
 
     audit_repository.log(
         db,
@@ -346,22 +454,55 @@ def forgot_password(db: Session, payload: ForgotPasswordRequest) -> dict:
 
 
 def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) -> dict:
+    """Complete a password reset by verifying the token and updating the password.
+
+    Validates the reset token, enforces password policy, prevents reuse of
+    the current password, and invalidates all outstanding reset tokens for
+    the user.
+
+    Args:
+        db: Database session.
+        payload: Request containing the reset token and new password.
+
+    Returns:
+        A generic success dict.
+
+    Raises:
+        HTTPException: If the token is invalid, the account is deactivated,
+            or the new password fails validation.
+    """
     now = _utcnow()
     token_hash = security.hash_password_reset_token(payload.token)
     token_row = password_reset_repository.get_valid_by_hash(
-        db, token_hash=token_hash, now=now)
+        db, token_hash=token_hash, now=now
+    )
 
-    if not token_row or not security.verify_password_reset_token(payload.token, token_row.token_hash):
-        raise HTTPException(
-            status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
+    if not token_row or not security.verify_password_reset_token(
+        payload.token, token_row.token_hash
+    ):
+        raise HTTPException(status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
 
     user = token_row.user
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Account is deactivated")
+    if not user.email_verified:
+        raise HTTPException(status_code=400, detail=SAFE_INVALID_RESET_TOKEN_MESSAGE)
 
     _validate_password(payload.new_password)
+    if security.verify_password(payload.new_password, user.hashed_password):
+        raise HTTPException(
+            status_code=400, detail="New password must be different from current password"
+        )
     user_repository.update(
-        db, user, hashed_password=security.get_password_hash(payload.new_password))
+        db,
+        user,
+        hashed_password=security.get_password_hash(payload.new_password),
+        session_version=user.session_version + 1,
+    )
+    # Invalidate ALL active reset tokens for this user so that unused
+    # tokens from earlier requests cannot be replayed after the password
+    # has already been changed.
+    password_reset_repository.invalidate_active_for_user(db, user_id=user.id, now=now)
     password_reset_repository.mark_as_used(db, token_row, used_at=now)
     audit_repository.log(
         db,
@@ -369,14 +510,19 @@ def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) ->
         action="PASSWORD_RESET_COMPLETED",
         details=f"user_id={user.id}",
     )
-    cache.delete_sync(cache_keys.user_profile(user.id),
-                      user_id=user.id, resource="user_profile")
+    cache.delete_sync(
+        cache_keys.user_profile(user.id),
+        user_id=user.id,
+        resource="user_profile",
+    )
     return GENERIC_RESET_SUCCESS_MESSAGE
 
 
 def logout(db: Session, user: User) -> dict:
-    audit_repository.log(db, user_id=user.id, action="LOGOUT",
-                         details=f"user_id={user.id}")
+    user_repository.update(db, user, session_version=user.session_version + 1)
+    audit_repository.log(
+        db, user_id=user.id, action="LOGOUT", details=f"user_id={user.id}"
+    )
     return {"message": "Logged out successfully"}
 
 
@@ -399,73 +545,32 @@ def update_profile(db: Session, user: User, payload: ProfileUpdate) -> User:
     if payload.new_password:
         if not payload.current_password:
             raise HTTPException(
-                status_code=400, detail="current_password is required to set a new password")
+                status_code=400,
+                detail="current_password is required to set a new password",
+            )
         if not security.verify_password(payload.current_password, user.hashed_password):
-            raise HTTPException(
-                status_code=400, detail="Current password is incorrect")
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
         _validate_password(payload.new_password)
-        fields["hashed_password"] = security.get_password_hash(
-            payload.new_password)
+        fields["hashed_password"] = security.get_password_hash(payload.new_password)
+        fields["session_version"] = user.session_version + 1
 
     user = user_repository.update(db, user, **fields)
-    audit_repository.log(db, user_id=user.id,
-                         action="UPDATE_PROFILE", details=f"user_id={user.id}")
-    cache.delete_sync(cache_keys.user_profile(user.id),
-                      user_id=user.id, resource="user_profile")
+    audit_repository.log(
+        db, user_id=user.id, action="UPDATE_PROFILE", details=f"user_id={user.id}"
+    )
+    cache.delete_sync(
+        cache_keys.user_profile(user.id), user_id=user.id, resource="user_profile"
+    )
     return user
 
 
-def _ensure_auth_token_tables(db: Session) -> None:
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS password_reset_tokens (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                token_hash VARCHAR NOT NULL UNIQUE,
-                expires_at TIMESTAMP NOT NULL,
-                used_at TIMESTAMP,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS email_verification_tokens (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                token_hash VARCHAR NOT NULL UNIQUE,
-                expires_at TIMESTAMP NOT NULL,
-                used_at TIMESTAMP,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_created "
-            "ON password_reset_tokens (user_id, created_at)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expiry_used "
-            "ON password_reset_tokens (expires_at, used_at)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_user_created "
-            "ON email_verification_tokens (user_id, created_at)"
-        )
-    )
-    db.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_email_verification_tokens_expiry_used "
-            "ON email_verification_tokens (expires_at, used_at)"
-        )
-    )
-    db.commit()
+def refresh(user: User) -> AuthResponse:
+    """Issue a fresh access token for an already-authenticated user.
+
+    Args:
+        user: The user resolved from a valid refresh token.
+
+    Returns:
+        An AuthResponse with a new access token.
+    """
+    return _make_auth_response(user)

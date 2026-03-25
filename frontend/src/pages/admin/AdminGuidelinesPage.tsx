@@ -3,6 +3,7 @@ import { Upload, CheckCircle, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { adminUploadGuideline } from '../../services/api';
 import type { IngestionReport } from '../../services/api';
+import { getErrorMessage } from '../../utils/errors';
 
 const SOURCE_GROUPS = [
   {
@@ -45,6 +46,10 @@ export function AdminGuidelinesPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedSource) {
+      setError('Please choose where this guideline belongs before uploading.');
+      return;
+    }
     if (!file) {
       setError('Please select a PDF file.');
       return;
@@ -60,9 +65,9 @@ export function AdminGuidelinesPage() {
       const report = await adminUploadGuideline(file, selectedSource);
       setResult(report);
       setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      fileInputRef.current!.value = '';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
+      setError(getErrorMessage(err, 'Upload failed.'));
     } finally {
       setUploading(false);
     }
@@ -85,9 +90,12 @@ export function AdminGuidelinesPage() {
             </label>
             <select
               value={selectedSource}
-              onChange={e => setSelectedSource(e.target.value)}
+              onChange={(e) => {
+                setSelectedSource(e.target.value);
+                setError('');
+              }}
               disabled={uploading}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent bg-white text-sm disabled:opacity-50"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm disabled:opacity-50"
             >
               {SOURCE_GROUPS.map(g => (
                 <optgroup key={g.group} label={g.group}>
@@ -110,7 +118,7 @@ export function AdminGuidelinesPage() {
               accept=".pdf,application/pdf"
               onChange={handleFileChange}
               disabled={uploading}
-              className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#005eb8] file:text-white hover:file:bg-[#003087] file:cursor-pointer disabled:opacity-50"
+              className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[var(--nhs-blue)] file:text-white hover:file:bg-[var(--nhs-dark-blue)] file:cursor-pointer disabled:opacity-50"
             />
             {file && (
               <p className="mt-1.5 text-xs text-gray-500">
@@ -123,7 +131,7 @@ export function AdminGuidelinesPage() {
           <button
             type="submit"
             disabled={uploading || !file}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#005eb8] text-white rounded-lg text-sm font-medium hover:bg-[#003087] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--nhs-blue)] text-white rounded-lg text-sm font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {uploading ? (
               <>
@@ -141,7 +149,7 @@ export function AdminGuidelinesPage() {
 
         {/* Error */}
         {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div role="alert" aria-live="polite" className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
           </div>
         )}
@@ -165,7 +173,7 @@ export function AdminGuidelinesPage() {
                 { label: 'DB updated', value: result.db.updated },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-gray-50 rounded-lg p-3 text-center">
-                  <dd className="text-2xl font-bold text-[#005eb8]">{value}</dd>
+                  <dd className="text-2xl font-bold text-[var(--nhs-blue)]">{value}</dd>
                   <dt className="text-xs text-gray-500 mt-0.5">{label}</dt>
                 </div>
               ))}

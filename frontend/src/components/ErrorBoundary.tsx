@@ -1,7 +1,9 @@
-import { Component, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 
 interface State {
@@ -9,38 +11,83 @@ interface State {
   error: Error | null;
 }
 
+/**
+ * Catches both React render errors (via getDerivedStateFromError) and
+ * unhandled promise rejections (via a global window listener) so that
+ * the entire app does not white-screen on unexpected failures.
+ */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null };
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, info: { componentStack: string }) {
-    console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack);
+  componentDidMount(): void {
+    window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
   }
 
-  render() {
+  componentWillUnmount(): void {
+    window.removeEventListener('unhandledrejection', this.handleUnhandledRejection);
+  }
+
+  /** Catches unhandled promise rejections globally and surfaces them in the error UI. */
+  handleUnhandledRejection = (event: PromiseRejectionEvent): void => {
+    const error =
+      event.reason instanceof Error
+        ? event.reason
+        : new Error(String(event.reason ?? 'Unhandled promise rejection'));
+    console.error('ErrorBoundary caught unhandled rejection:', error);
+    this.setState({ hasError: true, error });
+  };
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('ErrorBoundary caught:', error, info.componentStack);
+  }
+
+  handleReset = (): void => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render(): ReactNode {
     if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-            <div className="text-red-600 text-4xl mb-4">⚠</div>
-            <h1 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h1>
-            <p className="text-gray-500 mb-6 text-sm">
-              An unexpected error occurred. Please refresh the page or contact support if the problem persists.
+        <div className="min-h-[300px] flex items-center justify-center p-8">
+          <div className="max-w-md w-full bg-white border border-red-200 rounded-lg shadow-sm p-6 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Something went wrong
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              An unexpected error occurred. Please try refreshing the page.
             </p>
             {this.state.error && (
-              <p className="text-xs text-gray-400 font-mono mb-6 break-all">
+              <p className="text-xs text-gray-400 mb-4 font-mono break-all">
                 {this.state.error.message}
               </p>
             )}
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
-            >
-              Reload page
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={this.handleReset}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[var(--nhs-blue)] rounded-md hover:bg-[var(--nhs-hover-blue)] transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Reload page
+              </button>
+            </div>
           </div>
         </div>
       );

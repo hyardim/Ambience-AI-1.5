@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
+import { getErrorMessage } from '../../utils/errors';
+
+const DEMO_LOGIN = {
+  email: 'gp@example.com',
+  password: 'Password123',
+} as const;
 
 function routeForRole(role: UserRole | null): string {
   if (role === 'specialist') return '/specialist/queries';
@@ -11,11 +17,13 @@ function routeForRole(role: UserRole | null): string {
   return '/gp/queries';
 }
 
+/** Login page with field-level validation and contextual API error messages. */
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -27,13 +35,20 @@ export function LoginPage() {
     }
   }, [isAuthenticated, navigate, role]);
 
+  /**
+   * Validates fields and submits login credentials.
+   * Maps API status codes to user-friendly field-level error messages.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setUnverifiedEmail('');
 
-    if (!email || !password) {
-      setError('Please enter your email/username and password');
+    const errors: { email?: string; password?: string } = {};
+    if (!email) errors.email = 'Email is required';
+    if (!password) errors.password = 'Password is required';
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -42,8 +57,17 @@ export function LoginPage() {
       const loggedInRole = await login(email, password);
       navigate(routeForRole(loggedInRole));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Incorrect username or password';
-      setError(message);
+      const message = getErrorMessage(err, 'Incorrect username or password');
+      // Map well-known status codes to user-friendly messages
+      if (message.includes('401') || message.toLowerCase().includes('incorrect') || message.toLowerCase().includes('invalid')) {
+        setError('Invalid email or password');
+      } else if (message.includes('403') || message.toLowerCase().includes('deactivated') || message.toLowerCase().includes('disabled')) {
+        setError('Account deactivated');
+      } else if (message.includes('429') || message.toLowerCase().includes('too many')) {
+        setError('Too many attempts, please wait');
+      } else {
+        setError(message);
+      }
       if (message.toLowerCase().includes('verify your email')) {
         setUnverifiedEmail(email);
       }
@@ -53,12 +77,12 @@ export function LoginPage() {
   };
 
   const fillDemoCredentials = () => {
-    setEmail('gp@example.com');
-    setPassword('password123');
+    setEmail(DEMO_LOGIN.email);
+    setPassword(DEMO_LOGIN.password);
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f5] flex flex-col">
+    <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <AuthHeader />
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -68,30 +92,29 @@ export function LoginPage() {
               Login to your Account
             </h1>
 
-            {/* Demo credentials hint */}
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials</p>
               <p className="text-sm text-blue-700">
-                Username: <code className="bg-blue-100 px-1 rounded">gp@example.com</code> &nbsp;
-                Password: <code className="bg-blue-100 px-1 rounded">password123</code>
+                Username: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.email}</code> &nbsp;
+                Password: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.password}</code>
               </p>
               <button
                 type="button"
                 onClick={fillDemoCredentials}
-                className="mt-2 text-xs text-[#005eb8] hover:text-[#003087] font-medium underline"
+                className="mt-2 text-xs text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium underline"
               >
                 Fill demo credentials
               </button>
             </div>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
                 {unverifiedEmail && (
                   <div className="mt-2">
                     <Link
                       to={`/resend-verification?email=${encodeURIComponent(unverifiedEmail)}`}
-                      className="text-[#005eb8] hover:text-[#003087] font-medium"
+                      className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
                     >
                       Resend verification email
                     </Link>
@@ -109,10 +132,12 @@ export function LoginPage() {
                   type="text"
                   id="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
+                  onChange={(e) => { setEmail(e.target.value); setFieldErrors(prev => ({ ...prev, email: undefined })); }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Enter your username or email"
+                  required
                 />
+                {fieldErrors.email && <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>}
               </div>
 
               <div>
@@ -124,9 +149,10 @@ export function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     id="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent pr-12"
+                    onChange={(e) => { setPassword(e.target.value); setFieldErrors(prev => ({ ...prev, password: undefined })); }}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent pr-12"
                     placeholder="Enter your password"
+                    required
                   />
                   <button
                     type="button"
@@ -136,12 +162,13 @@ export function LoginPage() {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {fieldErrors.password && <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>}
               </div>
 
               <div className="text-right">
                 <Link
                   to="/forgot-password"
-                  className="text-sm text-[#005eb8] hover:text-[#003087] font-medium"
+                  className="text-sm text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
                 >
                   Forgot your password?
                 </Link>
@@ -150,7 +177,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-[#005eb8] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#003087] transition-colors focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full bg-[var(--nhs-blue)] text-white py-3 px-4 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? 'Logging in...' : 'Login'}
               </button>
@@ -158,7 +185,7 @@ export function LoginPage() {
 
             <p className="mt-8 text-center text-gray-600">
               Don't have an account?{' '}
-              <Link to="/register" className="text-[#005eb8] hover:text-[#003087] font-medium">
+              <Link to="/register" className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium">
                 Register here
               </Link>
             </p>

@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from src.db.password_reset_models import PasswordResetToken
+from src.db.models.password_reset_token import PasswordResetToken
 
 
 def create(
@@ -41,7 +41,9 @@ def get_valid_by_hash(
     )
 
 
-def mark_as_used(db: Session, token_row: PasswordResetToken, *, used_at: datetime) -> PasswordResetToken:
+def mark_as_used(
+    db: Session, token_row: PasswordResetToken, *, used_at: datetime
+) -> PasswordResetToken:
     token_row.used_at = used_at
     db.commit()
     db.refresh(token_row)
@@ -60,19 +62,3 @@ def invalidate_active_for_user(db: Session, *, user_id: int, now: datetime) -> i
     )
     db.commit()
     return updated
-
-
-def cleanup_expired_or_used(db: Session, *, older_than: datetime) -> int:
-    deleted = (
-        db.query(PasswordResetToken)
-        .filter(
-            (PasswordResetToken.expires_at < older_than)
-            | (
-                PasswordResetToken.used_at.is_not(None)
-                & (PasswordResetToken.used_at < older_than)
-            )
-        )
-        .delete(synchronize_session=False)
-    )
-    db.commit()
-    return deleted

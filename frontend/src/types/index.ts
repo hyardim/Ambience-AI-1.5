@@ -35,7 +35,11 @@ export interface Citation {
   section_path?: string | string[];
   page_start?: number;
   page_end?: number;
+  document_url?: string;
   source_url?: string;
+  creation_date?: string;
+  publish_date?: string;
+  last_updated_date?: string;
 }
 
 export interface Message {

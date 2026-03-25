@@ -4,18 +4,27 @@ import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { AuthHeader } from '../../components/AuthHeader';
 import { forgotPassword } from '../../services/api';
 
+/** Forgot password page with email format validation. */
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  /** Validates email format before requesting a password reset link. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldError('');
 
     if (!email) {
-      setError('Email is required');
+      setFieldError('Email is required');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFieldError('Please enter a valid email address');
       return;
     }
 
@@ -74,11 +83,12 @@ export function ForgotPasswordPage() {
                       id="email"
                       type="email"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => { setEmail(e.target.value); setFieldError(''); }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                       placeholder="you@example.com"
                       autoComplete="email"
                     />
+                    {fieldError && <p className="text-sm text-red-600 mt-1">{fieldError}</p>}
                   </div>
 
                   <button

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import sys
@@ -11,7 +10,6 @@ import click
 
 from ..utils.logger import setup_logger
 from .pipeline import run_ingestion
-from .web_sync import GuidelineWebSync
 
 logger = setup_logger(__name__)
 
@@ -34,9 +32,16 @@ def _resolve_db_url(db_url: str | None, dry_run: bool) -> str | None:
 
 
 def _configure_log_level(log_level: str) -> None:
-    """Set root logger level from CLI flag."""
+    """Set root logger level and update existing console handlers."""
     numeric = getattr(logging, log_level.upper(), logging.INFO)
     logging.getLogger().setLevel(numeric)
+    logger_dict = logging.Logger.manager.loggerDict
+    for existing in logger_dict.values():
+        if not isinstance(existing, logging.Logger):
+            continue
+        for handler in existing.handlers:
+            if type(handler) is logging.StreamHandler:
+                handler.setLevel(numeric)
 
 
 @click.group()
@@ -86,8 +91,7 @@ def cli() -> None:
 @click.option(
     "--log-level",
     default="INFO",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"],
-                      case_sensitive=False),
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
     help="Logging level (default: INFO).",
 )
 @click.option(
@@ -148,82 +152,9 @@ def ingest(
         sys.exit(1)
 
 
-@cli.command("sync-web")
-@click.option(
-    "--db-url",
-    default=None,
-    type=str,
-    help="Postgres connection string. Falls back to DATABASE_URL env var.",
-)
-@click.option(
-    "--source",
-    "source_names",
-    multiple=True,
-    type=str,
-    help="Optional source_name filters (e.g. NICE, NICE_NEURO, BSR).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    default=False,
-    help="Discover and evaluate changes without downloading or ingestion.",
-)
-@click.option(
-    "--log-level",
-    default="INFO",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"],
-                      case_sensitive=False),
-    help="Logging level (default: INFO).",
-)
-def sync_web(
-    db_url: str | None,
-    source_names: tuple[str, ...],
-    dry_run: bool,
-    log_level: str,
-) -> None:
-    """Run one web sync pass for configured guideline sources."""
-    _configure_log_level(log_level)
-    resolved_db_url = _resolve_db_url(db_url, dry_run=dry_run)
-
-    if resolved_db_url is None:
-        click.echo(
-            "ERROR: --db-url (or DATABASE_URL) is required unless --dry-run is set.",
-            err=True,
-        )
-        sys.exit(1)
-
-    sync = GuidelineWebSync()
-    result = asyncio.run(
-        sync.sync_once(
-            db_url=resolved_db_url,
-            source_names=set(source_names) if source_names else None,
-            dry_run=dry_run,
-        )
-    )
-    summary = result["summary"]
-
-    click.echo(
-        "\nWeb sync complete:\n"
-        f"  Discovered:          {summary['discovered_count']}\n"
-        f"  Downloaded new:      {summary['downloaded_new_count']}\n"
-        f"  Downloaded updated:  {summary['downloaded_updated_count']}\n"
-        f"  Skipped unchanged:   {summary['skipped_unchanged_count']}\n"
-        f"  Ingest succeeded:    {summary['ingest_succeeded_count']}\n"
-        f"  Ingest failed:       {summary['ingest_failed_count']}"
-    )
-
-    errors = summary.get("errors", [])
-    if errors:
-        click.echo("\nErrors:", err=True)
-        for err in errors:
-            click.echo(f"  - {err}", err=True)
-        if not dry_run:
-            sys.exit(1)
-
-
 def main() -> None:
     cli()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
