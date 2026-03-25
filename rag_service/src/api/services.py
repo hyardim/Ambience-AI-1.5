@@ -26,10 +26,6 @@ LOW_SCORE_FALLBACK_FLOOR = 0.0
 LOW_SCORE_FALLBACK_RATIO = 0.5
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
-REFERRAL_QUERY_HINT_RE = re.compile(
-    r"\b(refer|referral|pathway|how urgently|urgency|urgent|immediate)\b",
-    re.IGNORECASE,
-)
 REFERRAL_SECTION_HINT_RE = re.compile(
     r"\b(recommendation|recommendations|refer|referral|pathway|"
     r"when to refer|urgent|immediate)\b",
@@ -40,6 +36,37 @@ NON_DIRECTIVE_SECTION_HINT_RE = re.compile(
     r"why the committee made)\b",
     re.IGNORECASE,
 )
+INVESTIGATION_QUERY_HINT_RE = re.compile(
+    r"\b(investigations?|investigate|baseline|blood tests?|work[- ]?up|"
+    r"laboratory|labs?)\b",
+    re.IGNORECASE,
+)
+INVESTIGATION_TEXT_HINT_RE = re.compile(
+    r"\b(investigations?|blood tests?|fbc|cbc|esr|crp|urinalysis|"
+    r"anti-?ccp|rheumatoid factor|rf\b|ana|dsdna|u&es|egfr|creatinine)\b",
+    re.IGNORECASE,
+)
+IMAGING_QUERY_HINT_RE = re.compile(
+    r"\b(imaging|x-?ray|ultrasound|mri|ct|scan)\b",
+    re.IGNORECASE,
+)
+IMAGING_TEXT_HINT_RE = re.compile(
+    r"\b(x-?ray|ultrasound|mri|ct|scan|imaging)\b",
+    re.IGNORECASE,
+)
+REFERRAL_QUERY_HINT_RE = re.compile(
+    r"\b(refer\w*|referr\w*|pathway|urgent|immediate|urgency|"
+    r"prior to referral|before referral)\b",
+    re.IGNORECASE,
+)
+REFERRAL_TEXT_HINT_RE = re.compile(
+    r"\b(refer\w*|referr\w*|pathway|urgent|urgency)\b",
+    re.IGNORECASE,
+)
+SOURCE_NAME_PRIORITY: dict[str, int] = {
+    "nice": 2,
+    "sign": 1,
+}
 
 
 def _citation_section_path(result: CitedResult) -> str:
@@ -191,14 +218,16 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
 def _rank_by_query_overlap(
     query: str, chunks: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Prioritise section fit, overlap, then score."""
+    """Prioritise section fit, requested-part coverage, overlap, then score."""
     if not chunks:
         return []
     return sorted(
         chunks,
         key=lambda chunk: (
             _section_priority(query, chunk),
+            _query_part_coverage_score(query, chunk),
             _query_overlap_count(query, chunk.get("text", "")),
+            _source_name_priority(chunk),
             float(chunk.get("score", 0.0)),
         ),
         reverse=True,
@@ -231,6 +260,40 @@ def _query_overlap_count(query: str, text: str) -> int:
         }
 
     return len(_tokens(query).intersection(_tokens(text)))
+
+
+def _requested_query_parts(query: str) -> set[str]:
+    parts: set[str] = set()
+    if INVESTIGATION_QUERY_HINT_RE.search(query):
+        parts.add("investigations")
+    if IMAGING_QUERY_HINT_RE.search(query):
+        parts.add("imaging")
+    if REFERRAL_QUERY_HINT_RE.search(query):
+        parts.add("referral")
+    return parts
+
+
+def _query_part_coverage_score(query: str, chunk: dict[str, Any]) -> int:
+    requested_parts = _requested_query_parts(query)
+    if not requested_parts:
+        return 0
+
+    haystack = f"{chunk.get('text', '')} {chunk.get('section_path', '')}"
+    score = 0
+    if "investigations" in requested_parts and INVESTIGATION_TEXT_HINT_RE.search(
+        haystack
+    ):
+        score += 1
+    if "imaging" in requested_parts and IMAGING_TEXT_HINT_RE.search(haystack):
+        score += 1
+    if "referral" in requested_parts and REFERRAL_TEXT_HINT_RE.search(haystack):
+        score += 1
+    return score
+
+
+def _source_name_priority(chunk: dict[str, Any]) -> int:
+    source_name = str((chunk.get("metadata") or {}).get("source_name") or "").lower()
+    return SOURCE_NAME_PRIORITY.get(source_name, 0)
 
 
 def evidence_level(chunks: list[dict[str, Any]]) -> str:

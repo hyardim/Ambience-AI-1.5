@@ -72,6 +72,7 @@ HIGH_PRECISION_MIN_OVERLAP = 5
 HIGH_PRECISION_SOFT_MIN_TOP_SCORE = 0.08
 HIGH_PRECISION_MIN_KEY_OVERLAP = 3
 HIGH_PRECISION_MIN_OVERLAP_RATIO = 0.12
+ANSWER_RETRIEVAL_MIN_TOP_K = 8
 HIGH_PRECISION_QUERY_RE = re.compile(
     r"\b(baseline|blood tests?|imaging|investigations?|prior to referral|"
     r"referral pathway|how urgently|urgency)\b",
@@ -85,6 +86,33 @@ NON_DIRECTIVE_SECTION_HINT_RE = re.compile(
 DIRECTIVE_SECTION_HINT_RE = re.compile(
     r"\b(recommendation|recommendations|refer|referral|pathway|"
     r"when to refer|urgent|immediate|assessment|investigation)\b",
+    re.IGNORECASE,
+)
+REFERRAL_QUERY_HINT_RE = re.compile(
+    r"\b(refer\w*|referr\w*|pathway|urgent|immediate|urgency|"
+    r"prior to referral|before referral)\b",
+    re.IGNORECASE,
+)
+REFERRAL_SENTENCE_HINT_RE = re.compile(
+    r"\b(refer\w*|referr\w*|pathway|urgent|urgency)\b",
+    re.IGNORECASE,
+)
+INVESTIGATION_QUERY_HINT_RE = re.compile(
+    r"\b(investigations?|investigate|baseline|blood tests?|work[- ]?up|"
+    r"laboratory|labs?)\b",
+    re.IGNORECASE,
+)
+INVESTIGATION_SENTENCE_HINT_RE = re.compile(
+    r"\b(investigations?|blood tests?|fbc|cbc|esr|crp|urinalysis|"
+    r"anti-?ccp|rheumatoid factor|rf\b|ana|dsdna|u&es|eGFR|creatinine)\b",
+    re.IGNORECASE,
+)
+IMAGING_QUERY_HINT_RE = re.compile(
+    r"\b(imaging|x-?ray|ultrasound|mri|ct|scan)\b",
+    re.IGNORECASE,
+)
+IMAGING_SENTENCE_HINT_RE = re.compile(
+    r"\b(x-?ray|ultrasound|mri|ct|scan|imaging)\b",
     re.IGNORECASE,
 )
 OVERLAP_STOPWORDS = {
@@ -126,6 +154,8 @@ class _RetrievalPassDecision:
     top_chunks: list[dict[str, Any]]
     passes_low_confidence_gate: bool
     has_directive_section_fit: bool
+    requested_part_count: int
+    covered_part_count: int
     evidence_quality_score: float
 
 
@@ -218,11 +248,12 @@ def _retrieve_for_answer_query(
 ) -> list[dict[str, Any]]:
     advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
     if callable(advanced_retriever):
+        retrieval_top_k = max(request.top_k, ANSWER_RETRIEVAL_MIN_TOP_K)
 
         def _run_advanced(doc_type: str | None) -> list[dict[str, Any]]:
             return advanced_retriever(
                 query=retrieval_query,
-                top_k=request.top_k,
+                top_k=retrieval_top_k,
                 specialty=request.specialty,
                 source_name=request.source_name,
                 doc_type=doc_type,
@@ -269,14 +300,45 @@ def _evidence_quality_score(chunks: list[dict[str, Any]]) -> float:
     return (0.7 * top_score) + (0.3 * mean_score)
 
 
+def _requested_question_parts(query: str) -> list[tuple[str, re.Pattern[str]]]:
+    requested_parts: list[tuple[str, re.Pattern[str]]] = []
+    if INVESTIGATION_QUERY_HINT_RE.search(query):
+        requested_parts.append(("investigations", INVESTIGATION_SENTENCE_HINT_RE))
+    if IMAGING_QUERY_HINT_RE.search(query):
+        requested_parts.append(("imaging", IMAGING_SENTENCE_HINT_RE))
+    if REFERRAL_QUERY_HINT_RE.search(query):
+        requested_parts.append(("referral/urgency pathway", REFERRAL_SENTENCE_HINT_RE))
+    return requested_parts
+
+
+def _covered_question_part_count(
+    chunks: list[dict[str, Any]],
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+) -> int:
+    if not requested_parts or not chunks:
+        return 0
+
+    covered = 0
+    for _, pattern in requested_parts:
+        for chunk in chunks:
+            haystack = f"{chunk.get('text', '')} {chunk.get('section_path', '')}"
+            if pattern.search(haystack):
+                covered += 1
+                break
+    return covered
+
+
 def _evaluate_retrieval_pass(
     *,
     name: str,
+    query: str,
     retrieval_query: str,
     retrieved: list[dict[str, Any]],
 ) -> _RetrievalPassDecision:
     filtered = filter_chunks(retrieval_query, retrieved)
     top_chunks = filtered[:MAX_CITATIONS]
+    requested_parts = _requested_question_parts(query)
+    covered_part_count = _covered_question_part_count(top_chunks, requested_parts)
     passes_low_confidence_gate = bool(top_chunks) and not (
         _should_reject_for_low_confidence(
             retrieval_query,
@@ -293,13 +355,16 @@ def _evaluate_retrieval_pass(
         has_directive_section_fit=(
             passes_low_confidence_gate and _has_directive_section_fit(top_chunks)
         ),
+        requested_part_count=len(requested_parts),
+        covered_part_count=covered_part_count,
         evidence_quality_score=_evidence_quality_score(top_chunks),
     )
 
 
-def _pass_rank(decision: _RetrievalPassDecision) -> tuple[int, int, float]:
+def _pass_rank(decision: _RetrievalPassDecision) -> tuple[int, int, int, float]:
     return (
         int(decision.passes_low_confidence_gate),
+        decision.covered_part_count,
         int(decision.has_directive_section_fit),
         decision.evidence_quality_score,
     )
@@ -473,6 +538,7 @@ async def generate_clinical_answer(
     try:
         primary_pass = _evaluate_retrieval_pass(
             name="original",
+            query=request.query,
             retrieval_query=request.query,
             retrieved=_retrieve_for_answer_query(
                 request,
@@ -501,6 +567,7 @@ async def generate_clinical_answer(
                 canonicalization_triggered = True
                 canonical_pass = _evaluate_retrieval_pass(
                     name="canonical",
+                    query=request.query,
                     retrieval_query=canonical_query,
                     retrieved=_retrieve_for_answer_query(
                         request,

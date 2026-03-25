@@ -277,6 +277,43 @@ def test_filter_chunks_prefers_referral_sections_for_pathway_queries() -> None:
     assert filtered[0] == referral_chunk
 
 
+def test_filter_chunks_prefers_chunk_covering_requested_query_parts() -> None:
+    referral_only_chunk = {
+        "text": (
+            "Adults with suspected persistent synovitis should be referred "
+            "within 3 working days."
+        ),
+        "score": 0.99,
+        "section_path": "Recommendations > Referral pathway",
+        "metadata": {
+            "source_url": "https://example.com/audit.pdf",
+            "source_name": "BSR",
+        },
+    }
+    investigations_and_imaging_chunk = {
+        "text": (
+            "Offer rheumatoid factor testing, consider anti-CCP if RF negative, "
+            "and X-ray the hands and feet before referral."
+        ),
+        "score": 0.96,
+        "section_path": "Recommendations > Referral from primary care",
+        "metadata": {
+            "source_url": "https://example.com/nice.pdf",
+            "source_name": "NICE",
+        },
+    }
+
+    filtered = filter_chunks(
+        (
+            "What baseline blood tests and imaging should be completed prior "
+            "to referral?"
+        ),
+        [referral_only_chunk, investigations_and_imaging_chunk],
+    )
+
+    assert filtered[0] == investigations_and_imaging_chunk
+
+
 def test_to_search_result_uses_default_source_name() -> None:
     result = to_search_result({"text": "chunk", "score": 0.6})
 

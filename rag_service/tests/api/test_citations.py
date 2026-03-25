@@ -48,7 +48,7 @@ def test_extract_citation_results_drops_uncited_clinical_sentences() -> None:
     assert used == [citations[0]]
 
 
-def test_extract_citation_results_drops_rule_style_citation_tokens() -> None:
+def test_extract_citation_results_normalizes_rule_style_citation_tokens() -> None:
     citations = [SearchResult(text="A", source="S", score=0.9)]
 
     answer, used = extract_citation_results(
@@ -57,8 +57,8 @@ def test_extract_citation_results_drops_rule_style_citation_tokens() -> None:
         strip_references=False,
     )
 
-    assert answer == ""
-    assert used == []
+    assert answer == "Refer to neurology [1]."
+    assert used == [citations[0]]
 
 
 def test_extract_citation_results_keeps_scope_refusal_without_citations() -> None:
@@ -155,6 +155,57 @@ def test_extract_citation_results_marks_missing_imaging_and_referral_parts() -> 
     assert used == [citations[0]]
 
 
+def test_extract_citation_results_drops_mmf_cyc_treatment_when_not_requested() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        (
+            "Immediate investigations include urinalysis and creatinine [1]. "
+            "Use mycophenolate mofetil (MMF) or cyclophosphamide (CYC) [1]."
+        ),
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with SLE and new proteinuria. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert "urinalysis and creatinine [1]" in answer.lower()
+    assert "mycophenolate" not in answer.lower()
+    assert "cyclophosphamide" not in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_adds_supported_parts_from_used_citation() -> None:
+    citations = [
+        SearchResult(
+            text=(
+                "Offer rheumatoid factor testing. Consider anti-CCP if RF negative. "
+                "X-ray the hands and feet. Refer urgently for persistent synovitis."
+            ),
+            source="S",
+            score=0.9,
+        )
+    ]
+
+    answer, used = extract_citation_results(
+        "Offer a blood test for rheumatoid factor [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with intermittent joint swelling. What baseline blood tests "
+            "and imaging should be completed prior to referral?"
+        ),
+    )
+
+    assert "blood test for rheumatoid factor [1]" in answer.lower()
+    assert "imaging recommendations [1]" in answer.lower()
+    assert "referral/urgency pathway recommendations [1]" in answer.lower()
+    assert "do not directly cover" not in answer.lower()
+    assert used == [citations[0]]
+
+
 def test_extract_citation_results_referring_phrase_counts_as_referral_coverage() -> (
     None
 ):
@@ -189,4 +240,43 @@ def test_extract_citation_results_keeps_treatment_when_requested() -> None:
     )
 
     assert "ACE inhibitors" in answer
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_drops_unsupported_timeframe_claim() -> None:
+    citations = [
+        SearchResult(
+            text="Refer urgently for specialist assessment.",
+            source="S",
+            score=0.9,
+        )
+    ]
+
+    answer, used = extract_citation_results(
+        "Refer urgently within 24 hours [1]. Arrange specialist assessment [1].",
+        citations,
+        strip_references=False,
+    )
+
+    assert "within 24 hours" not in answer.lower()
+    assert "arrange specialist assessment [1]" in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_supported_timeframe_claim() -> None:
+    citations = [
+        SearchResult(
+            text="Refer adults with persistent synovitis within 3 working days.",
+            source="S",
+            score=0.9,
+        )
+    ]
+
+    answer, used = extract_citation_results(
+        "Refer adults with persistent synovitis within 3 working days [1].",
+        citations,
+        strip_references=False,
+    )
+
+    assert "within 3 working days [1]" in answer.lower()
     assert used == [citations[0]]

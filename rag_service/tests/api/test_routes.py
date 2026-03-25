@@ -323,6 +323,7 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
     assert captured["doc_type"] == "guideline"
     assert captured["score_threshold"] == 0.42
     assert captured["expand_query"] is True
+    assert captured["top_k"] == 8
 
 
 @pytest.mark.anyio
@@ -372,6 +373,53 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
 
     assert response.answer == "A"
     assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_keeps_larger_requested_top_k_for_advanced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        captured.update(kwargs)
+        return [
+            {
+                "text": "chunk",
+                "score": 0.9,
+                "metadata": {"title": "Guide", "source_url": "https://example.com"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "A"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, []),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query="q", top_k=12, stream=False)
+    )
+
+    assert response.answer == "A"
+    assert captured["top_k"] == 12
 
 
 @pytest.mark.anyio

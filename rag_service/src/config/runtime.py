@@ -36,4 +36,6 @@ class AlertingConfig(AppBaseSettings):
 
 class RetrievalConfig(AppBaseSettings):
     retrieval_canonicalization_enabled: bool = Field(default=False)
-    retrieval_canonicalization_specialties: str = Field(default="rheumatology")
+    retrieval_canonicalization_specialties: str = Field(
+        default="rheumatology,neurology"
+    )

@@ -14,7 +14,7 @@ MAX_CITATIONS = 3
 MIN_RELEVANCE = 0.05
 
 _VALID_CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
-_RULE_STYLE_CITATION_RE = re.compile(r"\[(?:\d+(?:\.\d+)+)\]")
+_RULE_STYLE_CITATION_RE = re.compile(r"\[(\d+)(?:\.\d+)+\]")
 _SECTION_LABEL_RE = re.compile(
     r"\b(?:"
     r"General clinical context|"
@@ -69,8 +69,16 @@ _TREATMENT_QUERY_HINT_RE = re.compile(
 )
 _TREATMENT_SENTENCE_HINT_RE = re.compile(
     r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|steroid|"
-    r"immunosuppress\w*|treat\w*|management|manage\w*|therapy|medication|"
+    r"immunosuppress\w*|mycophenolate|mmf\b|cyclophosphamide|cyc\b|"
+    r"treat\w*|management|manage\w*|therapy|medication|"
     r"dose|prescrib\w*|drug)\b",
+    re.IGNORECASE,
+)
+_TIME_VALUE_RE = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty[- ]four)"
+_EXPLICIT_TIMEFRAME_RE = re.compile(
+    rf"\b(?:within\s+{_TIME_VALUE_RE}\s+"
+    rf"(?:minute|minutes|hour|hours|day|days|week|weeks|working day|working days)"
+    rf"|{_TIME_VALUE_RE}\s+working\s+days?|same[- ]day|next[- ]day)\b",
     re.IGNORECASE,
 )
 
@@ -143,9 +151,23 @@ def is_boilerplate(chunk: dict[str, Any]) -> bool:
 
 def _clean_answer_text(text: str) -> str:
     cleaned = _SECTION_LABEL_RE.sub("", text)
+    cleaned = re.sub(r"\(\s*\)", "", cleaned)
+    cleaned = re.sub(r"\s+([,.;:])", r"\1", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def _normalize_rule_style_citations(answer_text: str, citation_count: int) -> str:
+    """Map guideline subsection markers like [1.1.4] to source-style [1]."""
+
+    def _replace(match: re.Match[str]) -> str:
+        candidate = int(match.group(1))
+        if 1 <= candidate <= citation_count:
+            return f"[{candidate}]"
+        return ""
+
+    return _RULE_STYLE_CITATION_RE.sub(_replace, answer_text)
 
 
 def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str:
@@ -197,6 +219,67 @@ def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str
     return _clean_answer_text(" ".join(kept_units))
 
 
+def _normalize_text_for_match(text: str) -> str:
+    normalized = text.lower().replace("-", " ")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _citation_indices_for_unit(unit: str) -> set[int]:
+    indices: set[int] = set()
+    for group in _VALID_CITATION_GROUP_RE.findall(unit):
+        indices.update(parse_citation_group(group[1:-1]))
+    return indices
+
+
+def _enforce_explicit_timeframe_grounding(
+    answer_text: str,
+    citations_used: list[SearchResult],
+) -> str:
+    """Drop explicit timeframe claims unless the phrase appears in cited evidence."""
+    if not answer_text.strip():
+        return ""
+    if not citations_used:
+        return answer_text
+
+    citation_text_by_index = {
+        idx: _normalize_text_for_match(citation.text)
+        for idx, citation in enumerate(citations_used, start=1)
+    }
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+
+        timeframe_matches = _EXPLICIT_TIMEFRAME_RE.findall(unit)
+        if not timeframe_matches:
+            kept_units.append(unit)
+            continue
+
+        cited_indices = _citation_indices_for_unit(unit)
+        if not cited_indices:
+            kept_units.append(unit)
+            continue
+
+        citation_haystack = " ".join(
+            citation_text_by_index[index]
+            for index in sorted(cited_indices)
+            if index in citation_text_by_index
+        )
+        keep_unit = True
+        for phrase in timeframe_matches:
+            normalized_phrase = _normalize_text_for_match(phrase)
+            if normalized_phrase and normalized_phrase not in citation_haystack:
+                keep_unit = False
+                break
+
+        if keep_unit:
+            kept_units.append(unit)
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
 def _has_cited_sentence_matching(
     answer_text: str,
     sentence_pattern: re.Pattern[str],
@@ -220,11 +303,22 @@ def _join_labels(labels: list[str]) -> str:
     return f"{', '.join(labels[:-1])}, and {labels[-1]}"
 
 
+def _find_supporting_citation_index(
+    citations_used: list[SearchResult],
+    pattern: re.Pattern[str],
+) -> int | None:
+    for idx, citation in enumerate(citations_used, start=1):
+        if pattern.search(citation.text):
+            return idx
+    return None
+
+
 def _enforce_partial_question_coverage(
     answer_text: str,
     *,
     query: str | None,
     has_citations: bool,
+    citations_used: list[SearchResult],
 ) -> str:
     """Append explicit coverage gaps for unsupported multi-part asks.
 
@@ -251,11 +345,24 @@ def _enforce_partial_question_coverage(
     if not has_citations:
         return ""
 
-    missing_parts = [
-        label
-        for label, pattern in requested_parts
-        if not _has_cited_sentence_matching(answer_text, pattern)
-    ]
+    additions: list[str] = []
+    missing_parts: list[str] = []
+    for label, pattern in requested_parts:
+        if _has_cited_sentence_matching(answer_text, pattern):
+            continue
+
+        supporting_index = _find_supporting_citation_index(citations_used, pattern)
+        if supporting_index is not None:
+            additions.append(
+                "The indexed passages also include "
+                f"{label} recommendations [{supporting_index}]."
+            )
+        else:
+            missing_parts.append(label)
+
+    if additions:
+        answer_text = _clean_answer_text(f"{answer_text} {' '.join(additions)}")
+
     if not missing_parts:
         return answer_text
 
@@ -298,6 +405,10 @@ def extract_citation_results(
     strip_references: bool,
     query: str | None = None,
 ) -> tuple[str, list[SearchResult]]:
+    answer_text = _normalize_rule_style_citations(
+        answer_text,
+        citation_count=len(citations_retrieved),
+    )
     used_indices = extract_citation_indices(answer_text)
     sorted_used = sorted(
         index for index in used_indices if 1 <= index <= len(citations_retrieved)
@@ -312,15 +423,14 @@ def extract_citation_results(
             answer,
             flags=re.DOTALL | re.IGNORECASE,
         ).rstrip()
-    # Strip guideline subsection references that look like citations
-    # (e.g. [1.4.4]) to avoid treating them as evidence markers.
-    answer = _RULE_STYLE_CITATION_RE.sub("", answer)
     answer = _clean_answer_text(answer)
     answer = _enforce_grounded_sentences(answer, has_citations=bool(citations_used))
+    answer = _enforce_explicit_timeframe_grounding(answer, citations_used)
     answer = _enforce_requested_scope(answer, query=query)
     answer = _enforce_partial_question_coverage(
         answer,
         query=query,
         has_citations=bool(citations_used),
+        citations_used=citations_used,
     )
     return answer, citations_used
