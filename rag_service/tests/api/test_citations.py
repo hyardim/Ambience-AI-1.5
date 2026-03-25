@@ -155,6 +155,29 @@ def test_extract_citation_results_marks_missing_imaging_and_referral_parts() -> 
     assert used == [citations[0]]
 
 
+def test_extract_citation_results_referring_phrase_counts_as_referral_coverage() -> (
+    None
+):
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        (
+            "Before referring the patient, offer rheumatoid factor testing [1]. "
+            "X-ray the hands and feet [1]."
+        ),
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with intermittent joint swelling. What baseline blood tests "
+            "and imaging should be completed prior to referral?"
+        ),
+    )
+
+    assert "referral/urgency pathway part of this question" not in answer
+    assert "imaging part of this question" not in answer
+    assert used == [citations[0]]
+
+
 def test_extract_citation_results_keeps_treatment_when_requested() -> None:
     citations = [SearchResult(text="A", source="S", score=0.9)]
 

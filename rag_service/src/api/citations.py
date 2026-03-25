@@ -38,11 +38,11 @@ _SCOPE_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _REFERRAL_QUERY_HINT_RE = re.compile(
-    r"\b(refer|referral|pathway|urgent|immediate|urgency|how urgently)\b",
+    r"\b(refer\w*|referr\w*|pathway|urgent|immediate|urgency|how urgently)\b",
     re.IGNORECASE,
 )
 _REFERRAL_SENTENCE_HINT_RE = re.compile(
-    r"\b(refer|referral|pathway|urgent|urgency)\b",
+    r"\b(refer\w*|referr\w*|pathway|urgent|urgency)\b",
     re.IGNORECASE,
 )
 _INVESTIGATION_QUERY_HINT_RE = re.compile(
