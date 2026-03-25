@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from typing import Any
 
 from ..config import path_config
 from ..utils.logger import setup_logger
+from ..utils.query_hash import query_fingerprint
 from ..utils.telemetry import append_jsonl
 from .citation import CitedResult, assemble_citations
 from .filters import FilterConfig, apply_filters
@@ -71,7 +71,7 @@ def retrieve(
     logger.info(f'Retrieving for query: "{query}", top_k={top_k}')
     total_start = time.perf_counter()
 
-    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
+    query_hash = query_fingerprint(query)
     artifacts: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
@@ -297,7 +297,7 @@ def _maybe_write_artifacts(
 
     Args:
         enabled: Whether debug artifact writing is turned on.
-        query_hash: Short MD5 hash of the query, used as the output directory name.
+        query_hash: Stable short query fingerprint used as the output directory name.
         artifacts: Mapping of stage label to serialisable data.
     """
     if not enabled:

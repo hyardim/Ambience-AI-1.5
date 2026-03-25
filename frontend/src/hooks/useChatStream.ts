@@ -224,8 +224,10 @@ export function useChatStream(
             });
           },
 
-          onContent(messageId, content) {
+          onContent(messageId, content, _isDraft) {
             if (!mountedRef.current) return;
+            // Render both draft and final content so users see live streaming.
+            // The "complete" event still finalises grounded/cited output.
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === String(messageId)

@@ -167,7 +167,8 @@ class TestPatientContextRAGPayload:
         assert ctx.get("notes") == "eGFR 38, T2DM"
         assert ctx.get("specialty") == "neurology"
         assert ctx.get("severity") is None
-        assert captured.get("severity") == "high"
+        assert captured.get("severity") is None
+        assert captured.get("urgency") == "high"
 
     def test_no_patient_context_key_when_fields_absent(self, client, gp_headers):
         """If no patient fields are set, patient_context in RAG payload is absent or empty."""
@@ -206,6 +207,8 @@ class TestPatientContextRAGPayload:
     def test_recent_conversation_history_forwarded_to_rag(self, client, gp_headers):
         from unittest.mock import MagicMock, patch
 
+        from src.core.config import settings
+
         chat = client.post(
             "/chats/", json={"specialty": "neurology"}, headers=gp_headers
         ).json()
@@ -228,17 +231,18 @@ class TestPatientContextRAGPayload:
             }
             return response
 
-        with patch("src.services.chat_service.httpx.post", side_effect=fake_rag):
-            client.post(
-                f"/chats/{chat['id']}/message",
-                json={"role": "user", "content": "Initial question"},
-                headers=gp_headers,
-            )
-            client.post(
-                f"/chats/{chat['id']}/message",
-                json={"role": "user", "content": "Follow-up question"},
-                headers=gp_headers,
-            )
+        with patch.object(settings, "RAG_INCLUDE_CONVERSATION_HISTORY", True):
+            with patch("src.services.chat_service.httpx.post", side_effect=fake_rag):
+                client.post(
+                    f"/chats/{chat['id']}/message",
+                    json={"role": "user", "content": "Initial question"},
+                    headers=gp_headers,
+                )
+                client.post(
+                    f"/chats/{chat['id']}/message",
+                    json={"role": "user", "content": "Follow-up question"},
+                    headers=gp_headers,
+                )
 
         history = (second_payload.get("patient_context") or {}).get(
             "conversation_history", ""

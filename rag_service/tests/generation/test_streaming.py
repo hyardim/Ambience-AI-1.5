@@ -222,6 +222,7 @@ class TestStreamGenerate:
     @pytest.mark.anyio
     async def test_uses_configured_timeout(self, monkeypatch):
         captured_timeout = None
+        captured_payload = None
 
         class FakeStreamResponse:
             async def aiter_lines(self):
@@ -242,6 +243,8 @@ class TestStreamGenerate:
                 captured_timeout = timeout
 
             def stream(self, method, url, json=None):
+                nonlocal captured_payload
+                captured_payload = json
                 return FakeStreamResponse()
 
             async def __aenter__(self):
@@ -252,15 +255,16 @@ class TestStreamGenerate:
 
         monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
         monkeypatch.setattr(
-            "src.generation.streaming.generation_config",
+            "src.generation.streaming.local_llm_config",
             type(
                 "Cfg",
                 (),
                 {
-                    "ollama_timeout_seconds": 17.5,
-                    "ollama_model": "m",
-                    "ollama_base_url": "http://x",
-                    "ollama_max_tokens": 10,
+                    "timeout_seconds": 17.5,
+                    "model": "m",
+                    "base_url": "http://x",
+                    "max_tokens": 10,
+                    "temperature": 0.0,
                 },
             )(),
         )
@@ -269,3 +273,5 @@ class TestStreamGenerate:
             pass
 
         assert captured_timeout == 17.5
+        assert captured_payload is not None
+        assert captured_payload.get("options", {}).get("temperature") == 0.0

@@ -740,9 +740,10 @@ async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done
     update_kwargs = async_update.await_args.kwargs
     assert update_kwargs["content"] == "Hello world"
     assert update_kwargs["citations"] == [{"title": "Doc"}]
-    assert publish.await_count == 3
+    assert publish.await_count == 4
     published_events = [call.args[1].event for call in publish.await_args_list]
-    assert published_events == ["stream_start", "content", "complete"]
+    assert published_events == ["stream_start", "content", "content", "complete"]
+    assert publish.await_args_list[1].args[1].data.get("is_draft") is True
     close_chat.assert_awaited_once_with(5)
 
 

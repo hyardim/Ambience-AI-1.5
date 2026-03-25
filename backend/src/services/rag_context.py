@@ -92,11 +92,12 @@ def build_patient_context(chat: Chat, messages: list[Message]) -> dict | None:
         **ctx,
         **({"specialty": chat.specialty} if chat.specialty else {}),
     } or None
-    conversation_history = build_conversation_history_from_messages(messages)
     if patient_context is None:
         patient_context = {}
-    if conversation_history:
-        patient_context["conversation_history"] = conversation_history
+    if settings.RAG_INCLUDE_CONVERSATION_HISTORY:
+        conversation_history = build_conversation_history_from_messages(messages)
+        if conversation_history:
+            patient_context["conversation_history"] = conversation_history
     return patient_context or None
 
 

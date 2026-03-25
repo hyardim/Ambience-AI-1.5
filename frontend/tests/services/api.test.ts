@@ -614,7 +614,7 @@ describe('API service', () => {
 
       expect(onOpen).toHaveBeenCalled();
       expect(onStreamStart).toHaveBeenCalledWith(7);
-      expect(onContent).toHaveBeenCalledWith(7, 'partial');
+      expect(onContent).toHaveBeenCalledWith(7, 'partial', false);
       expect(onComplete).toHaveBeenCalledWith(7, 'final', [{ title: 'A' }]);
       expect(onError).not.toHaveBeenCalled();
       expect(onConnectionError).not.toHaveBeenCalled();
@@ -637,7 +637,7 @@ describe('API service', () => {
       source.emit('complete', { message_id: 9 });
       source.emit('error', { message_id: 9 });
 
-      expect(onContent).toHaveBeenCalledWith(9, '');
+      expect(onContent).toHaveBeenCalledWith(9, '', false);
       expect(onComplete).toHaveBeenCalledWith(9, '', null);
       expect(onError).not.toHaveBeenCalled();
     });

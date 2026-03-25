@@ -6,7 +6,7 @@ import type { Message } from '@/types';
 type StreamCallbacks = {
   onOpen?: () => void;
   onStreamStart?: (messageId: number) => void;
-  onContent?: (messageId: number, content: string) => void;
+  onContent?: (messageId: number, content: string, isDraft?: boolean) => void;
   onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
   onFileContextTruncated?: () => void;
   onError?: (messageId: number, errorMessage: string) => void;
@@ -349,6 +349,25 @@ describe('useChatStream', () => {
 
     const messages = wrapper.getMessages();
     expect(messages[0].content).toBe('Hello world');
+    expect(messages[0].isGenerating).toBe(true);
+  });
+
+  it('renders draft content events so live streaming remains visible', () => {
+    const { result } = renderHook(() =>
+      useChatStream(wrapper.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+      }),
+    );
+
+    act(() => {
+      result.current.connectStream(1);
+      latestCallbacks.onStreamStart?.(42);
+      latestCallbacks.onContent?.(42, 'Draft answer', true);
+    });
+
+    const messages = wrapper.getMessages();
+    expect(messages[0].content).toBe('Draft answer');
     expect(messages[0].isGenerating).toBe(true);
   });
 

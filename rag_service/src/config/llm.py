@@ -19,7 +19,7 @@ class LLMConfig(AppBaseSettings):
     llm_model: str = Field(default="m42-health/Llama3-Med42-70B")
     llm_api_key: str = Field(default="ollama")
     llm_max_tokens: int = Field(default=1024)
-    llm_temperature: float = Field(default=0.1)
+    llm_temperature: float = Field(default=0.0)
     llm_timeout_seconds: float = Field(default=120.0)
 
 

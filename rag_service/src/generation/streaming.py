@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
-from ..config import generation_config
+from ..config import local_llm_config
 
 
 async def stream_generate(
@@ -22,21 +22,24 @@ async def stream_generate(
     Raises ``RuntimeError`` on HTTP or connection failure.
     """
     payload = {
-        "model": generation_config.ollama_model,
+        "model": local_llm_config.model,
         "prompt": prompt,
         "stream": True,
         "keep_alive": -1,
-        "options": {"num_predict": max_tokens or generation_config.ollama_max_tokens},
+        "options": {
+            "num_predict": max_tokens or local_llm_config.max_tokens,
+            "temperature": local_llm_config.temperature,
+        },
     }
 
     try:
         async with (
             httpx.AsyncClient(
-                timeout=generation_config.ollama_timeout_seconds
+                timeout=local_llm_config.timeout_seconds
             ) as client,
             client.stream(
                 "POST",
-                f"{generation_config.ollama_base_url}/api/generate",
+                f"{local_llm_config.base_url.rstrip('/')}/api/generate",
                 json=payload,
             ) as response,
         ):

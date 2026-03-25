@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     # RAG / chat flow tuning
     CHAT_RAG_TOP_K: int = 4
     CHAT_HISTORY_MESSAGE_LIMIT: int = 8
+    # Include prior chat transcript in model-visible patient context.
+    # Disable by default to reduce cross-question contamination in iterative chats.
+    RAG_INCLUDE_CONVERSATION_HISTORY: bool = False
 
     # Auth verification / recovery
     FRONTEND_BASE_URL: str = "http://localhost:3000"

@@ -41,7 +41,7 @@ async def test_streaming_generator_uses_generate_answer_for_cloud(
 
 @pytest.mark.anyio
 async def test_produces_chunks_then_done(monkeypatch: pytest.MonkeyPatch) -> None:
-    tokens = ["Hello", " ", "world"]
+    tokens = ["Hello", " ", "world [1]"]
 
     async def fake_stream_generate(prompt: str, max_tokens: int | None = None):
         del prompt, max_tokens
@@ -68,9 +68,9 @@ async def test_produces_chunks_then_done(monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(lines) == 4
     assert lines[0] == {"type": "chunk", "delta": "Hello"}
     assert lines[1] == {"type": "chunk", "delta": " "}
-    assert lines[2] == {"type": "chunk", "delta": "world"}
+    assert lines[2] == {"type": "chunk", "delta": "world [1]"}
     assert lines[3]["type"] == "done"
-    assert lines[3]["answer"] == "Hello world"
+    assert lines[3]["answer"] == "Hello world [1]"
     assert "citations_retrieved" in lines[3]
 
 
@@ -98,6 +98,8 @@ async def test_done_payload_keeps_empty_used_citations(
     assert lines[-1]["type"] == "done"
     assert lines[-1]["citations_used"] == []
     assert lines[-1]["citations"] == []
+    assert lines[-1]["citations_retrieved"] == []
+    assert lines[-1]["fallback_reason"] == "postprocess_no_citations"
 
 
 @pytest.mark.anyio

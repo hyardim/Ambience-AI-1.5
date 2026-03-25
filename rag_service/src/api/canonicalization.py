@@ -11,6 +11,13 @@ RHEUMATOLOGY_CANONICAL_QUERY = (
     "before urgent rheumatology referral, including rheumatoid factor (RF), "
     "anti-CCP antibodies, ESR/CRP, and X-ray of hands and feet?"
 )
+RHEUMATOLOGY_SLE_RENAL_CANONICAL_QUERY = (
+    "Adult with known systemic lupus erythematosus and new proteinuria with "
+    "rising creatinine. For suspected lupus nephritis, what immediate primary "
+    "care investigations are recommended (for example urinalysis, urine "
+    "protein quantification, and renal function tests), and what urgent "
+    "specialist referral pathway is advised?"
+)
 NEUROLOGY_NPH_CANONICAL_QUERY = (
     "Adult with difficulty initiating and coordinating walking (gait apraxia), "
     "urinary symptoms, cognitive decline, and ventriculomegaly. Should normal "
@@ -43,13 +50,24 @@ _INVESTIGATION_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _REFERRAL_HINT_RE = re.compile(
-    r"\b(refer|referral|pathway|urgent|urgency|prior to referral|"
+    r"\b(refer\w*|referr\w*|pathway|urgent\w*|urgency|prior to referral|"
     r"before referral)\b",
+    re.IGNORECASE,
+)
+_SLE_HINT_RE = re.compile(
+    r"\b(systemic lupus erythematosus|sle|lupus nephritis|lupus)\b",
+    re.IGNORECASE,
+)
+_RENAL_INVOLVEMENT_HINT_RE = re.compile(
+    r"\b(proteinuria|creatinine|egfr|renal function|kidney function|"
+    r"urinalysis|urine protein|uacr|upcr|nephritis)\b",
     re.IGNORECASE,
 )
 _GAIT_APRAXIA_HINT_RE = re.compile(
     r"\b(gait apraxia|difficulty initiating (?:and )?coordinating walking|"
-    r"difficulty initiating walking|gait initiation difficulty)\b",
+    r"difficulty initiating walking|gait initiation difficulty|"
+    r"rapidly progressive gait disturbance|rapidly progressive unsteady gait|"
+    r"gait disturbance|unsteady gait|gait ataxia)\b",
     re.IGNORECASE,
 )
 _URINARY_HINT_RE = re.compile(
@@ -114,6 +132,10 @@ def build_canonical_retrieval_query(
             query
         ):
             return RHEUMATOLOGY_CANONICAL_QUERY
+        if specialty_norm == RHEUMATOLOGY and _is_rheumatology_sle_renal_referral_query(
+            query
+        ):
+            return RHEUMATOLOGY_SLE_RENAL_CANONICAL_QUERY
         if specialty_norm == NEUROLOGY:
             if _is_neurology_nph_referral_query(query):
                 return NEUROLOGY_NPH_CANONICAL_QUERY
@@ -127,6 +149,10 @@ def build_canonical_retrieval_query(
         query
     ):
         return RHEUMATOLOGY_CANONICAL_QUERY
+    if RHEUMATOLOGY in allowed_specialties and _is_rheumatology_sle_renal_referral_query(
+        query
+    ):
+        return RHEUMATOLOGY_SLE_RENAL_CANONICAL_QUERY
     if NEUROLOGY in allowed_specialties:
         if _is_neurology_nph_referral_query(query):
             return NEUROLOGY_NPH_CANONICAL_QUERY
@@ -154,6 +180,15 @@ def _has_multi_joint_swelling(query: str) -> bool:
         1 for pattern in _JOINT_FAMILY_PATTERNS if pattern.search(query)
     )
     return joint_family_matches >= 2
+
+
+def _is_rheumatology_sle_renal_referral_query(query: str) -> bool:
+    return (
+        bool(_SLE_HINT_RE.search(query))
+        and bool(_RENAL_INVOLVEMENT_HINT_RE.search(query))
+        and bool(_INVESTIGATION_HINT_RE.search(query))
+        and bool(_REFERRAL_HINT_RE.search(query))
+    )
 
 
 def _is_neurology_nph_referral_query(query: str) -> bool:

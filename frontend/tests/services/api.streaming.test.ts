@@ -94,7 +94,22 @@ describe('subscribeToChatStream', () => {
     const es = MockEventSource.instances[0];
     es._emit('content', { chat_id: 1, message_id: 99, content: 'partial text' });
 
-    expect(onContent).toHaveBeenCalledWith(99, 'partial text');
+    expect(onContent).toHaveBeenCalledWith(99, 'partial text', false);
+  });
+
+  it('forwards draft marker on content events', () => {
+    const onContent = vi.fn();
+    subscribeToChatStream(1, { onContent });
+
+    const es = MockEventSource.instances[0];
+    es._emit('content', {
+      chat_id: 1,
+      message_id: 99,
+      content: 'draft text',
+      is_draft: true,
+    });
+
+    expect(onContent).toHaveBeenCalledWith(99, 'draft text', true);
   });
 
   it('calls onComplete and closes the source on complete event', () => {
@@ -283,7 +298,7 @@ describe('subscribeToChatStream', () => {
     es._emit('content', { chat_id: 1, message_id: 1, content: 'partial' });
     es._emit('error', { chat_id: 1, message_id: 1, error: 'LLM timeout' });
 
-    expect(onContent).toHaveBeenCalledWith(1, 'partial');
+    expect(onContent).toHaveBeenCalledWith(1, 'partial', false);
     expect(onError).toHaveBeenCalledWith(1, 'LLM timeout');
     expect(es.closed).toBe(true);
   });

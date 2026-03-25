@@ -557,10 +557,20 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
 
                                 if chunk.get("type") == "chunk":
                                     ai_content += chunk.get("delta", "")
-                                    # Do not emit raw token drafts to GP clients.
-                                    # The RAG service post-processes grounded output
-                                    # at stream completion; sending intermediate
-                                    # unvalidated text causes visible answer rewrites.
+                                    # Emit cumulative draft content so GP/Specialist
+                                    # clients see real-time generation progress.
+                                    await chat_event_bus.publish(
+                                        chat_id,
+                                        SSEEvent(
+                                            event="content",
+                                            data={
+                                                "chat_id": chat_id,
+                                                "message_id": placeholder.id,
+                                                "content": ai_content,
+                                                "is_draft": True,
+                                            },
+                                        ),
+                                    )
                                 elif chunk.get("type") == "done":
                                     ai_content = chunk.get("answer", ai_content)
                                     citations = _select_rag_citations(chunk)

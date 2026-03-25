@@ -714,7 +714,7 @@ export function subscribeToChatStream(
   handlers: {
     onOpen?: () => void;
     onStreamStart?: (messageId: number) => void;
-    onContent?: (messageId: number, content: string) => void;
+    onContent?: (messageId: number, content: string, isDraft: boolean) => void;
     onComplete?: (messageId: number, content: string, citations: unknown[] | null) => void;
     onFileContextTruncated?: () => void;
     onError?: (messageId: number, errorMessage: string) => void;
@@ -760,11 +760,15 @@ export function subscribeToChatStream(
   source.addEventListener('content', (event) => {
     if (closed) return;
     retryCount = 0;
-    const payload = parsePayload<{ message_id?: number; content?: string }>(
+    const payload = parsePayload<{ message_id?: number; content?: string; is_draft?: boolean }>(
       event as MessageEvent<string>,
     );
     if (typeof payload?.message_id === 'number') {
-      handlers.onContent?.(payload.message_id, payload.content ?? '');
+      handlers.onContent?.(
+        payload.message_id,
+        payload.content ?? '',
+        payload.is_draft === true,
+      );
     }
   });
 

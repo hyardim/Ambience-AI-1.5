@@ -422,3 +422,18 @@ class TestRetrieve:
         run_retrieve(mocks, score_threshold=0.7)
         _, fkwargs = mocks["apply_filters"].call_args
         assert fkwargs["config"].score_threshold == 0.7
+
+    def test_telemetry_uses_shared_query_fingerprint(self):
+        from src.utils.query_hash import query_fingerprint
+
+        mocks = make_all_stage_mocks()
+        payloads: list[dict[str, object]] = []
+
+        with patch(
+            "src.retrieval.retrieve.append_jsonl",
+            lambda _path, payload: payloads.append(payload),
+        ):
+            run_retrieve(mocks)
+
+        assert payloads
+        assert payloads[0]["query_hash"] == query_fingerprint(QUERY)

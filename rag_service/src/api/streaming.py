@@ -48,9 +48,13 @@ async def streaming_generator(
         strip_references=True,
         query=query,
     )
+    fallback_reason: str | None = None
+    citations_retrieved_payload = citations_retrieved
     if not renumbered_answer.strip() or not citations_used:
         renumbered_answer = _NO_EVIDENCE_RESPONSE
         citations_used = []
+        citations_retrieved_payload = []
+        fallback_reason = "postprocess_no_citations"
 
     yield (
         json.dumps(
@@ -61,9 +65,10 @@ async def streaming_generator(
                     citation.model_dump() for citation in citations_used
                 ],
                 "citations_retrieved": [
-                    citation.model_dump() for citation in citations_retrieved
+                    citation.model_dump() for citation in citations_retrieved_payload
                 ],
                 "citations": [citation.model_dump() for citation in citations_used],
+                "fallback_reason": fallback_reason,
             }
         )
         + "\n"
