@@ -72,13 +72,14 @@ except ImportError:  # pragma: no cover - compatibility for isolated test stubs
 
 ABSOLUTE_MIN_TOP_SCORE = 0.002
 HIGH_PRECISION_MIN_TOP_SCORE = 0.02
-HIGH_PRECISION_MIN_OVERLAP = 5
+# Balanced defaults (kept as constants for tests/introspection).
+HIGH_PRECISION_MIN_OVERLAP = 3
 HIGH_PRECISION_SOFT_MIN_TOP_SCORE = 0.08
-HIGH_PRECISION_MIN_KEY_OVERLAP = 3
-HIGH_PRECISION_MIN_OVERLAP_RATIO = 0.12
-ANSWER_RETRIEVAL_MIN_TOP_K = 8
-MULTIPART_PROMPT_CHUNKS = 5
-PROMPT_BACKFILL_SCORE_RATIO = 0.35
+HIGH_PRECISION_MIN_KEY_OVERLAP = 2
+HIGH_PRECISION_MIN_OVERLAP_RATIO = 0.08
+ANSWER_RETRIEVAL_MIN_TOP_K = 12
+MULTIPART_PROMPT_CHUNKS = 7
+PROMPT_BACKFILL_SCORE_RATIO = 0.25
 TREATMENT_INITIATION_MIN_TOP_SCORE = 0.15
 TREATMENT_INITIATION_MIN_OVERLAP = 5
 HIGH_PRECISION_QUERY_RE = re.compile(
@@ -106,9 +107,12 @@ REFERRAL_SENTENCE_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 TREATMENT_DECISION_QUERY_RE = re.compile(
-    r"\b(start\w*|initiat\w*|commenc\w*|begin\w*|"
-    r"treat\w*|therapy|medication|steroid\w*|drug\w*|"
-    r"preferred|first[- ]line|acei|arb|insulin)\b",
+    r"\b(start\w*|commenc\w*|begin\w*|treat\w*|therapy|medication|"
+    r"steroid\w*|drug\w*|preferred|first[- ]line|acei|arb|insulin)\b|"
+    r"\binitiat\w*\s+(?:treat\w*|therapy|medication|steroid\w*|"
+    r"drug\w*|acei|arb|insulin)\b|"
+    r"\b(?:treat\w*|therapy|medication|steroid\w*|drug\w*|"
+    r"acei|arb|insulin)\s+initiat\w*\b",
     re.IGNORECASE,
 )
 TREATMENT_SENTENCE_HINT_RE = re.compile(
@@ -141,6 +145,28 @@ DIFFERENTIAL_QUERY_RE = re.compile(
     r"how to tell|how can .* be .* from)\b",
     re.IGNORECASE,
 )
+DIFFERENTIAL_VS_RE = re.compile(
+    r"\b(?P<a>[^?.;]+?)\s+(?:vs\.?|versus)\s+(?P<b>[^?.;]+)\b",
+    re.IGNORECASE,
+)
+DIFFERENTIAL_FROM_RE = re.compile(
+    r"\b(?:distinguish\w*|differentiat\w*|tell)\s+(?P<a>.+?)\s+from\s+"
+    r"(?P<b>.+?)(?:\?|$)",
+    re.IGNORECASE,
+)
+DIFFERENTIAL_PASSIVE_FROM_RE = re.compile(
+    r"\b(?P<a>.+?)\s+(?:can\s+)?(?:be\s+)?(?:distinguish\w*|differentiat\w*)\s+"
+    r"from\s+(?P<b>.+?)(?:\?|$)",
+    re.IGNORECASE,
+)
+DIFFERENTIAL_BETWEEN_RE = re.compile(
+    r"\bdifference between\s+(?P<a>.+?)\s+and\s+(?P<b>.+?)(?:\?|$)",
+    re.IGNORECASE,
+)
+RECOMMENDATION_SPLIT_RE = re.compile(
+    r"(?=(?:^|\n|[.!?]\s+)\d+\.\d+(?:\.\d+)?\b)",
+    re.MULTILINE,
+)
 OVERLAP_STOPWORDS = {
     "the",
     "and",
@@ -169,6 +195,25 @@ OVERLAP_STOPWORDS = {
     "month",
     "months",
 }
+DIFFERENTIAL_STOPWORDS = OVERLAP_STOPWORDS.union(
+    {
+        "how",
+        "can",
+        "be",
+        "primary",
+        "care",
+        "episodes",
+        "recurrent",
+        "transient",
+        "lasting",
+        "followed",
+        "persistent",
+        "deficit",
+        "deficits",
+        "hours",
+        "minutes",
+    }
+)
 
 
 @dataclass
@@ -216,6 +261,34 @@ def _minimum_required_top_score(query: str) -> float:
     return ABSOLUTE_MIN_TOP_SCORE
 
 
+def _high_precision_min_overlap() -> int:
+    return HIGH_PRECISION_MIN_OVERLAP
+
+
+def _high_precision_min_key_overlap() -> int:
+    return HIGH_PRECISION_MIN_KEY_OVERLAP
+
+
+def _high_precision_min_overlap_ratio() -> float:
+    return HIGH_PRECISION_MIN_OVERLAP_RATIO
+
+
+def _answer_retrieval_min_top_k() -> int:
+    return ANSWER_RETRIEVAL_MIN_TOP_K
+
+
+def _multipart_prompt_chunk_limit() -> int:
+    return MULTIPART_PROMPT_CHUNKS
+
+
+def _prompt_backfill_score_ratio() -> float:
+    return PROMPT_BACKFILL_SCORE_RATIO
+
+
+def _differential_low_evidence_top_score_floor() -> float:
+    return 0.58
+
+
 def _query_overlap_count(query: str, text: str) -> int:
     def _tokens(value: str) -> set[str]:
         return {
@@ -242,6 +315,73 @@ def _query_overlap_ratio(query: str, text: str) -> float:
     return overlap / len(query_tokens)
 
 
+def _tokenize_clinical_terms(text: str, *, stopwords: set[str]) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[A-Za-z0-9]+", text.lower())
+        if len(token) >= 3 and token not in stopwords
+    }
+
+
+def _extract_differential_target_tokens(query: str) -> tuple[set[str], set[str]] | None:
+    patterns = (
+        DIFFERENTIAL_FROM_RE,
+        DIFFERENTIAL_PASSIVE_FROM_RE,
+        DIFFERENTIAL_VS_RE,
+        DIFFERENTIAL_BETWEEN_RE,
+    )
+    for pattern in patterns:
+        match = pattern.search(query)
+        if not match:
+            continue
+        left = _tokenize_clinical_terms(
+            match.group("a"),
+            stopwords=DIFFERENTIAL_STOPWORDS,
+        )
+        right = _tokenize_clinical_terms(
+            match.group("b"),
+            stopwords=DIFFERENTIAL_STOPWORDS,
+        )
+        if not left or not right:
+            continue
+        # Keep only distinctive signal per side.
+        left_only = left - right
+        right_only = right - left
+        if left_only and right_only:
+            return left_only, right_only
+        return left, right
+    return None
+
+
+def _has_balanced_differential_support(query: str, chunks: list[dict[str, Any]]) -> bool:
+    targets = _extract_differential_target_tokens(query)
+    if targets is None or not chunks:
+        return False
+
+    left_tokens, right_tokens = targets
+    chunk_tokens = [
+        _tokenize_clinical_terms(
+            f"{chunk.get('text', '')} {chunk.get('section_path', '')}",
+            stopwords=OVERLAP_STOPWORDS,
+        )
+        for chunk in chunks
+    ]
+    left_supported = any(left_tokens.intersection(tokens) for tokens in chunk_tokens)
+    right_supported = any(right_tokens.intersection(tokens) for tokens in chunk_tokens)
+    if not (left_supported and right_supported):
+        return False
+
+    left_matches = {
+        token for token in left_tokens if any(token in tokens for tokens in chunk_tokens)
+    }
+    right_matches = {
+        token
+        for token in right_tokens
+        if any(token in tokens for tokens in chunk_tokens)
+    }
+    return len(left_matches.union(right_matches)) >= 2
+
+
 def _should_reject_for_low_confidence(query: str, top_chunk: dict[str, Any]) -> bool:
     top_score = float(top_chunk.get("score", 0.0))
     if top_score < ABSOLUTE_MIN_TOP_SCORE:
@@ -263,7 +403,7 @@ def _should_reject_for_low_confidence(query: str, top_chunk: dict[str, Any]) -> 
 
     overlap = _query_overlap_count(query, top_chunk.get("text", ""))
     if top_score < HIGH_PRECISION_MIN_TOP_SCORE:
-        return overlap < HIGH_PRECISION_MIN_OVERLAP
+        return overlap < _high_precision_min_overlap()
 
     if top_score < HIGH_PRECISION_SOFT_MIN_TOP_SCORE:
         section_path = str(top_chunk.get("section_path") or "")
@@ -275,13 +415,13 @@ def _should_reject_for_low_confidence(query: str, top_chunk: dict[str, Any]) -> 
             allow_non_directive_investigation_support
         ):
             return True
-        min_key_overlap = HIGH_PRECISION_MIN_KEY_OVERLAP
+        min_key_overlap = _high_precision_min_key_overlap()
         if allow_non_directive_investigation_support:
             min_key_overlap = 2
         if overlap < min_key_overlap:
             return True
         overlap_ratio = _query_overlap_ratio(query, top_chunk.get("text", ""))
-        if overlap_ratio < HIGH_PRECISION_MIN_OVERLAP_RATIO:
+        if overlap_ratio < _high_precision_min_overlap_ratio():
             return True
 
     return False
@@ -321,6 +461,76 @@ def _supports_query_parts(query: str, chunk: dict[str, Any]) -> bool:
     return overlap >= 2 or section_overlap >= 1
 
 
+def _split_recommendation_segments(text: str) -> list[str]:
+    if not text:
+        return []
+    segments = [
+        segment.strip() for segment in RECOMMENDATION_SPLIT_RE.split(text) if segment
+    ]
+    if len(segments) <= 1:
+        return []
+    return [segment for segment in segments if segment]
+
+
+def _segment_rank(
+    query: str,
+    segment: str,
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+) -> tuple[int, int, int, int]:
+    part_hits = sum(1 for _, pattern in requested_parts if pattern.search(segment))
+    directive_fit = int(bool(DIRECTIVE_SECTION_HINT_RE.search(segment)))
+    overlap = _query_overlap_count(query, segment)
+    return (part_hits, directive_fit, overlap, len(segment))
+
+
+def _best_recommendation_excerpt(
+    query: str,
+    text: str,
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+) -> str | None:
+    segments = _split_recommendation_segments(text)
+    if not segments:
+        return None
+
+    best_segment = max(
+        segments,
+        key=lambda segment: _segment_rank(query, segment, requested_parts),
+    )
+    part_hits, _, overlap, _ = _segment_rank(query, best_segment, requested_parts)
+    if part_hits == 0 and overlap < 2:
+        return None
+    if len(best_segment) >= len(text.strip()):
+        return None
+    return best_segment
+
+
+def _narrow_chunk_to_recommendation_excerpt(
+    query: str,
+    chunk: dict[str, Any],
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+) -> dict[str, Any]:
+    text = str(chunk.get("text") or "")
+    excerpt = _best_recommendation_excerpt(query, text, requested_parts)
+    if excerpt is None:
+        return chunk
+    narrowed = dict(chunk)
+    narrowed["text"] = excerpt
+    return narrowed
+
+
+def _prepare_prompt_chunks(
+    query: str,
+    chunks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not chunks:
+        return chunks
+    requested_parts = _requested_question_parts(query)
+    return [
+        _narrow_chunk_to_recommendation_excerpt(query, chunk, requested_parts)
+        for chunk in chunks
+    ]
+
+
 def _retrieve_for_answer_query(
     request: AnswerRequest,
     *,
@@ -328,7 +538,7 @@ def _retrieve_for_answer_query(
 ) -> list[dict[str, Any]]:
     advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
     if callable(advanced_retriever):
-        retrieval_top_k = max(request.top_k, ANSWER_RETRIEVAL_MIN_TOP_K)
+        retrieval_top_k = max(request.top_k, _answer_retrieval_min_top_k())
 
         def _run_advanced(doc_type: str | None) -> list[dict[str, Any]]:
             return advanced_retriever(
@@ -396,7 +606,7 @@ def _requested_question_parts(query: str) -> list[tuple[str, re.Pattern[str]]]:
 def _prompt_chunk_limit(query: str) -> int:
     requested_parts = _requested_question_parts(query)
     if len(requested_parts) >= 2:
-        return MULTIPART_PROMPT_CHUNKS
+        return _multipart_prompt_chunk_limit()
     return MAX_CITATIONS
 
 
@@ -420,6 +630,171 @@ def _chunk_has_overlap(query: str, chunk: dict[str, Any]) -> bool:
     )
 
 
+def _chunk_has_source_identity(chunk: dict[str, Any]) -> bool:
+    return bool((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
+
+
+def _chunk_matches_part(chunk: dict[str, Any], pattern: re.Pattern[str]) -> bool:
+    haystack = f"{chunk.get('text', '')} {chunk.get('section_path', '')}"
+    return bool(pattern.search(haystack))
+
+
+def _chunk_part_indexes(
+    chunk: dict[str, Any],
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+) -> set[int]:
+    matched_indexes: set[int] = set()
+    for index, (_, pattern) in enumerate(requested_parts):
+        if _chunk_matches_part(chunk, pattern):
+            matched_indexes.add(index)
+    return matched_indexes
+
+
+def _prompt_backfill_min_score(retrieved: list[dict[str, Any]]) -> float:
+    if not retrieved:
+        return ABSOLUTE_MIN_TOP_SCORE
+    top_retrieved_score = max(float(chunk.get("score", 0.0)) for chunk in retrieved)
+    return max(
+        ABSOLUTE_MIN_TOP_SCORE,
+        top_retrieved_score * _prompt_backfill_score_ratio(),
+    )
+
+
+def _is_prompt_backfill_candidate(
+    *,
+    query: str,
+    chunk: dict[str, Any],
+    min_score: float,
+) -> bool:
+    if float(chunk.get("score", 0.0)) < min_score:
+        return False
+    if is_boilerplate(chunk):
+        return False
+    if not _chunk_has_source_identity(chunk):
+        return False
+    if not _chunk_has_overlap(query, chunk):
+        return False
+    return True
+
+
+def _part_candidate_rank(query: str, chunk: dict[str, Any]) -> tuple[float, int, int]:
+    section_path = str(chunk.get("section_path") or "")
+    text = str(chunk.get("text") or "")
+    return (
+        float(chunk.get("score", 0.0)),
+        int(bool(DIRECTIVE_SECTION_HINT_RE.search(section_path))),
+        _query_overlap_count(query, text) + _query_overlap_count(query, section_path),
+    )
+
+
+def _best_candidate_for_part(
+    *,
+    query: str,
+    pattern: re.Pattern[str],
+    candidates: list[dict[str, Any]],
+    seen: set[tuple[Any, ...]],
+    min_score: float,
+) -> dict[str, Any] | None:
+    best_chunk: dict[str, Any] | None = None
+    best_rank: tuple[float, int, int] | None = None
+    for chunk in candidates:
+        chunk_key = _chunk_identity(chunk)
+        if chunk_key in seen:
+            continue
+        if not _chunk_matches_part(chunk, pattern):
+            continue
+        if not _is_prompt_backfill_candidate(
+            query=query,
+            chunk=chunk,
+            min_score=min_score,
+        ):
+            continue
+        rank = _part_candidate_rank(query, chunk)
+        if best_rank is None or rank > best_rank:
+            best_rank = rank
+            best_chunk = chunk
+    return best_chunk
+
+
+def _replacement_index_for_part_coverage(
+    *,
+    selected: list[dict[str, Any]],
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+) -> int | None:
+    if not selected:
+        return None
+
+    chunk_part_indexes = [
+        _chunk_part_indexes(chunk, requested_parts) for chunk in selected
+    ]
+    part_coverage_counts = [0] * len(requested_parts)
+    for indexes in chunk_part_indexes:
+        for index in indexes:
+            part_coverage_counts[index] += 1
+
+    non_covering: list[tuple[float, int]] = []
+    redundant_covering: list[tuple[float, int]] = []
+    for index, part_indexes in enumerate(chunk_part_indexes):
+        score = float(selected[index].get("score", 0.0))
+        if not part_indexes:
+            non_covering.append((score, index))
+            continue
+        if all(part_coverage_counts[part_index] > 1 for part_index in part_indexes):
+            redundant_covering.append((score, index))
+
+    if non_covering:
+        non_covering.sort(key=lambda item: item[0])
+        return non_covering[0][1]
+    if redundant_covering:
+        redundant_covering.sort(key=lambda item: item[0])
+        return redundant_covering[0][1]
+    return None
+
+
+def _seed_missing_requested_parts(
+    *,
+    query: str,
+    selected: list[dict[str, Any]],
+    requested_parts: list[tuple[str, re.Pattern[str]]],
+    candidates: list[dict[str, Any]],
+    limit: int,
+    min_score: float,
+) -> list[dict[str, Any]]:
+    if not requested_parts:
+        return selected
+
+    seen = {_chunk_identity(chunk) for chunk in selected}
+    seeded = list(selected)
+    for _, pattern in requested_parts:
+        if any(_chunk_matches_part(chunk, pattern) for chunk in seeded):
+            continue
+        candidate = _best_candidate_for_part(
+            query=query,
+            pattern=pattern,
+            candidates=candidates,
+            seen=seen,
+            min_score=min_score,
+        )
+        if candidate is None:
+            continue
+        replace_index = _replacement_index_for_part_coverage(
+            selected=seeded,
+            requested_parts=requested_parts,
+        )
+        if replace_index is not None:
+            old_chunk = seeded[replace_index]
+            seen.discard(_chunk_identity(old_chunk))
+            seeded[replace_index] = candidate
+            seen.add(_chunk_identity(candidate))
+            continue
+
+        if len(seeded) < limit:
+            seeded.append(candidate)
+            seen.add(_chunk_identity(candidate))
+
+    return seeded
+
+
 def _select_prompt_chunks(
     *,
     query: str,
@@ -427,35 +802,39 @@ def _select_prompt_chunks(
     filtered: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     prompt_chunk_limit = _prompt_chunk_limit(query)
-    top_chunks = list(filtered[:prompt_chunk_limit])
-    if len(top_chunks) >= prompt_chunk_limit or not retrieved:
-        return top_chunks
+    selected = list(filtered[:prompt_chunk_limit])
+    requested_parts = _requested_question_parts(query)
+    backfill_min_score = _prompt_backfill_min_score(retrieved)
 
-    top_retrieved_score = max(float(chunk.get("score", 0.0)) for chunk in retrieved)
-    backfill_min_score = max(
-        ABSOLUTE_MIN_TOP_SCORE,
-        top_retrieved_score * PROMPT_BACKFILL_SCORE_RATIO,
-    )
-    seen = {_chunk_identity(chunk) for chunk in top_chunks}
+    if requested_parts:
+        selected = _seed_missing_requested_parts(
+            query=query,
+            selected=selected,
+            requested_parts=requested_parts,
+            candidates=[*filtered, *retrieved],
+            limit=prompt_chunk_limit,
+            min_score=backfill_min_score,
+        )
 
-    backfill_candidates: list[dict[str, Any]] = []
+    if len(selected) >= prompt_chunk_limit or not retrieved:
+        return selected[:prompt_chunk_limit]
+
+    seen = {_chunk_identity(chunk) for chunk in selected}
     for chunk in retrieved:
-        if len(top_chunks) + len(backfill_candidates) >= prompt_chunk_limit:
+        if len(selected) >= prompt_chunk_limit:
             break
         if _chunk_identity(chunk) in seen:
             continue
-        if float(chunk.get("score", 0.0)) < backfill_min_score:
+        if not _is_prompt_backfill_candidate(
+            query=query,
+            chunk=chunk,
+            min_score=backfill_min_score,
+        ):
             continue
-        if is_boilerplate(chunk):
-            continue
-        if not ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id")):
-            continue
-        if not _chunk_has_overlap(query, chunk):
-            continue
-        backfill_candidates.append(chunk)
+        selected.append(chunk)
         seen.add(_chunk_identity(chunk))
 
-    return top_chunks + backfill_candidates
+    return selected
 
 
 def _covered_question_part_count(
@@ -490,11 +869,10 @@ def _evaluate_retrieval_pass(
     )
     requested_parts = _requested_question_parts(query)
     covered_part_count = _covered_question_part_count(top_chunks, requested_parts)
-    passes_low_confidence_gate = bool(top_chunks) and not (
-        _should_reject_for_low_confidence(
-            retrieval_query,
-            top_chunks[0],
-        )
+    passes_low_confidence_gate = _passes_low_confidence_gate(
+        query=query,
+        retrieval_query=retrieval_query,
+        top_chunks=top_chunks,
     )
     return _RetrievalPassDecision(
         name=name,
@@ -510,6 +888,27 @@ def _evaluate_retrieval_pass(
         covered_part_count=covered_part_count,
         evidence_quality_score=_evidence_quality_score(top_chunks),
     )
+
+
+def _passes_low_confidence_gate(
+    *,
+    query: str,
+    retrieval_query: str,
+    top_chunks: list[dict[str, Any]],
+) -> bool:
+    if not top_chunks:
+        return False
+    if not _should_reject_for_low_confidence(retrieval_query, top_chunks[0]):
+        return True
+
+    # Loosen rejection for multipart asks when retrieval clearly covers at
+    # least part of the requested question; keep strict gate for treatment-only asks.
+    requested_parts = _requested_question_parts(query)
+    if not requested_parts or TREATMENT_DECISION_QUERY_RE.search(query):
+        return False
+    covered_parts = _covered_question_part_count(top_chunks, requested_parts)
+    minimum_supported_parts = max(1, len(requested_parts) // 2)
+    return covered_parts >= minimum_supported_parts
 
 
 def _pass_rank(decision: _RetrievalPassDecision) -> tuple[int, int, int, float]:
@@ -701,10 +1100,18 @@ async def generate_clinical_answer(
         canonical_pass: _RetrievalPassDecision | None = None
         primary_evidence = evidence_level(primary_pass.top_chunks)
 
-        if retrieval_config.retrieval_canonicalization_enabled and (
+        should_try_canonicalization = (
             not primary_pass.top_chunks
             or not primary_pass.passes_low_confidence_gate
             or primary_evidence == "weak"
+            or (
+                REFERRAL_QUERY_HINT_RE.search(request.query) is not None
+                and not primary_pass.has_directive_section_fit
+            )
+        )
+        if (
+            retrieval_config.retrieval_canonicalization_enabled
+            and should_try_canonicalization
         ):
             allowed_specialties = parse_allowed_specialties(
                 retrieval_config.retrieval_canonicalization_specialties
@@ -780,6 +1187,7 @@ async def _generate_answer_from_retrieval(
             retrieved=retrieved,
             filtered=filtered,
         )
+        top_chunks = _prepare_prompt_chunks(query_for_retrieval, top_chunks)
         evidence = evidence_level(top_chunks)
         if not top_chunks and not file_context:
             log_route_decision(
@@ -798,32 +1206,39 @@ async def _generate_answer_from_retrieval(
                 fallback_reason=fallback_reason or "no_relevant_chunks",
             )
             return _no_evidence_response(stream)
-        if (
-            top_chunks
-            and not file_context
-            and DIFFERENTIAL_QUERY_RE.search(query)
-            and evidence != "strong"
-        ):
-            log_route_decision(
-                route_endpoint,
-                "local",
-                0.0,
-                routing_config.llm_route_threshold,
-                ("no_evidence", "differential_low_evidence"),
-                query=query,
-                retrieved_count=len(filtered or retrieved),
-                top_score=top_chunks[0]["score"],
-                evidence=evidence,
-                outcome="fallback",
-                canonicalization_triggered=canonicalization_triggered,
-                selected_retrieval_pass=selected_retrieval_pass,
-                fallback_reason=fallback_reason or "low_evidence_differential",
+        if top_chunks and not file_context and DIFFERENTIAL_QUERY_RE.search(query):
+            balanced_support = _has_balanced_differential_support(query, top_chunks)
+            top_score = float(top_chunks[0].get("score", 0.0))
+            should_fallback_for_differential = (
+                evidence == "weak"
+                and not balanced_support
+                and top_score < _differential_low_evidence_top_score_floor()
             )
-            return _no_evidence_response(stream)
+            if should_fallback_for_differential:
+                log_route_decision(
+                    route_endpoint,
+                    "local",
+                    0.0,
+                    routing_config.llm_route_threshold,
+                    ("no_evidence", "differential_low_evidence"),
+                    query=query,
+                    retrieved_count=len(filtered or retrieved),
+                    top_score=top_chunks[0]["score"],
+                    evidence=evidence,
+                    outcome="fallback",
+                    canonicalization_triggered=canonicalization_triggered,
+                    selected_retrieval_pass=selected_retrieval_pass,
+                    fallback_reason=fallback_reason or "low_evidence_differential",
+                )
+                return _no_evidence_response(stream)
         if (
             top_chunks
             and not file_context
-            and _should_reject_for_low_confidence(query_for_retrieval, top_chunks[0])
+            and not _passes_low_confidence_gate(
+                query=query,
+                retrieval_query=query_for_retrieval,
+                top_chunks=top_chunks,
+            )
         ):
             log_route_decision(
                 route_endpoint,
@@ -951,6 +1366,21 @@ async def _generate_answer_from_retrieval(
             except ModelGenerationError:
                 pass
         if not renumbered_answer.strip() or not citations_used:
+            log_route_decision(
+                route_endpoint,
+                route.provider,
+                route.score,
+                route.threshold,
+                ("no_evidence", "postprocess_no_citations"),
+                query=query,
+                retrieved_count=len(filtered or retrieved),
+                top_score=top_chunks[0]["score"] if top_chunks else None,
+                evidence=evidence,
+                outcome="fallback",
+                canonicalization_triggered=canonicalization_triggered,
+                selected_retrieval_pass=selected_retrieval_pass,
+                fallback_reason="postprocess_no_citations",
+            )
             renumbered_answer = NO_EVIDENCE_RESPONSE
             citations_used = []
             citations_retrieved = []

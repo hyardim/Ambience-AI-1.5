@@ -418,6 +418,14 @@ def test_query_fingerprint_is_stable() -> None:
     assert len(query_fingerprint("migraine treatment")) == 12
 
 
+def test_query_fingerprint_matches_shared_utility() -> None:
+    from src.utils.query_hash import query_fingerprint as shared_query_fingerprint
+
+    assert query_fingerprint("migraine treatment") == shared_query_fingerprint(
+        "migraine treatment"
+    )
+
+
 def test_retrieve_chunks_advanced_returns_mapped_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -35,7 +35,9 @@ def test_has_query_overlap_accepts_three_character_tokens() -> None:
     )
 
 
-def test_extract_citation_results_drops_uncited_clinical_sentences() -> None:
+def test_extract_citation_results_keeps_low_risk_uncited_context_in_balanced_mode() -> (
+    None
+):
     citations = [SearchResult(text="A", source="S", score=0.9)]
 
     answer, used = extract_citation_results(
@@ -44,7 +46,7 @@ def test_extract_citation_results_drops_uncited_clinical_sentences() -> None:
         strip_references=False,
     )
 
-    assert answer == "Refer urgently [1]."
+    assert answer == "Refer urgently [1]. Consider extra hydration advice while waiting."
     assert used == [citations[0]]
 
 

@@ -106,6 +106,165 @@ def test_select_prompt_chunks_does_not_backfill_below_score_threshold() -> None:
     assert selected == [primary]
 
 
+def test_select_prompt_chunks_seeds_missing_multipart_part_coverage() -> None:
+    query = (
+        "What baseline blood tests and imaging should be completed prior to referral?"
+    )
+    referral = {
+        "text": "Refer urgently if persistent synovitis affects multiple joints.",
+        "score": 0.95,
+        "section_path": "Recommendations > Referral pathway",
+        "metadata": {"source_url": "https://example.com/referral.pdf"},
+        "doc_id": "doc-r",
+        "chunk_id": "chunk-r",
+    }
+    investigations = {
+        "text": "Offer rheumatoid factor and consider anti-CCP if RF negative.",
+        "score": 0.9,
+        "section_path": "Recommendations > Investigations",
+        "metadata": {"source_url": "https://example.com/investigations.pdf"},
+        "doc_id": "doc-i",
+        "chunk_id": "chunk-i",
+    }
+    context = {
+        "text": "General context on inflammatory arthritis prevalence.",
+        "score": 0.82,
+        "section_path": "Discussion",
+        "metadata": {"source_url": "https://example.com/context.pdf"},
+        "doc_id": "doc-c",
+        "chunk_id": "chunk-c",
+    }
+    imaging = {
+        "text": "X-ray the hands and feet before referral where persistent synovitis is suspected.",
+        "score": 0.5,
+        "section_path": "Recommendations > Imaging",
+        "metadata": {"source_url": "https://example.com/imaging.pdf"},
+        "doc_id": "doc-x",
+        "chunk_id": "chunk-x",
+    }
+
+    filtered = [
+        referral,
+        investigations,
+        context,
+        {**referral, "chunk_id": "chunk-r2"},
+        {**investigations, "chunk_id": "chunk-i2"},
+    ]
+    retrieved = [*filtered, imaging]
+
+    selected = routes._select_prompt_chunks(
+        query=query,
+        retrieved=retrieved,
+        filtered=filtered,
+    )
+
+    assert imaging in selected
+    assert context not in selected
+
+
+def test_select_prompt_chunks_skips_low_quality_part_seed_candidates() -> None:
+    query = (
+        "What baseline blood tests and imaging should be completed prior to referral?"
+    )
+    referral = {
+        "text": "Refer urgently if persistent synovitis affects multiple joints.",
+        "score": 0.95,
+        "section_path": "Recommendations > Referral pathway",
+        "metadata": {"source_url": "https://example.com/referral.pdf"},
+        "doc_id": "doc-r",
+        "chunk_id": "chunk-r",
+    }
+    investigations = {
+        "text": "Offer rheumatoid factor and consider anti-CCP if RF negative.",
+        "score": 0.9,
+        "section_path": "Recommendations > Investigations",
+        "metadata": {"source_url": "https://example.com/investigations.pdf"},
+        "doc_id": "doc-i",
+        "chunk_id": "chunk-i",
+    }
+    context = {
+        "text": "General context on inflammatory arthritis prevalence.",
+        "score": 0.82,
+        "section_path": "Discussion",
+        "metadata": {"source_url": "https://example.com/context.pdf"},
+        "doc_id": "doc-c",
+        "chunk_id": "chunk-c",
+    }
+    low_quality_imaging = {
+        "text": "X-ray mention with weak confidence only.",
+        "score": 0.1,
+        "section_path": "Discussion",
+        "metadata": {"source_url": "https://example.com/imaging-weak.pdf"},
+        "doc_id": "doc-x",
+        "chunk_id": "chunk-x",
+    }
+
+    filtered = [referral, investigations, context, {**referral, "chunk_id": "chunk-r2"}]
+    retrieved = [*filtered, low_quality_imaging]
+
+    selected = routes._select_prompt_chunks(
+        query=query,
+        retrieved=retrieved,
+        filtered=filtered,
+    )
+
+    assert low_quality_imaging not in selected
+
+
+def test_prepare_prompt_chunks_narrows_mixed_numbered_recommendation_chunk() -> None:
+    query = (
+        "65-year-old with rapidly progressive gait disturbance and urinary "
+        "incontinence over 3 months. CT head shows ventriculomegaly. Should "
+        "normal pressure hydrocephalus be suspected and how urgently should this "
+        "be referred?"
+    )
+    chunk = {
+        "text": (
+            "1.4.2 Refer immediately for assessment for possible vascular event "
+            "using local stroke pathways if rapidly progressive unsteady gait is "
+            "present within days to weeks.\n"
+            "1.4.4 Refer adults with difficulty initiating and coordinating "
+            "walking (gait apraxia) to neurology or an elderly care clinic to "
+            "exclude normal pressure hydrocephalus."
+        ),
+        "score": 0.9,
+        "section_path": "Recommendations > Rapidly progressive unsteady gait",
+        "metadata": {"source_url": "https://example.com/guide.pdf"},
+        "doc_id": "doc-1",
+        "chunk_id": "chunk-1",
+    }
+
+    prepared = routes._prepare_prompt_chunks(query, [chunk])
+
+    assert len(prepared) == 1
+    assert "exclude normal pressure hydrocephalus" in prepared[0]["text"]
+    assert "possible vascular event" not in prepared[0]["text"]
+
+
+def test_has_balanced_differential_support_requires_both_sides() -> None:
+    query = (
+        "How can migraine aura be distinguished from TIA in primary care?"
+    )
+    both_supported = [
+        {
+            "text": (
+                "Migraine aura may present with transient visual symptoms, while "
+                "TIA should be considered for sudden focal neurological deficit."
+            ),
+            "section_path": "Recommendations",
+        }
+    ]
+    one_sided = [
+        {
+            "text": "Migraine aura can present with transient visual disturbance.",
+            "section_path": "Recommendations",
+        }
+    ]
+
+    assert routes._has_balanced_differential_support(query, both_supported) is True
+    assert routes._has_balanced_differential_support(query, one_sided) is False
+
+
 @pytest.mark.anyio
 async def test_clinical_query_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*args: object, **kwargs: object) -> list[dict[str, object]]:
@@ -408,7 +567,7 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
     assert captured["doc_type"] == "guideline"
     assert captured["score_threshold"] == 0.42
     assert captured["expand_query"] is True
-    assert captured["top_k"] == 8
+    assert captured["top_k"] == max(8, routes._answer_retrieval_min_top_k())
 
 
 @pytest.mark.anyio
@@ -663,6 +822,84 @@ async def test_generate_clinical_answer_no_evidence_for_low_score_high_precision
 
 
 @pytest.mark.anyio
+async def test_generate_clinical_answer_allows_weak_differential_with_balanced_support(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = "How can migraine aura be distinguished from TIA in primary care?"
+
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [
+            {
+                "text": (
+                    "Migraine aura may present with transient visual symptoms, while "
+                    "TIA should be considered for sudden focal neurological deficit."
+                ),
+                "score": 0.57,
+                "section_path": "Recommendations > Differential diagnosis",
+                "metadata": {"source_url": "https://example.com/guide"},
+                "doc_id": "doc-1",
+            }
+        ],
+    )
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "Differentiate migraine aura from TIA using symptom profile [1]."
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, citations),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query=query, specialty="neurology", stream=False)
+    )
+
+    assert response.answer != routes.NO_EVIDENCE_RESPONSE
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_rejects_weak_differential_without_balanced_support(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = "How can migraine aura be distinguished from TIA in primary care?"
+
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [
+            {
+                "text": "Migraine aura can present with transient visual disturbance.",
+                "score": 0.57,
+                "section_path": "Recommendations",
+                "metadata": {"source_url": "https://example.com/guide"},
+                "doc_id": "doc-1",
+            }
+        ],
+    )
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query=query, specialty="neurology", stream=False)
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE
+
+
+@pytest.mark.anyio
 async def test_generate_clinical_answer_uses_canonical_pass_when_primary_is_weak(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -896,6 +1133,94 @@ async def test_canonical_pass_selected_for_weak_primary_evidence(
 
 
 @pytest.mark.anyio
+async def test_generate_clinical_answer_tries_canonical_for_referral_query_without_directive_fit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = (
+        "65-year-old with rapidly progressive gait disturbance and urinary "
+        "incontinence over 3 months. CT head shows ventriculomegaly. Should "
+        "normal pressure hydrocephalus be suspected and how urgently should this "
+        "be referred?"
+    )
+    canonical_query = "canonical nph retrieval query"
+    telemetry_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    monkeypatch.setattr(
+        routes,
+        "retrieval_config",
+        SimpleNamespace(
+            retrieval_canonicalization_enabled=True,
+            retrieval_canonicalization_specialties="neurology",
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "build_canonical_retrieval_query",
+        lambda **kwargs: canonical_query,
+    )
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        if kwargs["query"] == canonical_query:
+            return [
+                {
+                    "text": (
+                        "Refer adults with gait apraxia to neurology to exclude "
+                        "normal pressure hydrocephalus."
+                    ),
+                    "score": 0.6,
+                    "section_path": "Recommendations > Referral pathway",
+                    "metadata": {"source_url": "https://example.com/guideline"},
+                    "doc_id": "doc-2",
+                }
+            ]
+        return [
+            {
+                "text": "General discussion of sudden-onset unsteady gait.",
+                "score": 0.9,
+                "section_path": "Discussion",
+                "metadata": {"source_url": "https://example.com/paper"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+
+    def fake_log(*args: object, **kwargs: object) -> None:
+        telemetry_calls.append((args, kwargs))
+
+    monkeypatch.setattr(routes, "log_route_decision", fake_log)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, citations),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query=query, specialty="neurology", stream=False)
+    )
+
+    assert response.answer == "Answer [1]"
+    assert telemetry_calls
+    _, selected_call = telemetry_calls[-1]
+    assert selected_call["canonicalization_triggered"] is True
+    assert selected_call["selected_retrieval_pass"] == "canonical"
+
+
+@pytest.mark.anyio
 async def test_generate_clinical_answer_falls_back_when_no_valid_citations_extracted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -968,6 +1293,28 @@ def test_low_confidence_gate_keeps_high_precision_directive_section() -> None:
     }
 
     assert routes._should_reject_for_low_confidence(query, top_chunk) is False
+
+
+def test_passes_low_confidence_gate_allows_partial_part_coverage() -> None:
+    query = (
+        "What baseline blood tests and imaging should be completed prior to referral?"
+    )
+    top_chunks = [
+        {
+            "text": "Baseline blood tests include ESR and CRP.",
+            "score": 0.03,
+            "section_path": "Discussion",
+        }
+    ]
+
+    assert (
+        routes._passes_low_confidence_gate(
+            query=query,
+            retrieval_query=query,
+            top_chunks=top_chunks,
+        )
+        is True
+    )
 
 
 def test_treatment_initiation_query_rejects_low_score_weak_overlap() -> None:

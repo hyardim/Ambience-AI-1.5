@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 from typing import Any
 
@@ -9,6 +8,7 @@ from ..generation.client import ProviderName
 from ..retrieval.citation import CitedResult
 from ..retrieval.retrieve import retrieve
 from ..utils.logger import setup_logger
+from ..utils.query_hash import query_fingerprint
 from ..utils.telemetry import append_jsonl
 from .citations import MIN_RELEVANCE, has_query_overlap, is_boilerplate
 from .schemas import SearchResult
@@ -21,12 +21,12 @@ NO_EVIDENCE_RESPONSE = (
     "document, or try a different query."
 )
 HIGH_CONFIDENCE_RELEVANCE = 0.72
-SOFT_FALLBACK_RELEVANCE = 0.55
+SOFT_FALLBACK_RELEVANCE = 0.45
 LOW_SCORE_FALLBACK_FLOOR = 0.0
-LOW_SCORE_FALLBACK_RATIO = 0.5
+LOW_SCORE_FALLBACK_RATIO = 0.45
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
-STRONG_TOP_SCORE_PRUNE_RATIO = 0.3
+STRONG_TOP_SCORE_PRUNE_RATIO = 0.25
 REFERRAL_SECTION_HINT_RE = re.compile(
     r"\b(recommendation|recommendations|refer|referral|pathway|"
     r"when to refer|urgent|immediate)\b",
@@ -65,9 +65,12 @@ REFERRAL_TEXT_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 TREATMENT_QUERY_HINT_RE = re.compile(
-    r"\b(start\w*|initiat\w*|commenc\w*|begin\w*|"
-    r"treat\w*|therapy|medication|steroid\w*|drug\w*|"
-    r"preferred|first[- ]line|acei|arb|insulin)\b",
+    r"\b(start\w*|commenc\w*|begin\w*|treat\w*|therapy|medication|"
+    r"steroid\w*|drug\w*|preferred|first[- ]line|acei|arb|insulin)\b|"
+    r"\binitiat\w*\s+(?:treat\w*|therapy|medication|steroid\w*|"
+    r"drug\w*|acei|arb|insulin)\b|"
+    r"\b(?:treat\w*|therapy|medication|steroid\w*|drug\w*|"
+    r"acei|arb|insulin)\s+initiat\w*\b",
     re.IGNORECASE,
 )
 TREATMENT_TEXT_HINT_RE = re.compile(
@@ -197,6 +200,9 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         chunk
         for chunk in base_candidates
         if has_query_overlap(query, chunk.get("text", ""))
+        or (
+            has_query_overlap(query, chunk.get("section_path", ""))
+        )
         or chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE
     ]
     if strict_matches:
@@ -225,7 +231,12 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         for chunk in retrieved
         if chunk.get("score", 0) >= low_score_threshold
         and ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id"))
-        and has_query_overlap(query, chunk.get("text", ""))
+        and (
+            has_query_overlap(query, chunk.get("text", ""))
+            or (
+                has_query_overlap(query, chunk.get("section_path", ""))
+            )
+        )
         and not is_boilerplate(chunk)
     ]
     return _rank_by_query_overlap(query, low_score_matches)
@@ -241,10 +252,11 @@ def _rank_by_query_overlap(
         chunks,
         key=lambda chunk: (
             _query_part_coverage_score(query, chunk),
-            _score_priority(chunk),
-            float(chunk.get("score", 0.0)),
             _section_priority(query, chunk),
-            _query_overlap_count(query, chunk.get("text", "")),
+            _score_priority(chunk),
+            _query_overlap_count(query, chunk.get("text", ""))
+            + _query_overlap_count(query, chunk.get("section_path", "")),
+            float(chunk.get("score", 0.0)),
             _source_name_priority(chunk),
         ),
         reverse=True,
@@ -376,10 +388,6 @@ def low_evidence_note(level: str) -> str | None:
         "does not directly support a claim, say so explicitly and keep any "
         "general context clearly separated."
     )
-
-
-def query_fingerprint(query: str) -> str:
-    return hashlib.sha256(query.encode("utf-8")).hexdigest()[:12]
 
 
 def log_route_decision(

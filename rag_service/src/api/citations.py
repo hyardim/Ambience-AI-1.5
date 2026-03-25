@@ -32,6 +32,12 @@ _CLINICAL_HINT_RE = re.compile(
     r"diagnos\w*|treat\w*|assessment|imaging|neurolog\w*|safety)\b",
     re.IGNORECASE,
 )
+_HIGH_RISK_UNCITED_CLAIM_RE = re.compile(
+    r"\b(refer\w*|referr\w*|urgent|immediate|start\w*|initiat\w*|"
+    r"commenc\w*|begin\w*|prescrib\w*|dose\w*|treat\w*|therapy|"
+    r"medication|steroid\w*|acei|arb|insulin|admit\w*|biopsy)\b",
+    re.IGNORECASE,
+)
 _SCOPE_HINT_RE = re.compile(
     r"\b(honest scope|do not cover|does not cover|outside scope|cannot provide|"
     r"can't provide|cannot answer|insufficient evidence|not enough evidence)\b",
@@ -89,8 +95,6 @@ _CHILD_POPULATION_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _ADULT_POPULATION_HINT_RE = re.compile(r"\badult(?:s)?\b", re.IGNORECASE)
-_IMMEDIATE_WORD_RE = re.compile(r"\bimmediate(?:ly)?\b", re.IGNORECASE)
-_URGENT_WORD_RE = re.compile(r"\burgent(?:ly)?\b", re.IGNORECASE)
 _TIME_VALUE_RE = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty[- ]four)"
 _EXPLICIT_TIMEFRAME_RE = re.compile(
     rf"\b(?:within\s+{_TIME_VALUE_RE}\s+"
@@ -223,7 +227,11 @@ def _normalize_rule_style_citations(answer_text: str, citation_count: int) -> st
     return _RULE_STYLE_CITATION_RE.sub(_replace, answer_text)
 
 
-def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str:
+def _enforce_grounded_sentences(
+    answer_text: str,
+    *,
+    has_citations: bool,
+) -> str:
     """Drop uncited clinical claims from model output.
 
     Any sentence that appears clinical must include at least one valid [N]
@@ -258,11 +266,14 @@ def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str
             continue
 
         if _CLINICAL_HINT_RE.search(unit):
-            # Clinical statement without evidence marker: drop.
+            # Keep low-risk connective clinical context when at least one
+            # grounded citation exists; still block high-risk uncited advice.
+            if has_citations and not _HIGH_RISK_UNCITED_CLAIM_RE.search(unit):
+                kept_units.append(unit)
+                continue
             continue
 
-        if not has_citations:
-            kept_units.append(unit)
+        kept_units.append(unit)
 
     if has_citations and not kept_units and cited_units:
         kept_units = cited_units
@@ -357,7 +368,7 @@ def _neutralize_unsupported_rationale_clauses(
             cited_tokens.update(citation_haystack_tokens_by_index.get(index, set()))
         overlap = rationale_tokens.intersection(cited_tokens)
         overlap_ratio = len(overlap) / max(len(rationale_tokens), 1)
-        if overlap_ratio >= 0.25:
+        if overlap_ratio >= 0.15:
             kept_units.append(unit)
             continue
 
@@ -391,7 +402,6 @@ def _enforce_explicit_timeframe_grounding(
         return ""
     if not citations_used:
         return answer_text
-
     citation_text_by_index = {
         idx: _normalize_text_for_match(_citation_text(citation))
         for idx, citation in enumerate(citations_used, start=1)
@@ -529,7 +539,11 @@ def _enforce_partial_question_coverage(
     )
 
 
-def _enforce_requested_scope(answer_text: str, *, query: str | None) -> str:
+def _enforce_requested_scope(
+    answer_text: str,
+    *,
+    query: str | None,
+) -> str:
     """Remove treatment-only guidance when treatment was not requested."""
     if not answer_text.strip():
         return ""
@@ -564,39 +578,10 @@ def _enforce_urgency_wording_grounding(
     answer_text: str,
     citations_used: list[SearchResult],
 ) -> str:
-    """Remove uncited urgency words ('urgent'/'immediate') from cited units."""
+    """Balanced mode keeps urgency wording in cited units."""
     if not answer_text.strip() or not citations_used:
         return answer_text
-
-    citation_text_by_index = {
-        idx: _normalize_text_for_match(_citation_text(citation))
-        for idx, citation in enumerate(citations_used, start=1)
-    }
-    kept_units: list[str] = []
-    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
-        unit = (raw_unit or "").strip()
-        if not unit:
-            continue
-
-        cited_indices = _citation_indices_for_unit(unit)
-        if not cited_indices:
-            kept_units.append(unit)
-            continue
-
-        citation_haystack = " ".join(
-            citation_text_by_index.get(index, "")
-            for index in sorted(cited_indices)
-        )
-        rewritten = unit
-        if _IMMEDIATE_WORD_RE.search(rewritten) and "immediate" not in citation_haystack:
-            rewritten = _IMMEDIATE_WORD_RE.sub("", rewritten)
-        if _URGENT_WORD_RE.search(rewritten) and "urgent" not in citation_haystack:
-            rewritten = _URGENT_WORD_RE.sub("", rewritten)
-        rewritten = re.sub(r"\s{2,}", " ", rewritten).strip()
-        if rewritten:
-            kept_units.append(rewritten)
-
-    return _clean_answer_text(" ".join(kept_units))
+    return answer_text
 
 
 def _trim_non_query_additional_branches(
@@ -611,7 +596,6 @@ def _trim_non_query_additional_branches(
     """
     if not answer_text.strip() or not query:
         return answer_text
-
     query_tokens = _content_tokens(query)
     if not query_tokens:
         return answer_text
@@ -691,11 +675,23 @@ def extract_citation_results(
             flags=re.DOTALL | re.IGNORECASE,
         ).rstrip()
     answer = _clean_answer_text(answer)
-    answer = _enforce_grounded_sentences(answer, has_citations=bool(citations_used))
-    answer = _neutralize_unsupported_rationale_clauses(answer, citations_used)
+    answer = _enforce_grounded_sentences(
+        answer,
+        has_citations=bool(citations_used),
+    )
+    answer = _neutralize_unsupported_rationale_clauses(
+        answer,
+        citations_used,
+    )
     answer = _soften_cross_source_consensus_claims(answer)
-    answer = _enforce_explicit_timeframe_grounding(answer, citations_used)
-    answer = _enforce_urgency_wording_grounding(answer, citations_used)
+    answer = _enforce_explicit_timeframe_grounding(
+        answer,
+        citations_used,
+    )
+    answer = _enforce_urgency_wording_grounding(
+        answer,
+        citations_used,
+    )
     answer = _trim_non_query_additional_branches(answer, query=query)
     answer = _enforce_population_alignment(answer, query=query)
     answer = _enforce_requested_scope(answer, query=query)
