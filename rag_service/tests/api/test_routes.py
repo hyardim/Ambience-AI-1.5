@@ -24,6 +24,88 @@ async def test_health_check_reports_cloud_availability(
     assert result["cloud_available"] is False
 
 
+def test_prompt_chunk_limit_is_dynamic_for_multipart_queries() -> None:
+    assert (
+        routes._prompt_chunk_limit(
+            "What baseline blood tests and imaging should be completed prior to referral?"
+        )
+        == routes.MULTIPART_PROMPT_CHUNKS
+    )
+    assert (
+        routes._prompt_chunk_limit("Is routine referral needed for Bell's palsy?")
+        == routes.MAX_CITATIONS
+    )
+
+
+def test_select_prompt_chunks_backfills_when_filtered_is_sparse() -> None:
+    query = (
+        "Older patient with scalp tenderness and jaw claudication. "
+        "What urgent action is recommended?"
+    )
+    primary = {
+        "text": "Consider blood tests and follow local pathways for temporal arteritis.",
+        "score": 0.55,
+        "section_path": "Referral pathway",
+        "metadata": {"source_url": "https://example.com/guide-a.pdf"},
+        "doc_id": "doc-a",
+        "chunk_id": "chunk-a",
+    }
+    backfill = {
+        "text": "Urgent referral for suspected giant cell arteritis should be arranged.",
+        "score": 0.3,
+        "section_path": "Urgent referral",
+        "metadata": {"source_url": "https://example.com/guide-b.pdf"},
+        "doc_id": "doc-b",
+        "chunk_id": "chunk-b",
+    }
+    irrelevant = {
+        "text": "Quality statement audience section with service specification details.",
+        "score": 0.32,
+        "section_path": "Audience and scope",
+        "metadata": {"source_url": "https://example.com/guide-c.pdf"},
+        "doc_id": "doc-c",
+        "chunk_id": "chunk-c",
+    }
+
+    selected = routes._select_prompt_chunks(
+        query=query,
+        retrieved=[primary, backfill, irrelevant],
+        filtered=[primary],
+    )
+
+    assert selected[0] == primary
+    assert backfill in selected
+    assert irrelevant not in selected
+
+
+def test_select_prompt_chunks_does_not_backfill_below_score_threshold() -> None:
+    query = "What urgent referral pathway should be used?"
+    primary = {
+        "text": "Refer immediately via urgent pathway.",
+        "score": 0.5,
+        "section_path": "Referral pathway",
+        "metadata": {"source_url": "https://example.com/guide-a.pdf"},
+        "doc_id": "doc-a",
+        "chunk_id": "chunk-a",
+    }
+    low_score = {
+        "text": "Urgent pathway mention in low-confidence supporting material.",
+        "score": 0.1,
+        "section_path": "Context",
+        "metadata": {"source_url": "https://example.com/guide-b.pdf"},
+        "doc_id": "doc-b",
+        "chunk_id": "chunk-b",
+    }
+
+    selected = routes._select_prompt_chunks(
+        query=query,
+        retrieved=[primary, low_score],
+        filtered=[primary],
+    )
+
+    assert selected == [primary]
+
+
 @pytest.mark.anyio
 async def test_clinical_query_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*args: object, **kwargs: object) -> list[dict[str, object]]:
@@ -302,7 +384,10 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, []),
+        lambda answer, citations, strip_references, query=None: (
+            answer,
+            citations[:1],
+        ),
     )
 
     await routes.generate_clinical_answer(
@@ -364,7 +449,10 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, []),
+        lambda answer, citations, strip_references, query=None: (
+            answer,
+            citations[:1],
+        ),
     )
 
     response = await routes.generate_clinical_answer(
@@ -411,7 +499,10 @@ async def test_generate_clinical_answer_keeps_larger_requested_top_k_for_advance
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, []),
+        lambda answer, citations, strip_references, query=None: (
+            answer,
+            citations[:1],
+        ),
     )
 
     response = await routes.generate_clinical_answer(
@@ -802,6 +893,52 @@ async def test_canonical_pass_selected_for_weak_primary_evidence(
     _, selected_call = telemetry_calls[-1]
     assert selected_call["canonicalization_triggered"] is True
     assert selected_call["selected_retrieval_pass"] == "canonical"
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_falls_back_when_no_valid_citations_extracted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: [
+            {
+                "text": "Refer urgently for suspected persistent synovitis.",
+                "score": 0.9,
+                "section_path": "Recommendations > Referral pathway",
+                "metadata": {"source_url": "https://example.com/guideline"},
+                "doc_id": "doc-1",
+            }
+        ],
+    )
+    monkeypatch.setattr(routes, "filter_chunks", lambda query, retrieved: retrieved)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args, **kwargs):
+        return "Honest scope note with no grounded citations."
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, []),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query="q", stream=False)
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE
+    assert response.citations_used == []
 
 
 def test_should_reject_for_low_confidence_high_precision_nondirective_section() -> None:

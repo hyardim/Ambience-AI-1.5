@@ -218,7 +218,7 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
 def _rank_by_query_overlap(
     query: str, chunks: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Prioritise section fit, requested-part coverage, overlap, then score."""
+    """Prioritise section fit, part coverage, semantic strength, then overlap."""
     if not chunks:
         return []
     return sorted(
@@ -226,6 +226,7 @@ def _rank_by_query_overlap(
         key=lambda chunk: (
             _section_priority(query, chunk),
             _query_part_coverage_score(query, chunk),
+            _score_priority(chunk),
             _query_overlap_count(query, chunk.get("text", "")),
             _source_name_priority(chunk),
             float(chunk.get("score", 0.0)),
@@ -260,6 +261,16 @@ def _query_overlap_count(query: str, text: str) -> int:
         }
 
     return len(_tokens(query).intersection(_tokens(text)))
+
+
+def _score_priority(chunk: dict[str, Any]) -> int:
+    """Lightly favor stronger semantic matches before lexical tie-breakers."""
+    score = float(chunk.get("score", 0.0))
+    if score >= 0.7:
+        return 2
+    if score >= 0.3:
+        return 1
+    return 0
 
 
 def _requested_query_parts(query: str) -> set[str]:

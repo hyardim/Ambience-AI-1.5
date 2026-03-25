@@ -31,7 +31,11 @@ from ..utils.db import db as db_manager
 from ..utils.logger import setup_logger
 from . import services as api_services
 from .canonicalization import build_canonical_retrieval_query, parse_allowed_specialties
-from .citations import MAX_CITATIONS, extract_citation_results
+from .citations import (
+    MAX_CITATIONS,
+    extract_citation_results,
+    is_boilerplate,
+)
 from .schemas import (
     AnswerRequest,
     AnswerResponse,
@@ -73,6 +77,8 @@ HIGH_PRECISION_SOFT_MIN_TOP_SCORE = 0.08
 HIGH_PRECISION_MIN_KEY_OVERLAP = 3
 HIGH_PRECISION_MIN_OVERLAP_RATIO = 0.12
 ANSWER_RETRIEVAL_MIN_TOP_K = 8
+MULTIPART_PROMPT_CHUNKS = 5
+PROMPT_BACKFILL_SCORE_RATIO = 0.35
 HIGH_PRECISION_QUERY_RE = re.compile(
     r"\b(baseline|blood tests?|imaging|investigations?|prior to referral|"
     r"referral pathway|how urgently|urgency)\b",
@@ -280,7 +286,7 @@ def _retrieve_for_answer_query(
 
 
 def _has_directive_section_fit(chunks: list[dict[str, Any]]) -> bool:
-    for chunk in chunks[:MAX_CITATIONS]:
+    for chunk in chunks:
         section_path = str(chunk.get("section_path") or "")
         if not section_path:
             continue
@@ -294,7 +300,7 @@ def _has_directive_section_fit(chunks: list[dict[str, Any]]) -> bool:
 def _evidence_quality_score(chunks: list[dict[str, Any]]) -> float:
     if not chunks:
         return 0.0
-    scores = [float(chunk.get("score", 0.0)) for chunk in chunks[:MAX_CITATIONS]]
+    scores = [float(chunk.get("score", 0.0)) for chunk in chunks]
     top_score = scores[0]
     mean_score = sum(scores) / len(scores)
     return (0.7 * top_score) + (0.3 * mean_score)
@@ -309,6 +315,71 @@ def _requested_question_parts(query: str) -> list[tuple[str, re.Pattern[str]]]:
     if REFERRAL_QUERY_HINT_RE.search(query):
         requested_parts.append(("referral/urgency pathway", REFERRAL_SENTENCE_HINT_RE))
     return requested_parts
+
+
+def _prompt_chunk_limit(query: str) -> int:
+    requested_parts = _requested_question_parts(query)
+    if len(requested_parts) >= 2:
+        return MULTIPART_PROMPT_CHUNKS
+    return MAX_CITATIONS
+
+
+def _chunk_identity(chunk: dict[str, Any]) -> tuple[Any, ...]:
+    metadata = chunk.get("metadata") or {}
+    return (
+        chunk.get("doc_id"),
+        chunk.get("chunk_id"),
+        chunk.get("page_start"),
+        chunk.get("page_end"),
+        metadata.get("source_name"),
+    )
+
+
+def _chunk_has_overlap(query: str, chunk: dict[str, Any]) -> bool:
+    text = str(chunk.get("text") or "")
+    section_path = str(chunk.get("section_path") or "")
+    return (
+        _query_overlap_count(query, text) > 0
+        or _query_overlap_count(query, section_path) > 0
+    )
+
+
+def _select_prompt_chunks(
+    *,
+    query: str,
+    retrieved: list[dict[str, Any]],
+    filtered: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    prompt_chunk_limit = _prompt_chunk_limit(query)
+    top_chunks = list(filtered[:prompt_chunk_limit])
+    if len(top_chunks) >= prompt_chunk_limit or not retrieved:
+        return top_chunks
+
+    top_retrieved_score = max(float(chunk.get("score", 0.0)) for chunk in retrieved)
+    backfill_min_score = max(
+        ABSOLUTE_MIN_TOP_SCORE,
+        top_retrieved_score * PROMPT_BACKFILL_SCORE_RATIO,
+    )
+    seen = {_chunk_identity(chunk) for chunk in top_chunks}
+
+    backfill_candidates: list[dict[str, Any]] = []
+    for chunk in retrieved:
+        if len(top_chunks) + len(backfill_candidates) >= prompt_chunk_limit:
+            break
+        if _chunk_identity(chunk) in seen:
+            continue
+        if float(chunk.get("score", 0.0)) < backfill_min_score:
+            continue
+        if is_boilerplate(chunk):
+            continue
+        if not ((chunk.get("metadata") or {}).get("source_url") or chunk.get("doc_id")):
+            continue
+        if not _chunk_has_overlap(query, chunk):
+            continue
+        backfill_candidates.append(chunk)
+        seen.add(_chunk_identity(chunk))
+
+    return top_chunks + backfill_candidates
 
 
 def _covered_question_part_count(
@@ -336,7 +407,11 @@ def _evaluate_retrieval_pass(
     retrieved: list[dict[str, Any]],
 ) -> _RetrievalPassDecision:
     filtered = filter_chunks(retrieval_query, retrieved)
-    top_chunks = filtered[:MAX_CITATIONS]
+    top_chunks = _select_prompt_chunks(
+        query=query,
+        retrieved=retrieved,
+        filtered=filtered,
+    )
     requested_parts = _requested_question_parts(query)
     covered_part_count = _covered_question_part_count(top_chunks, requested_parts)
     passes_low_confidence_gate = bool(top_chunks) and not (
@@ -624,7 +699,11 @@ async def _generate_answer_from_retrieval(
     try:
         query_for_retrieval = retrieval_query or query
         filtered = filter_chunks(query_for_retrieval, retrieved)
-        top_chunks = filtered[:MAX_CITATIONS]
+        top_chunks = _select_prompt_chunks(
+            query=query,
+            retrieved=retrieved,
+            filtered=filtered,
+        )
         evidence = evidence_level(top_chunks)
         if not top_chunks and not file_context:
             log_route_decision(
@@ -743,7 +822,7 @@ async def _generate_answer_from_retrieval(
             strip_references=True,
             query=query,
         )
-        if not renumbered_answer.strip():
+        if not renumbered_answer.strip() or not citations_used:
             renumbered_answer = NO_EVIDENCE_RESPONSE
             citations_used = []
         return AnswerResponse(

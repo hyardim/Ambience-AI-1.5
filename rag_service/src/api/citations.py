@@ -64,7 +64,8 @@ _IMAGING_SENTENCE_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _TREATMENT_QUERY_HINT_RE = re.compile(
-    r"\b(treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|drug)\b",
+    r"\b(treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|drug|"
+    r"start\w*|initiat\w*|commenc\w*|begin\w*|steroid\w*|prednisolone)\b",
     re.IGNORECASE,
 )
 _TREATMENT_SENTENCE_HINT_RE = re.compile(
@@ -81,6 +82,42 @@ _EXPLICIT_TIMEFRAME_RE = re.compile(
     rf"|{_TIME_VALUE_RE}\s+working\s+days?|same[- ]day|next[- ]day)\b",
     re.IGNORECASE,
 )
+_RATIONALE_MARKER_RE = re.compile(
+    r"\b(because|therefore|thus|to assess|to evaluate|to identify|"
+    r"suggestive of|indicating|which suggests?|which indicates?)\b",
+    re.IGNORECASE,
+)
+_CROSS_SOURCE_OVERCLAIM_RE = re.compile(
+    r"\b(?:explicitly|clearly)\s+stated\s+in\s+both\s+"
+    r"(?:guideline\s+)?(?:sections?|sources?|passages?)\b",
+    re.IGNORECASE,
+)
+_CROSS_SOURCE_SOFTEN_RE = re.compile(
+    r"\bin\s+both\s+(?:guideline\s+)?(?:sections?|sources?|passages?)\b",
+    re.IGNORECASE,
+)
+_RATIONALE_STOPWORDS = {
+    "and",
+    "the",
+    "that",
+    "with",
+    "from",
+    "for",
+    "this",
+    "these",
+    "those",
+    "therefore",
+    "because",
+    "thus",
+    "which",
+    "suggests",
+    "indicates",
+    "assess",
+    "evaluate",
+    "identify",
+    "help",
+    "helps",
+}
 
 GENERIC_TOKENS = {
     "guideline",
@@ -225,11 +262,91 @@ def _normalize_text_for_match(text: str) -> str:
     return normalized.strip()
 
 
+def _content_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[A-Za-z0-9]+", text.lower())
+        if len(token) >= 4 and token not in _RATIONALE_STOPWORDS
+    }
+
+
 def _citation_indices_for_unit(unit: str) -> set[int]:
     indices: set[int] = set()
     for group in _VALID_CITATION_GROUP_RE.findall(unit):
         indices.update(parse_citation_group(group[1:-1]))
     return indices
+
+
+def _ensure_citation_in_unit(unit: str, source_unit: str) -> str:
+    if _VALID_CITATION_GROUP_RE.search(unit):
+        return unit
+    first_group = _VALID_CITATION_GROUP_RE.search(source_unit)
+    if not first_group:
+        return unit
+    return f"{unit} {first_group.group(0)}".strip()
+
+
+def _neutralize_unsupported_rationale_clauses(
+    answer_text: str,
+    citations_used: list[SearchResult],
+) -> str:
+    """Keep cited recommendation sentences but trim unsupported rationale tails."""
+    if not answer_text.strip() or not citations_used:
+        return answer_text
+
+    citation_haystack_tokens_by_index = {
+        idx: _content_tokens(citation.text)
+        for idx, citation in enumerate(citations_used, start=1)
+    }
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+
+        cited_indices = _citation_indices_for_unit(unit)
+        if not cited_indices:
+            kept_units.append(unit)
+            continue
+
+        marker = _RATIONALE_MARKER_RE.search(unit)
+        if not marker:
+            kept_units.append(unit)
+            continue
+
+        rationale_tokens = _content_tokens(unit[marker.start() :])
+        if not rationale_tokens:
+            kept_units.append(unit)
+            continue
+
+        cited_tokens: set[str] = set()
+        for index in cited_indices:
+            cited_tokens.update(citation_haystack_tokens_by_index.get(index, set()))
+        overlap = rationale_tokens.intersection(cited_tokens)
+        overlap_ratio = len(overlap) / max(len(rationale_tokens), 1)
+        if overlap_ratio >= 0.25:
+            kept_units.append(unit)
+            continue
+
+        trimmed = unit[: marker.start()].rstrip(" ,;:-")
+        trimmed = _ensure_citation_in_unit(trimmed, unit)
+        if trimmed and trimmed[-1] not in ".!?":
+            trimmed = f"{trimmed}."
+        if trimmed:
+            kept_units.append(trimmed)
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
+def _soften_cross_source_consensus_claims(answer_text: str) -> str:
+    if not answer_text.strip():
+        return ""
+    softened = _CROSS_SOURCE_OVERCLAIM_RE.sub(
+        "included in indexed passages",
+        answer_text,
+    )
+    softened = _CROSS_SOURCE_SOFTEN_RE.sub("in indexed passages", softened)
+    return _clean_answer_text(softened)
 
 
 def _enforce_explicit_timeframe_grounding(
@@ -425,6 +542,8 @@ def extract_citation_results(
         ).rstrip()
     answer = _clean_answer_text(answer)
     answer = _enforce_grounded_sentences(answer, has_citations=bool(citations_used))
+    answer = _neutralize_unsupported_rationale_clauses(answer, citations_used)
+    answer = _soften_cross_source_consensus_claims(answer)
     answer = _enforce_explicit_timeframe_grounding(answer, citations_used)
     answer = _enforce_requested_scope(answer, query=query)
     answer = _enforce_partial_question_coverage(

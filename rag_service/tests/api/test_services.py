@@ -245,6 +245,32 @@ def test_filter_chunks_prioritises_higher_query_overlap_over_raw_score() -> None
     assert filtered[0] == lower_score_high_overlap
 
 
+def test_filter_chunks_keeps_very_high_score_signal_ahead_of_overlap_noise() -> None:
+    high_score_core_recommendation = {
+        "text": (
+            "Patients with severe SLE should be investigated to exclude infection "
+            "before treatment decisions."
+        ),
+        "score": 0.99,
+        "metadata": {"source_url": "https://example.com/core-guideline.pdf"},
+    }
+    lower_score_overlap_noise = {
+        "text": (
+            "Severe SLE treatment decisions infection exclusion context and "
+            "discussion wording repeated for narrative overlap."
+        ),
+        "score": 0.18,
+        "metadata": {"source_url": "https://example.com/discussion.pdf"},
+    }
+
+    filtered = filter_chunks(
+        "severe SLE alternative aetiologies infection before treatment decisions",
+        [lower_score_overlap_noise, high_score_core_recommendation],
+    )
+
+    assert filtered[0] == high_score_core_recommendation
+
+
 def test_filter_chunks_prefers_referral_sections_for_pathway_queries() -> None:
     discussion_chunk = {
         "text": (

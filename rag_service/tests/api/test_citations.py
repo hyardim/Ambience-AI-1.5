@@ -243,6 +243,53 @@ def test_extract_citation_results_keeps_treatment_when_requested() -> None:
     assert used == [citations[0]]
 
 
+def test_extract_citation_results_keeps_treatment_when_query_asks_to_start() -> None:
+    citations = [SearchResult(text="Start prednisolone 15 mg daily.", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Start prednisolone 15 mg daily [1].",
+        citations,
+        strip_references=False,
+        query="Should polymyalgia rheumatica be started on steroids in primary care?",
+    )
+
+    assert "prednisolone 15 mg daily [1]" in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_neutralizes_unsupported_rationale_clause() -> None:
+    citations = [SearchResult(text="X-ray the hands and feet.", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "X-ray the hands and feet [1] to assess erosive changes suggestive of RA.",
+        citations,
+        strip_references=False,
+        query="What imaging should be completed prior to referral?",
+    )
+
+    assert "x-ray the hands and feet [1]" in answer.lower()
+    assert "erosive changes" not in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_softens_cross_source_consensus_overclaim() -> None:
+    citations = [
+        SearchResult(text="Refer urgently.", source="S1", score=0.9),
+        SearchResult(text="Referral is recommended.", source="S2", score=0.8),
+    ]
+
+    answer, used = extract_citation_results(
+        "The referral urgency is explicitly stated in both guideline sections [1, 2].",
+        citations,
+        strip_references=False,
+        query="What referral urgency is recommended?",
+    )
+
+    assert "explicitly stated in both guideline sections" not in answer.lower()
+    assert "included in indexed passages [1, 2]" in answer.lower()
+    assert used == citations
+
+
 def test_extract_citation_results_drops_unsupported_timeframe_claim() -> None:
     citations = [
         SearchResult(
