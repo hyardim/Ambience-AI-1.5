@@ -127,6 +127,18 @@ def test_grounded_prompt_uses_simpler_context_format() -> None:
     assert "[1] Neurology referral guidance" in prompt
 
 
+def test_grounded_prompt_uses_simpler_mvp_like_answer_contract() -> None:
+    prompt = build_grounded_prompt(
+        "What baseline blood tests and imaging should be completed prior to referral?",
+        _CHUNKS,
+        answer_mode="routine_low_risk",
+    )
+
+    assert "Next step:" in prompt
+    assert "prefer 4-8 short sentences" in prompt
+    assert "Do not include section labels or lead-ins" in prompt
+
+
 def test_grounded_prompt_includes_grounding_guardrails() -> None:
     prompt = build_grounded_prompt("Question?", _CHUNKS)
 

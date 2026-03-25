@@ -26,11 +26,15 @@ _FILE_CONTEXT = (
 
 
 class TestGroundedPromptFileContext:
-    def test_context_includes_match_cues_and_passage_labels(self):
+    def test_context_uses_simple_numbered_passage_format(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=_FILE_CONTEXT)
 
-        assert "Match cues:" in prompt
-        assert "Passage: Methotrexate is first-line for RA." in prompt
+        context_block = prompt.split("Context:\n", 1)[1].split("\n\nUPLOADED DOCUMENTS", 1)[0]
+
+        assert "Match cues:" not in context_block
+        assert "Source:" not in context_block
+        assert "[1] BSR RA Guideline - page 5" in prompt
+        assert "Methotrexate is first-line for RA." in prompt
 
     def test_uploaded_documents_block_present(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=_FILE_CONTEXT)
@@ -143,20 +147,15 @@ class TestGroundedPromptFileContext:
             file_context=None,
         )
 
-        assert "If the question is non-medical, off-topic" in prompt
-        assert (
-            "STOP there and do not add a 'General clinical context:' section"
-            in prompt
-        )
+        assert "do not add uncited clinical advice" in prompt
+        assert "Do not include section labels or lead-ins" in prompt
 
-    def test_grounded_prompt_prefers_lower_numbered_more_specific_passages(self):
+    def test_grounded_prompt_emphasises_actionable_scoped_answers(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=None)
 
-        assert (
-            "The context items are already ordered by estimated direct relevance"
-            in prompt
-        )
-        assert "Prefer the lowest-numbered passage" in prompt
+        assert "Next step:" in prompt
+        assert "If the user asks multiple parts" in prompt
+        assert "Every grounded clinical claim sentence must include" in prompt
 
 
 class TestRevisionPromptFileContext:
@@ -262,6 +261,4 @@ class TestRevisionPromptFileContext:
 
         prompt = build_grounded_prompt("What DMT?", chunks)
 
-        assert "(pages 5-6)" in prompt
-        assert "specialty=rheumatology" in prompt
-        assert "section=DMARD therapy" in prompt
+        assert "BSR RA Guideline - DMARD therapy - pages 5-6" in prompt

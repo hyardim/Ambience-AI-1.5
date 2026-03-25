@@ -516,13 +516,13 @@ class TestRetrieve:
         mocks = make_all_stage_mocks()
         run_retrieve(mocks, top_k=3)
         _, vkwargs = mocks["vector_search"].call_args
-        assert vkwargs["top_k"] == 40
+        assert vkwargs["top_k"] == 12
         _, kkwargs = mocks["keyword_search"].call_args
-        assert kkwargs["top_k"] == 40
+        assert kkwargs["top_k"] == 12
         _, fkwargs = mocks["reciprocal_rank_fusion"].call_args
-        assert fkwargs["top_k"] == 40
+        assert fkwargs["top_k"] == 18
         _, rkwargs = mocks["rerank"].call_args
-        assert rkwargs["top_k"] == 40
+        assert rkwargs["top_k"] == 6
 
     def test_filters_passed_through_to_vector_and_keyword_search(self):
         mocks = make_all_stage_mocks()
@@ -533,13 +533,29 @@ class TestRetrieve:
             doc_type="guideline",
         )
         _, vkwargs = mocks["vector_search"].call_args
-        assert vkwargs["specialty"] is None
+        assert vkwargs["specialty"] == "rheumatology"
         assert vkwargs["source_name"] == "NICE"
         assert vkwargs["doc_type"] == "guideline"
         _, kkwargs = mocks["keyword_search"].call_args
-        assert kkwargs["specialty"] is None
+        assert kkwargs["specialty"] == "rheumatology"
         assert kkwargs["source_name"] == "NICE"
         assert kkwargs["doc_type"] == "guideline"
+
+    def test_search_candidate_top_k_widens_for_long_queries(self):
+        from src.retrieval.retrieve import _search_candidate_top_k
+
+        short = _search_candidate_top_k(3, "gout treatment options")
+        long = _search_candidate_top_k(
+            3,
+            (
+                "45-year-old with known systemic lupus erythematosus presenting "
+                "with new proteinuria and rising creatinine what immediate "
+                "investigations and referral pathway are recommended"
+            ),
+        )
+
+        assert short == 12
+        assert long == 40
 
     def test_final_ranking_prefers_requested_specialty_without_hard_filtering(self):
         rheum = make_ranked_result("c-rheum").model_copy(
