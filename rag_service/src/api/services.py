@@ -26,6 +26,7 @@ LOW_SCORE_FALLBACK_FLOOR = 0.0
 LOW_SCORE_FALLBACK_RATIO = 0.5
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
+STRONG_TOP_SCORE_PRUNE_RATIO = 0.3
 REFERRAL_SECTION_HINT_RE = re.compile(
     r"\b(recommendation|recommendations|refer|referral|pathway|"
     r"when to refer|urgent|immediate)\b",
@@ -199,6 +200,7 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         or chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE
     ]
     if strict_matches:
+        strict_matches = _prune_low_score_outliers(strict_matches)
         return _rank_by_query_overlap(query, strict_matches)
 
     semantic_fallback = [
@@ -207,6 +209,7 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
         if chunk.get("score", 0) >= SOFT_FALLBACK_RELEVANCE
     ]
     if semantic_fallback:
+        semantic_fallback = _prune_low_score_outliers(semantic_fallback)
         return _rank_by_query_overlap(query, semantic_fallback)
 
     if not retrieved:
@@ -231,21 +234,50 @@ def filter_chunks(query: str, retrieved: list[dict[str, Any]]) -> list[dict[str,
 def _rank_by_query_overlap(
     query: str, chunks: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Prioritise section fit, part coverage, semantic strength, then overlap."""
+    """Prioritise semantic fit first, then directive/part coverage alignment."""
     if not chunks:
         return []
     return sorted(
         chunks,
         key=lambda chunk: (
-            _section_priority(query, chunk),
             _query_part_coverage_score(query, chunk),
             _score_priority(chunk),
+            float(chunk.get("score", 0.0)),
+            _section_priority(query, chunk),
             _query_overlap_count(query, chunk.get("text", "")),
             _source_name_priority(chunk),
-            float(chunk.get("score", 0.0)),
         ),
         reverse=True,
     )
+
+
+def _prune_low_score_outliers(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop very low-score stragglers when there is already a strong top hit.
+
+    This keeps recall for weak-evidence queries while reducing prompt pollution
+    from unrelated low-score chunks in high-confidence retrievals.
+    """
+    if not chunks:
+        return []
+
+    top_score = max(float(chunk.get("score", 0.0)) for chunk in chunks)
+    if top_score < HIGH_CONFIDENCE_RELEVANCE:
+        return chunks
+
+    min_allowed_score = max(
+        MIN_RELEVANCE,
+        top_score * STRONG_TOP_SCORE_PRUNE_RATIO,
+    )
+    pruned = [
+        chunk
+        for chunk in chunks
+        if float(chunk.get("score", 0.0)) >= min_allowed_score
+    ]
+    return pruned or sorted(
+        chunks,
+        key=lambda chunk: float(chunk.get("score", 0.0)),
+        reverse=True,
+    )[:1]
 
 
 def _section_priority(query: str, chunk: dict[str, Any]) -> int:
@@ -257,7 +289,7 @@ def _section_priority(query: str, chunk: dict[str, Any]) -> int:
     priority = 0
     if REFERRAL_QUERY_HINT_RE.search(query):
         if REFERRAL_SECTION_HINT_RE.search(section_path):
-            priority += 2
+            priority += 1
         if NON_DIRECTIVE_SECTION_HINT_RE.search(section_path):
             priority -= 1
     return priority

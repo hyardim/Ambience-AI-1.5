@@ -76,6 +76,21 @@ _TREATMENT_SENTENCE_HINT_RE = re.compile(
     r"dose|prescrib\w*)\b",
     re.IGNORECASE,
 )
+_ADDITIONAL_BRANCH_PREFIX_RE = re.compile(
+    r"^(?:additionally|also|furthermore|moreover)\b",
+    re.IGNORECASE,
+)
+_ADULT_QUERY_HINT_RE = re.compile(
+    r"\b(adult|adults|older adult|older adults|over\s*\d{1,2}s?)\b",
+    re.IGNORECASE,
+)
+_CHILD_POPULATION_HINT_RE = re.compile(
+    r"\b(child|children|young people|paediatric|pediatric|under\s*\d+)\b",
+    re.IGNORECASE,
+)
+_ADULT_POPULATION_HINT_RE = re.compile(r"\badult(?:s)?\b", re.IGNORECASE)
+_IMMEDIATE_WORD_RE = re.compile(r"\bimmediate(?:ly)?\b", re.IGNORECASE)
+_URGENT_WORD_RE = re.compile(r"\burgent(?:ly)?\b", re.IGNORECASE)
 _TIME_VALUE_RE = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty[- ]four)"
 _EXPLICIT_TIMEFRAME_RE = re.compile(
     rf"\b(?:within\s+{_TIME_VALUE_RE}\s+"
@@ -533,6 +548,123 @@ def _enforce_requested_scope(answer_text: str, *, query: str | None) -> str:
     return _clean_answer_text(" ".join(kept_units))
 
 
+def _unit_matches_requested_part(unit: str, query: str) -> bool:
+    if _INVESTIGATION_QUERY_HINT_RE.search(query) and _INVESTIGATION_SENTENCE_HINT_RE.search(unit):
+        return True
+    if _IMAGING_QUERY_HINT_RE.search(query) and _IMAGING_SENTENCE_HINT_RE.search(unit):
+        return True
+    if _REFERRAL_QUERY_HINT_RE.search(query) and _REFERRAL_SENTENCE_HINT_RE.search(unit):
+        return True
+    if _TREATMENT_QUERY_HINT_RE.search(query) and _TREATMENT_SENTENCE_HINT_RE.search(unit):
+        return True
+    return False
+
+
+def _enforce_urgency_wording_grounding(
+    answer_text: str,
+    citations_used: list[SearchResult],
+) -> str:
+    """Remove uncited urgency words ('urgent'/'immediate') from cited units."""
+    if not answer_text.strip() or not citations_used:
+        return answer_text
+
+    citation_text_by_index = {
+        idx: _normalize_text_for_match(_citation_text(citation))
+        for idx, citation in enumerate(citations_used, start=1)
+    }
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+
+        cited_indices = _citation_indices_for_unit(unit)
+        if not cited_indices:
+            kept_units.append(unit)
+            continue
+
+        citation_haystack = " ".join(
+            citation_text_by_index.get(index, "")
+            for index in sorted(cited_indices)
+        )
+        rewritten = unit
+        if _IMMEDIATE_WORD_RE.search(rewritten) and "immediate" not in citation_haystack:
+            rewritten = _IMMEDIATE_WORD_RE.sub("", rewritten)
+        if _URGENT_WORD_RE.search(rewritten) and "urgent" not in citation_haystack:
+            rewritten = _URGENT_WORD_RE.sub("", rewritten)
+        rewritten = re.sub(r"\s{2,}", " ", rewritten).strip()
+        if rewritten:
+            kept_units.append(rewritten)
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
+def _trim_non_query_additional_branches(
+    answer_text: str,
+    *,
+    query: str | None,
+) -> str:
+    """Drop weakly aligned 'Additionally, if ...' branch sentences.
+
+    These branches are often adjacent recommendation fragments that are not
+    directly asked in the current scenario.
+    """
+    if not answer_text.strip() or not query:
+        return answer_text
+
+    query_tokens = _content_tokens(query)
+    if not query_tokens:
+        return answer_text
+
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+
+        if not _VALID_CITATION_GROUP_RE.search(unit):
+            kept_units.append(unit)
+            continue
+
+        if not _ADDITIONAL_BRANCH_PREFIX_RE.search(unit.strip()):
+            kept_units.append(unit)
+            continue
+
+        overlap = len(_content_tokens(unit).intersection(query_tokens))
+        if overlap >= 2 or _unit_matches_requested_part(unit, query):
+            kept_units.append(unit)
+            continue
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
+def _enforce_population_alignment(answer_text: str, *, query: str | None) -> str:
+    """For adult-only asks, drop child-only cited population statements."""
+    if not answer_text.strip() or not query:
+        return answer_text
+
+    query_is_adult = bool(_ADULT_QUERY_HINT_RE.search(query))
+    query_mentions_child = bool(_CHILD_POPULATION_HINT_RE.search(query))
+    if not query_is_adult or query_mentions_child:
+        return answer_text
+
+    kept_units: list[str] = []
+    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
+        unit = (raw_unit or "").strip()
+        if not unit:
+            continue
+
+        if (
+            _VALID_CITATION_GROUP_RE.search(unit)
+            and _CHILD_POPULATION_HINT_RE.search(unit)
+            and not _ADULT_POPULATION_HINT_RE.search(unit)
+        ):
+            continue
+        kept_units.append(unit)
+
+    return _clean_answer_text(" ".join(kept_units))
+
+
 def extract_citation_results(
     answer_text: str,
     citations_retrieved: list[SearchResult],
@@ -563,6 +695,9 @@ def extract_citation_results(
     answer = _neutralize_unsupported_rationale_clauses(answer, citations_used)
     answer = _soften_cross_source_consensus_claims(answer)
     answer = _enforce_explicit_timeframe_grounding(answer, citations_used)
+    answer = _enforce_urgency_wording_grounding(answer, citations_used)
+    answer = _trim_non_query_additional_branches(answer, query=query)
+    answer = _enforce_population_alignment(answer, query=query)
     answer = _enforce_requested_scope(answer, query=query)
     answer = _enforce_partial_question_coverage(
         answer,
