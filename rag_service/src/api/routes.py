@@ -136,6 +136,11 @@ IMAGING_SENTENCE_HINT_RE = re.compile(
     r"\b(x-?ray|ultrasound|mri|ct|scan|imaging)\b",
     re.IGNORECASE,
 )
+DIFFERENTIAL_QUERY_RE = re.compile(
+    r"\b(distinguish|differentiat\w*|vs\.?|versus|difference between|"
+    r"how to tell|how can .* be .* from)\b",
+    re.IGNORECASE,
+)
 OVERLAP_STOPWORDS = {
     "the",
     "and",
@@ -262,15 +267,58 @@ def _should_reject_for_low_confidence(query: str, top_chunk: dict[str, Any]) -> 
 
     if top_score < HIGH_PRECISION_SOFT_MIN_TOP_SCORE:
         section_path = str(top_chunk.get("section_path") or "")
-        if NON_DIRECTIVE_SECTION_HINT_RE.search(section_path):
+        allow_non_directive_investigation_support = _supports_query_parts(
+            query,
+            top_chunk,
+        )
+        if NON_DIRECTIVE_SECTION_HINT_RE.search(section_path) and not (
+            allow_non_directive_investigation_support
+        ):
             return True
-        if overlap < HIGH_PRECISION_MIN_KEY_OVERLAP:
+        min_key_overlap = HIGH_PRECISION_MIN_KEY_OVERLAP
+        if allow_non_directive_investigation_support:
+            min_key_overlap = 2
+        if overlap < min_key_overlap:
             return True
         overlap_ratio = _query_overlap_ratio(query, top_chunk.get("text", ""))
         if overlap_ratio < HIGH_PRECISION_MIN_OVERLAP_RATIO:
             return True
 
     return False
+
+
+def _supports_query_parts(query: str, chunk: dict[str, Any]) -> bool:
+    """Allow weak but aligned chunks for non-treatment multipart asks.
+
+    This keeps strict rejection for treatment-initiation asks while permitting
+    investigation/referral partial answers when only non-directive sections are
+    available and lexically aligned.
+    """
+    if TREATMENT_DECISION_QUERY_RE.search(query):
+        return False
+
+    asks_multipart = bool(
+        INVESTIGATION_QUERY_HINT_RE.search(query)
+        or IMAGING_QUERY_HINT_RE.search(query)
+        or REFERRAL_QUERY_HINT_RE.search(query)
+    )
+    if not asks_multipart:
+        return False
+
+    text = str(chunk.get("text", ""))
+    section_path = str(chunk.get("section_path", ""))
+    haystack = f"{text} {section_path}"
+    has_part_fit = bool(
+        INVESTIGATION_SENTENCE_HINT_RE.search(haystack)
+        or IMAGING_SENTENCE_HINT_RE.search(haystack)
+        or REFERRAL_SENTENCE_HINT_RE.search(haystack)
+    )
+    if not has_part_fit:
+        return False
+
+    overlap = _query_overlap_count(query, text)
+    section_overlap = _query_overlap_count(query, section_path)
+    return overlap >= 2 or section_overlap >= 1
 
 
 def _retrieve_for_answer_query(
@@ -753,6 +801,28 @@ async def _generate_answer_from_retrieval(
         if (
             top_chunks
             and not file_context
+            and DIFFERENTIAL_QUERY_RE.search(query)
+            and evidence != "strong"
+        ):
+            log_route_decision(
+                route_endpoint,
+                "local",
+                0.0,
+                routing_config.llm_route_threshold,
+                ("no_evidence", "differential_low_evidence"),
+                query=query,
+                retrieved_count=len(filtered or retrieved),
+                top_score=top_chunks[0]["score"],
+                evidence=evidence,
+                outcome="fallback",
+                canonicalization_triggered=canonicalization_triggered,
+                selected_retrieval_pass=selected_retrieval_pass,
+                fallback_reason=fallback_reason or "low_evidence_differential",
+            )
+            return _no_evidence_response(stream)
+        if (
+            top_chunks
+            and not file_context
             and _should_reject_for_low_confidence(query_for_retrieval, top_chunks[0])
         ):
             log_route_decision(
@@ -883,6 +953,7 @@ async def _generate_answer_from_retrieval(
         if not renumbered_answer.strip() or not citations_used:
             renumbered_answer = NO_EVIDENCE_RESPONSE
             citations_used = []
+            citations_retrieved = []
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
