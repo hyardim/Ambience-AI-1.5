@@ -91,7 +91,6 @@ def build_patient_context(chat: Chat, messages: list[Message]) -> dict | None:
     patient_context = {
         **ctx,
         **({"specialty": chat.specialty} if chat.specialty else {}),
-        **({"severity": chat.severity} if chat.severity else {}),
     } or None
     conversation_history = build_conversation_history_from_messages(messages)
     if patient_context is None:

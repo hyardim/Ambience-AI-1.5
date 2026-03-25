@@ -16,6 +16,7 @@ import { SeverityBadge, StatusBadge } from '../../components/Badges';
 import { ChatInput } from '../../components/ChatInput';
 import { ChatMessage } from '../../components/ChatMessage';
 import { Header } from '../../components/Header';
+import { PatientContextBanner } from '../../components/PatientContextBanner';
 import type { Message } from '../../types';
 import type { BackendChatWithMessages } from '../../types/api';
 import { orFallback } from '../../utils/value';
@@ -360,6 +361,14 @@ export function SpecialistQueryDetailView({
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <PatientContextBanner
+              age={chat.patient_age}
+              sex={chat.patient_gender}
+              specialty={chat.specialty}
+              severity={chat.severity}
+              notes={chat.patient_notes}
+            />
+
             {chat.files && chat.files.length > 0 && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">

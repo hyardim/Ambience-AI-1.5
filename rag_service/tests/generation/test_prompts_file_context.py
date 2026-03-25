@@ -101,7 +101,7 @@ class TestGroundedPromptFileContext:
         q_idx = prompt.index("Question:")
         assert pc_idx < ctx_idx < file_idx < q_idx
 
-    def test_patient_context_includes_specialty_severity_and_notes(self):
+    def test_patient_context_includes_specialty_and_notes_without_severity(self):
         prompt = build_grounded_prompt(
             "What DMT?",
             _CHUNKS,
@@ -113,7 +113,7 @@ class TestGroundedPromptFileContext:
         )
 
         assert "Specialty: Neurology" in prompt
-        assert "Severity: Urgent" in prompt
+        assert "Severity:" not in prompt
         assert "Clinical notes: Recent relapse after steroid taper." in prompt
 
     def test_patient_context_includes_recent_chat_history(self):
@@ -180,7 +180,7 @@ class TestRevisionPromptFileContext:
         )
 
         assert "PATIENT CONTEXT" in prompt
-        assert "Severity: High" in prompt
+        assert "Severity:" not in prompt
         assert "Clinical notes: Two relapses this year." in prompt
 
     def test_revision_prompt_includes_evidence_note(self):

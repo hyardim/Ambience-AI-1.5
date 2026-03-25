@@ -125,7 +125,7 @@ class TestPatientContextPersistence:
 
 class TestPatientContextRAGPayload:
     def test_patient_context_forwarded_to_rag(self, client, gp_headers):
-        """All patient fields plus specialty and severity reach the RAG payload."""
+        """Patient fields plus specialty reach patient_context; severity is top-level."""
         from unittest.mock import MagicMock, patch
 
         chat = client.post(
@@ -166,7 +166,8 @@ class TestPatientContextRAGPayload:
         assert ctx.get("gender") == "female"
         assert ctx.get("notes") == "eGFR 38, T2DM"
         assert ctx.get("specialty") == "neurology"
-        assert ctx.get("severity") == "high"
+        assert ctx.get("severity") is None
+        assert captured.get("severity") == "high"
 
     def test_no_patient_context_key_when_fields_absent(self, client, gp_headers):
         """If no patient fields are set, patient_context in RAG payload is absent or empty."""

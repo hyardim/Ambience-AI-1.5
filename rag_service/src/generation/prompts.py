@@ -118,7 +118,10 @@ _INSTRUCTIONS_NEW = (
     "study references, "
     "author names, or year references — not even for well-known studies. "
     "If you are uncertain, say so explicitly.\n"
-    "5. CONFLICTING SOURCES: If an uploaded document contradicts an indexed "
+    "5. ACTIONABLE NEXT STEP: When indexed passages include clear directives, "
+    "state what the GP should do next in practical terms (for example referral, "
+    "testing, or treatment actions), and cite those directives.\n"
+    "6. CONFLICTING SOURCES: If an uploaded document contradicts an indexed "
     "guideline passage, flag the discrepancy explicitly (e.g. 'Note: the "
     "uploaded document states X, whereas the indexed "
     "guideline states Y').\n\n"
@@ -130,6 +133,10 @@ _INSTRUCTIONS_NEW = (
     "If the user asks multiple parts (for example investigations, imaging, and "
     "referral pathway), answer each part explicitly in separate sentences and "
     "include a practical action order where possible. "
+    "When evidence is available, include one explicit 'Next step:' sentence for "
+    "the GP that is grounded in cited passages. "
+    "If indexed passages do not provide a concrete next step, state that "
+    "explicitly. "
     "If the clinician asks whether to start/initiate a treatment in primary "
     "care, begin with one direct yes/no sentence, then state conditions and "
     "exceptions from cited passages. "
@@ -219,11 +226,6 @@ def _format_patient_context(patient_context: dict | None) -> str:
             patient_context["specialty"], max_length=100
         ).capitalize()
         parts.append(f"Specialty: {spec}")
-    if patient_context.get("severity"):
-        sev = _sanitize_input(
-            patient_context["severity"], max_length=50
-        ).capitalize()
-        parts.append(f"Severity: {sev}")
     header = "  |  ".join(parts)
     notes = _sanitize_input(patient_context.get("notes", ""))
     block = "PATIENT CONTEXT\n" + header

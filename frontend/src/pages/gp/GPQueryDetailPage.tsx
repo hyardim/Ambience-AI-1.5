@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, ClipboardCheck, Paperclip } from 'lucide-react';
 import { Header } from '../../components/Header';
 import { ChatMessage } from '../../components/ChatMessage';
 import { ChatInput } from '../../components/ChatInput';
+import { PatientContextBanner } from '../../components/PatientContextBanner';
 import { useAuth } from '../../contexts/useAuth';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { useChatStream } from '../../hooks/useChatStream';
@@ -82,6 +83,15 @@ export function GPQueryDetailPage() {
   // Also poll when any AI message is still generating (revision in progress)
   const hasRevisionInProgress = messages.some(
     (message) => message.senderType === 'ai' && message.isGenerating === true,
+  );
+  const hasPatientContext = Boolean(
+    chat && (
+      chat.patient_age !== null && chat.patient_age !== undefined
+      || chat.patient_gender
+      || chat.patient_notes
+      || chat.specialty
+      || chat.severity
+    ),
   );
 
   // Poll when the chat is in a review workflow and the status may change
@@ -480,6 +490,18 @@ export function GPQueryDetailPage() {
           {error && (
             <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
+            </div>
+          )}
+
+          {hasPatientContext && (
+            <div className="mx-6 mt-4">
+              <PatientContextBanner
+                age={chat?.patient_age}
+                sex={chat?.patient_gender}
+                specialty={chat?.specialty}
+                severity={chat?.severity}
+                notes={chat?.patient_notes}
+              />
             </div>
           )}
 

@@ -49,11 +49,11 @@ class TestGroundedPromptPatientContext:
         )
         assert "Specialty: Rheumatology" in prompt
 
-    def test_severity_capitalised_in_prompt(self):
+    def test_severity_not_in_prompt(self):
         prompt = build_grounded_prompt(
             "What treatment?", _CHUNKS, patient_context=_FULL_CONTEXT
         )
-        assert "Severity: High" in prompt
+        assert "Severity:" not in prompt
 
     def test_clinical_notes_in_prompt(self):
         prompt = build_grounded_prompt(
