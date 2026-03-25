@@ -166,6 +166,10 @@ def _install_stubs() -> None:
         medium_prompt_chars=3500,
         long_prompt_chars=7000,
     )
+    fake_config.retrieval_config = types.SimpleNamespace(
+        retrieval_canonicalization_enabled=False,
+        retrieval_canonicalization_specialties="rheumatology",
+    )
     fake_config.retry_config = types.SimpleNamespace(
         redis_url="redis://localhost:6379/0",
         retry_enabled=True,
@@ -237,6 +241,7 @@ def _install_stubs() -> None:
         "src.retrieval.query",
         "src.api.services",
         "src.api.streaming",
+        "src.api.canonicalization",
         "src.generation.router",
     ):
         _make_stub(module_name)
@@ -335,6 +340,11 @@ def _install_stubs() -> None:
     fake_api_services.low_evidence_note = MagicMock(return_value=None)
     fake_api_services.log_route_decision = MagicMock()
     fake_api_services.to_search_result = MagicMock(side_effect=_fake_to_search_result)
+    fake_canonicalization = sys.modules["src.api.canonicalization"]
+    fake_canonicalization.build_canonical_retrieval_query = MagicMock(return_value=None)
+    fake_canonicalization.parse_allowed_specialties = MagicMock(
+        return_value={"rheumatology"}
+    )
 
     import json as _json
 

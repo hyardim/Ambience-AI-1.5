@@ -216,6 +216,10 @@ def main_app():
         medium_prompt_chars=3500,
         long_prompt_chars=7000,
     )  # type: ignore[attr-defined]
+    fake_config.retrieval_config = types.SimpleNamespace(
+        retrieval_canonicalization_enabled=False,
+        retrieval_canonicalization_specialties="rheumatology",
+    )  # type: ignore[attr-defined]
     fake_config.retry_config = types.SimpleNamespace(
         redis_url="redis://localhost:6379/0",
         retry_enabled=True,
@@ -261,6 +265,7 @@ def main_app():
         "src.orchestration.pipeline",
         "src.retrieval.query",
         "src.api.services",
+        "src.api.canonicalization",
     ):
         _make_stub(_mod_name)
 
@@ -319,7 +324,7 @@ def main_app():
 
     sys.modules["src.api.services"].retrieve_chunks = MagicMock(return_value=[])  # type: ignore[attr-defined]
     sys.modules["src.api.services"].filter_chunks = MagicMock(
-        side_effect=lambda _query, retrieved: retrieved
+        side_effect=lambda _query, retrieved, specialty=None: retrieved
     )  # type: ignore[attr-defined]
     sys.modules["src.api.services"].NO_EVIDENCE_RESPONSE = "No evidence"  # type: ignore[attr-defined]
     sys.modules["src.api.services"].evidence_level = MagicMock(return_value="strong")  # type: ignore[attr-defined]
@@ -327,6 +332,12 @@ def main_app():
     sys.modules["src.api.services"].log_route_decision = MagicMock()  # type: ignore[attr-defined]
     sys.modules["src.api.services"].to_search_result = MagicMock(
         side_effect=_fake_to_search_result
+    )  # type: ignore[attr-defined]
+    sys.modules["src.api.canonicalization"].build_canonical_retrieval_query = MagicMock(
+        return_value=None
+    )  # type: ignore[attr-defined]
+    sys.modules["src.api.canonicalization"].parse_allowed_specialties = MagicMock(
+        return_value={"rheumatology"}
     )  # type: ignore[attr-defined]
 
     # src.generation.router only uses stdlib + the fake config above.

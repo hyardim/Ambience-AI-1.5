@@ -57,6 +57,22 @@ def _effective_relevance_score(result: CitedResult) -> float:
     return max(rerank_score, vector_score)
 
 
+def _finalize_filtered(
+    chunks: list[dict[str, Any]],
+    query: str,
+    *,
+    specialty: str | None,
+) -> list[dict[str, Any]]:
+    return _prune_topic_outliers(
+        _sort_by_alignment(
+            chunks,
+            query,
+            specialty=specialty,
+        ),
+        query,
+    )
+
+
 def _citation_section_path(result: CitedResult) -> str:
     return " > ".join(result.citation.section_path)
 
@@ -206,13 +222,10 @@ def _filter_chunks(
             and _has_citable_source(chunk)
             and _raw_query_overlap(chunk)
         ]
-        return _prune_topic_outliers(
-            _sort_by_alignment(
-                low_score_fallback,
-                expanded_query,
-                specialty=specialty,
-            ),
+        return _finalize_filtered(
+            low_score_fallback,
             expanded_query,
+            specialty=specialty,
         )
 
     alignments = [
@@ -258,13 +271,10 @@ def _filter_chunks(
                 )
             ]
             if narrowed:
-                return _prune_topic_outliers(
-                    _sort_by_alignment(
-                        narrowed,
-                        expanded_query,
-                        specialty=specialty,
-                    ),
+                return _finalize_filtered(
+                    narrowed,
                     expanded_query,
+                    specialty=specialty,
                 )
         refined = [
             chunk
@@ -276,21 +286,15 @@ def _filter_chunks(
             )
         ]
         if refined:
-            return _prune_topic_outliers(
-                _sort_by_alignment(
-                    refined,
-                    expanded_query,
-                    specialty=specialty,
-                ),
-                expanded_query,
-            )
-        return _prune_topic_outliers(
-            _sort_by_alignment(
-                strict_matches,
+            return _finalize_filtered(
+                refined,
                 expanded_query,
                 specialty=specialty,
-            ),
+            )
+        return _finalize_filtered(
+            strict_matches,
             expanded_query,
+            specialty=specialty,
         )
 
     semantic_alignments = [
@@ -310,13 +314,10 @@ def _filter_chunks(
         )
     ]
     if semantic_fallback:
-        return _prune_topic_outliers(
-            _sort_by_alignment(
-                semantic_fallback,
-                expanded_query,
-                specialty=specialty,
-            ),
+        return _finalize_filtered(
+            semantic_fallback,
             expanded_query,
+            specialty=specialty,
         )
 
     top_score = max(float(chunk.get("score", 0.0)) for chunk in filtered)
@@ -330,13 +331,10 @@ def _filter_chunks(
         if chunk.get("score", 0) >= low_score_threshold
         and _raw_query_overlap(chunk)
     ]
-    return _prune_topic_outliers(
-        _sort_by_alignment(
-            low_score_fallback,
-            expanded_query,
-            specialty=specialty,
-        ),
+    return _finalize_filtered(
+        low_score_fallback,
         expanded_query,
+        specialty=specialty,
     )
 
 

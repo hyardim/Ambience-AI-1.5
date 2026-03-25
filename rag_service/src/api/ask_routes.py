@@ -65,6 +65,7 @@ async def ask_route(
         )
         response = await _generate_answer_from_retrieval(
             query=payload.query,
+            retrieval_query=payload.query,
             max_tokens=1024,
             patient_context=None,
             file_context=None,

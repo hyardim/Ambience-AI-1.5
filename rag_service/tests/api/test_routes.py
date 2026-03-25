@@ -330,7 +330,7 @@ async def test_generate_clinical_answer_uses_vector_fallback_when_rerank_is_weak
         )
     )
 
-    assert response.answer == "Answer [1]"
+    assert response.answer.startswith("Answer [1]")
     assert len(response.citations_used) == 1
 
 
@@ -374,7 +374,7 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references: (answer, []),
+        lambda answer, citations, strip_references, query=None: (answer, []),
     )
 
     response = await routes.generate_clinical_answer(
@@ -445,7 +445,7 @@ async def test_generate_clinical_answer_keeps_uncited_low_risk_answer(
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references: (answer, []),
+        lambda answer, citations, strip_references, query=None: (answer, []),
     )
 
     response = await routes.generate_clinical_answer(
@@ -508,7 +508,7 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references: (answer, []),
+        lambda answer, citations, strip_references, query=None: (answer, []),
     )
 
     response = await routes.generate_clinical_answer(
@@ -518,6 +518,265 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
     assert response.answer == routes.api_services.NO_EVIDENCE_RESPONSE
     assert response.citations_used == []
     assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_uses_canonical_query_when_it_scores_better(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = (
+        "35-year-old with intermittent joint swelling in knees and wrists over "
+        "4 months. CRP mildly raised. No clear diagnosis. What baseline blood "
+        "tests and imaging should be completed prior to referral?"
+    )
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        routes,
+        "retrieval_config",
+        SimpleNamespace(
+            retrieval_canonicalization_enabled=True,
+            retrieval_canonicalization_specialties="rheumatology",
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "build_canonical_retrieval_query",
+        lambda query, specialty, allowed_specialties: "canonical query",
+    )
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        calls.append(str(kwargs["query"]))
+        if kwargs["query"] == "canonical query":
+            return [
+                {
+                    "text": "Persistent synovitis should be referred urgently.",
+                    "score": 0.91,
+                    "metadata": {"title": "Guide"},
+                    "doc_id": "doc-2",
+                }
+            ]
+        return [
+            {
+                "text": "Off-target context chunk.",
+                "score": 0.1,
+                "metadata": {"title": "Paper"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+
+    def fake_filter(
+        query_text: str,
+        retrieved: list[dict[str, object]],
+        specialty: str | None = None,
+    ) -> list[dict[str, object]]:
+        del specialty
+        if query_text == query:
+            return retrieved
+        return retrieved
+
+    monkeypatch.setattr(routes, "filter_chunks", fake_filter)
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, citations),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query=query, specialty="rheumatology", stream=False)
+    )
+
+    assert response.answer == "Answer [1]"
+    assert calls == [query, "canonical query"]
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_keeps_original_query_when_canonical_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        routes,
+        "retrieval_config",
+        SimpleNamespace(
+            retrieval_canonicalization_enabled=False,
+            retrieval_canonicalization_specialties="rheumatology",
+        ),
+    )
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        calls.append(str(kwargs["query"]))
+        return [
+            {
+                "text": "Relevant chunk.",
+                "score": 0.9,
+                "metadata": {"title": "Guide"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, citations),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query="q", specialty="rheumatology", stream=False)
+    )
+
+    assert response.answer == "Answer [1]"
+    assert calls == ["q"]
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_keeps_original_when_canonical_not_better(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = (
+        "35-year-old with intermittent joint swelling in knees and wrists over "
+        "4 months. CRP mildly raised. No clear diagnosis. What baseline blood "
+        "tests and imaging should be completed prior to referral?"
+    )
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        routes,
+        "retrieval_config",
+        SimpleNamespace(
+            retrieval_canonicalization_enabled=True,
+            retrieval_canonicalization_specialties="rheumatology",
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "build_canonical_retrieval_query",
+        lambda query, specialty, allowed_specialties: "canonical query",
+    )
+
+    def fake_advanced(**kwargs: object) -> list[dict[str, object]]:
+        calls.append(str(kwargs["query"]))
+        if kwargs["query"] == "canonical query":
+            return [
+                {
+                    "text": "Canonical chunk.",
+                    "score": 0.45,
+                    "metadata": {"title": "Guide"},
+                    "doc_id": "doc-2",
+                }
+            ]
+        return [
+            {
+                "text": "Original chunk.",
+                "score": 0.9,
+                "metadata": {"title": "Guide"},
+                "doc_id": "doc-1",
+            }
+        ]
+
+    monkeypatch.setattr(routes.api_services, "retrieve_chunks_advanced", fake_advanced)
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None: (answer, citations),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query=query, specialty="rheumatology", stream=False)
+    )
+
+    assert response.answer == "Answer [1]"
+    assert calls == [query, "canonical query"]
+
+
+def test_choose_retrieval_query_returns_original_when_canonical_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = routes.AnswerRequest(query="q", specialty="rheumatology", stream=False)
+    monkeypatch.setattr(
+        routes,
+        "_retrieve_for_answer_request",
+        lambda request, query: [{"text": "chunk", "score": 0.9}],
+    )
+    monkeypatch.setattr(
+        routes,
+        "_retrieval_quality",
+        lambda query, retrieved, specialty=None: (retrieved, 0.9),
+    )
+    monkeypatch.setattr(
+        routes,
+        "retrieval_config",
+        SimpleNamespace(
+            retrieval_canonicalization_enabled=True,
+            retrieval_canonicalization_specialties="rheumatology",
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "build_canonical_retrieval_query",
+        lambda query, specialty, allowed_specialties: None,
+    )
+
+    retrieval_query, retrieved = routes._choose_retrieval_query(request)
+
+    assert retrieval_query == "q"
+    assert retrieved == [{"text": "chunk", "score": 0.9}]
 
 
 @pytest.mark.anyio

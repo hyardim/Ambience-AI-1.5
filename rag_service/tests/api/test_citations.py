@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import re
+
 from src.api.citations import (
+    _enforce_partial_question_coverage,
+    _enforce_requested_scope,
+    _has_cited_sentence_matching,
+    _join_labels,
     extract_citation_results,
     has_query_overlap,
     is_boilerplate,
@@ -68,3 +74,221 @@ def test_is_boilerplate_flags_operational_referral_letters() -> None:
     }
 
     assert is_boilerplate(chunk) is True
+
+
+def test_extract_citation_results_drops_uncited_clinical_sentences() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Refer urgently [1]. Consider extra hydration advice while waiting.",
+        citations,
+        strip_references=False,
+    )
+
+    assert answer == "Refer urgently [1]."
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_drops_rule_style_citation_tokens() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Refer to neurology [1.4.4].",
+        citations,
+        strip_references=False,
+    )
+
+    assert answer == ""
+    assert used == []
+
+
+def test_extract_citation_results_adds_partial_coverage_note() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Immediate investigations include urinalysis [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with new proteinuria and rising creatinine. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert answer.startswith("Immediate investigations include urinalysis [1].")
+    assert "referral/urgency pathway part of this question" in answer
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_drops_treatment_when_not_requested() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        (
+            "Immediate investigations include urinalysis [1]. "
+            "Start ACE inhibitors for proteinuria [1]."
+        ),
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with SLE and new proteinuria. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert "urinalysis [1]" in answer
+    assert "ace inhibitors" not in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_scope_only_when_no_citations() -> None:
+    answer, used = extract_citation_results(
+        "Honest scope: the indexed passages do not cover this question.",
+        [],
+        strip_references=False,
+    )
+
+    assert "do not cover" in answer.lower()
+    assert used == []
+
+
+def test_extract_citation_results_preserves_cited_scope_sentence() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "The indexed passages do not cover imaging guidance [1].",
+        citations,
+        strip_references=False,
+    )
+
+    assert "do not cover imaging guidance [1]" in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_returns_empty_for_query_without_cited_support(
+) -> None:
+    answer, used = extract_citation_results(
+        "Referral should be urgent.",
+        [],
+        strip_references=False,
+        query="What referral pathway and urgency are recommended?",
+    )
+
+    assert answer == ""
+    assert used == []
+
+
+def test_extract_citation_results_keeps_answer_when_all_requested_parts_are_cited(
+) -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        (
+            "Baseline investigations include ESR and CRP [1]. "
+            "Imaging should include X-ray [1]. "
+            "Refer urgently via rheumatology pathway [1]."
+        ),
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with intermittent joint swelling. What baseline blood tests "
+            "and imaging should be completed prior to referral?"
+        ),
+    )
+
+    assert "do not directly cover" not in answer
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_does_not_duplicate_existing_gap_sentence() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+    sentence = (
+        "The indexed passages retrieved do not directly cover the referral/urgency "
+        "pathway part of this question."
+    )
+
+    answer, _ = extract_citation_results(
+        f"Immediate investigations include urinalysis [1]. {sentence}",
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with new proteinuria and rising creatinine. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert answer.count("do not directly cover") == 1
+
+
+def test_extract_citation_results_drops_treatment_only_answer_when_not_requested() -> (
+    None
+):
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Start ACE inhibitors for proteinuria [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "Patient with SLE and new proteinuria. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert answer == ""
+    assert used == [citations[0]]
+
+
+def test_has_cited_sentence_matching_skips_empty_units() -> None:
+    assert (
+        _has_cited_sentence_matching(
+            "\n\nRefer urgently [1].",
+            re.compile(r"\brefer\b", re.IGNORECASE),
+        )
+        is True
+    )
+
+
+def test_join_labels_handles_empty_and_two_labels() -> None:
+    assert _join_labels([]) == ""
+    assert _join_labels(["imaging", "referral"]) == "imaging and referral"
+
+
+def test_enforce_partial_question_coverage_returns_empty_without_citations() -> None:
+    assert (
+        _enforce_partial_question_coverage(
+            "Need referral guidance.",
+            query="What referral pathway and urgency are recommended?",
+            has_citations=False,
+        )
+        == ""
+    )
+
+
+def test_enforce_partial_question_coverage_keeps_existing_gap_sentence() -> None:
+    sentence = (
+        "The indexed passages retrieved do not directly cover the referral/urgency "
+        "pathway part of this question."
+    )
+    answer = _enforce_partial_question_coverage(
+        f"Immediate investigations include urinalysis [1]. {sentence}",
+        query=(
+            "Patient with new proteinuria and rising creatinine. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+        has_citations=True,
+    )
+
+    assert answer.count("do not directly cover") == 1
+
+
+def test_enforce_requested_scope_skips_blank_units() -> None:
+    answer = _enforce_requested_scope(
+        "\n\nStart ACE inhibitors.\n\n",
+        query=(
+            "Patient with SLE and new proteinuria. "
+            "What immediate investigations and referral pathway are recommended?"
+        ),
+    )
+
+    assert answer == ""

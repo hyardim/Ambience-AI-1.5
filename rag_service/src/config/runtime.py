@@ -32,3 +32,8 @@ class RetryConfig(AppBaseSettings):
 class AlertingConfig(AppBaseSettings):
     llm_fallback_alert_webhook_url: str = Field(default="")
     llm_fallback_alert_timeout_seconds: float = Field(default=2.0)
+
+
+class RetrievalConfig(AppBaseSettings):
+    retrieval_canonicalization_enabled: bool = Field(default=False)
+    retrieval_canonicalization_specialties: str = Field(default="rheumatology")

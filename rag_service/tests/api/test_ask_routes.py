@@ -5,6 +5,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from src.api import ask_routes as ask_routes_module
 from src.api.app import create_app
 from src.api.schemas import AnswerResponse, SearchResult
 from src.generation.prompts import ACTIVE_PROMPT
@@ -55,8 +56,6 @@ def _make_response() -> AnswerResponse:
 
 
 def _client(monkeypatch) -> TestClient:
-    app = create_app()
-
     def fake_retrieve(**kwargs):
         return [{"text": "context", "score": 0.9, "metadata": {}}]
 
@@ -64,13 +63,16 @@ def _client(monkeypatch) -> TestClient:
         return _make_response()
 
     monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
+        ask_routes_module.api_services,
+        "retrieve_chunks_advanced",
         fake_retrieve,
     )
     monkeypatch.setattr(
-        "src.api.ask_routes._generate_answer_from_retrieval",
+        ask_routes_module,
+        "_generate_answer_from_retrieval",
         fake_generate,
     )
+    app = create_app()
     return TestClient(app)
 
 
@@ -93,15 +95,15 @@ def test_ask_success(monkeypatch) -> None:
 
 
 def test_ask_retrieval_failure(monkeypatch) -> None:
-    app = create_app()
-
     def boom_retrieve(**kwargs):
         raise RetrievalError(stage="S", query="q", message="fail")
 
     monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
+        ask_routes_module.api_services,
+        "retrieve_chunks_advanced",
         boom_retrieve,
     )
+    app = create_app()
     client = TestClient(app)
 
     resp = client.post("/ask", json={"query": "q"})
@@ -110,10 +112,9 @@ def test_ask_retrieval_failure(monkeypatch) -> None:
 
 
 def test_ask_generation_failure(monkeypatch) -> None:
-    app = create_app()
-
     monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
+        ask_routes_module.api_services,
+        "retrieve_chunks_advanced",
         lambda **kwargs: [{"text": "context", "score": 0.9, "metadata": {}}],
     )
 
@@ -121,9 +122,11 @@ def test_ask_generation_failure(monkeypatch) -> None:
         raise HTTPException(status_code=500, detail="RAG answer error")
 
     monkeypatch.setattr(
-        "src.api.ask_routes._generate_answer_from_retrieval",
+        ask_routes_module,
+        "_generate_answer_from_retrieval",
         boom_generate,
     )
+    app = create_app()
     client = TestClient(app)
 
     resp = client.post("/ask", json={"query": "q"})
@@ -132,15 +135,15 @@ def test_ask_generation_failure(monkeypatch) -> None:
 
 
 def test_ask_unexpected_failure(monkeypatch) -> None:
-    app = create_app()
-
     def boom_retrieve(**kwargs):
         raise RuntimeError("oops")
 
     monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
+        ask_routes_module.api_services,
+        "retrieve_chunks_advanced",
         boom_retrieve,
     )
+    app = create_app()
     client = TestClient(app)
 
     resp = client.post("/ask", json={"query": "q"})
@@ -150,10 +153,9 @@ def test_ask_unexpected_failure(monkeypatch) -> None:
 
 def test_ask_non_answer_response_type(monkeypatch) -> None:
     """Line 84: when response is not AnswerResponse type."""
-    app = create_app()
-
     monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
+        ask_routes_module.api_services,
+        "retrieve_chunks_advanced",
         lambda **kwargs: [{"text": "ctx", "score": 0.9, "metadata": {}}],
     )
 
@@ -161,9 +163,11 @@ def test_ask_non_answer_response_type(monkeypatch) -> None:
         return {"unexpected": "dict"}
 
     monkeypatch.setattr(
-        "src.api.ask_routes._generate_answer_from_retrieval",
+        ask_routes_module,
+        "_generate_answer_from_retrieval",
         fake_generate,
     )
+    app = create_app()
     client = TestClient(app)
 
     resp = client.post("/ask", json={"query": "q"})
@@ -173,10 +177,9 @@ def test_ask_non_answer_response_type(monkeypatch) -> None:
 
 def test_ask_reraises_non_rag_http_exception(monkeypatch) -> None:
     """Line 94: re-raise of non-500 HTTPException."""
-    app = create_app()
-
     monkeypatch.setattr(
-        "src.api.ask_routes.api_services.retrieve_chunks_advanced",
+        ask_routes_module.api_services,
+        "retrieve_chunks_advanced",
         lambda **kwargs: [{"text": "ctx", "score": 0.9, "metadata": {}}],
     )
 
@@ -184,9 +187,11 @@ def test_ask_reraises_non_rag_http_exception(monkeypatch) -> None:
         raise HTTPException(status_code=429, detail="Too many requests")
 
     monkeypatch.setattr(
-        "src.api.ask_routes._generate_answer_from_retrieval",
+        ask_routes_module,
+        "_generate_answer_from_retrieval",
         fake_generate,
     )
+    app = create_app()
     client = TestClient(app)
 
     resp = client.post("/ask", json={"query": "q"})

@@ -249,7 +249,7 @@ def test_select_rag_citations_prefers_citations_used():
         chat_service._select_rag_citations(
             {"citations_used": [], "citations_retrieved": [3]}
         )
-        == []
+        == [3]
     )
     assert chat_service._select_rag_citations({"citations_used": []}) == []
     assert chat_service._select_rag_citations({}) is None
@@ -740,7 +740,9 @@ async def test_async_generate_ai_response_streaming_path_handles_chunks_and_done
     update_kwargs = async_update.await_args.kwargs
     assert update_kwargs["content"] == "Hello world"
     assert update_kwargs["citations"] == [{"title": "Doc"}]
-    assert publish.await_count >= 3
+    assert publish.await_count == 3
+    published_events = [call.args[1].event for call in publish.await_args_list]
+    assert published_events == ["stream_start", "content", "complete"]
     close_chat.assert_awaited_once_with(5)
 
 

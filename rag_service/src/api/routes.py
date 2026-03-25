@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -12,6 +12,7 @@ from ..config import (
     db_config,
     local_llm_config,
     path_config,
+    retrieval_config,
     retry_config,
     routing_config,
 )
@@ -30,6 +31,7 @@ from ..retrieval.vector_store import get_source_path_for_doc
 from ..utils.db import db as db_manager
 from ..utils.logger import setup_logger
 from . import services as api_services
+from .canonicalization import build_canonical_retrieval_query, parse_allowed_specialties
 from .citations import MAX_CITATIONS, extract_citation_results
 from .schemas import (
     AnswerRequest,
@@ -55,6 +57,102 @@ from .streaming import ndjson_done_only, streaming_generator
 
 logger = setup_logger(__name__)
 router = APIRouter()
+
+
+def _answer_is_effectively_empty(answer: str) -> bool:
+    return not answer.strip()
+
+
+def _retrieval_quality(
+    query: str,
+    retrieved: list[dict[str, Any]],
+    *,
+    specialty: str | None,
+) -> tuple[list[dict[str, Any]], float]:
+    filtered = filter_chunks(query, retrieved, specialty=specialty)
+    top_chunks = filtered[:MAX_CITATIONS]
+    if not top_chunks:
+        return filtered, 0.0
+    score = float(top_chunks[0].get("score", 0.0))
+    if evidence_level(top_chunks) == "strong":
+        score += 0.5
+    return filtered, score
+
+
+def _retrieve_for_answer_request(
+    request: AnswerRequest,
+    query: str,
+) -> list[dict[str, Any]]:
+    advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
+    if callable(advanced_retriever):
+        return cast(
+            list[dict[str, Any]],
+            advanced_retriever(
+                query=query,
+                top_k=request.top_k,
+                specialty=request.specialty,
+                source_name=request.source_name,
+                doc_type=request.doc_type,
+                score_threshold=request.score_threshold,
+                expand_query=request.expand_query,
+            ),
+        )
+    return retrieve_chunks(
+        query,
+        top_k=request.top_k,
+        specialty=request.specialty,
+    )
+
+
+def _choose_retrieval_query(
+    request: AnswerRequest,
+) -> tuple[str, list[dict[str, Any]]]:
+    retrieved = _retrieve_for_answer_request(request, request.query)
+    specialty = request.specialty
+    original_filtered, original_quality = _retrieval_quality(
+        request.query,
+        retrieved,
+        specialty=specialty,
+    )
+
+    if not retrieval_config.retrieval_canonicalization_enabled:
+        return request.query, retrieved
+
+    allowed_specialties = parse_allowed_specialties(
+        retrieval_config.retrieval_canonicalization_specialties
+    )
+    canonical_query = build_canonical_retrieval_query(
+        query=request.query,
+        specialty=specialty,
+        allowed_specialties=allowed_specialties,
+    )
+    if not canonical_query or canonical_query == request.query:
+        return request.query, retrieved
+
+    canonical_retrieved = _retrieve_for_answer_request(request, canonical_query)
+    canonical_filtered, canonical_quality = _retrieval_quality(
+        request.query,
+        canonical_retrieved,
+        specialty=specialty,
+    )
+
+    if (
+        (not original_filtered and canonical_filtered)
+        or canonical_quality > original_quality + 0.2
+    ):
+        logger.info(
+            "Using canonical retrieval query for answer route",
+            extra={
+                "original_query": request.query,
+                "canonical_query": canonical_query,
+                "specialty": specialty,
+                "original_quality": original_quality,
+                "canonical_quality": canonical_quality,
+            },
+        )
+        return canonical_query, canonical_retrieved
+
+    return request.query, retrieved
 
 
 def _cloud_available() -> bool:
@@ -236,25 +334,10 @@ async def generate_clinical_answer(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Any:
     try:
-        advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
-        if callable(advanced_retriever):
-            retrieved = advanced_retriever(
-                query=request.query,
-                top_k=request.top_k,
-                specialty=request.specialty,
-                source_name=request.source_name,
-                doc_type=request.doc_type,
-                score_threshold=request.score_threshold,
-                expand_query=request.expand_query,
-            )
-        else:
-            retrieved = retrieve_chunks(
-                request.query,
-                top_k=request.top_k,
-                specialty=request.specialty,
-            )
+        retrieval_query, retrieved = _choose_retrieval_query(request)
         return await _generate_answer_from_retrieval(
             query=request.query,
+            retrieval_query=retrieval_query,
             max_tokens=request.max_tokens,
             patient_context=request.patient_context,
             file_context=request.file_context,
@@ -280,6 +363,7 @@ async def generate_clinical_answer(
 async def _generate_answer_from_retrieval(
     *,
     query: str,
+    retrieval_query: str,
     max_tokens: int,
     patient_context: dict[str, Any] | None,
     file_context: str | None,
@@ -341,6 +425,7 @@ async def _generate_answer_from_retrieval(
                     citations_retrieved,
                     allow_uncited_answer=allow_uncited,
                     provider=route.provider,
+                    query=query,
                 ),
                 media_type="application/x-ndjson",
             )
@@ -379,7 +464,13 @@ async def _generate_answer_from_retrieval(
             answer_text,
             citations_retrieved,
             strip_references=True,
+            query=query,
         )
+        if _answer_is_effectively_empty(renumbered_answer):
+            return _no_evidence_response(
+                stream,
+                citations_retrieved=citations_retrieved,
+            )
         if not citations_used and not allow_uncited:
             return _no_evidence_response(
                 stream,
@@ -514,7 +605,13 @@ async def revise_clinical_answer(
             answer_text,
             citations_retrieved,
             strip_references=False,
+            query=request.original_query,
         )
+        if _answer_is_effectively_empty(renumbered_answer):
+            return _no_evidence_response(
+                request.stream,
+                citations_retrieved=citations_retrieved,
+            )
         fallback_citations = citations_used if citations_used else citations_retrieved
         return AnswerResponse(
             answer=renumbered_answer,

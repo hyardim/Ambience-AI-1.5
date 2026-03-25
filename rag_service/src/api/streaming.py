@@ -20,6 +20,7 @@ async def streaming_generator(
     *,
     allow_uncited_answer: bool = False,
     provider: ProviderName = "local",
+    query: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
     accumulated = ""
@@ -43,9 +44,12 @@ async def streaming_generator(
         accumulated,
         citations_retrieved,
         strip_references=True,
+        query=query,
     )
     refused = False
-    if not citations_used and not allow_uncited_answer:
+    if not renumbered_answer.strip() or (
+        not citations_used and not allow_uncited_answer
+    ):
         renumbered_answer = NO_EVIDENCE_RESPONSE
         refused = True
 

@@ -8,6 +8,7 @@ from src.config import (
     EmbeddingConfig,
     LoggingConfig,
     PathConfig,
+    RetrievalConfig,
     VectorIndexConfig,
 )
 
@@ -89,6 +90,23 @@ class TestLoggingConfig:
         config = LoggingConfig()
         assert config.log_level == "INFO"
         assert config.log_file == "logs/rag.log"
+
+
+class TestRetrievalConfig:
+    def test_default_values(self) -> None:
+        config = RetrievalConfig()
+        assert config.retrieval_canonicalization_enabled is False
+        assert config.retrieval_canonicalization_specialties == "rheumatology"
+
+    def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RETRIEVAL_CANONICALIZATION_ENABLED", "true")
+        monkeypatch.setenv(
+            "RETRIEVAL_CANONICALIZATION_SPECIALTIES",
+            "rheumatology,neurology",
+        )
+        config = RetrievalConfig()
+        assert config.retrieval_canonicalization_enabled is True
+        assert config.retrieval_canonicalization_specialties == "rheumatology,neurology"
 
 
 class TestPathConfig:
