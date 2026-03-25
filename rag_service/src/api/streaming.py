@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncGenerator
 
 from ..generation.client import ProviderName, generate_answer
@@ -11,6 +12,24 @@ from .schemas import SearchResult
 from .services import NO_EVIDENCE_RESPONSE
 
 logger = setup_logger(__name__)
+
+_SOURCE_ECHO_RE = re.compile(
+    r"\[?Source:\s*.*?(?=(?:\s+\[?Source:)|$)",
+    re.IGNORECASE,
+)
+_CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
+
+
+def _answer_is_effectively_empty(answer: str) -> bool:
+    if not answer.strip():
+        return True
+    stripped = answer.lstrip().lower()
+    if stripped.startswith("[source:") or stripped.startswith("source:"):
+        return True
+    without_source_echo = _SOURCE_ECHO_RE.sub(" ", answer)
+    without_citations = _CITATION_GROUP_RE.sub(" ", without_source_echo)
+    normalized = re.sub(r"[\W_]+", " ", without_citations).strip()
+    return not normalized
 
 
 async def streaming_generator(
@@ -45,9 +64,10 @@ async def streaming_generator(
         citations_retrieved,
         strip_references=True,
         query=query,
+        allow_uncited_answer=allow_uncited_answer,
     )
     refused = False
-    if not renumbered_answer.strip() or (
+    if _answer_is_effectively_empty(renumbered_answer) or (
         not citations_used and not allow_uncited_answer
     ):
         renumbered_answer = NO_EVIDENCE_RESPONSE
@@ -56,12 +76,12 @@ async def streaming_generator(
     # When the answer was allowed through (not refused), fall back to
     # citations_retrieved so the frontend can still display sources.
     final_citations: list[SearchResult]
-    if citations_used:
+    if refused:
+        final_citations = []
+    elif citations_used:
         final_citations = citations_used
     elif not refused:
         final_citations = citations_retrieved
-    else:
-        final_citations = []
 
     yield (
         json.dumps(

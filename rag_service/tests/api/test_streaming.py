@@ -180,6 +180,39 @@ async def test_done_payload_refuses_empty_post_processed_answer(
 
 
 @pytest.mark.anyio
+async def test_done_payload_refuses_source_echo_only_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_stream_generate(prompt: str, max_tokens: int | None = None):
+        del prompt, max_tokens
+        yield (
+            "[Source: [1] Headaches in over 12s] "
+            "[Source: [2] Stroke and transient ischaemic attack in over 16s]"
+        )
+
+    monkeypatch.setattr(
+        "src.api.streaming.stream_generate",
+        fake_stream_generate,
+    )
+
+    citations_retrieved = [
+        SearchResult(text="evidence", source="guideline.pdf", score=0.9)
+    ]
+
+    lines = []
+    async for line in streaming_generator(
+        "prompt",
+        128,
+        citations_retrieved,
+        allow_uncited_answer=True,
+    ):
+        lines.append(json.loads(line.strip()))
+
+    assert lines[-1]["answer"] == NO_EVIDENCE_RESPONSE
+    assert lines[-1]["citations"] == []
+
+
+@pytest.mark.anyio
 async def test_produces_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     async def failing_stream(prompt: str, max_tokens: int | None = None):
         del prompt, max_tokens

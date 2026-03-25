@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
 from ..config import db_config, path_config
@@ -37,6 +38,87 @@ LOW_SCORE_FALLBACK_FLOOR = 0.04
 LOW_SCORE_FALLBACK_RATIO = 0.6
 LOW_EVIDENCE_TOP_SCORE = 0.58
 LOW_EVIDENCE_STRONG_HITS = 1
+_INVESTIGATION_TASK_RE = re.compile(
+    r"\b(investigations?|investigate|baseline|blood tests?|work[- ]?up|"
+    r"laboratory|labs?)\b",
+    re.IGNORECASE,
+)
+_IMAGING_TASK_RE = re.compile(
+    r"\b(imaging|x-?ray|ultrasound|mri|ct|scan)\b",
+    re.IGNORECASE,
+)
+_REFERRAL_TASK_RE = re.compile(
+    r"\b(refer|referral|pathway|urgent|urgency|how urgently)\b",
+    re.IGNORECASE,
+)
+_TREATMENT_TASK_RE = re.compile(
+    r"\b(treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|"
+    r"drug|start\w*|initiat\w*|commenc\w*|begin\w*|stop\w*|continue\w*)\b",
+    re.IGNORECASE,
+)
+_TASK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("investigations", _INVESTIGATION_TASK_RE),
+    ("imaging", _IMAGING_TASK_RE),
+    ("referral", _REFERRAL_TASK_RE),
+    ("treatment", _TREATMENT_TASK_RE),
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_URGENT_TOXICITY_QUERY_RE = re.compile(
+    (
+        r"\b(methotrexate|mtx)\b.*\b(neutropenia|low neutrophils)\b.*"
+        r"\b(fever|sore throat|pyrexia)\b|"
+        r"\b(fever|sore throat|pyrexia)\b.*\b(neutropenia|low neutrophils)\b.*"
+        r"\b(methotrexate|mtx)\b"
+    ),
+    re.IGNORECASE,
+)
+_URGENT_TOXICITY_CHUNK_RE = re.compile(
+    r"\b(methotrexate|mtx|neutropenia|low neutrophils|bone marrow suppression|"
+    r"toxicity|monitoring|infection|withhold|stop|csdmard)\b",
+    re.IGNORECASE,
+)
+_APPRAISAL_OR_BIOLOGIC_RE = re.compile(
+    r"\b(baricitinib|sarilumab|adalimumab|etanercept|rituximab|tocilizumab|"
+    r"biologic|technology appraisal|appraisal)\b",
+    re.IGNORECASE,
+)
+_SLE_RENAL_QUERY_RE = re.compile(
+    r"\b(sle|systemic lupus erythematosus|lupus)\b.*"
+    r"\b(proteinuria|albuminuria|creatinine|renal|kidney|nephritis)\b|"
+    r"\b(proteinuria|albuminuria|creatinine|renal|kidney|nephritis)\b.*"
+    r"\b(sle|systemic lupus erythematosus|lupus)\b",
+    re.IGNORECASE,
+)
+_SLE_RENAL_CHUNK_RE = re.compile(
+    r"\b(lupus nephritis|systemic lupus erythematosus|sle|proteinuria|"
+    r"protein:creatinine|protein creatinine|urinalysis|nephrology|renal|"
+    r"kidney|creatinine|haematuria|upcr)\b",
+    re.IGNORECASE,
+)
+_SLE_RENAL_DISTRACTOR_RE = re.compile(
+    r"\b(spondyloarthritis|axial spondyloarthritis|psoriatic arthritis|"
+    r"baricitinib|sarilumab|biologic|technology appraisal|appraisal)\b",
+    re.IGNORECASE,
+)
+_MIGRAINE_TIA_QUERY_RE = re.compile(
+    r"\b(migraine aura|migraine)\b.*\b(tia|transient ischaemic attack)\b|"
+    r"\b(tia|transient ischaemic attack)\b.*\b(migraine aura|migraine)\b",
+    re.IGNORECASE,
+)
+_MIGRAINE_AURA_CHUNK_RE = re.compile(
+    r"\b(migraine aura|visual symptoms?|fully reversible|gradual spread|"
+    r"5 to 60 minutes|headache)\b",
+    re.IGNORECASE,
+)
+_TIA_CHUNK_RE = re.compile(
+    r"\b(tia|transient ischaemic attack|stroke|sudden negative symptoms|"
+    r"immediate referral|24 hours)\b",
+    re.IGNORECASE,
+)
+_GENERIC_SENSORY_DISTRACTOR_RE = re.compile(
+    r"\b(numbness and weakness|sensory disturbances?|tingling|numbness)\b",
+    re.IGNORECASE,
+)
 
 
 def _has_citable_source(chunk: dict[str, Any]) -> bool:
@@ -71,6 +153,197 @@ def _finalize_filtered(
         ),
         query,
     )
+
+
+def _requested_task_count(query: str) -> int:
+    return len(_requested_tasks(query))
+
+
+def _question_focus_text(query: str) -> str:
+    units = [
+        part.strip()
+        for part in _SENTENCE_SPLIT_RE.split(query)
+        if part and part.strip()
+    ]
+    if not units:
+        return query
+    question_units = [unit for unit in units if "?" in unit]
+    if question_units:
+        return question_units[-1]
+    return units[-1]
+
+
+def _requested_tasks(query: str) -> list[str]:
+    focus_text = _question_focus_text(query)
+    focus_tasks = [
+        label for label, pattern in _TASK_PATTERNS if pattern.search(focus_text)
+    ]
+    if focus_tasks:
+        return focus_tasks
+    return [label for label, pattern in _TASK_PATTERNS if pattern.search(query)]
+
+
+def _chunk_task_labels(chunk: dict[str, Any], requested_tasks: list[str]) -> set[str]:
+    if not requested_tasks:
+        return set()
+    metadata = chunk.get("metadata") or {}
+    haystack = " ".join(
+        part
+        for part in (
+            chunk.get("text") or "",
+            chunk.get("section_path") or metadata.get("section_title") or "",
+            metadata.get("title") or metadata.get("source_name") or "",
+        )
+        if part
+    )
+    labels = {
+        label
+        for label, pattern in _TASK_PATTERNS
+        if label in requested_tasks and pattern.search(haystack)
+    }
+    # Investigation-heavy referral templates often mention tests but not literal
+    # imaging keywords. Preserve them as referral/investigation support only.
+    return labels
+
+
+def _task_coverage_count(
+    chunks: list[dict[str, Any]],
+    requested_tasks: list[str],
+) -> int:
+    covered: set[str] = set()
+    for chunk in chunks:
+        covered.update(_chunk_task_labels(chunk, requested_tasks))
+    return len(covered)
+
+
+def _select_task_covering_chunks(
+    chunks: list[dict[str, Any]],
+    *,
+    original_query: str,
+    max_chunks: int,
+) -> list[dict[str, Any]]:
+    if not chunks or max_chunks <= 0:
+        return []
+
+    if _MIGRAINE_TIA_QUERY_RE.search(original_query):
+        migraine_chunks = [
+            chunk
+            for chunk in chunks
+            if _MIGRAINE_AURA_CHUNK_RE.search(
+                " ".join(
+                    part
+                    for part in (
+                        chunk.get("text") or "",
+                        chunk.get("section_path") or "",
+                        (chunk.get("metadata") or {}).get("title") or "",
+                    )
+                    if part
+                )
+            )
+        ]
+        tia_chunks = [
+            chunk
+            for chunk in chunks
+            if _TIA_CHUNK_RE.search(
+                " ".join(
+                    part
+                    for part in (
+                        chunk.get("text") or "",
+                        chunk.get("section_path") or "",
+                        (chunk.get("metadata") or {}).get("title") or "",
+                    )
+                    if part
+                )
+            )
+        ]
+        comparison_selected: list[dict[str, Any]] = []
+        if migraine_chunks:
+            comparison_selected.append(migraine_chunks[0])
+        for chunk in tia_chunks:
+            if chunk not in comparison_selected:
+                comparison_selected.append(chunk)
+                break
+        for chunk in chunks:
+            if len(comparison_selected) >= max_chunks:
+                break
+            if chunk not in comparison_selected:
+                comparison_selected.append(chunk)
+        if comparison_selected:
+            return comparison_selected[:max_chunks]
+
+    requested_tasks = _requested_tasks(original_query)
+    if len(requested_tasks) < 2:
+        return chunks[:max_chunks]
+
+    remaining = list(chunks)
+    selected: list[dict[str, Any]] = []
+    covered: set[str] = set()
+
+    while remaining and len(selected) < max_chunks:
+        best_idx = 0
+        best_gain = -1
+        best_task_count = -1
+        for idx, chunk in enumerate(remaining):
+            labels = _chunk_task_labels(chunk, requested_tasks)
+            gain = len(labels - covered)
+            if gain > best_gain or (
+                gain == best_gain and len(labels) > best_task_count
+            ):
+                best_idx = idx
+                best_gain = gain
+                best_task_count = len(labels)
+        chosen = remaining.pop(best_idx)
+        selected.append(chosen)
+        covered.update(_chunk_task_labels(chosen, requested_tasks))
+
+    return selected
+
+
+def _finalize_with_chunk_floor(
+    primary: list[dict[str, Any]],
+    fallback: list[dict[str, Any]],
+    *,
+    original_query: str,
+    expanded_query: str,
+    specialty: str | None,
+) -> list[dict[str, Any]]:
+    minimum_chunks = 2 if _requested_task_count(original_query) >= 2 else 1
+    target_chunks = min(max(minimum_chunks, len(primary)), 3)
+
+    primary_final = _finalize_filtered(
+        primary,
+        expanded_query,
+        specialty=specialty,
+    )
+
+    fallback_final = _finalize_filtered(
+        fallback,
+        expanded_query,
+        specialty=specialty,
+    )
+    primary_selected = _select_task_covering_chunks(
+        primary_final,
+        original_query=original_query,
+        max_chunks=min(target_chunks, len(primary_final)),
+    )
+    fallback_selected = _select_task_covering_chunks(
+        fallback_final,
+        original_query=original_query,
+        max_chunks=min(target_chunks, len(fallback_final)),
+    )
+
+    if len(primary_selected) < minimum_chunks:
+        return fallback_selected or primary_selected
+
+    if len(fallback_selected) < minimum_chunks:
+        return primary_selected
+
+    if _task_coverage_count(fallback_selected, _requested_tasks(original_query)) > (
+        _task_coverage_count(primary_selected, _requested_tasks(original_query))
+    ):
+        return fallback_selected
+
+    return primary_selected
 
 
 def _citation_section_path(result: CitedResult) -> str:
@@ -239,6 +512,18 @@ def _filter_chunks(
     if not filtered:
         return []
 
+    if _MIGRAINE_TIA_QUERY_RE.search(query):
+        comparison_final = _finalize_filtered(
+            filtered,
+            expanded_query,
+            specialty=specialty,
+        )
+        return _select_task_covering_chunks(
+            comparison_final,
+            original_query=query,
+            max_chunks=min(3, len(comparison_final)),
+        )
+
     strict_matches = [
         chunk
         for chunk in filtered
@@ -271,9 +556,11 @@ def _filter_chunks(
                 )
             ]
             if narrowed:
-                return _finalize_filtered(
+                return _finalize_with_chunk_floor(
                     narrowed,
-                    expanded_query,
+                    strict_matches,
+                    original_query=query,
+                    expanded_query=expanded_query,
                     specialty=specialty,
                 )
         refined = [
@@ -286,14 +573,18 @@ def _filter_chunks(
             )
         ]
         if refined:
-            return _finalize_filtered(
+            return _finalize_with_chunk_floor(
                 refined,
-                expanded_query,
+                strict_matches,
+                original_query=query,
+                expanded_query=expanded_query,
                 specialty=specialty,
             )
-        return _finalize_filtered(
+        return _finalize_with_chunk_floor(
             strict_matches,
-            expanded_query,
+            filtered,
+            original_query=query,
+            expanded_query=expanded_query,
             specialty=specialty,
         )
 
@@ -406,9 +697,76 @@ def _sort_by_alignment(
             doc_type=metadata.get("doc_type", ""),
         )
 
+    def _urgent_toxicity_score(chunk: dict[str, Any]) -> int:
+        if not _URGENT_TOXICITY_QUERY_RE.search(query):
+            return 0
+        metadata = chunk.get("metadata") or {}
+        haystack = " ".join(
+            part
+            for part in (
+                chunk.get("text") or "",
+                chunk.get("section_path") or metadata.get("section_title") or "",
+                metadata.get("title") or metadata.get("source_name") or "",
+                metadata.get("doc_type") or "",
+            )
+            if part
+        )
+        score = 0
+        if _URGENT_TOXICITY_CHUNK_RE.search(haystack):
+            score += 4
+        if _APPRAISAL_OR_BIOLOGIC_RE.search(haystack):
+            score -= 5
+        return score
+
+    def _sle_renal_score(chunk: dict[str, Any]) -> int:
+        if not _SLE_RENAL_QUERY_RE.search(query):
+            return 0
+        metadata = chunk.get("metadata") or {}
+        haystack = " ".join(
+            part
+            for part in (
+                chunk.get("text") or "",
+                chunk.get("section_path") or metadata.get("section_title") or "",
+                metadata.get("title") or metadata.get("source_name") or "",
+                metadata.get("doc_type") or "",
+            )
+            if part
+        )
+        score = 0
+        if _SLE_RENAL_CHUNK_RE.search(haystack):
+            score += 4
+        if _SLE_RENAL_DISTRACTOR_RE.search(haystack):
+            score -= 4
+        return score
+
+    def _comparison_balance_score(chunk: dict[str, Any]) -> int:
+        if not _MIGRAINE_TIA_QUERY_RE.search(query):
+            return 0
+        metadata = chunk.get("metadata") or {}
+        haystack = " ".join(
+            part
+            for part in (
+                chunk.get("text") or "",
+                chunk.get("section_path") or metadata.get("section_title") or "",
+                metadata.get("title") or metadata.get("source_name") or "",
+            )
+            if part
+        )
+        score = 0
+        if _MIGRAINE_AURA_CHUNK_RE.search(haystack):
+            score += 3
+        if _TIA_CHUNK_RE.search(haystack):
+            score += 1
+        if _GENERIC_SENSORY_DISTRACTOR_RE.search(haystack):
+            score -= 2
+        return score
+
     return sorted(
         chunks,
         key=lambda chunk: (
+            _sle_renal_score(chunk),
+            _urgent_toxicity_score(chunk),
+            _comparison_balance_score(chunk),
             _specialty_match(chunk),
             _intent_score(chunk),
             _document_score(chunk),

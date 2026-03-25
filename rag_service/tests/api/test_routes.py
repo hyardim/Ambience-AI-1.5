@@ -237,6 +237,115 @@ async def test_revise_clinical_answer_returns_no_evidence_response(
     assert response.answer == routes.NO_EVIDENCE_RESPONSE
 
 
+@pytest.mark.anyio
+async def test_generate_clinical_answer_returns_no_evidence_for_empty_post_processed_answer(  # noqa: E501
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retrieved = [
+        {
+            "text": "Relevant chunk.",
+            "score": 0.9,
+            "metadata": {"title": "Guide"},
+            "doc_id": "doc-1",
+        }
+    ]
+
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: retrieved,
+    )
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None, **kwargs: (
+            "",
+            citations,
+        ),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(query="q", specialty="neurology", stream=False)
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE
+    assert response.citations_retrieved
+
+
+@pytest.mark.anyio
+async def test_revise_clinical_answer_returns_no_evidence_for_empty_post_processed_answer(  # noqa: E501
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retrieved = [
+        {
+            "text": "Relevant chunk.",
+            "score": 0.9,
+            "metadata": {"title": "Guide"},
+            "doc_id": "doc-1",
+        }
+    ]
+
+    monkeypatch.setattr(
+        routes, "retrieve_chunks", lambda query, top_k, specialty: retrieved
+    )
+    monkeypatch.setattr(
+        routes, "filter_chunks", lambda query, retrieved, specialty=None: retrieved
+    )
+    monkeypatch.setattr(routes, "build_revision_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return "Answer [1]"
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None, **kwargs: (
+            "",
+            citations,
+        ),
+    )
+
+    response = await routes.revise_clinical_answer(
+        routes.ReviseRequest(
+            original_query="q",
+            previous_answer="a",
+            feedback="f",
+            stream=False,
+        )
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE
+    assert response.citations_retrieved
+
+
 def test_no_evidence_response_preserves_retrieved_citations() -> None:
     citations = [SearchResult(text="evidence", source="guide.pdf", score=0.9)]
 
@@ -374,7 +483,7 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, []),
+        lambda answer, citations, strip_references, query=None, **kwargs: (answer, []),
     )
 
     response = await routes.generate_clinical_answer(
@@ -445,7 +554,7 @@ async def test_generate_clinical_answer_keeps_uncited_low_risk_answer(
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, []),
+        lambda answer, citations, strip_references, query=None, **kwargs: (answer, []),
     )
 
     response = await routes.generate_clinical_answer(
@@ -508,7 +617,7 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, []),
+        lambda answer, citations, strip_references, query=None, **kwargs: (answer, []),
     )
 
     response = await routes.generate_clinical_answer(
@@ -518,6 +627,64 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
     assert response.answer == routes.api_services.NO_EVIDENCE_RESPONSE
     assert response.citations_used == []
     assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}
+
+
+@pytest.mark.anyio
+async def test_generate_clinical_answer_refuses_source_echo_only_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retrieved = [
+        {
+            "text": "Migraine aura guidance.",
+            "score": 0.9,
+            "metadata": {"title": "Guide"},
+            "doc_id": "doc-1",
+        }
+    ]
+
+    monkeypatch.setattr(
+        routes.api_services,
+        "retrieve_chunks_advanced",
+        lambda **kwargs: retrieved,
+    )
+    monkeypatch.setattr(
+        routes,
+        "filter_chunks",
+        lambda query, retrieved, specialty=None: retrieved,
+    )
+    monkeypatch.setattr(routes, "build_grounded_prompt", lambda *args, **kwargs: "p")
+    monkeypatch.setattr(
+        routes,
+        "select_generation_provider",
+        lambda **kwargs: SimpleNamespace(
+            provider="local", score=0.9, threshold=0.5, reasons=()
+        ),
+    )
+    monkeypatch.setattr(routes, "log_route_decision", lambda *args, **kwargs: None)
+
+    async def fake_generate_answer(*args: object, **kwargs: object) -> str:
+        return (
+            "[Source: [1] Headaches in over 12s] "
+            "[Source: [2] Stroke and transient ischaemic attack in over 16s]"
+        )
+
+    monkeypatch.setattr(routes, "generate_answer", fake_generate_answer)
+    monkeypatch.setattr(
+        routes,
+        "extract_citation_results",
+        lambda answer, citations, strip_references, query=None, **kwargs: (answer, []),
+    )
+
+    response = await routes.generate_clinical_answer(
+        routes.AnswerRequest(
+            query="How can migraine aura be distinguished from TIA?",
+            specialty="neurology",
+            stream=False,
+        )
+    )
+
+    assert response.answer == routes.NO_EVIDENCE_RESPONSE
+    assert response.citations_used == []
 
 
 @pytest.mark.anyio
@@ -595,7 +762,10 @@ async def test_generate_clinical_answer_uses_canonical_query_when_it_scores_bett
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, citations),
+        lambda answer, citations, strip_references, query=None, **kwargs: (
+            answer,
+            citations,
+        ),
     )
 
     response = await routes.generate_clinical_answer(
@@ -655,7 +825,10 @@ async def test_generate_clinical_answer_keeps_original_query_when_canonical_disa
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, citations),
+        lambda answer, citations, strip_references, query=None, **kwargs: (
+            answer,
+            citations,
+        ),
     )
 
     response = await routes.generate_clinical_answer(
@@ -734,7 +907,10 @@ async def test_generate_clinical_answer_keeps_original_when_canonical_not_better
     monkeypatch.setattr(
         routes,
         "extract_citation_results",
-        lambda answer, citations, strip_references, query=None: (answer, citations),
+        lambda answer, citations, strip_references, query=None, **kwargs: (
+            answer,
+            citations,
+        ),
     )
 
     response = await routes.generate_clinical_answer(

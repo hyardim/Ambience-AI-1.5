@@ -212,6 +212,272 @@ def test_filter_chunks_prefers_guidance_style_doc_over_appraisal_for_triage_quer
     assert filtered[0] == guidance
 
 
+def test_filter_chunks_keeps_two_chunks_for_multi_part_question() -> None:
+    referral = {
+        "text": "Refer suspected inflammatory arthritis urgently [1].",
+        "score": 0.9,
+        "section_path": "Referral pathway",
+        "metadata": {
+            "title": "BSR referral guidance",
+            "source_url": "https://example.com/referral",
+            "specialty": "rheumatology",
+        },
+    }
+    investigations = {
+        "text": "Baseline blood tests include ESR, CRP, RF and anti-CCP [1].",
+        "score": 0.84,
+        "section_path": "Investigations",
+        "metadata": {
+            "title": "BSR baseline investigations",
+            "source_url": "https://example.com/investigations",
+            "specialty": "rheumatology",
+        },
+    }
+
+    filtered = filter_chunks(
+        "35-year-old with intermittent joint swelling in knees and wrists over "
+        "4 months. What baseline blood tests and referral pathway are recommended?",
+        [referral, investigations],
+        specialty="rheumatology",
+    )
+
+    assert len(filtered) == 2
+    assert referral in filtered
+    assert investigations in filtered
+
+
+def test_filter_chunks_prefers_imaging_chunk_over_tangential_investigation_chunk() -> (
+    None
+):
+    referral = {
+        "text": (
+            "Refer suspected early inflammatory arthritis urgently and do not delay "
+            "referral while awaiting results."
+        ),
+        "score": 0.91,
+        "section_path": "Suspected early inflammatory arthritis referral",
+        "metadata": {
+            "title": "Bsr Enhanced Triage And Specialist Advice",
+            "source_url": "https://example.com/referral",
+            "specialty": "rheumatology",
+        },
+    }
+    imaging = {
+        "text": (
+            "Baseline investigations include rheumatoid factor, anti-CCP, "
+            "inflammatory markers, and X-ray hands and feet."
+        ),
+        "score": 0.89,
+        "section_path": "Referral investigations",
+        "metadata": {
+            "title": "Rheumatoid arthritis in adults: diagnosis and management",
+            "source_url": "https://example.com/imaging",
+            "specialty": "rheumatology",
+        },
+    }
+    tangential = {
+        "text": (
+            "For suspected acute anterior uveitis, immediate ophthalmological "
+            "assessment is recommended and HLA-B27 testing may be considered."
+        ),
+        "score": 0.9,
+        "section_path": "Referral for suspected acute anterior uveitis",
+        "metadata": {
+            "title": "Spondyloarthritis in over 16s: diagnosis and management",
+            "source_url": "https://example.com/uveitis",
+            "specialty": "rheumatology",
+        },
+    }
+
+    filtered = filter_chunks(
+        "35-year-old with intermittent joint swelling in knees and wrists over "
+        "4 months. CRP mildly raised. No clear diagnosis. What baseline blood "
+        "tests and imaging should be completed prior to referral?",
+        [referral, tangential, imaging],
+        specialty="rheumatology",
+    )
+
+    assert referral in filtered
+    assert imaging in filtered
+    assert tangential not in filtered[:2]
+
+
+def test_filter_chunks_uses_question_focus_for_task_detection() -> None:
+    nph = {
+        "text": (
+            "Refer adults who have difficulty initiating and coordinating "
+            "walking (gait apraxia) to neurology or an elderly care clinic to "
+            "exclude normal pressure hydrocephalus."
+        ),
+        "score": 0.93,
+        "section_path": "Difficulty initiating and coordinating walking (gait apraxia)",
+        "metadata": {
+            "title": "Suspected neurological conditions: recognition and referral",
+            "source_url": "https://example.com/nph",
+            "specialty": "neurology",
+        },
+    }
+    stroke_imaging = {
+        "text": (
+            "Do not offer CT brain scanning to people with a suspected TIA "
+            "unless there is clinical suspicion of an alternative diagnosis "
+            "that CT could detect. After specialist assessment, consider MRI."
+        ),
+        "score": 0.91,
+        "section_path": "Imaging for people who have had a suspected TIA",
+        "metadata": {
+            "title": "Stroke and transient ischaemic attack in over 16s",
+            "source_url": "https://example.com/tia",
+            "specialty": "neurology",
+        },
+    }
+
+    filtered = filter_chunks(
+        "65-year-old with rapidly progressive gait disturbance and urinary "
+        "incontinence over 3 months. CT head shows ventriculomegaly. "
+        "Should normal pressure hydrocephalus be suspected and how urgently "
+        "should this be referred?",
+        [nph, stroke_imaging],
+        specialty="neurology",
+    )
+
+    assert filtered[0] == nph
+    assert stroke_imaging not in filtered
+
+
+def test_filter_chunks_prefers_urgent_toxicity_guidance_over_biologic_appraisals() -> (
+    None
+):
+    toxicity = {
+        "text": (
+            "If methotrexate toxicity or significant neutropenia is suspected, "
+            "withhold methotrexate and arrange urgent clinical assessment and "
+            "repeat blood count monitoring."
+        ),
+        "score": 0.88,
+        "section_path": "csDMARD monitoring",
+        "metadata": {
+            "title": (
+                "The 2025 British Society for Rheumatology guideline for the "
+                "prescription and monitoring of conventional synthetic "
+                "disease-modifying anti-rheumatic drugs"
+            ),
+            "source_url": "https://example.com/bsr-mtx",
+            "specialty": "rheumatology",
+            "doc_type": "guideline",
+        },
+    }
+    appraisal = {
+        "text": (
+            "Baricitinib is recommended as an option for treating active rheumatoid "
+            "arthritis in adults with severe disease."
+        ),
+        "score": 0.9,
+        "section_path": "Recommendations",
+        "metadata": {
+            "title": "Baricitinib for moderate to severe rheumatoid arthritis",
+            "source_url": "https://example.com/baricitinib",
+            "specialty": "rheumatology",
+            "doc_type": "appraisal",
+        },
+    }
+
+    filtered = filter_chunks(
+        "30-year-old on methotrexate for rheumatoid arthritis presenting with "
+        "fever, sore throat, and neutropenia on FBC. What immediate action is "
+        "required?",
+        [appraisal, toxicity],
+        specialty="rheumatology",
+    )
+
+    assert filtered[0] == toxicity
+
+
+def test_filter_chunks_prefers_lupus_renal_guidance_over_unrelated_rheum_docs() -> None:
+    lupus_renal = {
+        "text": (
+            "Urinalysis should screen for proteinuria and haematuria, and urine "
+            "protein:creatinine ratio should be sent when lupus nephritis is "
+            "suspected. Urgent specialist assessment is appropriate for renal "
+            "involvement."
+        ),
+        "score": 0.82,
+        "section_path": "Lupus nephritis > Urine protein:creatinine ratio",
+        "metadata": {
+            "title": "OP-BRHE170291 1..45",
+            "source_url": "https://example.com/lupus-renal",
+            "specialty": "rheumatology",
+            "doc_type": "guideline",
+        },
+    }
+    distractor = {
+        "text": (
+            "Be aware that axial spondyloarthritis may be missed even if the "
+            "onset is associated with established comorbidities."
+        ),
+        "score": 0.86,
+        "section_path": "Suspecting spondyloarthritis",
+        "metadata": {
+            "title": "Spondyloarthritis in over 16s: diagnosis and management",
+            "source_url": "https://example.com/spa",
+            "specialty": "rheumatology",
+            "doc_type": "guideline",
+        },
+    }
+
+    filtered = filter_chunks(
+        "45-year-old with known SLE presenting with new proteinuria and rising "
+        "creatinine. What immediate investigations and referral pathway are "
+        "recommended?",
+        [distractor, lupus_renal],
+        specialty="rheumatology",
+    )
+
+    assert filtered[0] == lupus_renal
+
+
+def test_filter_chunks_prefers_migraine_aura_comparison_chunk_over_generic_sensory(
+) -> None:
+    migraine = {
+        "text": (
+            "Suspect migraine with aura when symptoms are fully reversible, "
+            "develop over at least 5 minutes, and last between 5 and 60 minutes."
+        ),
+        "score": 0.79,
+        "section_path": "Sensory symptoms including tingling or numbness in adults",
+        "metadata": {
+            "title": "Suspected neurological conditions: recognition and referral",
+            "source_url": "https://example.com/migraine",
+            "specialty": "neurology",
+            "doc_type": "guideline",
+        },
+    }
+    generic = {
+        "text": (
+            "Assess sudden-onset transient unilateral numbness in adults in line "
+            "with the NICE guideline on stroke and transient ischaemic attack."
+        ),
+        "score": 0.83,
+        "section_path": "Numbness and weakness",
+        "metadata": {
+            "title": "Suspected neurological conditions: recognition and referral",
+            "source_url": "https://example.com/generic-sensory",
+            "specialty": "neurology",
+            "doc_type": "guideline",
+        },
+    }
+
+    filtered = filter_chunks(
+        "38-year-old with recurrent episodes of transient unilateral visual "
+        "disturbance lasting 10-15 minutes followed by headache. No persistent "
+        "deficit. How can migraine aura be distinguished from TIA in primary care?",
+        [generic, migraine],
+        specialty="neurology",
+    )
+
+    assert filtered[0] == migraine
+
+
 def test_retrieve_chunks_uses_shared_retrieval_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

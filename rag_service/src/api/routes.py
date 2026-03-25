@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -58,9 +59,23 @@ from .streaming import ndjson_done_only, streaming_generator
 logger = setup_logger(__name__)
 router = APIRouter()
 
+_SOURCE_ECHO_RE = re.compile(
+    r"\[?Source:\s*.*?(?=(?:\s+\[?Source:)|$)",
+    re.IGNORECASE,
+)
+_CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
+
 
 def _answer_is_effectively_empty(answer: str) -> bool:
-    return not answer.strip()
+    if not answer.strip():
+        return True
+    stripped = answer.lstrip().lower()
+    if stripped.startswith("[source:") or stripped.startswith("source:"):
+        return True
+    without_source_echo = _SOURCE_ECHO_RE.sub(" ", answer)
+    without_citations = _CITATION_GROUP_RE.sub(" ", without_source_echo)
+    normalized = re.sub(r"[\W_]+", " ", without_citations).strip()
+    return not normalized
 
 
 def _retrieval_quality(
@@ -465,6 +480,7 @@ async def _generate_answer_from_retrieval(
             citations_retrieved,
             strip_references=True,
             query=query,
+            allow_uncited_answer=allow_uncited,
         )
         if _answer_is_effectively_empty(renumbered_answer):
             return _no_evidence_response(
@@ -606,6 +622,7 @@ async def revise_clinical_answer(
             citations_retrieved,
             strip_references=False,
             query=request.original_query,
+            allow_uncited_answer=allow_uncited,
         )
         if _answer_is_effectively_empty(renumbered_answer):
             return _no_evidence_response(

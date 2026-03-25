@@ -243,6 +243,15 @@ class TestExpandQuery:
         assert "migraine aura" in result
         assert "transient ischaemic attack" in result
 
+    def test_migraine_tia_comparison_expansion_adds_balanced_comparison_terms(self):
+        result = _expand_query(
+            "How can migraine aura be distinguished from TIA in primary care?"
+        )
+        assert "migraine aura" in result
+        assert "transient ischaemic attack" in result
+        assert "positive visual symptoms" in result
+        assert "sudden negative symptoms" in result
+
     def test_methotrexate_toxicity_pattern_expands_to_monitoring_terms(self):
         result = _expand_query(
             "Methotrexate with fever, sore throat, and neutropenia on blood count."

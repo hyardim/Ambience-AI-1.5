@@ -217,6 +217,7 @@ export function GPQueryDetailPage() {
 
     // Optimistically add user message
     const tempId = `temp-${Date.now()}`;
+    const tempAiId = `temp-ai-${Date.now()}`;
     const userMsg: Message = {
       id: tempId,
       senderId: 'user',
@@ -225,7 +226,16 @@ export function GPQueryDetailPage() {
       content,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMsg]);
+    const aiPlaceholder: Message = {
+      id: tempAiId,
+      senderId: 'ai',
+      senderName: 'NHS AI Assistant',
+      senderType: 'ai',
+      content: '',
+      timestamp: new Date(),
+      isGenerating: true,
+    };
+    setMessages(prev => [...prev, userMsg, aiPlaceholder]);
 
     const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
@@ -234,7 +244,7 @@ export function GPQueryDetailPage() {
         const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
         if (oversized.length > 0) {
           setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
-          setMessages(prev => prev.filter(m => m.id !== tempId));
+          setMessages(prev => prev.filter(m => m.id !== tempId && m.id !== tempAiId));
           setSending(false);
           return;
         }
@@ -273,7 +283,7 @@ export function GPQueryDetailPage() {
       });
     } catch (err) {
       // Remove the optimistic message on failure so the UI stays consistent
-      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setMessages(prev => prev.filter(m => m.id !== tempId && m.id !== tempAiId));
       setError(getErrorMessage(err, 'Failed to send message'));
     } finally {
       setSending(false);

@@ -48,6 +48,12 @@ _LOW_RISK_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\banxiety\b", re.IGNORECASE),
     re.compile(r"\bno (rigidity|bradykinesia|neurological deficit)\b", re.IGNORECASE),
 )
+_WORKUP_QUERY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(before|prior to) referral\b", re.IGNORECASE),
+    re.compile(r"\bbaseline (blood )?tests?\b", re.IGNORECASE),
+    re.compile(r"\bimaging\b", re.IGNORECASE),
+    re.compile(r"\bwork[- ]?up\b", re.IGNORECASE),
+)
 
 # Patterns that look like prompt-injection attempts or role impersonation.
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
@@ -198,8 +204,32 @@ _INSTRUCTIONS_NEW = (
 )
 
 
-def _active_instructions() -> str:
-    return _INSTRUCTIONS_NEW if ACTIVE_PROMPT == "new" else _INSTRUCTIONS_ORIGINAL
+_EMERGENCY_BASE_INSTRUCTIONS = (
+    "You are a clinical decision-support assistant for a GP handling an urgent "
+    "question. Use the indexed passages as the primary evidence. Give the safest "
+    "concrete immediate action first, then a brief explanation. Cite only claims "
+    "that are directly supported by the indexed passages. If the passages support "
+    "the emergency pattern but not every operational detail, say 'Based on standard "
+    "emergency clinical practice:' before any uncited bridging sentence."
+)
+
+_COMPARISON_BASE_INSTRUCTIONS = (
+    "You are a clinical decision-support assistant for a GP answering a comparison "
+    "question. Use the indexed passages as the primary evidence. Compare the two "
+    "conditions named in the question directly, using concrete distinguishing "
+    "features supported by the passages. Do not drift into a one-sided workflow "
+    "answer for only one condition."
+)
+
+
+def _active_instructions(answer_mode: str | None = None) -> str:
+    if ACTIVE_PROMPT == "original":
+        return _INSTRUCTIONS_ORIGINAL
+    if answer_mode == "emergency":
+        return _EMERGENCY_BASE_INSTRUCTIONS
+    if answer_mode == "comparison":
+        return _COMPARISON_BASE_INSTRUCTIONS
+    return _INSTRUCTIONS_NEW
 
 
 def select_answer_mode(
@@ -269,6 +299,10 @@ def _mode_instructions(answer_mode: str) -> str:
             "EMERGENCY MODE:\n"
             "- Start with exactly 'Immediate action:' and give the urgent step "
             "in the first sentence.\n"
+            "- The first sentence must contain the concrete action itself (for "
+            "example stop a drug, admit, refer same-day, transfer urgently, "
+            "or arrange immediate assessment). Do not write only that action "
+            "is required.\n"
             "- Use decisive wording for emergency transfer or same-day "
             "escalation when supported.\n"
             "- Keep the answer short and operational. Do not add a 'General "
@@ -276,7 +310,10 @@ def _mode_instructions(answer_mode: str) -> str:
             "- If the indexed passages support only the red-flag pattern but "
             "not every operational detail, say 'Based on standard emergency "
             "clinical practice:' for the uncited part.\n"
-            "- Never bury the immediate action inside explanation."
+            "- Never bury the immediate action inside explanation.\n"
+            "- If you cannot name a concrete urgent action from the indexed "
+            "passages, say the evidence supports urgent same-day specialist or "
+            "hospital assessment and then state the safest immediate step."
         )
     if answer_mode == "comparison":
         return (
@@ -285,11 +322,17 @@ def _mode_instructions(answer_mode: str) -> str:
             "question.\n"
             "- Then add a section starting exactly 'Key differences:' with "
             "short feature-based bullet points.\n"
+            "- You must address both sides of the comparison explicitly. Do "
+            "not answer with guidance for only one condition.\n"
             "- Compare onset, symptom type, progression, duration, and "
             "follow-up/referral when relevant.\n"
+            "- For each condition named in the question, give at least one "
+            "distinctive feature if the indexed evidence supports it.\n"
             "- Avoid vague filler like 'consider history' or 'clinical "
             "judgement' unless followed by a concrete distinguishing feature.\n"
-            "- If uncertainty remains, end with one clear safety/referral sentence."
+            "- If uncertainty remains, end with one clear safety/referral sentence.\n"
+            "- Do not turn a comparison answer into a one-sided imaging or "
+            "referral workflow unless the question specifically asks for that."
         )
     if answer_mode == "routine_low_risk":
         return (
@@ -325,6 +368,34 @@ def _grounding_guardrails() -> str:
         "- If you infer something from general clinical practice, label it "
         "explicitly and do not attach bracket citations to it."
     )
+
+
+def _scope_framing_instructions(question: str, answer_mode: str) -> str | None:
+    if not any(pattern.search(question) for pattern in _WORKUP_QUERY_PATTERNS):
+        return None
+
+    lines = [
+        "SCOPE FRAMING:",
+        "- If the retrieved passages mainly cover a specific pathway, condition "
+        "subset, or referral template, name that scope explicitly in the answer "
+        "(for example 'For suspected rheumatoid arthritis, ...').",
+        "- Do not present subtype-specific guidance as if it were a complete "
+        "generic workup for all possible causes.",
+        "- When the evidence is narrower than the question, say so directly in "
+        "the first two sentences rather than leaving that limitation implicit.",
+        "- If the indexed passages support only part of the requested workup "
+        "(for example blood tests but not broad imaging guidance), state that "
+        "clearly in one sentence.",
+        "- Avoid broad phrasing like 'prior to referral, do X' unless the "
+        "retrieved passages truly support that as a general rule for the whole "
+        "clinical scenario.",
+    ]
+    if answer_mode == "routine_low_risk":
+        lines.append(
+            "- Even in routine low-risk mode, prefer scoped honesty over a "
+            "confident but over-broad summary."
+        )
+    return "\n".join(lines)
 
 
 def _matching_signals(question: str, chunk: dict) -> str:
@@ -376,32 +447,31 @@ def _format_context(question: str, chunks: list[dict]) -> str:
     lines = []
     for idx, chunk in enumerate(chunks, start=1):
         metadata = chunk.get("metadata", {}) or {}
-        source = (
+        title = (
             metadata.get("title")
             or metadata.get("source_name")
             or metadata.get("filename")
-            or "Unknown Source"
+            or ""
         )
         page_start = chunk.get("page_start")
         page_end = chunk.get("page_end")
-        page_note = ""
+        note_parts: list[str] = []
+        if title:
+            note_parts.append(str(title))
+        section = chunk.get("section_path") or metadata.get("section_title")
+        if section:
+            note_parts.append(str(section))
         if page_start is not None and page_end is not None:
             if page_start == page_end:
-                page_note = f" (page {page_start})"
+                note_parts.append(f"page {page_start}")
             else:
-                page_note = f" (pages {page_start}-{page_end})"
-        specialty = metadata.get("specialty")
-        section = chunk.get("section_path") or metadata.get("section_title")
-        source_meta_bits = [source]
-        if specialty:
-            source_meta_bits.append(f"specialty={specialty}")
-        if section:
-            source_meta_bits.append(f"section={section}")
+                note_parts.append(f"pages {page_start}-{page_end}")
 
+        header = f"[{idx}]"
+        if note_parts:
+            header = f"{header} {' - '.join(note_parts)}"
         lines.append(
-            f"[{idx}] Match cues: {_matching_signals(question, chunk)}\n"
-            f"Passage: {_truncate_chunk_text(chunk.get('text', ''))}\n"
-            f"Source: {' | '.join(source_meta_bits)}{page_note}"
+            f"{header}\n{_truncate_chunk_text(chunk.get('text', ''))}"
         )
 
     return "\n\n".join(lines)
@@ -479,10 +549,13 @@ def build_grounded_prompt(
     )
 
     parts = [
-        _active_instructions(),
+        _active_instructions(resolved_mode),
         _mode_instructions(resolved_mode),
         _grounding_guardrails(),
     ]
+    scope_framing = _scope_framing_instructions(question, resolved_mode)
+    if scope_framing:
+        parts.append(scope_framing)
     if patient_block:
         parts.append(patient_block)
     if evidence_note:
@@ -522,7 +595,7 @@ def build_revision_prompt(
 
     # Use the same active prompt variant as the initial generation so
     # citation and sourcing rules stay consistent across revisions.
-    base_instructions = _active_instructions()
+    base_instructions = _active_instructions(resolved_mode)
     instructions = (
         f"{base_instructions}\n\n"
         f"{_mode_instructions(resolved_mode)}\n\n"
@@ -535,6 +608,9 @@ def build_revision_prompt(
         "- Do not fabricate information or cite sources that are not provided.\n"
         "- Keep the response concise and factual."
     )
+    scope_framing = _scope_framing_instructions(original_question, resolved_mode)
+    if scope_framing:
+        instructions = f"{instructions}\n\n{scope_framing}"
 
     patient_block = _format_patient_context(patient_context)
     context_section = "Context:\n" + (context_block if has_context else "(none)")

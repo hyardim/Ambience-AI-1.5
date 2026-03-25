@@ -212,6 +212,10 @@ def retrieve(
         _maybe_write_artifacts(write_debug_artifacts, query_hash, artifacts)
         return []
 
+    if _rerank_is_uninformative(reranked):
+        reranked = _fallback_sort_for_flat_rerank(query, reranked)
+        artifacts["06_5_flat_rerank_fallback"] = [r.model_dump() for r in reranked]
+
     # ------------------------------------------------------------------
     # Stage 7: Deduplication
     # ------------------------------------------------------------------
@@ -235,7 +239,7 @@ def retrieve(
     # ------------------------------------------------------------------
     # Stage 7.6: Document diversification
     # ------------------------------------------------------------------
-    deduped = _diversify_by_document(deduped, max_per_doc=1)
+    deduped = _diversify_by_document(deduped, max_per_doc=2)
     artifacts["07_6_doc_diversity"] = [r.model_dump() for r in deduped]
 
     # ------------------------------------------------------------------
@@ -297,6 +301,37 @@ def _keyword_signal(keyword_rank: float | None) -> float:
     if keyword_rank is None:
         return 0.0
     return 1.0 / (1.0 + max(float(keyword_rank), 0.0))
+
+
+def _rerank_is_uninformative(results: list[Any]) -> bool:
+    if len(results) < 2:
+        return False
+    scores = [float(getattr(result, "rerank_score", 0.0) or 0.0) for result in results]
+    return max(scores) <= 0.0 or (max(scores) - min(scores)) <= 1e-9
+
+
+def _fallback_sort_for_flat_rerank(query: str, results: list[Any]) -> list[Any]:
+    def _fallback_key(result: Any) -> tuple[float, float, float, float, float]:
+        text = getattr(result, "text", "")
+        metadata = getattr(result, "metadata", {}) or {}
+        title = metadata.get("title", "")
+        section = metadata.get("section_title", "") or metadata.get("section_path", "")
+        doc_type = metadata.get("doc_type", "")
+        return (
+            phrase_overlap_count(query, text) + phrase_overlap_count(query, title),
+            query_intent_alignment_score(
+                query,
+                title=str(title),
+                section=str(section),
+                text=str(text),
+                doc_type=str(doc_type),
+            ),
+            query_overlap_ratio(query, text),
+            query_overlap_count(query, text) + query_overlap_count(query, title),
+            float(getattr(result, "rrf_score", 0.0) or 0.0),
+        )
+
+    return sorted(results, key=_fallback_key, reverse=True)
 
 
 def _calibrate_score(
@@ -517,6 +552,14 @@ def _diversify_by_document(
     max_per_doc: int,
 ) -> list[Any]:
     if max_per_doc <= 0:
+        return results
+
+    unique_doc_ids = {
+        getattr(result, "doc_id", "")
+        for result in results
+        if getattr(result, "doc_id", "")
+    }
+    if len(unique_doc_ids) <= 2:
         return results
 
     kept: list[Any] = []

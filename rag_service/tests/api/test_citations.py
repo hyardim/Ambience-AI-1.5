@@ -7,6 +7,7 @@ from src.api.citations import (
     _enforce_requested_scope,
     _has_cited_sentence_matching,
     _join_labels,
+    _question_focus_text,
     extract_citation_results,
     has_query_overlap,
     is_boilerplate,
@@ -102,6 +103,19 @@ def test_extract_citation_results_drops_rule_style_citation_tokens() -> None:
     assert used == []
 
 
+def test_extract_citation_results_normalizes_section_reference_artifacts() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Refer to neurology to exclude NPH ([1] 1.4.4).",
+        citations,
+        strip_references=False,
+    )
+
+    assert answer == "Refer to neurology to exclude NPH [1]."
+    assert used == [citations[0]]
+
+
 def test_extract_citation_results_adds_partial_coverage_note() -> None:
     citations = [SearchResult(text="A", source="S", score=0.9)]
 
@@ -141,6 +155,54 @@ def test_extract_citation_results_drops_treatment_when_not_requested() -> None:
     assert used == [citations[0]]
 
 
+def test_extract_citation_results_keeps_started_on_treatment_queries() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "PMR can be started on prednisolone 15-20 mg daily in primary care [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "70-year-old with sudden onset bilateral shoulder and hip girdle pain. "
+            "Should polymyalgia rheumatica be started on steroids in primary care?"
+        ),
+    )
+
+    assert "prednisolone 15-20 mg daily" in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_initiation_queries() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Methotrexate can be initiated in primary care after baseline blood tests [1].",
+        citations,
+        strip_references=False,
+        query=(
+            "Can methotrexate be initiated in primary care for inflammatory "
+            "arthritis?"
+        ),
+    )
+
+    assert "initiated in primary care" in answer.lower()
+    assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_initial_management_queries() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "Initial management is to reduce caffeine and review triggers [1].",
+        citations,
+        strip_references=False,
+        query="What initial management is appropriate for intermittent tremor?",
+    )
+
+    assert "initial management" in answer.lower()
+    assert used == [citations[0]]
+
+
 def test_extract_citation_results_keeps_scope_only_when_no_citations() -> None:
     answer, used = extract_citation_results(
         "Honest scope: the indexed passages do not cover this question.",
@@ -150,6 +212,19 @@ def test_extract_citation_results_keeps_scope_only_when_no_citations() -> None:
 
     assert "do not cover" in answer.lower()
     assert used == []
+
+
+def test_extract_citation_results_strips_dangling_leading_connective() -> None:
+    citations = [SearchResult(text="A", source="S", score=0.9)]
+
+    answer, used = extract_citation_results(
+        "However, it emphasizes not delaying referral while awaiting results [1].",
+        citations,
+        strip_references=False,
+    )
+
+    assert answer.startswith("It emphasizes")
+    assert used == [citations[0]]
 
 
 def test_extract_citation_results_preserves_cited_scope_sentence() -> None:
@@ -198,6 +273,23 @@ def test_extract_citation_results_keeps_answer_when_all_requested_parts_are_cite
 
     assert "do not directly cover" not in answer
     assert used == [citations[0]]
+
+
+def test_extract_citation_results_keeps_uncited_low_risk_partial_answer() -> None:
+    answer, used = extract_citation_results(
+        "Baseline blood tests include ESR and CRP.",
+        [],
+        strip_references=False,
+        query=(
+            "35-year-old with intermittent joint swelling in knees and wrists "
+            "over 4 months. CRP mildly raised. No clear diagnosis. What baseline "
+            "blood tests and imaging should be completed prior to referral?"
+        ),
+        allow_uncited_answer=True,
+    )
+
+    assert "baseline blood tests include esr and crp" in answer.lower()
+    assert used == []
 
 
 def test_extract_citation_results_does_not_duplicate_existing_gap_sentence() -> None:
@@ -265,6 +357,31 @@ def test_enforce_partial_question_coverage_returns_empty_without_citations() -> 
     )
 
 
+def test_enforce_partial_question_coverage_keeps_uncited_allowed_answer() -> None:
+    answer = _enforce_partial_question_coverage(
+        "Baseline blood tests include ESR and CRP.",
+        query=(
+            "35-year-old with intermittent joint swelling in knees and wrists "
+            "over 4 months. CRP mildly raised. No clear diagnosis. What baseline "
+            "blood tests and imaging should be completed prior to referral?"
+        ),
+        has_citations=False,
+        allow_uncited_answer=True,
+    )
+
+    assert "baseline blood tests include esr and crp" in answer.lower()
+
+
+def test_enforce_partial_question_coverage_ignores_blank_focus_text() -> None:
+    answer = _enforce_partial_question_coverage(
+        "Baseline blood tests include ESR and CRP [1].",
+        query=" \n\t ",
+        has_citations=True,
+    )
+
+    assert "baseline blood tests include esr and crp" in answer.lower()
+
+
 def test_enforce_partial_question_coverage_keeps_existing_gap_sentence() -> None:
     sentence = (
         "The indexed passages retrieved do not directly cover the referral/urgency "
@@ -282,6 +399,21 @@ def test_enforce_partial_question_coverage_keeps_existing_gap_sentence() -> None
     assert answer.count("do not directly cover") == 1
 
 
+def test_question_focus_text_prefers_last_question_sentence() -> None:
+    focus = _question_focus_text(
+        "CT head shows ventriculomegaly. Should normal pressure hydrocephalus "
+        "be suspected and how urgently should this be referred?"
+    )
+
+    assert "ct head" not in focus.lower()
+    assert "how urgently" in focus.lower()
+
+
+def test_question_focus_text_handles_empty_inputs() -> None:
+    assert _question_focus_text(None) == ""
+    assert _question_focus_text(" \n\t ") == ""
+
+
 def test_enforce_requested_scope_skips_blank_units() -> None:
     answer = _enforce_requested_scope(
         "\n\nStart ACE inhibitors.\n\n",
@@ -292,3 +424,16 @@ def test_enforce_requested_scope_skips_blank_units() -> None:
     )
 
     assert answer == ""
+
+
+def test_enforce_requested_scope_keeps_treatment_for_ambiguous_management_queries() -> (
+    None
+):
+    answer = _enforce_requested_scope(
+        "PMR can be started on prednisolone in primary care [1].",
+        query=(
+            "Should polymyalgia rheumatica be started on steroids in primary care?"
+        ),
+    )
+
+    assert "prednisolone" in answer.lower()

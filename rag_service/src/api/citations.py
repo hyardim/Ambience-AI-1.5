@@ -15,6 +15,14 @@ MAX_CITATIONS = 5
 MIN_RELEVANCE = 0.12
 _VALID_CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
 _RULE_STYLE_CITATION_RE = re.compile(r"\[(?:\d+(?:\.\d+)+)\]")
+_PAREN_SECTION_REFERENCE_RE = re.compile(
+    r"\(\s*(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\s*\)",
+    re.IGNORECASE,
+)
+_POST_CITATION_SECTION_REFERENCE_RE = re.compile(
+    r"(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\b",
+    re.IGNORECASE,
+)
 _SECTION_LABEL_RE = re.compile(
     r"\b(?:"
     r"General clinical context|"
@@ -25,6 +33,10 @@ _SECTION_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_LEADING_CONNECTIVE_RE = re.compile(
+    r"^(?:however|but|also|additionally|furthermore|moreover|in addition)\s*,?\s+",
+    re.IGNORECASE,
+)
 _CLINICAL_HINT_RE = re.compile(
     r"\b(refer|referral|urgent|stroke|tia|hydrocephalus|nph|gait|ataxia|weakness|"
     r"headache|jaw claudication|temporal arteritis|bell'?s palsy|migraine|"
@@ -64,7 +76,11 @@ _IMAGING_SENTENCE_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _TREATMENT_QUERY_HINT_RE = re.compile(
-    r"\b(treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|drug)\b",
+    r"\b("
+    r"treat\w*|management|manage\w*|therapy|medication|dose|prescrib\w*|drug|"
+    r"start\w*|initiat\w*|commenc\w*|begin\w*|stop\w*|withhold\w*|continue\w*|"
+    r"first[- ]line|initial management|prednisolone|steroid\w*"
+    r")\b",
     re.IGNORECASE,
 )
 _TREATMENT_SENTENCE_HINT_RE = re.compile(
@@ -113,9 +129,31 @@ def is_boilerplate(chunk: dict[str, Any]) -> bool:
 
 def _clean_answer_text(text: str) -> str:
     cleaned = _SECTION_LABEL_RE.sub("", text)
+    cleaned = _PAREN_SECTION_REFERENCE_RE.sub(r"\1", cleaned)
+    cleaned = _POST_CITATION_SECTION_REFERENCE_RE.sub(r"\1", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned.strip()
+    cleaned = cleaned.strip()
+    cleaned = _LEADING_CONNECTIVE_RE.sub("", cleaned)
+    if cleaned and cleaned[0].islower():
+        cleaned = cleaned[0].upper() + cleaned[1:]
+    return cleaned
+
+
+def _question_focus_text(query: str | None) -> str:
+    if not query:
+        return ""
+    units = [
+        part.strip()
+        for part in _SENTENCE_SPLIT_RE.split(query)
+        if part and part.strip()
+    ]
+    if not units:
+        return ""
+    question_units = [unit for unit in units if "?" in unit]
+    if question_units:
+        return question_units[-1]
+    return units[-1]
 
 
 def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str:
@@ -181,22 +219,27 @@ def _enforce_partial_question_coverage(
     *,
     query: str | None,
     has_citations: bool,
+    allow_uncited_answer: bool = False,
 ) -> str:
     if not answer_text.strip() or not query:
         return answer_text
 
+    focus_text = _question_focus_text(query)
+    if not focus_text:
+        return answer_text
+
     requested_parts: list[tuple[str, re.Pattern[str]]] = []
-    if _INVESTIGATION_QUERY_HINT_RE.search(query):
+    if _INVESTIGATION_QUERY_HINT_RE.search(focus_text):
         requested_parts.append(("investigations", _INVESTIGATION_SENTENCE_HINT_RE))
-    if _IMAGING_QUERY_HINT_RE.search(query):
+    if _IMAGING_QUERY_HINT_RE.search(focus_text):
         requested_parts.append(("imaging", _IMAGING_SENTENCE_HINT_RE))
-    if _REFERRAL_QUERY_HINT_RE.search(query):
+    if _REFERRAL_QUERY_HINT_RE.search(focus_text):
         requested_parts.append(("referral/urgency pathway", _REFERRAL_SENTENCE_HINT_RE))
 
     if not requested_parts:
         return answer_text
     if not has_citations:
-        return ""
+        return answer_text if allow_uncited_answer else ""
 
     missing_parts = [
         label
@@ -218,7 +261,20 @@ def _enforce_partial_question_coverage(
 def _enforce_requested_scope(answer_text: str, *, query: str | None) -> str:
     if not answer_text.strip():
         return ""
-    if not query or _TREATMENT_QUERY_HINT_RE.search(query):
+    if not query:
+        return answer_text
+
+    query_lc = query.lower()
+    requests_treatment = bool(_TREATMENT_QUERY_HINT_RE.search(query_lc))
+    requests_non_treatment_only = any(
+        pattern.search(query_lc)
+        for pattern in (
+            _INVESTIGATION_QUERY_HINT_RE,
+            _IMAGING_QUERY_HINT_RE,
+            _REFERRAL_QUERY_HINT_RE,
+        )
+    )
+    if requests_treatment or not requests_non_treatment_only:
         return answer_text
 
     kept_units: list[str] = []
@@ -239,6 +295,7 @@ def extract_citation_results(
     *,
     strip_references: bool,
     query: str | None = None,
+    allow_uncited_answer: bool = False,
 ) -> tuple[str, list[SearchResult]]:
     used_indices = extract_citation_indices(answer_text)
     sorted_used = sorted(
@@ -262,5 +319,6 @@ def extract_citation_results(
         answer,
         query=query,
         has_citations=bool(citations_used),
+        allow_uncited_answer=allow_uncited_answer,
     )
     return answer, citations_used

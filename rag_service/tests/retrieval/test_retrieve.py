@@ -244,7 +244,9 @@ class TestRetrieve:
         assert [item.chunk_id for item in deduped_passed] == ["c-strong", "c-weak"]
         assert deduped_passed[0].final_score >= deduped_passed[1].final_score
 
-    def test_document_diversification_limits_one_chunk_per_doc(self):
+    def test_document_diversification_keeps_multiple_chunks_when_only_two_docs_exist(
+        self,
+    ):
         first = make_ranked_result("c-1").model_copy(
             update={"doc_id": "doc-a", "final_score": 0.9}
         )
@@ -257,6 +259,9 @@ class TestRetrieve:
         mocks = make_all_stage_mocks(deduped_results=[first, second, third])
 
         run_retrieve(mocks, top_k=3)
+
+        deduped_passed = mocks["assemble_citations"].call_args.args[0]
+        assert [item.chunk_id for item in deduped_passed] == ["c-1", "c-2", "c-3"]
 
     def test_final_ranking_prefers_guidance_doc_over_appraisal_for_triage_queries(self):
         guidance = make_ranked_result("guidance").model_copy(
@@ -835,3 +840,48 @@ class TestDiversifyByDocument:
         items = [make_ranked_result(f"c{i}") for i in range(3)]
         result = _diversify_by_document(items, max_per_doc=0)
         assert len(result) == 3
+
+    def test_diversify_by_document_skips_diversification_for_two_docs(self):
+        from src.retrieval.retrieve import _diversify_by_document
+
+        items = [
+            make_ranked_result("c1").model_copy(update={"doc_id": "doc-a"}),
+            make_ranked_result("c2").model_copy(update={"doc_id": "doc-a"}),
+            make_ranked_result("c3").model_copy(update={"doc_id": "doc-b"}),
+        ]
+
+        result = _diversify_by_document(items, max_per_doc=1)
+
+        assert [item.chunk_id for item in result] == ["c1", "c2", "c3"]
+
+
+class TestFlatRerankFallback:
+    def test_fallback_sort_for_flat_rerank_prefers_overlap(self) -> None:
+        from src.retrieval.retrieve import _fallback_sort_for_flat_rerank
+
+        vague = make_ranked_result("c1").model_copy(
+            update={
+                "text": "General neurology overview.",
+                "metadata": {"title": "General guide"},
+                "rerank_score": 0.0,
+                "rrf_score": 0.8,
+            }
+        )
+        focused = make_ranked_result("c2").model_copy(
+            update={
+                "text": (
+                    "Suspect essential tremor in adults with symmetrical "
+                    "postural tremor and no symptoms of parkinsonism."
+                ),
+                "metadata": {"title": "Tremor in adults"},
+                "rerank_score": 0.0,
+                "rrf_score": 0.2,
+            }
+        )
+
+        ranked = _fallback_sort_for_flat_rerank(
+            "intermittent hand tremor worse with anxiety and caffeine",
+            [vague, focused],
+        )
+
+        assert [item.chunk_id for item in ranked] == ["c2", "c1"]

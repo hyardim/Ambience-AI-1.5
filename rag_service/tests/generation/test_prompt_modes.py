@@ -92,6 +92,9 @@ def test_grounded_prompt_includes_emergency_mode_instructions() -> None:
     assert "EMERGENCY MODE" in prompt
     assert "Immediate action:" in prompt
     assert "ANSWER MODE\nemergency" in prompt
+    assert "must contain the concrete action itself" in prompt
+    assert "Do not write only that action is required" in prompt
+    assert "handling an urgent question" in prompt
 
 
 def test_grounded_prompt_includes_comparison_mode_instructions() -> None:
@@ -104,6 +107,24 @@ def test_grounded_prompt_includes_comparison_mode_instructions() -> None:
     assert "COMPARISON MODE" in prompt
     assert "Key differences:" in prompt
     assert "ANSWER MODE\ncomparison" in prompt
+    assert "address both sides of the comparison explicitly" in prompt
+    assert (
+        "Do not turn a comparison answer into a one-sided imaging or referral "
+        "workflow" in prompt
+    )
+    assert "answering a comparison question" in prompt
+
+
+def test_grounded_prompt_uses_simpler_context_format() -> None:
+    prompt = build_grounded_prompt(
+        "How can migraine aura be distinguished from TIA?",
+        _CHUNKS,
+        answer_mode="comparison",
+    )
+
+    assert "Source:" not in prompt
+    assert "Match cues:" not in prompt
+    assert "[1] Neurology referral guidance" in prompt
 
 
 def test_grounded_prompt_includes_grounding_guardrails() -> None:
@@ -123,6 +144,24 @@ def test_grounded_prompt_includes_routine_low_risk_mode_instructions() -> None:
 
     assert "ROUTINE LOW-RISK MODE" in prompt
     assert "ANSWER MODE\nroutine_low_risk" in prompt
+
+
+def test_grounded_prompt_includes_scope_framing_for_workup_queries() -> None:
+    prompt = build_grounded_prompt(
+        (
+            "35-year-old with intermittent joint swelling in knees and wrists "
+            "over 4 months. What baseline blood tests and imaging should be "
+            "completed prior to referral?"
+        ),
+        _CHUNKS,
+        answer_mode="routine_low_risk",
+    )
+
+    assert "SCOPE FRAMING:" in prompt
+    assert "For suspected rheumatoid arthritis" in prompt
+    assert "subtype-specific guidance" in prompt
+    assert "first two sentences" in prompt
+    assert "Avoid broad phrasing like 'prior to referral, do X'" in prompt
 
 
 def test_grounded_prompt_falls_back_to_strict_for_invalid_mode() -> None:
@@ -149,6 +188,26 @@ def test_revision_prompt_falls_back_to_strict_for_invalid_mode() -> None:
 
     assert "STRICT GUIDELINE MODE" in prompt
     assert "ANSWER MODE\nstrict_guideline" in prompt
+
+
+def test_revision_prompt_includes_scope_framing_for_workup_queries() -> None:
+    from src.generation.prompts import build_revision_prompt
+
+    prompt = build_revision_prompt(
+        original_question=(
+            "35-year-old with intermittent joint swelling in knees and wrists "
+            "over 4 months. What baseline blood tests and imaging should be "
+            "completed prior to referral?"
+        ),
+        previous_answer="Offer rheumatoid factor [1].",
+        specialist_feedback="Make clear whether this is only for suspected RA.",
+        chunks=_CHUNKS,
+        answer_mode="routine_low_risk",
+    )
+
+    assert "SCOPE FRAMING:" in prompt
+    assert "subtype-specific guidance" in prompt
+    assert "first two sentences" in prompt
 
 
 def test_matching_signals_high_token_overlap() -> None:

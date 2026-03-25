@@ -135,6 +135,15 @@ RED_FLAG_PATTERNS: tuple[tuple[tuple[str, ...], list[str]], ...] = (
         ],
     ),
 )
+_COMPARISON_QUERY_RE = re.compile(
+    r"\b(distinguish\w*|differentiat\w*|compare|comparison|vs|versus)\b",
+    re.IGNORECASE,
+)
+_MIGRAINE_TIA_COMPARISON_RE = re.compile(
+    r"\b(migraine aura|migraine)\b.*\b(tia|transient ischaemic attack)\b|"
+    r"\b(tia|transient ischaemic attack)\b.*\b(migraine aura|migraine)\b",
+    re.IGNORECASE,
+)
 
 
 def _load_model() -> object:
@@ -285,6 +294,12 @@ def _expand_query(query: str) -> str:
 
 
 def _expand_red_flag_patterns(query: str, query_lower: str) -> str:
+    if _is_migraine_tia_comparison_query(query_lower):
+        comparison_additions = _balanced_migraine_tia_comparison_terms(query_lower)
+        if not comparison_additions:
+            return query
+        return query + " " + " ".join(comparison_additions)
+
     additions: list[str] = []
     for patterns, synonyms in RED_FLAG_PATTERNS:
         if all(re.search(pattern, query_lower) for pattern in patterns):
@@ -295,6 +310,30 @@ def _expand_red_flag_patterns(query: str, query_lower: str) -> str:
     if not additions:
         return query
     return query + " " + " ".join(additions)
+
+
+def _is_migraine_tia_comparison_query(query_lower: str) -> bool:
+    return bool(
+        _COMPARISON_QUERY_RE.search(query_lower)
+        and _MIGRAINE_TIA_COMPARISON_RE.search(query_lower)
+    )
+
+
+def _balanced_migraine_tia_comparison_terms(query_lower: str) -> list[str]:
+    additions: list[str] = []
+    for synonym in (
+        "migraine aura",
+        "transient ischaemic attack",
+        "positive visual symptoms",
+        "gradual spread",
+        "fully reversible",
+        "5 to 60 minutes",
+        "sudden negative symptoms",
+    ):
+        synonym_lower = synonym.lower()
+        if synonym_lower not in query_lower and synonym_lower not in additions:
+            additions.append(synonym)
+    return additions
 
 
 def expand_query_text(query: str) -> str:
