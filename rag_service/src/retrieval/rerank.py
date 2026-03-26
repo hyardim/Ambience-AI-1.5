@@ -112,7 +112,7 @@ def rerank(
             for r in results[:top_k]
         ]
 
-    pairs = [(query, result.text) for result in results]
+    pairs = [(query, _enrich_text_for_reranking(result)) for result in results]
 
     try:
         import time
@@ -303,6 +303,34 @@ def _load_model(model_name: str) -> Any:
         ) from e
 
     return _model
+
+
+def _enrich_text_for_reranking(result: FusedResult) -> str:
+    """Prepend section context to chunk text for better cross-encoder scoring.
+
+    The cross-encoder sees (query, text) pairs.  Including the section path
+    and document title helps it distinguish clinically relevant chunks from
+    chunks that share body-part keywords but come from unrelated sections
+    (e.g. "ketogenic diets" vs "initial assessment").
+    """
+    metadata = getattr(result, "metadata", {}) or {}
+    section_parts: list[str] = []
+
+    title = metadata.get("title", "")
+    if title:
+        section_parts.append(title)
+
+    section_path = metadata.get("section_path") or []
+    if isinstance(section_path, list) and section_path:
+        section_parts.append(" > ".join(str(s) for s in section_path))
+    elif metadata.get("section_title"):
+        section_parts.append(str(metadata["section_title"]))
+
+    prefix = " — ".join(section_parts)
+    text = getattr(result, "text", "")
+    if prefix:
+        return f"[{prefix}] {text}"
+    return text
 
 
 def _sigmoid(logit: float) -> float:

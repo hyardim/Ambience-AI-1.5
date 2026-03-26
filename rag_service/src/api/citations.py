@@ -64,6 +64,20 @@ _GUIDELINE_AMENDMENT_RE = re.compile(
     r",?\s*following\s+guideline\s+amendment\s+in\s+\d{4}",
     re.IGNORECASE,
 )
+# Standalone dotted numbers that look like recommendation references:
+# "(1.15.4)" → ""    "1.15.2" at sentence boundary → ""
+_STANDALONE_DOTTED_NUMBER_RE = re.compile(
+    r"\(\s*\d+(?:\.\d+){2,}\s*\)",  # parenthesised: (1.15.4)
+)
+# Fabricated external guideline references the model hallucinates:
+# "(AAN/AES, 2015)" → ""   "(NICE, 2020 [1])" → ""   "(BSR, 2010)" → kept (valid)
+# Only strip when they include a year AND an organisation not from our sources
+_FABRICATED_REF_RE = re.compile(
+    r"\(\s*(?:AAN|AES|AAN/AES|ACR|EULAR|WHO|BMA|RCP|SIGN|"
+    r"American Academy|American Epilepsy|European League)"
+    r"[^)]{0,40}\d{4}[^)]{0,20}\)",
+    re.IGNORECASE,
+)
 _PAREN_SECTION_REFERENCE_RE = re.compile(
     r"\(\s*(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\s*\)",
     re.IGNORECASE,
@@ -200,6 +214,10 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _GUIDELINE_AMENDMENT_RE.sub("", cleaned)
     # Strip any remaining bare "recommendation X.X.X [N]" references not caught above
     cleaned = _REC_NUMBER_BARE_RE.sub("", cleaned)
+    # Strip standalone dotted numbers in parens: (1.15.4)
+    cleaned = _STANDALONE_DOTTED_NUMBER_RE.sub("", cleaned)
+    # Strip fabricated external guideline references: (AAN/AES, 2015)
+    cleaned = _FABRICATED_REF_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()

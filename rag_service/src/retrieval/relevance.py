@@ -78,6 +78,16 @@ _NEGATIVE_DOC_PATTERNS: tuple[tuple[str, float], ...] = (
     ("visual summary", -0.06),
     ("shared learning", -0.08),
     ("manuscript", -0.1),
+    # Section-level penalties — down-weight chunks from non-clinical sections.
+    # Weights are high enough to overcome title-level "guideline" boost (+0.18).
+    ("how the recommendations might affect practice", -0.28),
+    ("consideration of the evidence", -0.22),
+    ("cost effectiveness", -0.18),
+    ("carbon reduction", -0.24),
+    ("decompressive hemicraniectomy", -0.14),
+    ("safety and efficacy of carotid stenting", -0.14),
+    ("fracture risk assessment", -0.10),
+    ("quality measures", -0.10),
 )
 
 _INTENT_QUERY_MARKERS: tuple[str, ...] = (
