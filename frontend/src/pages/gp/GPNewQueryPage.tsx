@@ -239,7 +239,7 @@ export function GPNewQueryPage() {
 
               <div>
                 <label htmlFor="patientNotes" className="block text-sm font-medium text-gray-700 mb-2">
-                  Additional clinical context
+                  Additional patient context
                 </label>
                 <textarea
                   id="patientNotes"
