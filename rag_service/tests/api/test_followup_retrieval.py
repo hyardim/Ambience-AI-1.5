@@ -423,3 +423,96 @@ class TestHallucinatedUploadedDocStripping:
         cleaned = _clean_answer_text(text)
         assert "UPLOADED DOCUMENT" not in cleaned
         assert "Uploaded document" not in cleaned.title()
+
+
+# ---------------------------------------------------------------------------
+# [Note: ...] meta-commentary stripping
+# ---------------------------------------------------------------------------
+
+
+class TestMetaNoteStripping:
+    """Verify that [Note: ...] blocks the model inserts as self-explanation
+    are stripped by the post-processing pipeline."""
+
+    def test_note_block_after_emergency_response_stripped(self):
+        """The canonical hallucination: model adds a note explaining why it
+        deviated from the expected format after firing the emergency rule."""
+        text = (
+            "Immediate action: Start high-dose prednisolone NOW (40–60 mg/day). "
+            "Arrange urgent same-day rheumatology referral. "
+            "[Note: This response is not directly addressing the primary care "
+            "question about polymyalgia rheumatica, but it is an urgent "
+            "management decision based on the patient's new headache and jaw "
+            "claudication.]  The provided context does not address PMR."
+        )
+        cleaned = _clean_answer_text(text)
+        assert "[Note:" not in cleaned
+        assert "not directly addressing" not in cleaned
+        # Emergency content preserved
+        assert "prednisolone" in cleaned
+        assert "rheumatology" in cleaned
+
+    def test_note_block_mid_text_stripped(self):
+        """[Note: ...] anywhere in the text must be stripped."""
+        text = "Start steroids. [Note: context is limited here.] Monitor response."
+        cleaned = _clean_answer_text(text)
+        assert "[Note:" not in cleaned
+        assert "Start steroids" in cleaned
+        assert "Monitor response" in cleaned
+
+    def test_note_block_case_insensitive(self):
+        """[note: ...] lowercase variant must also be stripped."""
+        text = "Treat as GCA. [note: the context passages do not address this.]"
+        cleaned = _clean_answer_text(text)
+        assert "[note:" not in cleaned.lower()
+
+    def test_legitimate_brackets_not_stripped(self):
+        """Normal citation brackets like [1] and [1, 2] must not be stripped."""
+        text = "Start prednisolone [1]. Refer to rheumatology [1, 2]."
+        cleaned = _clean_answer_text(text)
+        assert "[1]" in cleaned
+        assert "[1, 2]" in cleaned
+
+
+# ---------------------------------------------------------------------------
+# Emergency rule prompt structure — no follow-on after emergency
+# ---------------------------------------------------------------------------
+
+
+class TestEmergencyRuleStopsAfterResponse:
+    """Verify the prompt instructions prohibit follow-on paragraphs and
+    meta-commentary after an emergency response."""
+
+    def test_instructions_forbid_meta_commentary_after_emergency(self):
+        """The prompt must explicitly prohibit notes/disclaimers after the
+        emergency guidance block."""
+        ctx = {"age": 72}
+        prompt = build_grounded_prompt(
+            "She has jaw pain when chewing and a new headache.",
+            _GCA_CHUNKS,
+            patient_context=ctx,
+        )
+        instructions_section = prompt[:prompt.index("Context:")]
+        # Must explicitly say not to add follow-on content
+        assert "do not add" in instructions_section.lower() or \
+               "do not address any other" in instructions_section.lower()
+        assert "meta-commentary" in instructions_section.lower() or \
+               "disclaimer" in instructions_section.lower()
+
+    def test_instructions_forbid_acknowledging_irrelevant_chunks(self):
+        """Rule 13 must explicitly say not to acknowledge irrelevant passages
+        (not just ignore their content but not even mention their existence)."""
+        ctx = {"age": 70}
+        prompt = build_grounded_prompt(
+            "PMR patient with jaw pain and headache.",
+            _GCA_CHUNKS,
+            patient_context=ctx,
+        )
+        instructions_section = prompt[:prompt.index("Context:")]
+        rule13_pos = instructions_section.lower().rfind("13.")
+        assert rule13_pos != -1
+        rule13_text = instructions_section[rule13_pos:]
+        # Must say to not acknowledge/mention irrelevant passages at all
+        assert "acknowledge" in rule13_text.lower() or \
+               "do not write" in rule13_text.lower() or \
+               "completely" in rule13_text.lower()

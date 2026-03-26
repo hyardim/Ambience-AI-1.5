@@ -125,7 +125,12 @@ _INSTRUCTIONS = (
     "few days'. Never say 'GCA is less likely' when jaw claudication is "
     "present — the only correct response is to treat as possible GCA. "
     "These are medical emergencies regardless of what the retrieved context "
-    "passages say and regardless of your clinical probability assessment.\n"
+    "passages say and regardless of your clinical probability assessment. "
+    "When an emergency condition is detected: respond with ONLY the "
+    "emergency guidance — do NOT add notes, disclaimers, follow-on "
+    "paragraphs, or meta-commentary explaining why you are responding "
+    "differently. Do not address any other aspect of the original question "
+    "after the emergency response.\n"
     "For GCA (jaw claudication / new headache in elderly patient): begin "
     "with 'Immediate action:' then state: start high-dose prednisolone NOW "
     "(typically 40–60 mg/day without visual symptoms; escalate dose if "
@@ -144,8 +149,11 @@ _INSTRUCTIONS = (
     "cut-off. Migraine aura develops gradually (over 5+ minutes) and lasts "
     "5-60 minutes; TIA has sudden onset and typically no headache.\n"
     "13. If a retrieved context passage is about a different clinical "
-    "condition than the question asks about, ignore it — do not incorporate "
-    "information from unrelated passages into your answer."
+    "condition than the question asks about, IGNORE IT COMPLETELY — do not "
+    "incorporate its information, do not acknowledge it exists, do not write "
+    "phrases like 'the context does not address X' or 'the context for "
+    "spondyloarthritis does not apply here'. Simply skip that passage and "
+    "respond as if it were not provided."
 )
 
 

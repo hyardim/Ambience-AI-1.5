@@ -118,6 +118,14 @@ _HALLUCINATED_UPLOADED_DOC_RE = re.compile(
     r"\.?\s*Uploaded document\s*:[^\n.]*\.?",
     re.IGNORECASE,
 )
+# Strip [Note: ...] or [note: ...] meta-commentary blocks the model inserts to
+# explain why it is deviating from the expected format. These appear when the
+# emergency rule fires but the model still feels obliged to add a caveat.
+# e.g. "[Note: This response is not directly addressing the primary care question...]"
+_META_NOTE_RE = re.compile(
+    r"\s*\[Note:[^\]]*\]\.?",
+    re.IGNORECASE,
+)
 _PAREN_SECTION_REFERENCE_RE = re.compile(
     r"\(\s*(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\s*\)",
     re.IGNORECASE,
@@ -270,6 +278,9 @@ def _clean_answer_text(text: str) -> str:
     # These occur when the model echoes the citation format from Rule 2 even
     # though no UPLOADED DOCUMENTS section was present in the prompt.
     cleaned = _HALLUCINATED_UPLOADED_DOC_RE.sub("", cleaned)
+    # Strip [Note: ...] meta-commentary blocks the model adds when it detects
+    # it is deviating from the expected answer format (e.g. emergency override).
+    cleaned = _META_NOTE_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()
