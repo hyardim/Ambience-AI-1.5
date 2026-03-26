@@ -189,6 +189,31 @@ def _augment_query_with_history(
     return augmented[:_MAX_AUGMENTED_RETRIEVAL_QUERY]
 
 
+def _merge_retrieved(
+    primary: list[dict[str, Any]],
+    secondary: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge two retrieval result lists, deduplicating by chunk_id.
+
+    When the same chunk appears in both lists the higher-scoring copy is kept.
+    Results are sorted by descending score so the downstream pipeline sees the
+    best candidates first.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for chunk in primary:
+        cid = chunk.get("chunk_id") or chunk.get("id")
+        if cid:
+            by_id[cid] = chunk
+    for chunk in secondary:
+        cid = chunk.get("chunk_id") or chunk.get("id")
+        if not cid:
+            continue
+        existing = by_id.get(cid)
+        if existing is None or chunk.get("score", 0) > existing.get("score", 0):
+            by_id[cid] = chunk
+    return sorted(by_id.values(), key=lambda c: c.get("score", 0), reverse=True)
+
+
 def _choose_retrieval_query(
     request: AnswerRequest,
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -198,8 +223,18 @@ def _choose_retrieval_query(
     retrieval_query = _augment_query_with_history(
         request.query, request.patient_context
     )
+    was_augmented = retrieval_query != request.query
 
     retrieved = _retrieve_for_answer_request(request, retrieval_query)
+
+    # When augmentation fired, the prior clinical context (e.g. "70-year-old
+    # with PMR…") can dominate the embedding, drowning out the follow-up's
+    # symptom signal (e.g. "new headache, jaw aching").  Dual retrieval: also
+    # retrieve for the bare follow-up and merge, so both context-relevant AND
+    # symptom-specific chunks are available to the downstream re-ranker.
+    if was_augmented:
+        bare_retrieved = _retrieve_for_answer_request(request, request.query)
+        retrieved = _merge_retrieved(retrieved, bare_retrieved)
     specialty = request.specialty
     original_filtered, original_quality = _retrieval_quality(
         request.query,
