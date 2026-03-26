@@ -62,6 +62,19 @@ _SOURCE_ECHO_RE = re.compile(
 )
 _CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
 
+# Patterns that identify a GP follow-up message that is missing the original
+# clinical context.  When matched, we prepend the most recent prior GP message
+# from the conversation history so that the retrieval embedder sees a complete
+# clinical picture rather than a bare pronoun-led fragment.
+_FOLLOWUP_TRIGGER_RE = re.compile(
+    r"^(she\b|he\b|they\b|the patient\b|also\b|additionally\b|however\b|"
+    r"but\b|on examination\b|her\b|his\b|their\b|it turns out\b|"
+    r"patient also\b|patient has\b|patient is\b|patient was\b)",
+    re.IGNORECASE,
+)
+# Cap on how long an augmented retrieval query may be (characters).
+_MAX_AUGMENTED_RETRIEVAL_QUERY = 700
+
 
 def _answer_is_effectively_empty(answer: str) -> bool:
     if not answer.strip():
@@ -116,10 +129,67 @@ def _retrieve_for_answer_request(
     )
 
 
+def _augment_query_with_history(
+    query: str,
+    patient_context: dict[str, Any] | None,
+) -> str:
+    """Enrich a short follow-up query with prior conversation context for retrieval.
+
+    When a GP sends a follow-up like "She also has a new headache" the retrieval
+    engine only sees a vague fragment and may fetch irrelevant chunks.  When the
+    query looks like a follow-up (short AND starts with a continuation phrase) and
+    the patient_context contains conversation_history, we prepend the most recent
+    prior GP message so the embedding model has the full clinical picture.
+
+    Example
+    -------
+    history  : "GP: 70-year-old with PMR features, raised ESR."
+    query    : "She also mentions a new headache and jaw pain when chewing."
+    augmented: "70-year-old with PMR features, raised ESR.\n
+                She also mentions a new headache and jaw pain when chewing."
+
+    The *generation* query (`request.query`) is kept unchanged so the LLM
+    receives the original turn wording.
+    """
+    if not patient_context:
+        return query
+    history: str = patient_context.get("conversation_history") or ""
+    if not history:
+        return query
+
+    stripped = query.strip()
+    is_short = len(stripped) < 300
+    is_followup = bool(_FOLLOWUP_TRIGGER_RE.match(stripped))
+
+    if not (is_short and is_followup):
+        return query
+
+    # Extract GP messages from the history string (format: "GP: <text>")
+    gp_lines = [
+        line[len("GP:"):].strip()
+        for line in history.split("\n")
+        if line.strip().startswith("GP:")
+    ]
+    if not gp_lines:
+        return query
+
+    # Use the most recent GP message as the prior context anchor
+    prior_context = gp_lines[-1][:400].strip()
+    augmented = f"{prior_context}\n{stripped}"
+    return augmented[:_MAX_AUGMENTED_RETRIEVAL_QUERY]
+
+
 def _choose_retrieval_query(
     request: AnswerRequest,
 ) -> tuple[str, list[dict[str, Any]]]:
-    retrieved = _retrieve_for_answer_request(request, request.query)
+    # For follow-up messages, enrich the retrieval query with conversation
+    # history so the embedder has full clinical context.  The generation query
+    # (request.query) is kept unchanged — the LLM sees the original wording.
+    retrieval_query = _augment_query_with_history(
+        request.query, request.patient_context
+    )
+
+    retrieved = _retrieve_for_answer_request(request, retrieval_query)
     specialty = request.specialty
     original_filtered, original_quality = _retrieval_quality(
         request.query,
@@ -128,18 +198,18 @@ def _choose_retrieval_query(
     )
 
     if not retrieval_config.retrieval_canonicalization_enabled:
-        return request.query, retrieved
+        return retrieval_query, retrieved
 
     allowed_specialties = parse_allowed_specialties(
         retrieval_config.retrieval_canonicalization_specialties
     )
     canonical_query = build_canonical_retrieval_query(
-        query=request.query,
+        query=retrieval_query,
         specialty=specialty,
         allowed_specialties=allowed_specialties,
     )
-    if not canonical_query or canonical_query == request.query:
-        return request.query, retrieved
+    if not canonical_query or canonical_query == retrieval_query:
+        return retrieval_query, retrieved
 
     canonical_retrieved = _retrieve_for_answer_request(request, canonical_query)
     canonical_filtered, canonical_quality = _retrieval_quality(
@@ -164,7 +234,7 @@ def _choose_retrieval_query(
         )
         return canonical_query, canonical_retrieved
 
-    return request.query, retrieved
+    return retrieval_query, retrieved
 
 
 def _cloud_available() -> bool:
