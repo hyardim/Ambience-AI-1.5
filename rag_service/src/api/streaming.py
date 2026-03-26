@@ -40,6 +40,8 @@ async def streaming_generator(
     allow_uncited_answer: bool = False,
     provider: ProviderName = "local",
     query: str | None = None,
+    answer_mode: str | None = None,
+    evidence: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
     accumulated = ""
@@ -66,22 +68,17 @@ async def streaming_generator(
         query=query,
         allow_uncited_answer=allow_uncited_answer,
     )
+    # Mirror the non-streaming path: allow emergency/comparison answers through
+    # when evidence is strong even if the model omitted citation markers.
+    allow_uncited_strong = (
+        answer_mode in ("emergency", "comparison") and evidence == "strong"
+    )
     refused = False
     if _answer_is_effectively_empty(renumbered_answer) or (
-        not citations_used and not allow_uncited_answer
+        not citations_used and not allow_uncited_answer and not allow_uncited_strong
     ):
         renumbered_answer = NO_EVIDENCE_RESPONSE
         refused = True
-
-    # When the answer was allowed through (not refused), fall back to
-    # citations_retrieved so the frontend can still display sources.
-    final_citations: list[SearchResult]
-    if refused:
-        final_citations = []
-    elif citations_used:
-        final_citations = citations_used
-    elif not refused:
-        final_citations = citations_retrieved
 
     yield (
         json.dumps(
@@ -94,8 +91,11 @@ async def streaming_generator(
                 "citations_retrieved": [
                     citation.model_dump() for citation in citations_retrieved
                 ],
+                # Only surface citations that were actually used — don't inflate
+                # with retrieved citations when nothing was cited.
                 "citations": [
-                    citation.model_dump() for citation in final_citations
+                    citation.model_dump()
+                    for citation in ([] if refused else citations_used)
                 ],
             }
         )

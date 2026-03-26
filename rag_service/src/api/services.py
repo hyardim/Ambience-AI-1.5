@@ -363,7 +363,7 @@ def _finalize_with_chunk_floor(
         minimum_chunks = max(minimum_chunks, 2)
     if _MIGRAINE_TIA_QUERY_RE.search(original_query):
         minimum_chunks = max(minimum_chunks, 2)
-    target_chunks = min(max(minimum_chunks, len(primary)), 3)
+    target_chunks = min(max(minimum_chunks, len(primary)), 5)
 
     primary_final = _finalize_filtered(
         primary,

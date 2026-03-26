@@ -54,11 +54,11 @@ _SCOPE_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _REFERRAL_QUERY_HINT_RE = re.compile(
-    r"\b(refer|referral|pathway|urgent|immediate|urgency|how urgently)\b",
+    r"\b(refer\w*|pathway|urgent\w*|immediate|urgency|how urgently)\b",
     re.IGNORECASE,
 )
 _REFERRAL_SENTENCE_HINT_RE = re.compile(
-    r"\b(refer|referral|pathway|urgent|urgency)\b",
+    r"\b(refer\w*|pathway|urgent\w*|urgency)\b",
     re.IGNORECASE,
 )
 _INVESTIGATION_QUERY_HINT_RE = re.compile(
@@ -162,36 +162,39 @@ def _question_focus_text(query: str | None) -> str:
 
 
 def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str:
+    """Clean up the answer text.
+
+    Previously this function dropped any uncited sentence containing clinical
+    keywords, which was too aggressive — it silently removed accurate bridging
+    sentences and produced vague meta-references instead of real answers.
+
+    Now it only:
+    - Strips section-label artefacts from each sentence.
+    - Suppresses "honest scope" disclaimer sentences when the answer already
+      has citations (the disclaimer is redundant and confusing in that case).
+    - Preserves every other sentence — cited or not — so the model can
+      synthesise coherent answers using both indexed passages and general
+      clinical knowledge.
+    """
     units = [
         part.strip()
         for part in _SENTENCE_SPLIT_RE.split(answer_text)
         if part and part.strip()
     ]
-    cited_units: list[str] = []
-    scope_units: list[str] = []
     kept_units: list[str] = []
 
     for raw_unit in units:
         unit = _SECTION_LABEL_RE.sub("", raw_unit).strip(" -")
         unit = re.sub(r"^[*-]\s*", "", unit).strip()
-
-        has_valid_citation = bool(_VALID_CITATION_GROUP_RE.search(unit))
-        if has_valid_citation:
-            cited_units.append(unit)
-            kept_units.append(unit)
+        if not unit:
             continue
 
-        if _SCOPE_HINT_RE.search(unit):
-            scope_units.append(unit)
-            if not has_citations:
-                kept_units.append(unit)
+        # Drop "honest scope" disclaimers only when citations are present —
+        # they are redundant and undermine an otherwise useful answer.
+        if has_citations and _SCOPE_HINT_RE.search(unit):
             continue
 
-        if _CLINICAL_HINT_RE.search(unit):
-            continue
-
-        if not has_citations:
-            kept_units.append(unit)
+        kept_units.append(unit)
 
     return _clean_answer_text(" ".join(kept_units))
 
