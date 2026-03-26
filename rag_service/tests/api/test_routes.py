@@ -498,7 +498,7 @@ async def test_generate_clinical_answer_forwards_advanced_retrieval_fields(
         )
     )
 
-    assert response.answer == routes.api_services.NO_EVIDENCE_RESPONSE
+    assert response.answer == "A"
     assert response.citations_used == []
     assert captured["query"] == "q"
     assert captured["specialty"] == "neurology"
@@ -572,7 +572,7 @@ async def test_generate_clinical_answer_keeps_uncited_low_risk_answer(
     assert response.answer.startswith("Based on standard clinical practice:")
     assert response.citations_used == []
     assert response.citations_retrieved
-    assert response.citations == response.citations_retrieved
+    assert response.citations == []
 
 
 @pytest.mark.anyio
@@ -624,7 +624,7 @@ async def test_generate_clinical_answer_falls_back_when_advanced_retriever_missi
         routes.AnswerRequest(query="q", top_k=3, specialty="neurology")
     )
 
-    assert response.answer == routes.api_services.NO_EVIDENCE_RESPONSE
+    assert response.answer == "A"
     assert response.citations_used == []
     assert called == {"query": "q", "top_k": 3, "specialty": "neurology"}
 

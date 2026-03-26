@@ -55,6 +55,34 @@ def get_vector_dim(model: SentenceTransformer) -> int:
 # -----------------------------------------------------------------------
 
 
+def _embedding_text(chunk: dict[str, Any]) -> str:
+    """Build the text string that gets embedded for a chunk.
+
+    Prepends the section path and document title so that the vector
+    embedding captures section-level context — not just the raw text.
+    This helps semantic search distinguish chunks from different guideline
+    sections that share body-part terminology.
+
+    Page metadata is *not* included because it has no semantic value.
+    """
+    parts: list[str] = []
+    citation = chunk.get("citation", {})
+    title = citation.get("title", "")
+    if title:
+        parts.append(title)
+
+    section_path = chunk.get("section_path") or []
+    if isinstance(section_path, list) and section_path:
+        parts.append(" > ".join(str(s) for s in section_path))
+    elif chunk.get("section_title"):
+        parts.append(str(chunk["section_title"]))
+
+    text = chunk.get("text", "")
+    if parts:
+        return f"[{' — '.join(parts)}] {text}"
+    return text
+
+
 def _resolve_embedding_settings(config: dict[str, Any] | None) -> dict[str, Any]:
     settings = config or {}
     return {
@@ -103,7 +131,7 @@ def embed_chunks(
     for batch_start in range(0, len(chunks), batch_size):
         batch = chunks[batch_start : batch_start + batch_size]
         batch_num = batch_start // batch_size + 1
-        texts = [c.get("text", "") for c in batch]
+        texts = [_embedding_text(c) for c in batch]
 
         try:
             vectors = _embed_batch(model, texts)

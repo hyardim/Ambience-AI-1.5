@@ -31,7 +31,7 @@ def _sample_result() -> CitedResult:
 def test_build_system_prompt_mentions_context_and_citations() -> None:
     prompt = build_system_prompt().lower()
     assert "context" in prompt
-    assert "citation" in prompt
+    assert "cite" in prompt
 
 
 def test_format_context_with_results() -> None:

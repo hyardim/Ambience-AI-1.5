@@ -124,8 +124,20 @@ _INSTRUCTIONS = (
     "24 hours' or that TIAs cause 'persistent deficits'. Most TIAs resolve "
     "within 60 minutes; the 24-hour limit is only the historical maximum "
     "cut-off. Migraine aura develops gradually (over 5+ minutes) and lasts "
-    "5-60 minutes; TIA has sudden onset and typically no headache."
+    "5-60 minutes; TIA has sudden onset and typically no headache.\n"
+    "13. If a retrieved context passage is about a different clinical "
+    "condition than the question asks about, ignore it — do not incorporate "
+    "information from unrelated passages into your answer."
 )
+
+
+def _active_instructions() -> str:
+    """Return the active system instruction string.
+
+    Provided for API compatibility with ``orchestration.prompt`` which
+    delegates here so that both code paths share the same instruction text.
+    """
+    return _INSTRUCTIONS
 
 
 def select_answer_mode(
