@@ -189,6 +189,8 @@ _INSTRUCTIONS_NEW = (
     "If the clinician asks whether to start a treatment in primary care, begin "
     "with a direct yes/no sentence. "
     "Do not add branching criteria that were not asked. "
+    "Do NOT add a summary or 'In summary' paragraph at the end — the answer "
+    "should read as a single cohesive response, not a list followed by a recap. "
     "Do not include section labels or lead-ins such as 'General clinical "
     "context', 'Safety considerations', or 'Source:'."
 )
