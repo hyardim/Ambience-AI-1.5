@@ -464,3 +464,52 @@ class TestLoadModel:
 
         assert exc_info.value.stage == "RERANK"
         assert "sentence-transformers" in exc_info.value.message
+
+
+# -----------------------------------------------------------------------
+# _enrich_text_for_reranking: elif section_title branch (line 327)
+# -----------------------------------------------------------------------
+
+
+class TestBuildRerankerInputSectionTitle:
+    """Cover the elif section_title fallback in _enrich_text_for_reranking."""
+
+    def _make_fused(self, **overrides: Any) -> FusedResult:
+        from src.retrieval.fusion import FusedResult
+
+        defaults: dict[str, Any] = {
+            "chunk_id": "c1",
+            "doc_id": "doc_001",
+            "text": "Some clinical text.",
+            "rrf_score": 0.5,
+            "vector_score": 0.7,
+            "keyword_rank": 0.6,
+            "metadata": {
+                "specialty": "rheumatology",
+                "source_name": "NICE",
+                "doc_type": "guideline",
+                "title": "RA Guide",
+                "section_path": [],         # empty → hits elif
+                "section_title": "Therapy", # fallback used instead
+                "page_start": 1,
+                "page_end": 2,
+                "source_url": "https://nice.org.uk",
+            },
+        }
+        defaults.update(overrides)
+        return FusedResult(**defaults)
+
+    def test_section_title_used_when_section_path_empty(self) -> None:
+        from src.retrieval.rerank import _enrich_text_for_reranking
+
+        fused = self._make_fused()
+        text = _enrich_text_for_reranking(fused)
+        assert "Therapy" in text
+
+    def test_section_title_used_when_section_path_none(self) -> None:
+        from src.retrieval.rerank import _enrich_text_for_reranking
+
+        fused = self._make_fused()
+        fused.metadata["section_path"] = None
+        text = _enrich_text_for_reranking(fused)
+        assert "Therapy" in text

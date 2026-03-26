@@ -901,3 +901,63 @@ class TestFlatRerankFallback:
         )
 
         assert [item.chunk_id for item in ranked] == ["c2", "c1"]
+
+
+class TestFlatRerankPipelinePath:
+    """Cover lines 218-219: flat-rerank fallback triggered inside retrieve()."""
+
+    def test_retrieve_triggers_fallback_sort_when_rerank_is_uninformative(self):
+        """When all rerank_scores are 0, _rerank_is_uninformative → True,
+        so retrieve() calls _fallback_sort_for_flat_rerank (lines 218-219)."""
+        flat_result_a = make_ranked_result("flat-a").model_copy(
+            update={
+                "text": "Prednisolone is first-line for PMR.",
+                "rerank_score": 0.0,
+                "metadata": {"title": "PMR Guide"},
+            }
+        )
+        flat_result_b = make_ranked_result("flat-b").model_copy(
+            update={
+                "text": "Start at 15 mg/day prednisolone.",
+                "rerank_score": 0.0,
+                "metadata": {"title": "PMR Dosing"},
+            }
+        )
+        mocks = make_all_stage_mocks(reranked_results=[flat_result_a, flat_result_b])
+        output = run_retrieve(mocks)
+        # Both results pass through after fallback sort
+        assert len(output) == len(mocks["assemble_citations"].return_value)
+
+
+class TestDiversifyByDocumentCap:
+    """Cover lines 581-589: cap applied when > 2 unique doc_ids."""
+
+    def test_cap_is_applied_when_more_than_two_unique_docs(self):
+        from src.retrieval.retrieve import _diversify_by_document
+
+        # 3 unique doc_ids, 2 chunks from doc-a, 1 each from doc-b/c
+        items = [
+            make_ranked_result("c1").model_copy(update={"doc_id": "doc-a"}),
+            make_ranked_result("c2").model_copy(update={"doc_id": "doc-a"}),
+            make_ranked_result("c3").model_copy(update={"doc_id": "doc-b"}),
+            make_ranked_result("c4").model_copy(update={"doc_id": "doc-c"}),
+        ]
+        result = _diversify_by_document(items, max_per_doc=1)
+        # doc-a is capped at 1; doc-b and doc-c get 1 each → 3 total
+        assert len(result) == 3
+        doc_ids = [item.doc_id for item in result]
+        assert doc_ids.count("doc-a") == 1
+        assert doc_ids.count("doc-b") == 1
+        assert doc_ids.count("doc-c") == 1
+
+    def test_cap_preserves_order_by_first_occurrence(self):
+        from src.retrieval.retrieve import _diversify_by_document
+
+        items = [
+            make_ranked_result("c1").model_copy(update={"doc_id": "doc-x"}),
+            make_ranked_result("c2").model_copy(update={"doc_id": "doc-y"}),
+            make_ranked_result("c3").model_copy(update={"doc_id": "doc-x"}),  # capped
+            make_ranked_result("c4").model_copy(update={"doc_id": "doc-z"}),
+        ]
+        result = _diversify_by_document(items, max_per_doc=1)
+        assert [r.chunk_id for r in result] == ["c1", "c2", "c4"]

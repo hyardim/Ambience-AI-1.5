@@ -131,6 +131,15 @@ _INSTRUCTIONS = (
 )
 
 
+def _active_instructions() -> str:
+    """Return the active system instruction string.
+
+    Provided for API compatibility with ``orchestration.prompt`` which
+    delegates here so that both code paths share the same instruction text.
+    """
+    return _INSTRUCTIONS
+
+
 def select_answer_mode(
     question: str,
     *,

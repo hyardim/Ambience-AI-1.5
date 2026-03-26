@@ -443,3 +443,36 @@ class TestNormalisation:
         _embed_single(model, "text")
         _, kwargs = model.encode.call_args
         assert kwargs.get("normalize_embeddings") is True
+
+
+# -----------------------------------------------------------------------
+# _embedding_text: elif section_title branch (line 78)
+# -----------------------------------------------------------------------
+
+
+class TestEmbeddingTextSectionTitleFallback:
+    def test_uses_section_title_when_section_path_is_empty(self) -> None:
+        """When section_path is absent/empty but section_title is set, use section_title."""
+        from src.ingestion.embed import _embedding_text
+
+        chunk = {
+            "text": "Clinical guidance on gout.",
+            "section_path": [],  # empty → falls through to elif
+            "section_title": "Acute Gout Management",
+            "citation": {"title": "NICE Gout"},
+        }
+        result = _embedding_text(chunk)
+        assert "Acute Gout Management" in result
+        assert "Clinical guidance on gout." in result
+
+    def test_uses_section_title_when_section_path_is_none(self) -> None:
+        from src.ingestion.embed import _embedding_text
+
+        chunk = {
+            "text": "Use prednisolone.",
+            "section_path": None,
+            "section_title": "Treatment",
+            "citation": {},
+        }
+        result = _embedding_text(chunk)
+        assert "Treatment" in result

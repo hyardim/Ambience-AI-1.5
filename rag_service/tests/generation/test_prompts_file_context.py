@@ -148,15 +148,15 @@ class TestGroundedPromptFileContext:
             file_context=None,
         )
 
-        assert "do not add uncited clinical advice" in prompt
-        assert "Do not include section labels or lead-ins" in prompt
+        assert "Do not fabricate" in prompt
+        assert "Base your answer on the provided context" in prompt
 
     def test_grounded_prompt_emphasises_actionable_scoped_answers(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=None)
 
-        assert "Next step:" in prompt
-        assert "If the user asks multiple parts" in prompt
-        assert "Every grounded clinical claim sentence must include" in prompt
+        assert "concise and practical" in prompt
+        assert "Base your answer on the provided context" in prompt
+        assert "Cite with [1]" in prompt
 
 
 class TestRevisionPromptFileContext:

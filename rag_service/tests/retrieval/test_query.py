@@ -296,3 +296,25 @@ class TestRetrievalError:
         err = RetrievalError(stage="QUERY", query="test", message="failed")
         assert "QUERY" in str(err)
         assert "test" in str(err)
+
+
+class TestExpandRedFlagPatternsEarlyReturn:
+    """Cover the early-return in _expand_red_flag_patterns (line 300)."""
+
+    def test_migraine_tia_comparison_returns_query_unchanged_when_all_terms_present(self):
+        """When the query already contains every balanced comparison term,
+        _balanced_migraine_tia_comparison_terms returns [] and the original
+        query is returned unchanged via the early-return path."""
+        from src.retrieval.query import expand_query_text
+
+        # Craft a query that (a) triggers _is_migraine_tia_comparison_query and
+        # (b) already contains ALL synonyms that _balanced_migraine_tia_comparison_terms
+        # would normally add, so the additions list is empty.
+        full_query = (
+            "distinguish migraine aura transient ischaemic attack "
+            "positive visual symptoms gradual spread fully reversible "
+            "5 to 60 minutes sudden negative symptoms"
+        )
+        result = expand_query_text(full_query)
+        # The result should equal the original because nothing was added.
+        assert result == full_query

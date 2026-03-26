@@ -7,7 +7,7 @@ from psycopg2 import errors as pg_errors
 
 from src.retrieval.keyword_search import (
     KeywordSearchResult,
-    _build_relaxed_tsquery,
+    _build_relaxed_or_tsquery as _build_relaxed_tsquery,
     keyword_search,
 )
 from src.retrieval.query import RetrievalError
@@ -461,18 +461,20 @@ class TestKeywordSearch:
         assert isinstance(results, list)
 
     def test_build_relaxed_tsquery_returns_none_for_generic_only_tokens(self):
-        result = _build_relaxed_tsquery("about for from with")
+        # Use only words that are in RELAXED_QUERY_STOPWORDS or are < 3 chars
+        result = _build_relaxed_tsquery("and are for from the with")
         assert result is None
 
     def test_build_relaxed_tsquery_limits_terms(self):
-        from src.retrieval.keyword_search import RELAXED_QUERY_TERM_LIMIT
+        from src.retrieval.keyword_search import RELAXED_QUERY_MAX_TERMS
         query = " ".join(
-            f"term{i}" for i in range(RELAXED_QUERY_TERM_LIMIT + 5)
+            f"term{i}" for i in range(RELAXED_QUERY_MAX_TERMS + 5)
         )
         result = _build_relaxed_tsquery(query)
         assert result is not None
-        assert result.count("|") == RELAXED_QUERY_TERM_LIMIT - 1
+        assert result.count("|") == RELAXED_QUERY_MAX_TERMS - 1
 
     def test_build_relaxed_tsquery_returns_none_for_single_token(self):
+        # A single valid token is returned as a single-term tsquery (not None)
         result = _build_relaxed_tsquery("migraine")
-        assert result is None
+        assert result == "migraine"
