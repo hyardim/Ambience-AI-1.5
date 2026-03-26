@@ -441,6 +441,8 @@ async def _generate_answer_from_retrieval(
                     allow_uncited_answer=allow_uncited,
                     provider=route.provider,
                     query=query,
+                    answer_mode=answer_mode,
+                    evidence=evidence,
                 ),
                 media_type="application/x-ndjson",
             )
@@ -487,19 +489,23 @@ async def _generate_answer_from_retrieval(
                 stream,
                 citations_retrieved=citations_retrieved,
             )
-        if not citations_used and not allow_uncited:
+        # For emergency and comparison modes with strong evidence, allow a
+        # non-empty answer through even when the local model failed to add
+        # citation markers. Blocking it produces a worse outcome than showing
+        # the generated answer with a note that citations were not extracted.
+        allow_uncited_strong = (
+            answer_mode in ("emergency", "comparison") and evidence == "strong"
+        )
+        if not citations_used and not allow_uncited and not allow_uncited_strong:
             return _no_evidence_response(
                 stream,
                 citations_retrieved=citations_retrieved,
             )
-        fallback_citations = (
-            citations_used if citations_used else citations_retrieved
-        )
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=fallback_citations,
+            citations=citations_used,
         )
     except HTTPException:
         raise
@@ -629,12 +635,11 @@ async def revise_clinical_answer(
                 request.stream,
                 citations_retrieved=citations_retrieved,
             )
-        fallback_citations = citations_used if citations_used else citations_retrieved
         return AnswerResponse(
             answer=renumbered_answer,
             citations_used=citations_used,
             citations_retrieved=citations_retrieved,
-            citations=fallback_citations,
+            citations=citations_used,
         )
     except HTTPException:
         raise
