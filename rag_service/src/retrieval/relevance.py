@@ -88,6 +88,18 @@ _NEGATIVE_DOC_PATTERNS: tuple[tuple[str, float], ...] = (
     ("safety and efficacy of carotid stenting", -0.14),
     ("fracture risk assessment", -0.10),
     ("quality measures", -0.10),
+    # Clinical trial / HTA process sections — contain study data, not clinical recs.
+    ("clinical effectiveness", -0.16),
+    ("rct network meta-analyses", -0.22),
+    ("decision problem", -0.18),
+    ("the manufacturer's submission", -0.18),
+    ("mono-therapy sc or iv", -0.20),
+    ("ketogenic diets", -0.14),
+    # Late-stage / palliative sections — rarely answer acute clinical questions.
+    ("information and support for people as ms becomes more advanced", -0.14),
+    # Methodology sections that don't contain clinical recommendations.
+    ("rigor of development", -0.14),
+    ("rationale", -0.08),
 )
 
 _INTENT_QUERY_MARKERS: tuple[str, ...] = (
@@ -167,6 +179,11 @@ _INTENT_NEGATIVE_DOC_MARKERS: tuple[str, ...] = (
     "surgical approaches",
     "elective hip replacement",
     "spinal fusion",
+    "clinical effectiveness",
+    "rct network meta-analyses",
+    "the manufacturer's submission",
+    "ketogenic diets",
+    "decision problem",
 )
 
 

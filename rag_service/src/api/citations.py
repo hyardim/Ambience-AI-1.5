@@ -78,6 +78,24 @@ _FABRICATED_REF_RE = re.compile(
     r"[^)]{0,40}\d{4}[^)]{0,20}\)",
     re.IGNORECASE,
 )
+# Strip leaked prompt-rule references the model echoes:
+#   "(rule 11)"  "as per rule 11"  "Note: ... (rule 11)."
+#   "...is not appropriate for this presentation (rule 11)"
+_LEAKED_RULE_REF_RE = re.compile(
+    r"\s*\(rule\s+\d+\)\.?",
+    re.IGNORECASE,
+)
+# Meta-commentary about context passages or prompt instructions:
+#   "as described in the context passage related to stroke"
+#   "regardless of what the retrieved context passages say"
+_META_CONTEXT_RE = re.compile(
+    r",?\s*as described in the context passage[^.]*",
+    re.IGNORECASE,
+)
+_META_CONTEXT_REGARDLESS_RE = re.compile(
+    r"\s*regardless of what the retrieved context passages say\.?",
+    re.IGNORECASE,
+)
 _PAREN_SECTION_REFERENCE_RE = re.compile(
     r"\(\s*(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\s*\)",
     re.IGNORECASE,
@@ -218,6 +236,11 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _STANDALONE_DOTTED_NUMBER_RE.sub("", cleaned)
     # Strip fabricated external guideline references: (AAN/AES, 2015)
     cleaned = _FABRICATED_REF_RE.sub("", cleaned)
+    # Strip leaked prompt-rule references: "(rule 11)", "as per rule 11"
+    cleaned = _LEAKED_RULE_REF_RE.sub("", cleaned)
+    # Strip meta-commentary about context passages
+    cleaned = _META_CONTEXT_RE.sub("", cleaned)
+    cleaned = _META_CONTEXT_REGARDLESS_RE.sub(".", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()
