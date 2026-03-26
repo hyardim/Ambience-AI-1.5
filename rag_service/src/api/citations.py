@@ -23,6 +23,13 @@ _YEAR_CITATION_CLEANUP_RE = re.compile(
     r"\]",
     re.IGNORECASE,
 )
+# Matches recommendation numbers mixed into citation brackets:
+# [1, 1.1.2] → [1]    [1, 1.1.3] → [1]    [2, 1.1.4] → [2]
+_REC_IN_CITATION_CLEANUP_RE = re.compile(
+    r"\[(\d+)"                           # leading valid index
+    r"(?:\s*,\s*\d+(?:\.\d+)+)+"         # one or more ", 1.1.2" rec-number parts
+    r"\]",
+)
 # Strip inline recommendation-number references the model echoes from guideline text.
 # e.g. "as per recommendation 1.1.1" or "recommendation 1.1.2 on page 6"
 _REC_NUMBER_INLINE_RE = re.compile(
@@ -153,6 +160,8 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _POST_CITATION_SECTION_REFERENCE_RE.sub(r"\1", cleaned)
     # Strip year/amendment metadata from citations: [1, 2009; amended 2018] → [1]
     cleaned = _YEAR_CITATION_CLEANUP_RE.sub(r"[\1]", cleaned)
+    # Strip recommendation numbers from citation brackets: [1, 1.1.2] → [1]
+    cleaned = _REC_IN_CITATION_CLEANUP_RE.sub(r"[\1]", cleaned)
     # Strip echoed recommendation numbers: "as per recommendation 1.1.1 on page 6"
     cleaned = _REC_NUMBER_INLINE_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
