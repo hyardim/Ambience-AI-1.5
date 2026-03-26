@@ -88,14 +88,15 @@ class TestGroundedPromptFileContext:
         assert "Age: 45" in prompt
         assert "3 new T2 lesions" in prompt
 
-    def test_evidence_note_is_included_when_provided(self):
+    def test_evidence_note_parameter_accepted_but_not_in_prompt(self):
+        """evidence_note is accepted for API compat but no longer rendered."""
         prompt = build_grounded_prompt(
             "What DMT?",
             _CHUNKS,
             evidence_note="Evidence is limited.",
         )
-        assert "EVIDENCE NOTE" in prompt
-        assert "Evidence is limited." in prompt
+        # The simplified prompt no longer includes evidence notes.
+        assert "EVIDENCE NOTE" not in prompt
 
     def test_ordering_patient_context_then_context_then_uploaded_docs(self):
         """Section order: PATIENT CONTEXT → Context: → file content → Question:"""
@@ -210,7 +211,8 @@ class TestRevisionPromptFileContext:
         assert "Severity: High" in prompt
         assert "Clinical notes: Two relapses this year." in prompt
 
-    def test_revision_prompt_includes_evidence_note(self):
+    def test_revision_prompt_evidence_note_accepted_but_not_in_prompt(self):
+        """evidence_note is accepted for API compat but no longer rendered."""
         prompt = build_revision_prompt(
             original_question="What DMT?",
             previous_answer="Interferon.",
@@ -219,8 +221,7 @@ class TestRevisionPromptFileContext:
             evidence_note="Evidence is limited.",
         )
 
-        assert "EVIDENCE NOTE" in prompt
-        assert "Evidence is limited." in prompt
+        assert "EVIDENCE NOTE" not in prompt
 
     def test_truncate_chunk_text_marks_truncated_content(self):
         text = "A" * 1300

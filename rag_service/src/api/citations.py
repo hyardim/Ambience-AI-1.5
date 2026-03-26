@@ -229,20 +229,16 @@ def _question_focus_text(query: str | None) -> str:
 
 
 def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str:
-    """Clean up the answer text.
+    """Light cleanup pass over the answer text.
 
-    Previously this function dropped any uncited sentence containing clinical
-    keywords, which was too aggressive — it silently removed accurate bridging
-    sentences and produced vague meta-references instead of real answers.
-
-    Now it only:
-    - Strips section-label artefacts from each sentence.
-    - Suppresses "honest scope" disclaimer sentences when the answer already
-      has citations (the disclaimer is redundant and confusing in that case).
-    - Preserves every other sentence — cited or not — so the model can
-      synthesise coherent answers using both indexed passages and general
-      clinical knowledge.
+    Only strips scope-disclaimer sentences when the answer already has
+    citations (they are redundant and undermine an otherwise useful answer).
+    All other sentences are preserved — the LLM at low temperature with a
+    grounded prompt is already well-constrained.
     """
+    if not has_citations:
+        return answer_text
+
     units = [
         part.strip()
         for part in _SENTENCE_SPLIT_RE.split(answer_text)
@@ -251,19 +247,14 @@ def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str
     kept_units: list[str] = []
 
     for raw_unit in units:
-        unit = _SECTION_LABEL_RE.sub("", raw_unit).strip(" -")
-        unit = re.sub(r"^[*-]\s*", "", unit).strip()
+        unit = raw_unit.strip()
         if not unit:
             continue
-
-        # Drop "honest scope" disclaimers only when citations are present —
-        # they are redundant and undermine an otherwise useful answer.
-        if has_citations and _SCOPE_HINT_RE.search(unit):
+        if _SCOPE_HINT_RE.search(unit):
             continue
-
         kept_units.append(unit)
 
-    return _clean_answer_text(" ".join(kept_units))
+    return " ".join(kept_units)
 
 
 def _has_cited_sentence_matching(
@@ -296,72 +287,24 @@ def _enforce_partial_question_coverage(
     has_citations: bool,
     allow_uncited_answer: bool = False,
 ) -> str:
-    if not answer_text.strip() or not query:
-        return answer_text
+    """No-op — previously appended false coverage disclaimers.
 
-    focus_text = _question_focus_text(query)
-    if not focus_text:
-        return answer_text
-
-    requested_parts: list[tuple[str, re.Pattern[str]]] = []
-    if _INVESTIGATION_QUERY_HINT_RE.search(focus_text):
-        requested_parts.append(("investigations", _INVESTIGATION_SENTENCE_HINT_RE))
-    if _IMAGING_QUERY_HINT_RE.search(focus_text):
-        requested_parts.append(("imaging", _IMAGING_SENTENCE_HINT_RE))
-    if _REFERRAL_QUERY_HINT_RE.search(focus_text):
-        requested_parts.append(("referral/urgency pathway", _REFERRAL_SENTENCE_HINT_RE))
-
-    if not requested_parts:
-        return answer_text
-    if not has_citations:
-        return answer_text if allow_uncited_answer else ""
-
-    missing_parts = [
-        label
-        for label, pattern in requested_parts
-        if not _has_cited_sentence_matching(answer_text, pattern)
-    ]
-    if not missing_parts:
-        return answer_text
-
-    gap_sentence = (
-        "The indexed passages retrieved do not directly cover the "
-        f"{_join_labels(missing_parts)} part of this question."
-    )
-    if gap_sentence.lower() in answer_text.lower():
-        return answer_text
-    return _clean_answer_text(f"{answer_text} {gap_sentence}")
+    The LLM handles partial coverage naturally via its prompt instructions.
+    Kept as a function signature for API compatibility.
+    """
+    return answer_text
 
 
 def _enforce_requested_scope(answer_text: str, *, query: str | None) -> str:
+    """No-op — previously stripped treatment sentences from non-treatment queries.
+
+    This was too aggressive and removed clinically relevant content (e.g.
+    mentioning prednisolone dose when asked about PMR management).
+    Kept as a function signature for API compatibility.
+    """
     if not answer_text.strip():
         return ""
-    if not query:
-        return answer_text
-
-    query_lc = query.lower()
-    requests_treatment = bool(_TREATMENT_QUERY_HINT_RE.search(query_lc))
-    requests_non_treatment_only = any(
-        pattern.search(query_lc)
-        for pattern in (
-            _INVESTIGATION_QUERY_HINT_RE,
-            _IMAGING_QUERY_HINT_RE,
-            _REFERRAL_QUERY_HINT_RE,
-        )
-    )
-    if requests_treatment or not requests_non_treatment_only:
-        return answer_text
-
-    kept_units: list[str] = []
-    for raw_unit in _SENTENCE_SPLIT_RE.split(answer_text):
-        unit = (raw_unit or "").strip()
-        if not unit:
-            continue
-        if _TREATMENT_SENTENCE_HINT_RE.search(unit):
-            continue
-        kept_units.append(unit)
-
-    return _clean_answer_text(" ".join(kept_units))
+    return answer_text
 
 
 def extract_citation_results(

@@ -1,6 +1,7 @@
 from src.generation.prompts import (
     allows_uncited_answer,
     build_grounded_prompt,
+    build_revision_prompt,
     select_answer_mode,
 )
 
@@ -15,113 +16,43 @@ _CHUNKS = [
 ]
 
 
-def test_select_answer_mode_detects_emergency_queries() -> None:
+def test_select_answer_mode_always_returns_strict_guideline() -> None:
+    """Answer mode routing is now a no-op — always returns strict_guideline."""
     mode = select_answer_mode(
         "48-year-old with new onset severe back pain and bilateral leg weakness "
         "with urinary retention. What immediate steps are required before transfer?"
     )
+    assert mode == "strict_guideline"
 
-    assert mode == "emergency"
-
-
-def test_select_answer_mode_detects_comparison_queries() -> None:
     mode = select_answer_mode(
         "How can migraine aura be distinguished from TIA in primary care?"
     )
-
-    assert mode == "comparison"
-
-
-def test_select_answer_mode_detects_routine_low_risk_queries() -> None:
-    mode = select_answer_mode(
-        "29-year-old with intermittent hand tremor worse with anxiety and caffeine. "
-        "No rigidity, bradykinesia, or neurological deficit. "
-        "What initial management is appropriate before referral?"
-    )
-
-    assert mode == "routine_low_risk"
-
-
-def test_select_answer_mode_detects_partial_support_workup_queries() -> None:
-    mode = select_answer_mode(
-        "35-year-old with intermittent joint swelling in knees and wrists over "
-        "4 months. CRP mildly raised. No clear diagnosis. What baseline blood "
-        "tests and imaging should be completed prior to referral?"
-    )
-
-    assert mode == "routine_low_risk"
-
-
-def test_select_answer_mode_does_not_treat_urgent_severity_as_emergency_alone() -> None:
-    mode = select_answer_mode(
-        "65-year-old with rapidly progressive gait disturbance and urinary "
-        "incontinence over 3 months. CT head shows ventriculomegaly. "
-        "Should normal pressure hydrocephalus be suspected and how urgently "
-        "should this be referred?",
-        severity="urgent",
-    )
-
     assert mode == "strict_guideline"
 
 
-def test_select_answer_mode_treats_emergency_severity_as_emergency() -> None:
-    mode = select_answer_mode(
-        "Assess new severe back pain with neurological symptoms.",
-        severity="emergency",
-    )
-
-    assert mode == "emergency"
-
-
-def test_allows_uncited_answer_for_routine_low_risk_mode() -> None:
-    assert allows_uncited_answer("routine_low_risk", evidence_level="weak") is True
-
-
-def test_allows_uncited_answer_only_for_weak_comparison_mode() -> None:
+def test_allows_uncited_answer_always_true() -> None:
+    """The simplified pipeline always allows answers through."""
+    assert allows_uncited_answer("strict_guideline", evidence_level="weak") is True
+    assert allows_uncited_answer("strict_guideline", evidence_level="strong") is True
     assert allows_uncited_answer("comparison", evidence_level="weak") is True
-    assert allows_uncited_answer("comparison", evidence_level="strong") is False
 
 
-def test_grounded_prompt_includes_emergency_mode_instructions() -> None:
+def test_grounded_prompt_uses_unified_instructions() -> None:
     prompt = build_grounded_prompt(
         "Need urgent transfer advice",
         _CHUNKS,
-        answer_mode="emergency",
     )
 
-    assert "EMERGENCY MODE" in prompt
-    assert "Immediate action:" in prompt
-    assert "ANSWER MODE\nemergency" in prompt
-    assert "must contain the concrete action itself" in prompt
-    assert "Do not write only that action is required" in prompt
-    assert "handling an urgent question" in prompt
-    assert "cauda equina" in prompt
-
-
-def test_grounded_prompt_includes_comparison_mode_instructions() -> None:
-    prompt = build_grounded_prompt(
-        "How can migraine aura be distinguished from TIA?",
-        _CHUNKS,
-        answer_mode="comparison",
-    )
-
-    assert "COMPARISON MODE" in prompt
-    assert "Key differences:" in prompt
-    assert "ANSWER MODE\ncomparison" in prompt
-    assert "address both sides of the comparison explicitly" in prompt
-    assert (
-        "Do not turn a comparison answer into a one-sided imaging or referral "
-        "workflow" in prompt
-    )
-    assert "answering a comparison question" in prompt
-    assert "'- Migraine aura:' and '- TIA:'" in prompt
+    assert "clinical decision-support assistant for a GP" in prompt
+    assert "Cite supporting passages" in prompt
+    assert "Do not fabricate" in prompt
+    assert "Do NOT add a summary paragraph" in prompt
 
 
 def test_grounded_prompt_uses_simpler_context_format() -> None:
     prompt = build_grounded_prompt(
         "How can migraine aura be distinguished from TIA?",
         _CHUNKS,
-        answer_mode="comparison",
     )
 
     assert "Source:" not in prompt
@@ -129,143 +60,54 @@ def test_grounded_prompt_uses_simpler_context_format() -> None:
     assert "[1] Neurology referral guidance" in prompt
 
 
-def test_grounded_prompt_uses_simpler_mvp_like_answer_contract() -> None:
+def test_grounded_prompt_includes_patient_context() -> None:
     prompt = build_grounded_prompt(
-        "What baseline blood tests and imaging should be completed prior to referral?",
+        "What investigations should I order?",
         _CHUNKS,
-        answer_mode="routine_low_risk",
+        patient_context={"age": 45, "gender": "female", "specialty": "neurology"},
     )
 
-    assert "Next step:" in prompt
-    assert "prefer 4-8 short sentences" in prompt
-    assert "Do not include section labels or lead-ins" in prompt
+    assert "Age: 45" in prompt
+    assert "Gender: Female" in prompt
+    assert "Specialty: Neurology" in prompt
 
 
-def test_grounded_prompt_includes_grounding_guardrails() -> None:
-    prompt = build_grounded_prompt("Question?", _CHUNKS)
-
-    assert "GROUNDING GUARDRAILS" in prompt
-    assert "Never write phrases like 'directly addresses'" in prompt
-    assert "Do not invent author names" in prompt
-
-
-def test_grounded_prompt_includes_routine_low_risk_mode_instructions() -> None:
+def test_grounded_prompt_includes_file_context() -> None:
     prompt = build_grounded_prompt(
-        "What is the best OTC painkiller for mild headache?",
+        "Summarise this document.",
         _CHUNKS,
-        answer_mode="routine_low_risk",
+        file_context="Uploaded document content here.",
     )
 
-    assert "ROUTINE LOW-RISK MODE" in prompt
-    assert "ANSWER MODE\nroutine_low_risk" in prompt
+    assert "UPLOADED DOCUMENTS" in prompt
+    assert "Uploaded document content here." in prompt
 
 
-def test_grounded_prompt_includes_scope_framing_for_workup_queries() -> None:
-    prompt = build_grounded_prompt(
-        (
-            "35-year-old with intermittent joint swelling in knees and wrists "
-            "over 4 months. What baseline blood tests and imaging should be "
-            "completed prior to referral?"
-        ),
-        _CHUNKS,
-        answer_mode="routine_low_risk",
-    )
+def test_grounded_prompt_no_context_produces_none_marker() -> None:
+    prompt = build_grounded_prompt("What is X?", [])
 
-    assert "SCOPE FRAMING:" in prompt
-    assert "For suspected rheumatoid arthritis" in prompt
-    assert "subtype-specific guidance" in prompt
-    assert "first two sentences" in prompt
-    assert "Avoid broad phrasing like 'prior to referral, do X'" in prompt
+    assert "Context:\n(none)" in prompt
+    assert "Answer (no citations):" in prompt
 
 
-def test_grounded_prompt_falls_back_to_strict_for_invalid_mode() -> None:
-    prompt = build_grounded_prompt(
-        "Question about something?",
-        _CHUNKS,
-        answer_mode="nonexistent_mode",
-    )
-
-    assert "STRICT GUIDELINE MODE" in prompt
-    assert "ANSWER MODE\nstrict_guideline" in prompt
-
-
-def test_revision_prompt_falls_back_to_strict_for_invalid_mode() -> None:
-    from src.generation.prompts import build_revision_prompt
-
+def test_revision_prompt_includes_feedback() -> None:
     prompt = build_revision_prompt(
         original_question="What about X?",
         previous_answer="Some answer.",
         specialist_feedback="Add more detail.",
         chunks=_CHUNKS,
-        answer_mode="bogus_mode",
     )
 
-    assert "STRICT GUIDELINE MODE" in prompt
-    assert "ANSWER MODE\nstrict_guideline" in prompt
+    assert "specialist" in prompt.lower()
+    assert "Add more detail." in prompt
+    assert "Some answer." in prompt
+    assert "Revised answer (with citations):" in prompt
 
 
-def test_revision_prompt_includes_scope_framing_for_workup_queries() -> None:
-    from src.generation.prompts import build_revision_prompt
+def test_grounded_prompt_answer_mode_ignored() -> None:
+    """Answer mode parameter is accepted but has no effect on prompt."""
+    prompt_default = build_grounded_prompt("Q?", _CHUNKS)
+    prompt_emergency = build_grounded_prompt("Q?", _CHUNKS, answer_mode="emergency")
 
-    prompt = build_revision_prompt(
-        original_question=(
-            "35-year-old with intermittent joint swelling in knees and wrists "
-            "over 4 months. What baseline blood tests and imaging should be "
-            "completed prior to referral?"
-        ),
-        previous_answer="Offer rheumatoid factor [1].",
-        specialist_feedback="Make clear whether this is only for suspected RA.",
-        chunks=_CHUNKS,
-        answer_mode="routine_low_risk",
-    )
-
-    assert "SCOPE FRAMING:" in prompt
-    assert "subtype-specific guidance" in prompt
-    assert "first two sentences" in prompt
-
-
-def test_matching_signals_high_token_overlap() -> None:
-    from src.generation.prompts import _matching_signals
-
-    # Use words that overlap as individual tokens but NOT as bigram phrases.
-    # Scatter overlapping words among non-overlapping ones so adjacent pairs differ.
-    chunk = {
-        "text": (
-            "alpha migraine beta treatment gamma prevention delta acute"
-        ),
-        "metadata": {"title": "Short"},
-    }
-
-    result = _matching_signals(
-        "migraine treatment prevention acute",
-        chunk,
-    )
-
-    assert "high token overlap" in result
-
-
-def test_matching_signals_title_close_match() -> None:
-    from src.generation.prompts import _matching_signals
-
-    chunk = {
-        "text": "Some text about treatment.",
-        "metadata": {"title": "Migraine treatment guidance overview"},
-    }
-
-    result = _matching_signals("migraine treatment guidance", chunk)
-
-    assert "title closely matches" in result
-
-
-def test_matching_signals_section_close_match() -> None:
-    from src.generation.prompts import _matching_signals
-
-    chunk = {
-        "text": "Some unrelated text.",
-        "metadata": {"title": "Guide"},
-        "section_path": "Migraine treatment acute therapy",
-    }
-
-    result = _matching_signals("migraine treatment acute therapy", chunk)
-
-    assert "section heading closely matches" in result
+    # Both should produce the same prompt since mode routing is disabled.
+    assert prompt_default == prompt_emergency
