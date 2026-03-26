@@ -150,9 +150,9 @@ def test_create_chat_invalidates_list_cache(monkeypatch):
         title="New Chat",
         status=ChatStatus.OPEN,
         specialty="neuro",
-        severity=None,
-        patient_age=None,
-        patient_gender=None,
+        severity="high",
+        patient_age=45,
+        patient_gender="female",
         patient_notes=None,
         specialist_id=None,
         assigned_at=None,
@@ -176,9 +176,9 @@ def test_create_chat_invalidates_list_cache(monkeypatch):
     payload = SimpleNamespace(
         title="New Chat",
         specialty="neuro",
-        severity=None,
-        patient_age=None,
-        patient_gender=None,
+        severity="high",
+        patient_age=45,
+        patient_gender="female",
         patient_notes=None,
     )
 

@@ -290,10 +290,7 @@ def _enforce_bearer_header_for_unsafe_cookie_auth(
     if (
         not bearer_token
         and request.cookies.get(settings.ACCESS_COOKIE_NAME)
-        and (
-            path.startswith("/auth/logout")
-            or path.startswith("/api/v1/auth/logout")
-        )
+        and (path.startswith("/auth/logout") or path.startswith("/api/v1/auth/logout"))
     ):
         _enforce_cookie_request_origin(request)
 

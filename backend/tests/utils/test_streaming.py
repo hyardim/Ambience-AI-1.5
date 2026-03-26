@@ -376,7 +376,13 @@ class TestSpecialistStreamAuthorization:
     ):
         cardio = client.post(
             "/chats/",
-            json={"title": "Cardio Chat", "specialty": "cardiology"},
+            json={
+                "title": "Cardio Chat",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         ).json()
         client.post(

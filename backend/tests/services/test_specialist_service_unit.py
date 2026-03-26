@@ -473,6 +473,56 @@ def test_review_message_request_changes_path(monkeypatch, db_session):
     assert called == ["Needs work"]
 
 
+def test_review_rejects_request_changes_without_feedback(db_session):
+    owner = _user(db_session, email="gp-feedback@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-feedback@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review(
+            db_session,
+            specialist,
+            chat.id,
+            ReviewRequest(action="request_changes", feedback="   "),
+        )
+
+    assert exc.value.status_code == 400
+    assert "feedback" in str(exc.value.detail).lower()
+
+
+def test_review_message_rejects_request_changes_without_feedback(db_session):
+    owner = _user(
+        db_session,
+        email="gp-feedback-msg@example.com",
+        role=UserRole.GP,
+    )
+    specialist = _user(
+        db_session,
+        email="spec-feedback-msg@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+    ai_message = _ai_message(db_session, chat)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review_message(
+            db_session,
+            specialist,
+            chat.id,
+            ai_message.id,
+            ReviewRequest(action="request_changes", feedback="  "),
+        )
+
+    assert exc.value.status_code == 400
+    assert "feedback" in str(exc.value.detail).lower()
+
+
 def test_review_message_rejects_invalid_action(db_session):
     _user(
         db_session,

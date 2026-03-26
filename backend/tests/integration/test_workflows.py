@@ -65,7 +65,13 @@ def test_gp_to_specialist_manual_response_flow(
 
     create_chat = client.post(
         "/chats/",
-        json={"title": "MS relapse guidance", "specialty": "neurology"},
+        json={
+            "title": "MS relapse guidance",
+            "specialty": "neurology",
+            "severity": "high",
+            "patient_age": 45,
+            "patient_gender": "female",
+        },
         headers=gp_headers,
     )
     assert create_chat.status_code == 200
@@ -162,7 +168,13 @@ def _mock_rag_revise(monkeypatch, answer: str = "Revised AI recommendation"):
 def _create_gp_chat(client, gp_headers, title="Clinical case", specialty="neurology"):
     created = client.post(
         "/chats/",
-        json={"title": title, "specialty": specialty},
+        json={
+            "title": title,
+            "specialty": specialty,
+            "severity": "high",
+            "patient_age": 45,
+            "patient_gender": "female",
+        },
         headers=gp_headers,
     )
     assert created.status_code == 200
