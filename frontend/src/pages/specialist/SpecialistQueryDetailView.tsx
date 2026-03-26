@@ -279,6 +279,14 @@ export function SpecialistQueryDetailView({
                     })}
                   </span>
                 </div>
+                {(chat.patient_age != null || chat.patient_gender) && (
+                  <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-sm text-[var(--nhs-blue)] font-medium">
+                    <span>Patient:</span>
+                    {chat.patient_age != null && <span>{chat.patient_age} years old</span>}
+                    {chat.patient_age != null && chat.patient_gender && <span>•</span>}
+                    {chat.patient_gender && <span className="capitalize">{chat.patient_gender}</span>}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {chat.severity && <SeverityBadge severity={chat.severity} />}

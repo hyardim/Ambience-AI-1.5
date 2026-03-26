@@ -15,6 +15,22 @@ MAX_CITATIONS = 5
 MIN_RELEVANCE = 0.12
 _VALID_CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
 _RULE_STYLE_CITATION_RE = re.compile(r"\[(?:\d+(?:\.\d+)+)\]")
+# Matches year/amendment metadata inside citation brackets:
+# [1, 2009] → [1]    [1, 2009; amended 2018] → [1]    [1; amended 2018] → [1]
+_YEAR_CITATION_CLEANUP_RE = re.compile(
+    r"\[(\d+(?:\s*,\s*\d+)*)"           # leading valid indices
+    r"(?:\s*[,;]\s*(?:\d{4}|amended?)[^]]*)"  # trailing year/amendment junk
+    r"\]",
+    re.IGNORECASE,
+)
+# Strip inline recommendation-number references the model echoes from guideline text.
+# e.g. "as per recommendation 1.1.1" or "recommendation 1.1.2 on page 6"
+_REC_NUMBER_INLINE_RE = re.compile(
+    r",?\s*(?:as per |following (?:guidance from )?|in |per )"
+    r"recommendation\s+\d+(?:\.\d+)+"
+    r"(?:\s+on\s+page\s+\d+(?:\s+of\s+the\s+indexed\s+guideline\s+passage)?)?",
+    re.IGNORECASE,
+)
 _PAREN_SECTION_REFERENCE_RE = re.compile(
     r"\(\s*(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\s*\)",
     re.IGNORECASE,
@@ -135,6 +151,10 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _SECTION_LABEL_RE.sub("", text)
     cleaned = _PAREN_SECTION_REFERENCE_RE.sub(r"\1", cleaned)
     cleaned = _POST_CITATION_SECTION_REFERENCE_RE.sub(r"\1", cleaned)
+    # Strip year/amendment metadata from citations: [1, 2009; amended 2018] → [1]
+    cleaned = _YEAR_CITATION_CLEANUP_RE.sub(r"[\1]", cleaned)
+    # Strip echoed recommendation numbers: "as per recommendation 1.1.1 on page 6"
+    cleaned = _REC_NUMBER_INLINE_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()
