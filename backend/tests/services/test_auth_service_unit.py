@@ -96,7 +96,9 @@ def test_refresh_returns_auth_response(db_session):
 
 
 def test_register_normalizes_email_before_storage(db_session, monkeypatch):
-    monkeypatch.setattr(auth_service.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
+    monkeypatch.setattr(
+        auth_service.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False
+    )
 
     result = auth_service.register(
         db_session,
@@ -128,6 +130,14 @@ def test_validate_password_rejects_weak_passwords(password):
 
 def test_validate_password_accepts_strong_password():
     auth_service._validate_password("StrongPass1!")
+
+
+def test_login_rejects_invalid_email_format(db_session):
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db_session, "not-an-email", "StrongPass1!")
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Please enter a valid email address"
 
 
 def test_profile_update_accepts_explicit_none_new_password():

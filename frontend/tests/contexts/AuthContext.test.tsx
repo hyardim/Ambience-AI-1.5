@@ -112,6 +112,43 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('user_role')).toBeNull();
   });
 
+  it('keeps stored identity on transient bootstrap errors', async () => {
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    vi.spyOn(api, 'refreshSession').mockRejectedValueOnce(new Error('refresh failed'));
+    vi.spyOn(api, 'getProfile').mockRejectedValueOnce(new Error('Rate limit exceeded'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.username).toBe('Stored User');
+    expect(localStorage.getItem('username')).toBe('Stored User');
+  });
+
+  it('clears identity when profile fallback rejects with a non-Error value', async () => {
+    localStorage.setItem('username', 'Stored User');
+    localStorage.setItem('user_email', 'stored@example.com');
+    localStorage.setItem('user_role', 'gp');
+    vi.spyOn(api, 'refreshSession').mockRejectedValueOnce(new Error('refresh failed'));
+    vi.spyOn(api, 'getProfile').mockRejectedValueOnce('string rejection');
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(localStorage.getItem('username')).toBeNull();
+    expect(localStorage.getItem('user_email')).toBeNull();
+    expect(localStorage.getItem('user_role')).toBeNull();
+  });
+
   it('does not update state after unmount when refresh fails late', async () => {
     const refreshGate = deferred<void>();
     let profileCalls = 0;

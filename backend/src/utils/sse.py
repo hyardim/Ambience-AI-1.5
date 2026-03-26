@@ -198,7 +198,10 @@ class _ChatEventBus:
         now = time.monotonic()
         expired_ids = []
         for cid, evt in list(self._stream_start.items()):
-            if cid not in self._active_streams and (now - evt.created_at) > _REPLAY_BUFFER_TTL_SECONDS:
+            if (
+                cid not in self._active_streams
+                and (now - evt.created_at) > _REPLAY_BUFFER_TTL_SECONDS
+            ):
                 expired_ids.append(cid)
         for cid in expired_ids:
             self._stream_start.pop(cid, None)
@@ -207,7 +210,8 @@ class _ChatEventBus:
         # Enforce max size by removing oldest non-active entries
         if len(self._stream_start) > _REPLAY_BUFFER_MAX_SIZE:
             inactive = [
-                (cid, evt) for cid, evt in self._stream_start.items()
+                (cid, evt)
+                for cid, evt in self._stream_start.items()
                 if cid not in self._active_streams
             ]
             inactive.sort(key=lambda x: x[1].created_at)

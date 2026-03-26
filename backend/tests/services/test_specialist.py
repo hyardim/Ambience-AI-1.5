@@ -115,7 +115,7 @@ class TestSpecialistChatDetail:
         resp = client.get(
             f"/specialist/chats/{cardio['id']}", headers=specialist_headers
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

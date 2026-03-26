@@ -20,6 +20,7 @@ const hookState = {
   isStreaming: false,
   injectPlaceholder: false,
   injectStringTimestamp: false,
+  stripGeneratingPlaceholders: false,
 };
 
 vi.mock('@/hooks/useChatStream', () => ({
@@ -33,6 +34,9 @@ vi.mock('@/hooks/useChatStream', () => ({
       phase: hookState.phase,
       isStreaming: hookState.isStreaming,
       connectStream: (chatId: number) => {
+        if (hookState.stripGeneratingPlaceholders) {
+          setMessages((prev) => prev.filter((m) => !(m.senderType === 'ai' && m.isGenerating)));
+        }
         if (hookState.injectPlaceholder) {
           setMessages((prev) => [
             ...prev,
@@ -130,6 +134,7 @@ describe('GPQueryDetailPage', () => {
     hookState.isStreaming = false;
     hookState.injectPlaceholder = false;
     hookState.injectStringTimestamp = false;
+    hookState.stripGeneratingPlaceholders = false;
   });
 
   it('loads a consultation, edits metadata, sends a message, and shows submitted state', async () => {
@@ -359,6 +364,41 @@ describe('GPQueryDetailPage', () => {
 
     await waitFor(() => {
       expect(mockConnectStream).toHaveBeenCalled();
+    });
+  });
+
+  it('reconciles to fetched messages when no streaming placeholder remains', async () => {
+    hookState.stripGeneratingPlaceholders = true;
+    let getChatCalls = 0;
+
+    server.use(
+      http.get('/chats/:chatId', ({ params }) => {
+        getChatCalls += 1;
+        const base = { ...mockChatWithMessages, id: Number(params.chatId), status: 'open' };
+        if (getChatCalls < 2) {
+          return HttpResponse.json(base);
+        }
+        return HttpResponse.json({
+          ...base,
+          messages: [
+            ...mockChatWithMessages.messages,
+            { id: 777, content: 'Fetched AI response', sender: 'ai', created_at: '2025-01-15T10:03:00Z' },
+          ],
+        });
+      }),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /send stub message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Fetched AI response')).toBeInTheDocument();
     });
   });
 

@@ -17,6 +17,10 @@ function routeForRole(role: UserRole | null): string {
   return '/gp/queries';
 }
 
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 /** Login page with field-level validation and contextual API error messages. */
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -44,8 +48,13 @@ export function LoginPage() {
     setError('');
     setUnverifiedEmail('');
 
+    const normalizedEmail = email.trim().toLowerCase();
     const errors: { email?: string; password?: string } = {};
-    if (!email) errors.email = 'Email is required';
+    if (!normalizedEmail) {
+      errors.email = 'Email is required';
+    } else if (!isValidEmail(normalizedEmail)) {
+      errors.email = 'Please enter a valid email address';
+    }
     if (!password) errors.password = 'Password is required';
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -54,7 +63,7 @@ export function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      const loggedInRole = await login(email, password);
+      const loggedInRole = await login(normalizedEmail, password);
       navigate(routeForRole(loggedInRole));
     } catch (err) {
       const message = getErrorMessage(err, 'Incorrect username or password');
@@ -69,7 +78,7 @@ export function LoginPage() {
         setError(message);
       }
       if (message.toLowerCase().includes('verify your email')) {
-        setUnverifiedEmail(email);
+        setUnverifiedEmail(normalizedEmail);
       }
     } finally {
       setIsSubmitting(false);

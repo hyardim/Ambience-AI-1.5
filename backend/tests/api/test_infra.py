@@ -599,7 +599,7 @@ async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
 
     # Atomic incr is called; expire is NOT called because count > 1
     assert calls == [
-        ("incr", "ratelimit:anon:127.0.0.1"),
+        ("incr", "ratelimit:global:anon:127.0.0.1"),
     ]
 
 
@@ -624,7 +624,7 @@ async def test_rate_limit_dependency_keys_by_session_and_ip(monkeypatch):
 
     await rate_limit.rate_limit_dependency(request)
 
-    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].startswith("ratelimit:global:session:")
     assert seen["key"].endswith(":127.0.0.1")
 
 
@@ -649,7 +649,7 @@ async def test_rate_limit_dependency_uses_access_cookie_subject(monkeypatch):
 
     await rate_limit.rate_limit_dependency(request)
 
-    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].startswith("ratelimit:global:session:")
     assert seen["key"].endswith(":10.0.0.1")
 
 

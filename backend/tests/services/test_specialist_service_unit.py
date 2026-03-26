@@ -234,7 +234,7 @@ def test_assign_rejects_assigning_other_specialist(db_session):
             specialist,
             chat.id,
             SimpleNamespace(specialist_id=specialist.id + 1),
-    )
+        )
     assert exc.value.status_code == 403
 
 
@@ -279,7 +279,9 @@ def test_unassign_rejects_when_not_assigned_or_completed(db_session):
         role=UserRole.SPECIALIST,
         specialty="neurology",
     )
-    assigned_chat = _chat(db_session, owner, other_specialist, status=ChatStatus.ASSIGNED)
+    assigned_chat = _chat(
+        db_session, owner, other_specialist, status=ChatStatus.ASSIGNED
+    )
 
     with pytest.raises(HTTPException) as exc:
         specialist_service.unassign(db_session, specialist, assigned_chat.id)
@@ -670,7 +672,9 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
         "citations_used": [{"title": "Doc"}],
     }
     monkeypatch.setattr(
-        specialist_review.httpx, "Client", _mock_httpx_client(lambda *args, **kwargs: response)
+        specialist_review.httpx,
+        "Client",
+        _mock_httpx_client(lambda *args, **kwargs: response),
     )
     monkeypatch.setattr(
         specialist_review.audit_repository,
@@ -726,7 +730,9 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     invalidations = []
 
     monkeypatch.setattr(
-        specialist_review.httpx, "Client", _mock_httpx_client(lambda *args, **kwargs: response)
+        specialist_review.httpx,
+        "Client",
+        _mock_httpx_client(lambda *args, **kwargs: response),
     )
     monkeypatch.setattr(
         specialist_review,
@@ -802,7 +808,9 @@ def test_do_revise_forwards_internal_headers(monkeypatch):
     monkeypatch.setattr(
         specialist_review, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
     )
-    monkeypatch.setattr(specialist_review.httpx, "Client", _mock_httpx_client(fake_post))
+    monkeypatch.setattr(
+        specialist_review.httpx, "Client", _mock_httpx_client(fake_post)
+    )
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",
@@ -856,7 +864,9 @@ def test_do_revise_failure_logs_rag_error_and_notifies_user(monkeypatch, db_sess
     def fail_post(*args, **kwargs):
         raise RuntimeError("rag down")
 
-    monkeypatch.setattr(specialist_review.httpx, "Client", _mock_httpx_client(fail_post))
+    monkeypatch.setattr(
+        specialist_review.httpx, "Client", _mock_httpx_client(fail_post)
+    )
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",

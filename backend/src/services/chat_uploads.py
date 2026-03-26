@@ -187,9 +187,7 @@ async def upload_chat_file(
     # The chat row lock above serialises uploads per chat, so the count check
     # and insert stay consistent even when there are currently zero files.
     existing_count = (
-        db.query(FileAttachment)
-        .filter(FileAttachment.chat_id == chat_id)
-        .count()
+        db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).count()
     )
     if existing_count >= MAX_FILES_PER_CHAT:
         raise HTTPException(

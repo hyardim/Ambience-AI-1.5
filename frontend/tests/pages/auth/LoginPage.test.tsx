@@ -70,6 +70,21 @@ describe('LoginPage', () => {
     expect(screen.getByText(/email is required/i)).toBeInTheDocument();
   });
 
+  it('shows validation error when email format is invalid', async () => {
+    renderLogin();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText(/username/i), 'invalid-email');
+    await user.type(screen.getByLabelText(/password/i), 'Password123!');
+    fireEvent.submit(screen.getByRole('button', { name: /login/i }).closest('form')!);
+
+    expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
+  });
+
   it('fills demo credentials when the button is clicked', async () => {
     renderLogin();
     const user = userEvent.setup();
