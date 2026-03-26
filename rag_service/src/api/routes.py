@@ -173,8 +173,18 @@ def _augment_query_with_history(
     if not gp_lines:
         return query
 
-    # Use the most recent GP message as the prior context anchor
-    prior_context = gp_lines[-1][:400].strip()
+    # The backend fetches all DB messages before calling RAG, so the current
+    # follow-up message is already persisted and appears as the LAST GP entry
+    # in conversation_history.  We must exclude it to avoid doubling the query.
+    # Drop any trailing GP lines that are identical (or nearly identical) to
+    # the current query so we always anchor on the PRIOR clinical context.
+    filtered = [l for l in gp_lines if l[:200].lower() != stripped[:200].lower()]
+    if not filtered:
+        # All lines were the current message — no useful prior context available
+        return query
+
+    # Use the most recent PRIOR GP message as the clinical context anchor
+    prior_context = filtered[-1][:400].strip()
     augmented = f"{prior_context}\n{stripped}"
     return augmented[:_MAX_AUGMENTED_RETRIEVAL_QUERY]
 
