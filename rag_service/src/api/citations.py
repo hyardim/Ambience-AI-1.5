@@ -54,9 +54,11 @@ _PAREN_REC_NUMBER_RE = re.compile(
 )
 # Catch bare "recommendation X.X.X" anywhere it appears (with or without trailing [N]):
 # "recommendation 1.1.4 [1] advises..." → strips "recommendation 1.1.4 [1]"
-# This is a superset of _REC_NUMBER_INLINE_RE for cases with no preceding phrase.
+# Also handles plural: "recommendations 1.2.2 and 1.2.3 [1]"
 _REC_NUMBER_BARE_RE = re.compile(
-    r",?\s*\brecommendation\s+\d+(?:\.\d+)+\s*(?:\[[\d,\s]+\])?",
+    r",?\s*\brecommendations?\s+\d+(?:\.\d+)+"
+    r"(?:\s+and\s+\d+(?:\.\d+)+)*"  # optional "and X.X.X" continuation
+    r"\s*(?:\[[\d,\s]+\])?",
     re.IGNORECASE,
 )
 # Guideline amendment year reference: "following guideline amendment in 2018"
@@ -76,6 +78,17 @@ _FABRICATED_REF_RE = re.compile(
     r"\(\s*(?:AAN|AES|AAN/AES|ACR|EULAR|WHO|BMA|RCP|SIGN|"
     r"American Academy|American Epilepsy|European League)"
     r"[^)]{0,40}\d{4}[^)]{0,20}\)",
+    re.IGNORECASE,
+)
+# Strip fabricated BNF/external source references the model invents when context is thin:
+#   " British National Formulary (BNF) 2021: Hydroxychloroquine - Monitoring"
+#   " BNF 2021: ..."
+_FABRICATED_BNF_RE = re.compile(
+    r"\s*British National Formulary\s*\(BNF\)\s*\d{4}[^\n.]*",
+    re.IGNORECASE,
+)
+_FABRICATED_BNF_SHORT_RE = re.compile(
+    r"\n\s*BNF\s+\d{4}[^\n]*",
     re.IGNORECASE,
 )
 # Strip leaked prompt-rule references the model echoes:
@@ -236,6 +249,9 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _STANDALONE_DOTTED_NUMBER_RE.sub("", cleaned)
     # Strip fabricated external guideline references: (AAN/AES, 2015)
     cleaned = _FABRICATED_REF_RE.sub("", cleaned)
+    # Strip fabricated BNF references: "British National Formulary (BNF) 2021: ..."
+    cleaned = _FABRICATED_BNF_RE.sub("", cleaned)
+    cleaned = _FABRICATED_BNF_SHORT_RE.sub("", cleaned)
     # Strip leaked prompt-rule references: "(rule 11)", "as per rule 11"
     cleaned = _LEAKED_RULE_REF_RE.sub("", cleaned)
     # Strip meta-commentary about context passages

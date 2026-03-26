@@ -84,10 +84,12 @@ _NEGATIVE_DOC_PATTERNS: tuple[tuple[str, float], ...] = (
     ("consideration of the evidence", -0.22),
     ("cost effectiveness", -0.18),
     ("carbon reduction", -0.24),
-    ("decompressive hemicraniectomy", -0.14),
-    ("safety and efficacy of carotid stenting", -0.14),
+    ("decompressive hemicraniectomy", -0.22),
+    ("safety and efficacy of carotid stenting", -0.18),
     ("fracture risk assessment", -0.10),
     ("quality measures", -0.10),
+    # Cross-specialty noise — chunks about unrelated conditions pulled by embedding proximity.
+    ("pancreatic cancer", -0.22),
     # Clinical trial / HTA process sections — contain study data, not clinical recs.
     ("clinical effectiveness", -0.16),
     ("rct network meta-analyses", -0.22),
@@ -95,11 +97,18 @@ _NEGATIVE_DOC_PATTERNS: tuple[tuple[str, float], ...] = (
     ("the manufacturer's submission", -0.18),
     ("mono-therapy sc or iv", -0.20),
     ("ketogenic diets", -0.14),
+    # HTA appraisal methodology — not actionable clinical guidance.
+    ("the appraisal committee reviewed", -0.18),
+    ("interim data from", -0.14),
+    ("information about alemtuzumab", -0.12),
     # Late-stage / palliative sections — rarely answer acute clinical questions.
     ("information and support for people as ms becomes more advanced", -0.14),
     # Methodology sections that don't contain clinical recommendations.
     ("rigor of development", -0.14),
     ("rationale", -0.08),
+    # Audit / patient-public summaries — not clinical recommendations.
+    ("patient and public guide", -0.16),
+    ("national clinical audit", -0.14),
 )
 
 _INTENT_QUERY_MARKERS: tuple[str, ...] = (
@@ -184,6 +193,11 @@ _INTENT_NEGATIVE_DOC_MARKERS: tuple[str, ...] = (
     "the manufacturer's submission",
     "ketogenic diets",
     "decision problem",
+    "pancreatic cancer",
+    "decompressive hemicraniectomy",
+    "the appraisal committee reviewed",
+    "patient and public guide",
+    "national clinical audit",
 )
 
 
