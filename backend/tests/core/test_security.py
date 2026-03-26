@@ -3,12 +3,15 @@ Tests for src/core/security.py — password hashing and JWT utilities.
 """
 
 from datetime import timedelta
+from types import SimpleNamespace
 
 import jwt
 import pytest
 
 from src.core.config import settings
 from src.core.security import (
+    _enforce_cookie_request_origin,
+    _is_allowed_origin,
     create_access_token,
     get_password_hash,
     verify_password,
@@ -116,3 +119,20 @@ class TestCreateAccessToken:
                 "wrong_secret_key_that_is_long_enough_for_hs256",
                 algorithms=[ALGORITHM],
             )
+
+
+def test_is_allowed_origin_rejects_empty_and_malformed_inputs(monkeypatch):
+    monkeypatch.setattr(settings, "ALLOWED_ORIGINS", ["https://app.example.com"])
+
+    assert _is_allowed_origin("") is False
+    assert _is_allowed_origin("not-a-url") is False
+    assert _is_allowed_origin("https:///missing-host") is False
+
+
+def test_enforce_cookie_request_origin_allows_valid_referer(monkeypatch):
+    monkeypatch.setattr(settings, "ALLOWED_ORIGINS", ["https://app.example.com"])
+    request = SimpleNamespace(
+        headers={"referer": "https://app.example.com/chats/1"}
+    )
+
+    _enforce_cookie_request_origin(request)

@@ -261,9 +261,7 @@ class TestExpandQuery:
         assert "csDMARD monitoring" in result
 
     def test_sle_renal_pattern_expands_to_lupus_nephritis_terms(self):
-        result = _expand_query(
-            "Known SLE with new proteinuria and rising creatinine."
-        )
+        result = _expand_query("Known SLE with new proteinuria and rising creatinine.")
         assert "lupus nephritis" in result
         assert "renal involvement" in result
         assert "nephrology referral" in result
@@ -301,7 +299,9 @@ class TestRetrievalError:
 class TestExpandRedFlagPatternsEarlyReturn:
     """Cover the early-return in _expand_red_flag_patterns (line 300)."""
 
-    def test_migraine_tia_comparison_returns_query_unchanged_when_all_terms_present(self):
+    def test_migraine_tia_comparison_returns_query_unchanged_when_all_terms_present(
+        self,
+    ):
         """When the query already contains every balanced comparison term,
         _balanced_migraine_tia_comparison_terms returns [] and the original
         query is returned unchanged via the early-return path."""

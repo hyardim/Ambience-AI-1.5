@@ -830,6 +830,29 @@ def test_enforce_inprocess_limit_triggers_periodic_cleanup(monkeypatch):
     assert "test-bucket" in rate_limit._local_windows
 
 
+def test_request_path_falls_back_to_scope_when_url_missing():
+    request = SimpleNamespace(scope={"path": "/api/v1/chats/42"})
+    assert rate_limit._request_path(request) == "/api/v1/chats/42"
+
+
+def test_request_scope_handles_api_v1_prefix_and_auth_subroutes():
+    auth_request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/auth/login"))
+    chat_request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/chats/42"))
+    root_request = SimpleNamespace(url=SimpleNamespace(path="/api/v1"))
+
+    assert rate_limit._request_scope(auth_request) == "auth:login"
+    assert rate_limit._request_scope(chat_request) == "chats"
+    assert rate_limit._request_scope(root_request) == "global"
+
+
+def test_request_subject_for_login_scope_ignores_auth_tokens():
+    request = SimpleNamespace(
+        headers={"authorization": "Bearer keep-me-out"},
+        cookies={core_config.settings.ACCESS_COOKIE_NAME: "cookie-token"},
+    )
+    assert rate_limit._request_subject(request, scope="auth:login") == "anon"
+
+
 @pytest.mark.asyncio
 async def test_rag_search_proxy_success(monkeypatch):
     class FakeResponse:

@@ -110,11 +110,7 @@ _JOINT_FAMILY_PATTERNS = (
 
 def parse_allowed_specialties(raw: str) -> set[str]:
     """Parse comma-separated specialties from settings."""
-    return {
-        part.strip().lower()
-        for part in raw.split(",")
-        if part and part.strip()
-    }
+    return {part.strip().lower() for part in raw.split(",") if part and part.strip()}
 
 
 def build_canonical_retrieval_query(
@@ -128,8 +124,11 @@ def build_canonical_retrieval_query(
     if specialty_norm:
         if specialty_norm not in allowed_specialties:
             return None
-        if specialty_norm == RHEUMATOLOGY and _is_rheumatology_inflammatory_referral_query(  # noqa: E501
-            query
+        if (
+            specialty_norm == RHEUMATOLOGY
+            and _is_rheumatology_inflammatory_referral_query(
+                query
+            )
         ):
             return RHEUMATOLOGY_CANONICAL_QUERY
         if specialty_norm == RHEUMATOLOGY and _is_rheumatology_sle_renal_referral_query(
@@ -145,12 +144,16 @@ def build_canonical_retrieval_query(
 
     # Specialty may be unset from UI metadata; allow a narrow, high-precision
     # rule trigger for enabled specialties rather than failing closed on null.
-    if RHEUMATOLOGY in allowed_specialties and _is_rheumatology_inflammatory_referral_query(  # noqa: E501
-        query
+    if (
+        RHEUMATOLOGY in allowed_specialties
+        and _is_rheumatology_inflammatory_referral_query(
+            query
+        )
     ):
         return RHEUMATOLOGY_CANONICAL_QUERY
-    if RHEUMATOLOGY in allowed_specialties and _is_rheumatology_sle_renal_referral_query(
-        query
+    if (
+        RHEUMATOLOGY in allowed_specialties
+        and _is_rheumatology_sle_renal_referral_query(query)
     ):
         return RHEUMATOLOGY_SLE_RENAL_CANONICAL_QUERY
     if NEUROLOGY in allowed_specialties:

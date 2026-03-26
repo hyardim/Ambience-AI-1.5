@@ -18,7 +18,7 @@ _RULE_STYLE_CITATION_RE = re.compile(r"\[(?:\d+(?:\.\d+)+)\]")
 # Matches year/amendment metadata inside citation brackets:
 # [1, 2009] → [1]    [1, 2009; amended 2018] → [1]    [1; amended 2018] → [1]
 _YEAR_CITATION_CLEANUP_RE = re.compile(
-    r"\[(\d+(?:\s*,\s*\d+)*)"           # leading valid indices
+    r"\[(\d+(?:\s*,\s*\d+)*)"  # leading valid indices
     r"(?:\s*[,;]\s*(?:\d{4}|amended?)[^]]*)"  # trailing year/amendment junk
     r"\]",
     re.IGNORECASE,
@@ -26,8 +26,8 @@ _YEAR_CITATION_CLEANUP_RE = re.compile(
 # Matches recommendation numbers mixed into citation brackets:
 # [1, 1.1.2] → [1]    [1, 1.1.3] → [1]    [2, 1.1.4] → [2]
 _REC_IN_CITATION_CLEANUP_RE = re.compile(
-    r"\[(\d+)"                           # leading valid index
-    r"(?:\s*,\s*\d+(?:\.\d+)+)+"         # one or more ", 1.1.2" rec-number parts
+    r"\[(\d+)"  # leading valid index
+    r"(?:\s*,\s*\d+(?:\.\d+)+)+"  # one or more ", 1.1.2" rec-number parts
     r"\]",
 )
 # Strip inline recommendation-number references the model echoes from guideline text.
@@ -39,8 +39,10 @@ _REC_IN_CITATION_CLEANUP_RE = re.compile(
 #   "(recommendation 1.1.3)"
 #   "following guideline amendment in 2018"
 _REC_NUMBER_INLINE_RE = re.compile(
-    r",?\s*(?:as per |following (?:guidance from )?|as outlined in |as stated in |in |per )"
-    r"(?:guideline\s+)?"          # optional "guideline" word between preposition and "recommendation"
+    # Optional "guideline" word between preposition and "recommendation".
+    r",?\s*(?:as per |following (?:guidance from )?|"
+    r"as outlined in |as stated in |in |per )"
+    r"(?:guideline\s+)?"
     r"recommendation\s+\d+(?:\.\d+)+"
     r"(?:\s+on\s+page\s+\d+(?:\s+of\s+the\s+indexed\s+guideline\s+passage)?)?",
     re.IGNORECASE,
@@ -80,7 +82,8 @@ _FABRICATED_REF_RE = re.compile(
     r"[^)]{0,40}\d{4}[^)]{0,20}\)",
     re.IGNORECASE,
 )
-# Strip fabricated BNF/external source references the model invents when context is thin:
+# Strip fabricated BNF/external source references the model invents when
+# context is thin:
 #   " British National Formulary (BNF) 2021: Hydroxychloroquine - Monitoring"
 #   " BNF 2021: ..."
 _FABRICATED_BNF_RE = re.compile(
@@ -299,7 +302,8 @@ def _clean_answer_text(text: str) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()
     cleaned = _LEADING_PAGE_LABEL_RE.sub("", cleaned)
-    # Strip orphaned leading citations: "[1], primary care should..." → "Primary care should..."
+    # Strip orphaned leading citations:
+    # "[1], primary care should..." -> "Primary care should..."
     cleaned = _LEADING_CITATION_COMMA_RE.sub("", cleaned)
     cleaned = _LEADING_CONNECTIVE_RE.sub("", cleaned)
     if cleaned and cleaned[0].islower():
@@ -343,8 +347,6 @@ def _enforce_grounded_sentences(answer_text: str, *, has_citations: bool) -> str
 
     for raw_unit in units:
         unit = raw_unit.strip()
-        if not unit:
-            continue
         if _SCOPE_HINT_RE.search(unit):
             continue
         kept_units.append(unit)

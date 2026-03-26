@@ -133,7 +133,7 @@ _INSTRUCTIONS = (
     "after the emergency response.\n"
     "For GCA (jaw claudication / new headache in elderly patient): begin "
     "with 'Immediate action:' then state: start high-dose prednisolone NOW "
-    "(typically 40–60 mg/day without visual symptoms; escalate dose if "
+    "(typically 40-60 mg/day without visual symptoms; escalate dose if "
     "visual symptoms). Do NOT wait for biopsy — start steroids immediately, "
     "biopsy within 2 weeks remains diagnostic. Arrange URGENT same-day "
     "secondary care referral (rheumatology ± ophthalmology if visual "
@@ -221,9 +221,7 @@ def _format_context(question: str, chunks: list[dict]) -> str:
         header = f"[{idx}]"
         if note_parts:
             header = f"{header} {' - '.join(note_parts)}"
-        lines.append(
-            f"{header}\n{_truncate_chunk_text(chunk.get('text', ''))}"
-        )
+        lines.append(f"{header}\n{_truncate_chunk_text(chunk.get('text', ''))}")
 
     return "\n\n".join(lines)
 

@@ -66,6 +66,42 @@ async def test_clinical_query_returns_search_results(
     ]
 
 
+def test_augment_query_with_history_returns_original_for_non_followup() -> None:
+    query = "Please summarize next steps."
+    patient_context = {"conversation_history": "GP: prior baseline information"}
+
+    augmented = routes._augment_query_with_history(query, patient_context)
+
+    assert augmented == query
+
+
+def test_augment_query_with_history_prefixes_latest_gp_line() -> None:
+    query = "She now has new jaw pain and headache."
+    patient_context = {
+        "conversation_history": (
+            "GP: Earlier concern\n"
+            "Specialist: acknowledged\n"
+            "GP: 70-year-old with PMR features and raised ESR"
+        )
+    }
+
+    augmented = routes._augment_query_with_history(query, patient_context)
+
+    assert augmented.startswith("70-year-old with PMR features and raised ESR\n")
+    assert augmented.endswith(query)
+
+
+def test_augment_query_with_history_returns_original_when_no_gp_lines() -> None:
+    query = "She also has worsening weakness today."
+    patient_context = {
+        "conversation_history": "Specialist: prior note without GP-prefixed lines"
+    }
+
+    augmented = routes._augment_query_with_history(query, patient_context)
+
+    assert augmented == query
+
+
 @pytest.mark.anyio
 async def test_fetch_document_rejects_paths_outside_data_root(
     monkeypatch: pytest.MonkeyPatch,

@@ -7,8 +7,10 @@ from psycopg2 import errors as pg_errors
 
 from src.retrieval.keyword_search import (
     KeywordSearchResult,
-    _build_relaxed_or_tsquery as _build_relaxed_tsquery,
     keyword_search,
+)
+from src.retrieval.keyword_search import (
+    _build_relaxed_or_tsquery as _build_relaxed_tsquery,
 )
 from src.retrieval.query import RetrievalError
 
@@ -447,13 +449,9 @@ class TestKeywordSearch:
         config_url = ks_mod.db_config.database_url
 
         with (
-            patch.object(
-                ks_mod.db, "raw_connection"
-            ) as mock_pool,
+            patch.object(ks_mod.db, "raw_connection") as mock_pool,
         ):
-            mock_pool.return_value.__enter__ = MagicMock(
-                return_value=mock_conn
-            )
+            mock_pool.return_value.__enter__ = MagicMock(return_value=mock_conn)
             mock_pool.return_value.__exit__ = MagicMock(return_value=False)
             results = keyword_search(QUERY, db_url=config_url)
 
@@ -467,9 +465,8 @@ class TestKeywordSearch:
 
     def test_build_relaxed_tsquery_limits_terms(self):
         from src.retrieval.keyword_search import RELAXED_QUERY_MAX_TERMS
-        query = " ".join(
-            f"term{i}" for i in range(RELAXED_QUERY_MAX_TERMS + 5)
-        )
+
+        query = " ".join(f"term{i}" for i in range(RELAXED_QUERY_MAX_TERMS + 5))
         result = _build_relaxed_tsquery(query)
         assert result is not None
         assert result.count("|") == RELAXED_QUERY_MAX_TERMS - 1

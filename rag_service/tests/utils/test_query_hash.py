@@ -1,4 +1,5 @@
 """Tests for src/utils/query_hash.py."""
+
 from __future__ import annotations
 
 from src.utils.query_hash import QUERY_FINGERPRINT_LENGTH, query_fingerprint

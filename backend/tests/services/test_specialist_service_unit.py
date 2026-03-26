@@ -327,6 +327,125 @@ def test_review_blocks_terminal_actions_while_generation_in_progress(db_session)
     assert exc.value.status_code == 400
 
 
+def test_review_rejects_unknown_action_when_called_directly(db_session):
+    specialist = _user(
+        db_session,
+        email="spec-unknown-action@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_review.review(
+            db_session,
+            specialist,
+            1,
+            SimpleNamespace(action="unknown"),
+        )
+
+    assert exc.value.status_code == 400
+
+
+def test_review_send_comment_creates_trimmed_specialist_message(monkeypatch, db_session):
+    owner = _user(db_session, email="gp-comment@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-comment@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    monkeypatch.setattr(
+        specialist_review, "invalidate_notification_caches", lambda *_args: None
+    )
+
+    response = specialist_review.review(
+        db_session,
+        specialist,
+        chat.id,
+        ReviewRequest(action="send_comment", feedback="  Please include labs  "),
+    )
+
+    comment = (
+        db_session.query(Message)
+        .filter(Message.chat_id == chat.id, Message.sender == "specialist")
+        .order_by(Message.id.desc())
+        .first()
+    )
+    assert response.id == chat.id
+    assert comment is not None
+    assert comment.content == "Please include labs"
+
+
+def test_review_send_comment_requires_feedback(db_session):
+    owner = _user(db_session, email="gp-comment-required@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-comment-required@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_review.review(
+            db_session,
+            specialist,
+            chat.id,
+            ReviewRequest(action="send_comment", feedback="  "),
+        )
+
+    assert exc.value.status_code == 400
+
+
+def test_review_unassign_resets_chat_assignment(monkeypatch, db_session):
+    owner = _user(db_session, email="gp-unassign@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-unassign@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+
+    monkeypatch.setattr(
+        specialist_review, "invalidate_notification_caches", lambda *_args: None
+    )
+
+    response = specialist_review.review(
+        db_session,
+        specialist,
+        chat.id,
+        ReviewRequest(action="unassign"),
+    )
+
+    db_session.refresh(chat)
+    assert response.status == ChatStatus.SUBMITTED.value
+    assert chat.specialist_id is None
+
+
+def test_review_manual_response_requires_replacement_content(db_session):
+    owner = _user(db_session, email="gp-manual-response@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-manual-response@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_review.review(
+            db_session,
+            specialist,
+            chat.id,
+            ReviewRequest(action="manual_response", replacement_content=" "),
+        )
+
+    assert exc.value.status_code == 400
+
+
 def test_review_message_rejects_missing_manual_response_content(db_session):
     owner = _user(db_session, email="gp@example.com", role=UserRole.GP)
     specialist = _user(

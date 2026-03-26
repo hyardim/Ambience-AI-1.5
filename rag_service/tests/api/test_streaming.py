@@ -6,11 +6,19 @@ import pytest
 
 from src.api.schemas import SearchResult
 from src.api.services import NO_EVIDENCE_RESPONSE
-from src.api.streaming import ndjson_done_only, streaming_generator
+from src.api.streaming import (
+    _answer_is_effectively_empty,
+    ndjson_done_only,
+    streaming_generator,
+)
 
 
 def _search_result_payload(result: SearchResult) -> dict[str, object | None]:
     return result.model_dump()
+
+
+def test_answer_is_effectively_empty_for_whitespace_only() -> None:
+    assert _answer_is_effectively_empty("   \n\t  ") is True
 
 
 @pytest.mark.anyio

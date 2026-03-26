@@ -438,9 +438,7 @@ class TestVectorSearch:
             patch.object(vs_mod.db, "raw_connection") as mock_pool,
             patch("src.retrieval.vector_search.register_vector"),
         ):
-            mock_pool.return_value.__enter__ = MagicMock(
-                return_value=mock_conn
-            )
+            mock_pool.return_value.__enter__ = MagicMock(return_value=mock_conn)
             mock_pool.return_value.__exit__ = MagicMock(return_value=False)
             results = vector_search(VALID_EMBEDDING, db_url=config_url)
 

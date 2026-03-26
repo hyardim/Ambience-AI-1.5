@@ -58,6 +58,22 @@ def test_file_context_wrapper_functions_remain_backwards_compatible():
     assert specialist_review._build_file_context_result(fake_chat).file_context is None
 
 
+def test_build_conversation_history_breaks_when_budget_exceeded_after_tail_kept():
+    messages = [
+        SimpleNamespace(content="Older context", sender="user", is_error=False),
+        SimpleNamespace(
+            content="Most recent specialist advice", sender="specialist", is_error=False
+        ),
+    ]
+
+    history = rag_context.build_conversation_history_from_messages(
+        messages,
+        token_budget=3,
+    )
+
+    assert history == "Specialist: Most recent specialist advice"
+
+
 @pytest.mark.asyncio
 async def test_upload_chat_file_deduplicates_existing_filename(
     db_session, monkeypatch, tmp_path

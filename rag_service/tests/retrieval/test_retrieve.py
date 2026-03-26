@@ -285,8 +285,7 @@ class TestRetrieve:
             update={
                 "doc_id": "doc-appraisal",
                 "text": (
-                    "Adalimumab is recommended in some settings after DMARD "
-                    "failure."
+                    "Adalimumab is recommended in some settings after DMARD failure."
                 ),
                 "rerank_score": 0.5,
                 "final_score": 0.0,

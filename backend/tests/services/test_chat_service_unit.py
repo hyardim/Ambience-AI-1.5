@@ -81,6 +81,24 @@ def test_list_chats_rejects_inverted_date_range(db_session):
     assert "date_from" in str(exc.value.detail)
 
 
+def test_create_chat_rejects_missing_severity(db_session):
+    user = _user(db_session, email="gp-missing-severity@example.com")
+    payload = SimpleNamespace(
+        title="Needs severity",
+        specialty="neurology",
+        severity=None,
+        patient_age=40,
+        patient_gender="female",
+        patient_notes="Details",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        chat_service.create_chat(db_session, user, payload)
+
+    assert exc.value.status_code == 400
+    assert "severity is required" in str(exc.value.detail)
+
+
 def test_list_chats_uses_cache_for_simple_queries(monkeypatch, db_session):
     user = _user(db_session)
     cached_item = {
