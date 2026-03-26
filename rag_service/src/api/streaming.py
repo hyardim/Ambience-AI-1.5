@@ -37,11 +37,9 @@ async def streaming_generator(
     max_tokens: int,
     citations_retrieved: list[SearchResult],
     *,
-    allow_uncited_answer: bool = False,
+    allow_uncited_answer: bool = True,
     provider: ProviderName = "local",
     query: str | None = None,
-    answer_mode: str | None = None,
-    evidence: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield NDJSON lines: ``chunk`` deltas then a final ``done`` payload."""
     accumulated = ""
@@ -66,17 +64,11 @@ async def streaming_generator(
         citations_retrieved,
         strip_references=True,
         query=query,
-        allow_uncited_answer=allow_uncited_answer,
+        allow_uncited_answer=True,
     )
-    # Mirror the non-streaming path: allow emergency/comparison answers through
-    # when evidence is strong even if the model omitted citation markers.
-    allow_uncited_strong = (
-        answer_mode in ("emergency", "comparison") and evidence == "strong"
-    )
+    # Only refuse when the answer is truly empty after cleanup.
     refused = False
-    if _answer_is_effectively_empty(renumbered_answer) or (
-        not citations_used and not allow_uncited_answer and not allow_uncited_strong
-    ):
+    if _answer_is_effectively_empty(renumbered_answer):
         renumbered_answer = NO_EVIDENCE_RESPONSE
         refused = True
 
@@ -91,8 +83,6 @@ async def streaming_generator(
                 "citations_retrieved": [
                     citation.model_dump() for citation in citations_retrieved
                 ],
-                # Only surface citations that were actually used — don't inflate
-                # with retrieved citations when nothing was cited.
                 "citations": [
                     citation.model_dump()
                     for citation in ([] if refused else citations_used)
