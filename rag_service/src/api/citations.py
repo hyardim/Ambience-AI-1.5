@@ -109,6 +109,15 @@ _META_CONTEXT_REGARDLESS_RE = re.compile(
     r"\s*regardless of what the retrieved context passages say\.?",
     re.IGNORECASE,
 )
+# Strip hallucinated "Uploaded document:" source labels that the model writes
+# when there is no actual uploaded document in the prompt.  The pattern matches
+# a sentence that begins with "Uploaded document" followed by a colon/space and
+# arbitrary text, which is the canonical hallucination format.
+# We leave inline mentions like "the uploaded document shows..." untouched.
+_HALLUCINATED_UPLOADED_DOC_RE = re.compile(
+    r"\.?\s*Uploaded document\s*:[^\n.]*\.?",
+    re.IGNORECASE,
+)
 _PAREN_SECTION_REFERENCE_RE = re.compile(
     r"\(\s*(\[(?:\d+(?:\s*,\s*\d+)*)\])\s*(?:section\s*)?\d+(?:\.\d+)+\s*\)",
     re.IGNORECASE,
@@ -257,6 +266,10 @@ def _clean_answer_text(text: str) -> str:
     # Strip meta-commentary about context passages
     cleaned = _META_CONTEXT_RE.sub("", cleaned)
     cleaned = _META_CONTEXT_REGARDLESS_RE.sub(".", cleaned)
+    # Strip hallucinated "Uploaded document: ..." standalone source labels.
+    # These occur when the model echoes the citation format from Rule 2 even
+    # though no UPLOADED DOCUMENTS section was present in the prompt.
+    cleaned = _HALLUCINATED_UPLOADED_DOC_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()

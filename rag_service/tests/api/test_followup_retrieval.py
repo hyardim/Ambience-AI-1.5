@@ -322,3 +322,104 @@ class TestGCAEmergencyRuleInPrompt:
         instructions_section = prompt[:prompt.index("Context:")]
         assert "referral" in instructions_section.lower()
         assert "rheumatology" in instructions_section.lower()
+
+    def test_gca_rule_does_not_require_headache_jaw_claudication_alone_is_enough(self):
+        """Jaw claudication alone must trigger the emergency rule — the absence
+        of headache must not be an escape hatch."""
+        ctx = {"age": 74}
+        prompt = build_grounded_prompt(
+            "Elderly patient with jaw pain when chewing, no headache.",
+            _GCA_CHUNKS,
+            patient_context=ctx,
+        )
+        instructions_section = prompt[:prompt.index("Context:")]
+        # Rule must not require BOTH headache AND jaw claudication
+        assert "jaw claudication" in instructions_section.lower() or \
+               "jaw pain on chewing" in instructions_section.lower()
+        # Must not give the model an out based on absence of features
+        assert "do not" in instructions_section.lower() or "never" in instructions_section.lower()
+
+    def test_gca_rule_forbids_gca_is_less_likely_phrasing(self):
+        """The instructions must explicitly forbid the LLM from concluding GCA
+        is 'less likely' based on absence of other features."""
+        ctx = {"age": 70}
+        prompt = build_grounded_prompt(
+            "She has jaw aching when chewing, what should we do?",
+            _GCA_CHUNKS,
+            patient_context=ctx,
+        )
+        instructions_section = prompt[:prompt.index("Context:")]
+        # Explicit prohibition against downgrading urgency
+        assert "less likely" in instructions_section.lower() or \
+               "high-specificity" in instructions_section.lower()
+
+    def test_gca_rule_overrides_own_clinical_reasoning(self):
+        """Rule 11 must explicitly state it overrides the model's own clinical
+        reasoning, not just 'retrieved context passages'."""
+        ctx = {"age": 72}
+        prompt = build_grounded_prompt(
+            "Jaw claudication in 72-year-old with PMR.",
+            _GCA_CHUNKS,
+            patient_context=ctx,
+        )
+        instructions_section = prompt[:prompt.index("Context:")]
+        assert "clinical reasoning" in instructions_section.lower() or \
+               "probability assessment" in instructions_section.lower()
+
+
+# ---------------------------------------------------------------------------
+# Hallucinated "Uploaded document" post-processing
+# ---------------------------------------------------------------------------
+
+from src.api.citations import _clean_answer_text
+
+
+class TestHallucinatedUploadedDocStripping:
+    """Verify that hallucinated 'Uploaded document:' standalone citations are
+    stripped by the post-processing pipeline."""
+
+    def test_standalone_uploaded_doc_colon_stripped(self):
+        """'Uploaded document: These suggestions align with BSR guidelines.'
+        must be stripped when it appears as a standalone source label."""
+        text = (
+            "Start prednisolone 40 mg immediately for suspected GCA [1]. "
+            "Arrange urgent same-day rheumatology referral. "
+            "Uploaded document: These suggestions align with recommendations "
+            "from the British Society for Rheumatology guidelines for giant "
+            "cell arteritis and polymyalgia rheumatica."
+        )
+        cleaned = _clean_answer_text(text)
+        assert "Uploaded document" not in cleaned
+        # Clinical content must be preserved
+        assert "prednisolone" in cleaned
+        assert "rheumatology" in cleaned
+
+    def test_uploaded_doc_mid_sentence_stripped(self):
+        """Strip 'Uploaded document: ...' wherever it appears."""
+        text = "See below. Uploaded document: BSR guidelines apply here."
+        cleaned = _clean_answer_text(text)
+        assert "Uploaded document" not in cleaned
+
+    def test_inline_uploaded_reference_preserved(self):
+        """Inline references like 'the uploaded document shows...' are NOT
+        citation-style labels and must not be stripped."""
+        text = (
+            "According to the uploaded document provided, the patient's "
+            "eGFR is 28 ml/min, which indicates CKD stage 3b."
+        )
+        cleaned = _clean_answer_text(text)
+        # This is inline text, not a citation label — preserve it
+        assert "uploaded document" in cleaned.lower()
+
+    def test_uploaded_doc_at_very_end_stripped(self):
+        """Strip even when it appears as the last sentence with no trailing period."""
+        text = "Treat as GCA [1]. Uploaded document: See BSR for full guidance"
+        cleaned = _clean_answer_text(text)
+        assert "Uploaded document" not in cleaned
+
+    def test_uploaded_doc_uppercase_variants_stripped(self):
+        """Case-insensitive: UPLOADED DOCUMENT: must also be stripped."""
+        text = "Clinical guidance [1]. UPLOADED DOCUMENT: Refer to BSR."
+        cleaned = _clean_answer_text(text)
+        assert "UPLOADED DOCUMENT" not in cleaned
+        assert "Uploaded document" not in cleaned.title()
