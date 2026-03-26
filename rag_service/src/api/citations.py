@@ -45,9 +45,18 @@ _REC_NUMBER_INLINE_RE = re.compile(
     r"(?:\s+on\s+page\s+\d+(?:\s+of\s+the\s+indexed\s+guideline\s+passage)?)?",
     re.IGNORECASE,
 )
-# Standalone parenthetical recommendation number: "(recommendation 1.1.3)"
+# Standalone parenthetical recommendation number, with or without trailing citation:
+# "(recommendation 1.1.3)"  →  ""
+# "(recommendation 1.1.3 [1])"  →  ""
 _PAREN_REC_NUMBER_RE = re.compile(
-    r"\(\s*recommendation\s+\d+(?:\.\d+)+\s*\)",
+    r"\(\s*recommendation\s+\d+(?:\.\d+)+\s*(?:\[[\d,\s]+\])?\s*\)",
+    re.IGNORECASE,
+)
+# Catch bare "recommendation X.X.X" anywhere it appears (with or without trailing [N]):
+# "recommendation 1.1.4 [1] advises..." → strips "recommendation 1.1.4 [1]"
+# This is a superset of _REC_NUMBER_INLINE_RE for cases with no preceding phrase.
+_REC_NUMBER_BARE_RE = re.compile(
+    r",?\s*\brecommendation\s+\d+(?:\.\d+)+\s*(?:\[[\d,\s]+\])?",
     re.IGNORECASE,
 )
 # Guideline amendment year reference: "following guideline amendment in 2018"
@@ -80,6 +89,10 @@ _LEADING_CONNECTIVE_RE = re.compile(
 _LEADING_PAGE_LABEL_RE = re.compile(
     r"^(?:\[(?:\d+(?:\s*,\s*\d+)*)\]\s*)?page\s+\d+\s+",
     re.IGNORECASE,
+)
+# Strip orphaned leading citation that opens a sentence: "[1], primary care should..."
+_LEADING_CITATION_COMMA_RE = re.compile(
+    r"^\[(?:\d+(?:\s*,\s*\d+)*)\]\s*,\s*",
 )
 _CLINICAL_HINT_RE = re.compile(
     r"\b(refer|referral|urgent|stroke|tia|hydrocephalus|nph|gait|ataxia|weakness|"
@@ -116,7 +129,7 @@ _IMAGING_QUERY_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _IMAGING_SENTENCE_HINT_RE = re.compile(
-    r"\b(x-?ray|ultrasound|mri|ct|scan|imaging)\b",
+    r"\b(x-?ray\w*|ultrasound|mri|ct\b|scan\w*|imaging)\b",
     re.IGNORECASE,
 )
 _TREATMENT_QUERY_HINT_RE = re.compile(
@@ -185,10 +198,14 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _PAREN_REC_NUMBER_RE.sub("", cleaned)
     # Strip guideline amendment year refs: "following guideline amendment in 2018"
     cleaned = _GUIDELINE_AMENDMENT_RE.sub("", cleaned)
+    # Strip any remaining bare "recommendation X.X.X [N]" references not caught above
+    cleaned = _REC_NUMBER_BARE_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()
     cleaned = _LEADING_PAGE_LABEL_RE.sub("", cleaned)
+    # Strip orphaned leading citations: "[1], primary care should..." → "Primary care should..."
+    cleaned = _LEADING_CITATION_COMMA_RE.sub("", cleaned)
     cleaned = _LEADING_CONNECTIVE_RE.sub("", cleaned)
     if cleaned and cleaned[0].islower():
         cleaned = cleaned[0].upper() + cleaned[1:]
@@ -369,6 +386,13 @@ def extract_citation_results(
             answer,
             flags=re.DOTALL | re.IGNORECASE,
         ).rstrip()
+    # Strip summary/recap tail paragraphs the model adds despite the prompt rule
+    answer = re.sub(
+        r"\n+\s*(?:In summary|To summarise|To summarize|In conclusion)[,:].*",
+        "",
+        answer,
+        flags=re.DOTALL | re.IGNORECASE,
+    ).rstrip()
     answer = _RULE_STYLE_CITATION_RE.sub("", answer)
     answer = _clean_answer_text(answer)
     answer = _enforce_grounded_sentences(answer, has_citations=bool(citations_used))
