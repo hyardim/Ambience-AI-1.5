@@ -31,11 +31,28 @@ _REC_IN_CITATION_CLEANUP_RE = re.compile(
     r"\]",
 )
 # Strip inline recommendation-number references the model echoes from guideline text.
-# e.g. "as per recommendation 1.1.1" or "recommendation 1.1.2 on page 6"
+# Handles all common phrasings:
+#   "as per recommendation 1.1.1"
+#   "as per guideline recommendation 1.1.1"
+#   "as outlined in recommendation 1.1.2"
+#   "following guidance from recommendation 1.1.3"
+#   "(recommendation 1.1.3)"
+#   "following guideline amendment in 2018"
 _REC_NUMBER_INLINE_RE = re.compile(
-    r",?\s*(?:as per |following (?:guidance from )?|in |per )"
+    r",?\s*(?:as per |following (?:guidance from )?|as outlined in |as stated in |in |per )"
+    r"(?:guideline\s+)?"          # optional "guideline" word between preposition and "recommendation"
     r"recommendation\s+\d+(?:\.\d+)+"
     r"(?:\s+on\s+page\s+\d+(?:\s+of\s+the\s+indexed\s+guideline\s+passage)?)?",
+    re.IGNORECASE,
+)
+# Standalone parenthetical recommendation number: "(recommendation 1.1.3)"
+_PAREN_REC_NUMBER_RE = re.compile(
+    r"\(\s*recommendation\s+\d+(?:\.\d+)+\s*\)",
+    re.IGNORECASE,
+)
+# Guideline amendment year reference: "following guideline amendment in 2018"
+_GUIDELINE_AMENDMENT_RE = re.compile(
+    r",?\s*following\s+guideline\s+amendment\s+in\s+\d{4}",
     re.IGNORECASE,
 )
 _PAREN_SECTION_REFERENCE_RE = re.compile(
@@ -111,9 +128,9 @@ _TREATMENT_QUERY_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _TREATMENT_SENTENCE_HINT_RE = re.compile(
-    r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|steroid|"
-    r"immunosuppress\w*|treat\w*|management|manage\w*|therapy|medication|"
-    r"dose|prescrib\w*|drug)\b",
+    r"\b(ace inhibitors?|acei|arb|angiotensin|prednisolone|methotrexate|"
+    r"hydroxychloroquine|sulfasalazine|leflunomide|dmard|biologic\w*|"
+    r"immunosuppress\w*|steroid\w*|prescrib\w*|dose\s+of|mg\b|start\s+\w+\s+at)\b",
     re.IGNORECASE,
 )
 
@@ -164,6 +181,10 @@ def _clean_answer_text(text: str) -> str:
     cleaned = _REC_IN_CITATION_CLEANUP_RE.sub(r"[\1]", cleaned)
     # Strip echoed recommendation numbers: "as per recommendation 1.1.1 on page 6"
     cleaned = _REC_NUMBER_INLINE_RE.sub("", cleaned)
+    # Strip parenthetical rec numbers: "(recommendation 1.1.3)"
+    cleaned = _PAREN_REC_NUMBER_RE.sub("", cleaned)
+    # Strip guideline amendment year refs: "following guideline amendment in 2018"
+    cleaned = _GUIDELINE_AMENDMENT_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = cleaned.strip()

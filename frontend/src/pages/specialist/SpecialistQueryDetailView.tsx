@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { SeverityBadge, StatusBadge } from '../../components/Badges';
+import { PatientContextBanner } from '../../components/PatientContextBanner';
 import { ChatInput } from '../../components/ChatInput';
 import { ChatMessage } from '../../components/ChatMessage';
 import { Header } from '../../components/Header';
@@ -279,14 +280,14 @@ export function SpecialistQueryDetailView({
                     })}
                   </span>
                 </div>
-                {(chat.patient_age != null || chat.patient_gender) && (
-                  <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-sm text-[var(--nhs-blue)] font-medium">
-                    <span>Patient:</span>
-                    {chat.patient_age != null && <span>{chat.patient_age} years old</span>}
-                    {chat.patient_age != null && chat.patient_gender && <span>•</span>}
-                    {chat.patient_gender && <span className="capitalize">{chat.patient_gender}</span>}
-                  </div>
-                )}
+                <PatientContextBanner
+                  age={chat.patient_age}
+                  sex={chat.patient_gender}
+                  specialty={chat.specialty}
+                  urgency={chat.severity}
+                  notes={chat.patient_notes}
+                  className="mt-3"
+                />
               </div>
               <div className="flex items-center gap-2">
                 {chat.severity && <SeverityBadge severity={chat.severity} />}
