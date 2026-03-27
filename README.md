@@ -46,10 +46,10 @@ Important note for existing local volumes:
 
 RAG DB bootstrap assets now live together under:
 
-- [rag_service/scripts/db/migrations/001_create_rag_chunks.sql](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/001_create_rag_chunks.sql)
-- [rag_service/scripts/db/migrations/002_indexes.sql](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/002_indexes.sql)
-- [rag_service/scripts/db/migrations/003_add_text_search_vector.sql](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/003_add_text_search_vector.sql)
-- [rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz](/Users/Kavin2/Projects/Ambience-AI-1.5/rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz)
+- [rag_service/scripts/db/migrations/001_create_rag_chunks.sql](rag_service/scripts/db/migrations/001_create_rag_chunks.sql)
+- [rag_service/scripts/db/migrations/002_indexes.sql](rag_service/scripts/db/migrations/002_indexes.sql)
+- [rag_service/scripts/db/migrations/003_add_text_search_vector.sql](rag_service/scripts/db/migrations/003_add_text_search_vector.sql)
+- [rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz](rag_service/scripts/db/migrations/004_seed_rag_chunks.sql.gz)
 
 Main endpoints:
 
@@ -160,6 +160,27 @@ Cache troubleshooting:
 - To reset only backend cache keys, run: `redis-cli KEYS "cache:*" | xargs redis-cli DEL`
 - If you see stale chat data, confirm you updated the correct environment variables for the backend service.
 - If Redis is not reachable, the backend will fall back to database reads and log a `cache.error` warning.
+
+## Tips for best results
+
+These tips apply to anyone using the clinical interface.
+
+### For GPs — creating a query
+
+- **Include patient context.** The more detail you provide (age, sex, specialty, severity), the more targeted the generated answer will be. A query of "50F with RA on hydroxychloroquine — monitoring schedule?" will retrieve and rank more relevant passages than a bare drug name.
+- **Attach relevant documents.** Patient letters, test results, or recent correspondence can be uploaded alongside the query. The RAG service incorporates these as additional context alongside the indexed guidelines, so the answer can reference patient-specific findings directly.
+- **Be specific about the clinical question.** Naming the drug, condition, or procedure (rather than describing symptoms only) improves keyword and vector retrieval precision.
+
+### For specialists — refining an AI-generated answer
+
+- **Try the AI-revision path before editing manually.** If the generated answer is close but needs adjustments — different emphasis, a missing point, or a correction — use the "revise with feedback" option and describe exactly what needs to change. The service will regenerate the answer grounded in the same retrieved passages, with your feedback applied. This is usually faster than editing free-text and keeps citations consistent.
+- **Be explicit in revision feedback.** Vague instructions like "improve this" produce little change. Specific instructions like "add that prednisolone should be tapered gradually" or "remove the section about cauda equina — it's not relevant here" work much better.
+- **Write a manual response when the AI answer is fundamentally off.** If retrieval missed the relevant guideline entirely, or the clinical scenario is outside the indexed corpus, writing a manual response with your own sources is the right call. Manual responses are clearly marked in the audit trail.
+
+### General
+
+- **Emergency presentations** (neutropenic sepsis, cauda equina syndrome, acute cord compression) will trigger immediate-action guidance at the top of the answer regardless of how the query is phrased.
+- **Regenerating vs editing** — if an answer is unsatisfactory for no obvious reason, try regenerating it (re-submit the same query) before investing time in manual edits. LLM output has natural variance and a fresh generation often resolves the issue.
 
 ## Notes
 

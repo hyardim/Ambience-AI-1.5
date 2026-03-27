@@ -220,11 +220,11 @@ make lint
 
 Tests mirror the `src/` structure under [`tests/`](tests/).
 
-At the time of this cleanup pass:
+Current state:
 
 - lint passes
 - type checks pass
-- tests pass
+- 1254+ tests pass
 - coverage is at 100%
 
 ## Notes for maintainers
