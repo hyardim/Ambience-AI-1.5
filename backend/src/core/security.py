@@ -3,6 +3,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
+from urllib.parse import urlparse
 
 import jwt
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -286,6 +287,13 @@ def _enforce_bearer_header_for_unsafe_cookie_auth(
         return
 
     path = _request_path(request)
+    if (
+        not bearer_token
+        and request.cookies.get(settings.ACCESS_COOKIE_NAME)
+        and (path.startswith("/auth/logout") or path.startswith("/api/v1/auth/logout"))
+    ):
+        _enforce_cookie_request_origin(request)
+
     if any(path.startswith(prefix) for prefix in _UNSAFE_BEARER_EXEMPT_PATH_PREFIXES):
         return
 
@@ -301,6 +309,39 @@ def _enforce_bearer_header_for_unsafe_cookie_auth(
 
 def _get_refresh_cookie(request: Request) -> str | None:
     return request.cookies.get(settings.REFRESH_COOKIE_NAME)
+
+
+def _is_allowed_origin(origin_or_referer: str) -> bool:
+    if not origin_or_referer:
+        return False
+    parsed = urlparse(origin_or_referer)
+    if not parsed.scheme or not parsed.netloc:
+        return False
+    normalized = f"{parsed.scheme}://{parsed.netloc}".lower()
+    allowed = {origin.strip().lower() for origin in settings.ALLOWED_ORIGINS}
+    return normalized in allowed
+
+
+def _enforce_cookie_request_origin(request: Request) -> None:
+    """Require same-origin semantics for cookie-auth unsafe requests when headers are present."""
+    headers = getattr(request, "headers", {})
+    origin = headers.get("origin") if hasattr(headers, "get") else None
+    referer = headers.get("referer") if hasattr(headers, "get") else None
+
+    # For non-browser clients where these headers are typically absent, keep
+    # backward-compatible behavior.
+    if not origin and not referer:
+        return
+
+    if origin and _is_allowed_origin(origin):
+        return
+    if referer and _is_allowed_origin(referer):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Refresh request origin is not allowed",
+    )
 
 
 def _validate_payload(
@@ -390,6 +431,7 @@ def get_refresh_user(request: Request, db: Session = Depends(get_db)) -> User:
     Raises:
         HTTPException: If no refresh cookie is present or the token is invalid.
     """
+    _enforce_cookie_request_origin(request)
     token = _get_refresh_cookie(request)
     if not token:
         raise _credentials_exception()

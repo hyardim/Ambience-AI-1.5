@@ -65,10 +65,14 @@ def _validate_rag_response(rag_json: Any) -> dict:
     Returns the validated dict, or raises ValueError if the shape is wrong.
     """
     if not isinstance(rag_json, dict):
-        raise ValueError(f"Expected dict from RAG service, got {type(rag_json).__name__}")
+        raise ValueError(
+            f"Expected dict from RAG service, got {type(rag_json).__name__}"
+        )
     answer = rag_json.get("answer")
     if answer is not None and not isinstance(answer, str):
-        raise ValueError(f"Expected 'answer' to be a string, got {type(answer).__name__}")
+        raise ValueError(
+            f"Expected 'answer' to be a string, got {type(answer).__name__}"
+        )
     return rag_json
 
 
@@ -99,6 +103,13 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
     Returns:
         The newly created chat as a ChatResponse.
     """
+    if data.patient_age is None:
+        raise HTTPException(status_code=400, detail="patient_age is required")
+    if data.patient_gender is None:
+        raise HTTPException(status_code=400, detail="patient_gender is required")
+    if data.severity is None:
+        raise HTTPException(status_code=400, detail="severity is required")
+
     patient_context = {
         k: v
         for k, v in {
@@ -181,6 +192,16 @@ def list_chats(
             parsed_date_to = datetime.fromisoformat(date_to)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid date_to: {date_to}")
+
+    if (
+        parsed_date_from is not None
+        and parsed_date_to is not None
+        and parsed_date_from > parsed_date_to
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="date_from must be before or equal to date_to",
+        )
 
     # Avoid cache collisions for filter combinations not encoded in cache key.
     should_cache = not (search or date_from or date_to)
@@ -333,13 +354,17 @@ def archive_chat(db: Session, user: User, chat_id: int) -> None:
         raise HTTPException(status_code=404, detail="Chat not found")
 
     # Clean up uploaded files from the filesystem before archiving
-    attachments = db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).all()
+    attachments = (
+        db.query(FileAttachment).filter(FileAttachment.chat_id == chat_id).all()
+    )
     for att in attachments:
         if att.file_path and os.path.exists(att.file_path):
             try:
                 os.remove(att.file_path)
             except OSError:
-                logger.warning("Failed to remove file %s for chat %s", att.file_path, chat_id)
+                logger.warning(
+                    "Failed to remove file %s for chat %s", att.file_path, chat_id
+                )
 
     chat_repository.archive(db, chat)
     audit_repository.log(
@@ -439,12 +464,10 @@ async def _async_generate_ai_response(chat_id: int, user_id: int, content: str) 
                 return
 
             # Concurrency guard: skip if another generation is already running
-            existing = (
-                await db.execute(
-                    select(Message).where(
-                        Message.chat_id == chat_id,
-                        Message.is_generating == True,  # noqa: E712
-                    )
+            existing = await db.execute(
+                select(Message).where(
+                    Message.chat_id == chat_id,
+                    Message.is_generating == True,  # noqa: E712
                 )
             )
             if existing.scalars().first() is not None:

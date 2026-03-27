@@ -37,6 +37,17 @@ def test_allows_uncited_answer_always_true() -> None:
     assert allows_uncited_answer("comparison", evidence_level="weak") is True
 
 
+def test_allows_uncited_answer_with_file_context() -> None:
+    assert (
+        allows_uncited_answer(
+            "strict_guideline",
+            evidence_level="weak",
+            has_file_context=True,
+        )
+        is True
+    )
+
+
 def test_grounded_prompt_uses_unified_instructions() -> None:
     prompt = build_grounded_prompt(
         "Need urgent transfer advice",

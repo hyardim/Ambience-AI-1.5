@@ -85,6 +85,44 @@ def test_build_manual_citations_handles_empty_sources():
     assert specialist_service._build_manual_citations(["", "  "]) is None
 
 
+def test_build_manual_citations_detects_url_sources():
+    result = specialist_service._build_manual_citations(
+        ["https://nice.org.uk/guidance/ng228", "NICE NG228"]
+    )
+    assert result is not None
+    assert len(result) == 2
+    # URL source should have source_url set
+    assert result[0]["title"] == "https://nice.org.uk/guidance/ng228"
+    assert result[0]["source_url"] == "https://nice.org.uk/guidance/ng228"
+    assert result[0]["metadata"]["source_url"] == "https://nice.org.uk/guidance/ng228"
+    # Plain string source should NOT have source_url
+    assert result[1]["title"] == "NICE NG228"
+    assert "source_url" not in result[1]
+
+
+def test_build_manual_citations_accepts_source_entry_objects():
+    from src.schemas.chat import SourceEntry
+
+    result = specialist_service._build_manual_citations(
+        [
+            SourceEntry(name="guideline.pdf", url="/chats/1/files/5"),
+            SourceEntry(name="Plain source"),
+            "Legacy string source",
+        ]
+    )
+    assert result is not None
+    assert len(result) == 3
+    # SourceEntry with URL
+    assert result[0]["title"] == "guideline.pdf"
+    assert result[0]["source_url"] == "/chats/1/files/5"
+    # SourceEntry without URL
+    assert result[1]["title"] == "Plain source"
+    assert "source_url" not in result[1]
+    # Legacy string
+    assert result[2]["title"] == "Legacy string source"
+    assert "source_url" not in result[2]
+
+
 def test_specialist_service_reexports_expected_helpers():
     assert specialist_service.assign is not None
     assert specialist_service.review is not None
@@ -234,7 +272,7 @@ def test_assign_rejects_assigning_other_specialist(db_session):
             specialist,
             chat.id,
             SimpleNamespace(specialist_id=specialist.id + 1),
-    )
+        )
     assert exc.value.status_code == 403
 
 
@@ -279,7 +317,9 @@ def test_unassign_rejects_when_not_assigned_or_completed(db_session):
         role=UserRole.SPECIALIST,
         specialty="neurology",
     )
-    assigned_chat = _chat(db_session, owner, other_specialist, status=ChatStatus.ASSIGNED)
+    assigned_chat = _chat(
+        db_session, owner, other_specialist, status=ChatStatus.ASSIGNED
+    )
 
     with pytest.raises(HTTPException) as exc:
         specialist_service.unassign(db_session, specialist, assigned_chat.id)
@@ -322,6 +362,127 @@ def test_review_blocks_terminal_actions_while_generation_in_progress(db_session)
         specialist_service.review(
             db_session, specialist, chat.id, ReviewRequest(action="approve")
         )
+    assert exc.value.status_code == 400
+
+
+def test_review_rejects_unknown_action_when_called_directly(db_session):
+    specialist = _user(
+        db_session,
+        email="spec-unknown-action@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_review.review(
+            db_session,
+            specialist,
+            1,
+            SimpleNamespace(action="unknown"),
+        )
+
+    assert exc.value.status_code == 400
+
+
+def test_review_send_comment_creates_trimmed_specialist_message(
+    monkeypatch, db_session
+):
+    owner = _user(db_session, email="gp-comment@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-comment@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    monkeypatch.setattr(
+        specialist_review, "invalidate_notification_caches", lambda *_args: None
+    )
+
+    response = specialist_review.review(
+        db_session,
+        specialist,
+        chat.id,
+        ReviewRequest(action="send_comment", feedback="  Please include labs  "),
+    )
+
+    comment = (
+        db_session.query(Message)
+        .filter(Message.chat_id == chat.id, Message.sender == "specialist")
+        .order_by(Message.id.desc())
+        .first()
+    )
+    assert response.id == chat.id
+    assert comment is not None
+    assert comment.content == "Please include labs"
+
+
+def test_review_send_comment_requires_feedback(db_session):
+    owner = _user(db_session, email="gp-comment-required@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-comment-required@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_review.review(
+            db_session,
+            specialist,
+            chat.id,
+            ReviewRequest(action="send_comment", feedback="  "),
+        )
+
+    assert exc.value.status_code == 400
+
+
+def test_review_unassign_resets_chat_assignment(monkeypatch, db_session):
+    owner = _user(db_session, email="gp-unassign@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-unassign@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.REVIEWING)
+
+    monkeypatch.setattr(
+        specialist_review, "invalidate_notification_caches", lambda *_args: None
+    )
+
+    response = specialist_review.review(
+        db_session,
+        specialist,
+        chat.id,
+        ReviewRequest(action="unassign"),
+    )
+
+    db_session.refresh(chat)
+    assert response.status == ChatStatus.SUBMITTED.value
+    assert chat.specialist_id is None
+
+
+def test_review_manual_response_requires_replacement_content(db_session):
+    owner = _user(db_session, email="gp-manual-response@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-manual-response@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_review.review(
+            db_session,
+            specialist,
+            chat.id,
+            ReviewRequest(action="manual_response", replacement_content=" "),
+        )
+
     assert exc.value.status_code == 400
 
 
@@ -469,6 +630,56 @@ def test_review_message_request_changes_path(monkeypatch, db_session):
     )
     assert response.status == "reviewing"
     assert called == ["Needs work"]
+
+
+def test_review_rejects_request_changes_without_feedback(db_session):
+    owner = _user(db_session, email="gp-feedback@example.com", role=UserRole.GP)
+    specialist = _user(
+        db_session,
+        email="spec-feedback@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review(
+            db_session,
+            specialist,
+            chat.id,
+            ReviewRequest(action="request_changes", feedback="   "),
+        )
+
+    assert exc.value.status_code == 400
+    assert "feedback" in str(exc.value.detail).lower()
+
+
+def test_review_message_rejects_request_changes_without_feedback(db_session):
+    owner = _user(
+        db_session,
+        email="gp-feedback-msg@example.com",
+        role=UserRole.GP,
+    )
+    specialist = _user(
+        db_session,
+        email="spec-feedback-msg@example.com",
+        role=UserRole.SPECIALIST,
+        specialty="neurology",
+    )
+    chat = _chat(db_session, owner, specialist, status=ChatStatus.ASSIGNED)
+    ai_message = _ai_message(db_session, chat)
+
+    with pytest.raises(HTTPException) as exc:
+        specialist_service.review_message(
+            db_session,
+            specialist,
+            chat.id,
+            ai_message.id,
+            ReviewRequest(action="request_changes", feedback="  "),
+        )
+
+    assert exc.value.status_code == 400
+    assert "feedback" in str(exc.value.detail).lower()
 
 
 def test_review_message_rejects_invalid_action(db_session):
@@ -670,7 +881,9 @@ def test_do_revise_updates_placeholder_and_handles_audit_failure(
         "citations_used": [{"title": "Doc"}],
     }
     monkeypatch.setattr(
-        specialist_review.httpx, "Client", _mock_httpx_client(lambda *args, **kwargs: response)
+        specialist_review.httpx,
+        "Client",
+        _mock_httpx_client(lambda *args, **kwargs: response),
     )
     monkeypatch.setattr(
         specialist_review.audit_repository,
@@ -726,7 +939,9 @@ def test_do_revise_invalidates_admin_caches_when_chat_missing(monkeypatch):
     invalidations = []
 
     monkeypatch.setattr(
-        specialist_review.httpx, "Client", _mock_httpx_client(lambda *args, **kwargs: response)
+        specialist_review.httpx,
+        "Client",
+        _mock_httpx_client(lambda *args, **kwargs: response),
     )
     monkeypatch.setattr(
         specialist_review,
@@ -802,7 +1017,9 @@ def test_do_revise_forwards_internal_headers(monkeypatch):
     monkeypatch.setattr(
         specialist_review, "build_rag_headers", lambda: {"X-Internal-API-Key": "k"}
     )
-    monkeypatch.setattr(specialist_review.httpx, "Client", _mock_httpx_client(fake_post))
+    monkeypatch.setattr(
+        specialist_review.httpx, "Client", _mock_httpx_client(fake_post)
+    )
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",
@@ -856,7 +1073,9 @@ def test_do_revise_failure_logs_rag_error_and_notifies_user(monkeypatch, db_sess
     def fail_post(*args, **kwargs):
         raise RuntimeError("rag down")
 
-    monkeypatch.setattr(specialist_review.httpx, "Client", _mock_httpx_client(fail_post))
+    monkeypatch.setattr(
+        specialist_review.httpx, "Client", _mock_httpx_client(fail_post)
+    )
     monkeypatch.setattr(
         specialist_review.audit_repository,
         "log",

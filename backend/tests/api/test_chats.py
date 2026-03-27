@@ -11,7 +11,14 @@ Tests for /chats endpoints: create, list, get, archive (soft-delete), and send m
 class TestCreateChat:
     def test_create_chat_default_title(self, client, gp_headers):
         resp = client.post(
-            "/chats/", json={"specialty": "neurology"}, headers=gp_headers
+            "/chats/",
+            json={
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
+            headers=gp_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -23,19 +30,41 @@ class TestCreateChat:
     def test_create_chat_custom_title(self, client, gp_headers):
         resp = client.post(
             "/chats/",
-            json={"title": "Neurology Case", "specialty": "neurology"},
+            json={
+                "title": "Neurology Case",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         assert resp.status_code == 200
         assert resp.json()["title"] == "Neurology Case"
 
     def test_create_chat_unauthenticated_fails(self, client):
-        resp = client.post("/chats/", json={"title": "No Auth"})
+        resp = client.post(
+            "/chats/",
+            json={
+                "title": "No Auth",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
+        )
         assert resp.status_code == 401
 
     def test_create_chat_invalid_token_fails(self, client):
         resp = client.post(
-            "/chats/", json={}, headers={"Authorization": "Bearer bad.token"}
+            "/chats/",
+            json={
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
+            headers={"Authorization": "Bearer bad.token"},
         )
         assert resp.status_code == 401
 
@@ -43,7 +72,13 @@ class TestCreateChat:
         for i in range(3):
             resp = client.post(
                 "/chats/",
-                json={"title": f"Chat {i}", "specialty": "neurology"},
+                json={
+                    "title": f"Chat {i}",
+                    "specialty": "neurology",
+                    "severity": "high",
+                    "patient_age": 45,
+                    "patient_gender": "female",
+                },
                 headers=gp_headers,
             )
             assert resp.status_code == 200
@@ -63,12 +98,24 @@ class TestListChats:
     def test_list_chats_returns_own_chats(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Chat A", "specialty": "neurology"},
+            json={
+                "title": "Chat A",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         client.post(
             "/chats/",
-            json={"title": "Chat B", "specialty": "neurology"},
+            json={
+                "title": "Chat B",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         resp = client.get("/chats/", headers=gp_headers)
@@ -82,7 +129,13 @@ class TestListChats:
     ):
         client.post(
             "/chats/",
-            json={"title": "Alice Chat", "specialty": "neurology"},
+            json={
+                "title": "Alice Chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         resp = client.get("/chats/", headers=second_gp_headers)
@@ -95,7 +148,13 @@ class TestListChats:
         for title in ("First", "Second", "Third"):
             client.post(
                 "/chats/",
-                json={"title": title, "specialty": "neurology"},
+                json={
+                    "title": title,
+                    "specialty": "neurology",
+                    "severity": "high",
+                    "patient_age": 45,
+                    "patient_gender": "female",
+                },
                 headers=gp_headers,
             )
         resp = client.get("/chats/", headers=gp_headers)
@@ -322,12 +381,24 @@ class TestListChatsFiltering:
     def test_filter_by_specialty(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Neuro case", "specialty": "neurology"},
+            json={
+                "title": "Neuro case",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         client.post(
             "/chats/",
-            json={"title": "Cardio case", "specialty": "cardiology"},
+            json={
+                "title": "Cardio case",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -340,12 +411,24 @@ class TestListChatsFiltering:
     def test_filter_by_search_text(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Headache assessment", "specialty": "neurology"},
+            json={
+                "title": "Headache assessment",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         client.post(
             "/chats/",
-            json={"title": "Joint pain", "specialty": "rheumatology"},
+            json={
+                "title": "Joint pain",
+                "specialty": "rheumatology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -358,7 +441,13 @@ class TestListChatsFiltering:
     def test_search_is_case_insensitive(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Migraine Case", "specialty": "neurology"},
+            json={
+                "title": "Migraine Case",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -369,7 +458,13 @@ class TestListChatsFiltering:
     def test_search_partial_match(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Rheumatology follow-up", "specialty": "rheumatology"},
+            json={
+                "title": "Rheumatology follow-up",
+                "specialty": "rheumatology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -380,7 +475,13 @@ class TestListChatsFiltering:
     def test_filter_by_date_from(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Recent chat", "specialty": "neurology"},
+            json={
+                "title": "Recent chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -397,7 +498,13 @@ class TestListChatsFiltering:
     def test_filter_by_date_to(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Some chat", "specialty": "neurology"},
+            json={
+                "title": "Some chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -414,7 +521,13 @@ class TestListChatsFiltering:
     def test_filter_by_date_range(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Today chat", "specialty": "neurology"},
+            json={
+                "title": "Today chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -429,17 +542,35 @@ class TestListChatsFiltering:
     def test_combined_search_and_specialty(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Headache neuro", "specialty": "neurology"},
+            json={
+                "title": "Headache neuro",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         client.post(
             "/chats/",
-            json={"title": "Headache cardio", "specialty": "cardiology"},
+            json={
+                "title": "Headache cardio",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         client.post(
             "/chats/",
-            json={"title": "Joint pain neuro", "specialty": "neurology"},
+            json={
+                "title": "Joint pain neuro",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -454,12 +585,24 @@ class TestListChatsFiltering:
     def test_combined_all_filters(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Full filter match", "specialty": "neurology"},
+            json={
+                "title": "Full filter match",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         client.post(
             "/chats/",
-            json={"title": "Wrong specialty", "specialty": "cardiology"},
+            json={
+                "title": "Wrong specialty",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -482,6 +625,14 @@ class TestListChatsFiltering:
         assert resp.status_code == 400
         assert "date_to" in resp.json()["detail"]
 
+    def test_invalid_date_range_returns_400(self, client, gp_headers):
+        resp = client.get(
+            "/chats/?date_from=2099-01-01T00:00:00&date_to=2000-01-01T00:00:00",
+            headers=gp_headers,
+        )
+        assert resp.status_code == 400
+        assert "date_from" in resp.json()["detail"]
+
     def test_invalid_status_returns_400(self, client, gp_headers):
         resp = client.get("/chats/?status=nonexistent", headers=gp_headers)
         assert resp.status_code == 400
@@ -489,7 +640,13 @@ class TestListChatsFiltering:
     def test_filter_by_status(self, client, gp_headers):
         client.post(
             "/chats/",
-            json={"title": "Open chat", "specialty": "neurology"},
+            json={
+                "title": "Open chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
 
@@ -501,7 +658,13 @@ class TestListChatsFiltering:
         # Create a chat then archive it via the DELETE endpoint
         chat = client.post(
             "/chats/",
-            json={"title": "Will archive", "specialty": "neurology"},
+            json={
+                "title": "Will archive",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         ).json()
         client.delete(f"/chats/{chat['id']}", headers=gp_headers)

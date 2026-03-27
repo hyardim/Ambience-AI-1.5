@@ -58,6 +58,22 @@ def test_file_context_wrapper_functions_remain_backwards_compatible():
     assert specialist_review._build_file_context_result(fake_chat).file_context is None
 
 
+def test_build_conversation_history_breaks_when_budget_exceeded_after_tail_kept():
+    messages = [
+        SimpleNamespace(content="Older context", sender="user", is_error=False),
+        SimpleNamespace(
+            content="Most recent specialist advice", sender="specialist", is_error=False
+        ),
+    ]
+
+    history = rag_context.build_conversation_history_from_messages(
+        messages,
+        token_budget=3,
+    )
+
+    assert history == "Specialist: Most recent specialist advice"
+
+
 @pytest.mark.asyncio
 async def test_upload_chat_file_deduplicates_existing_filename(
     db_session, monkeypatch, tmp_path
@@ -86,7 +102,9 @@ async def test_upload_chat_file_deduplicates_existing_filename(
     existing_path.write_text("existing")
 
     monkeypatch.setattr(chat_uploads, "UPLOAD_DIR", tmp_path)
-    monkeypatch.setattr(chat_uploads.audit_repository, "log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_uploads.audit_repository, "log", lambda *args, **kwargs: None
+    )
 
     async def _noop_delete_pattern(*args, **kwargs):
         return None
@@ -120,14 +138,18 @@ def test_extract_text_returns_pdf_text_when_reader_succeeds(monkeypatch, tmp_pat
         def __init__(self, _path):
             self.pages = [SimpleNamespace(extract_text=lambda: "A" * 60)]
 
-    monkeypatch.setitem(sys.modules, "pypdf", types.SimpleNamespace(PdfReader=FakeReader))
+    monkeypatch.setitem(
+        sys.modules, "pypdf", types.SimpleNamespace(PdfReader=FakeReader)
+    )
 
     result = rag_context.extract_text(str(tmp_path / "doc.pdf"), "application/pdf")
 
     assert result == "A" * 60
 
 
-def test_build_file_context_result_prefers_sentence_boundary_when_truncating(monkeypatch):
+def test_build_file_context_result_prefers_sentence_boundary_when_truncating(
+    monkeypatch,
+):
     monkeypatch.setattr(rag_context, "FILE_CONTEXT_CHAR_LIMIT", 45)
     chat = SimpleNamespace(
         files=[
@@ -138,16 +160,22 @@ def test_build_file_context_result_prefers_sentence_boundary_when_truncating(mon
             )
         ]
     )
-    text = "Sentence one is quite long. Sentence two should be removed entirely afterward."
+    text = (
+        "Sentence one is quite long. Sentence two should be removed entirely afterward."
+    )
 
-    result = rag_context.build_file_context_result(chat, extract_text_fn=lambda *_args: text)
+    result = rag_context.build_file_context_result(
+        chat, extract_text_fn=lambda *_args: text
+    )
 
     assert result.was_truncated is True
     assert "Sentence one is quite long." in (result.file_context or "")
     assert "Sentence two should be removed" not in (result.file_context or "")
 
 
-def test_build_file_context_result_falls_back_to_word_boundary_when_truncating(monkeypatch):
+def test_build_file_context_result_falls_back_to_word_boundary_when_truncating(
+    monkeypatch,
+):
     monkeypatch.setattr(rag_context, "FILE_CONTEXT_CHAR_LIMIT", 55)
     chat = SimpleNamespace(
         files=[
@@ -158,9 +186,13 @@ def test_build_file_context_result_falls_back_to_word_boundary_when_truncating(m
             )
         ]
     )
-    text = "Wordboundary truncation should stop before clipping the finalwordwithoutperiod"
+    text = (
+        "Wordboundary truncation should stop before clipping the finalwordwithoutperiod"
+    )
 
-    result = rag_context.build_file_context_result(chat, extract_text_fn=lambda *_args: text)
+    result = rag_context.build_file_context_result(
+        chat, extract_text_fn=lambda *_args: text
+    )
 
     assert result.was_truncated is True
     assert "finalwordwithoutperiod" not in (result.file_context or "")

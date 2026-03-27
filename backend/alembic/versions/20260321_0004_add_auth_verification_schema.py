@@ -21,7 +21,9 @@ depends_on: Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column(
         "users",
-        sa.Column("email_verified", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column(
+            "email_verified", sa.Boolean(), nullable=False, server_default=sa.true()
+        ),
     )
     op.add_column("users", sa.Column("email_verified_at", sa.DateTime(), nullable=True))
     op.alter_column("users", "email_verified", server_default=None)
@@ -57,7 +59,9 @@ def upgrade() -> None:
         "password_reset_tokens",
         ["expires_at"],
     )
-    op.create_index("ix_password_reset_tokens_used_at", "password_reset_tokens", ["used_at"])
+    op.create_index(
+        "ix_password_reset_tokens_used_at", "password_reset_tokens", ["used_at"]
+    )
     op.create_index(
         "ix_password_reset_tokens_created_at",
         "password_reset_tokens",
@@ -180,7 +184,9 @@ def downgrade() -> None:
         "ix_password_reset_tokens_created_at",
         table_name="password_reset_tokens",
     )
-    op.drop_index("ix_password_reset_tokens_used_at", table_name="password_reset_tokens")
+    op.drop_index(
+        "ix_password_reset_tokens_used_at", table_name="password_reset_tokens"
+    )
     op.drop_index(
         "ix_password_reset_tokens_expires_at",
         table_name="password_reset_tokens",

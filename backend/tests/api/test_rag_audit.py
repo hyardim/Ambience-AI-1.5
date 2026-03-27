@@ -22,7 +22,15 @@ def _send_message(client, chat_id, headers, content="Patient has wrist pain."):
 
 def _create_chat(client, headers, specialty="neurology"):
     resp = client.post(
-        "/chats/", json={"title": "RAG test", "specialty": specialty}, headers=headers
+        "/chats/",
+        json={
+            "title": "RAG test",
+            "specialty": specialty,
+            "severity": "high",
+            "patient_age": 45,
+            "patient_gender": "female",
+        },
+        headers=headers,
     )
     assert resp.status_code == 200
     return resp.json()

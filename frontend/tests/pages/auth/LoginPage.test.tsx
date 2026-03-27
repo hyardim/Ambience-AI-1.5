@@ -70,18 +70,19 @@ describe('LoginPage', () => {
     expect(screen.getByText(/email is required/i)).toBeInTheDocument();
   });
 
-  it('fills demo credentials when the button is clicked', async () => {
+  it('shows validation error when email format is invalid', async () => {
     renderLogin();
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText(/fill demo credentials/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/fill demo credentials/i));
+    await user.type(screen.getByLabelText(/username/i), 'invalid-email');
+    await user.type(screen.getByLabelText(/password/i), 'Password123!');
+    fireEvent.submit(screen.getByRole('button', { name: /login/i }).closest('form')!);
 
-    expect(screen.getByLabelText(/username/i)).toHaveValue('gp@example.com');
-    expect(screen.getByLabelText(/password/i)).toHaveValue('Password123');
+    expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
   });
 
   it('logs in and navigates to GP queries on success', async () => {

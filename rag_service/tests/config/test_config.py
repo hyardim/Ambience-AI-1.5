@@ -193,8 +193,12 @@ def test_cloud_llm_is_configured_rejects_no_scheme_url() -> None:
     from src.config.llm import CloudLLMConfig, cloud_llm_is_configured
 
     config = CloudLLMConfig(
-        base_url="noscheme.example.com/v1", api_key="sk-real", model="gpt-4",
-        max_tokens=1024, temperature=0.1, timeout_seconds=120.0,
+        base_url="noscheme.example.com/v1",
+        api_key="sk-real",
+        model="gpt-4",
+        max_tokens=1024,
+        temperature=0.1,
+        timeout_seconds=120.0,
     )
     assert cloud_llm_is_configured(config) is False
 
@@ -203,8 +207,12 @@ def test_cloud_llm_is_configured_rejects_localhost() -> None:
     from src.config.llm import CloudLLMConfig, cloud_llm_is_configured
 
     config = CloudLLMConfig(
-        base_url="http://localhost:8080/v1", api_key="sk-real", model="gpt-4",
-        max_tokens=1024, temperature=0.1, timeout_seconds=120.0,
+        base_url="http://localhost:8080/v1",
+        api_key="sk-real",
+        model="gpt-4",
+        max_tokens=1024,
+        temperature=0.1,
+        timeout_seconds=120.0,
     )
     assert cloud_llm_is_configured(config) is False
 
@@ -213,8 +221,12 @@ def test_cloud_llm_is_configured_rejects_placeholder_key() -> None:
     from src.config.llm import CloudLLMConfig, cloud_llm_is_configured
 
     config = CloudLLMConfig(
-        base_url="https://api.real.com/v1", api_key="dummy", model="gpt-4",
-        max_tokens=1024, temperature=0.1, timeout_seconds=120.0,
+        base_url="https://api.real.com/v1",
+        api_key="dummy",
+        model="gpt-4",
+        max_tokens=1024,
+        temperature=0.1,
+        timeout_seconds=120.0,
     )
     assert cloud_llm_is_configured(config) is False
 
@@ -223,8 +235,12 @@ def test_cloud_llm_is_configured_rejects_required_prefix_key() -> None:
     from src.config.llm import CloudLLMConfig, cloud_llm_is_configured
 
     config = CloudLLMConfig(
-        base_url="https://api.real.com/v1", api_key="required_key", model="gpt-4",
-        max_tokens=1024, temperature=0.1, timeout_seconds=120.0,
+        base_url="https://api.real.com/v1",
+        api_key="required_key",
+        model="gpt-4",
+        max_tokens=1024,
+        temperature=0.1,
+        timeout_seconds=120.0,
     )
     assert cloud_llm_is_configured(config) is False
 
@@ -233,7 +249,11 @@ def test_cloud_llm_is_configured_accepts_real_config() -> None:
     from src.config.llm import CloudLLMConfig, cloud_llm_is_configured
 
     config = CloudLLMConfig(
-        base_url="https://api.real.com/v1", api_key="sk-real-key-123", model="gpt-4",
-        max_tokens=1024, temperature=0.1, timeout_seconds=120.0,
+        base_url="https://api.real.com/v1",
+        api_key="sk-real-key-123",
+        model="gpt-4",
+        max_tokens=1024,
+        temperature=0.1,
+        timeout_seconds=120.0,
     )
     assert cloud_llm_is_configured(config) is True

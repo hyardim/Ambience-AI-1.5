@@ -75,8 +75,7 @@ def test_get_source_path_for_doc_remaps_host_absolute_data_path() -> None:
     local.parent.mkdir(parents=True, exist_ok=True)
     local.write_text("pdf")
     host_style = (
-        "/Users/example/project/rag_service/data/raw/"
-        "_tmp/vector-store-remap-test.pdf"
+        "/Users/example/project/rag_service/data/raw/_tmp/vector-store-remap-test.pdf"
     )
     conn, cur = make_conn([(host_style, None)])
     try:
@@ -128,9 +127,7 @@ def test_remap_source_path_returns_none_when_no_data_raw_marker() -> None:
 
 
 def test_remap_source_path_returns_none_for_empty_tail() -> None:
-    result = vector_store._remap_source_path_to_data_root(
-        "/some/project/data/raw/"
-    )
+    result = vector_store._remap_source_path_to_data_root("/some/project/data/raw/")
     assert result is None
 
 
@@ -146,9 +143,7 @@ def test_get_source_path_for_doc_skips_empty_source_path(
             (str(real_file), None),
         ]
     )
-    with patch.object(
-        vector_store.db, "raw_connection", return_value=yield_conn(conn)
-    ):
+    with patch.object(vector_store.db, "raw_connection", return_value=yield_conn(conn)):
         result = vector_store.get_source_path_for_doc("doc123")
     # Empty source_path is skipped; second row resolves to the real file
     assert result == str(real_file)
@@ -172,9 +167,7 @@ def test_get_source_path_for_doc_skips_duplicate_candidate_paths() -> None:
     file_path.unlink(missing_ok=True)
 
     with (
-        patch.object(
-            vector_store.db, "raw_connection", return_value=yield_conn(conn)
-        ),
+        patch.object(vector_store.db, "raw_connection", return_value=yield_conn(conn)),
         patch(
             "src.retrieval.vector_store._remap_source_path_to_data_root",
             return_value=Path(source_str),

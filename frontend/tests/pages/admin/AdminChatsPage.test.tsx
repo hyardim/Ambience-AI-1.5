@@ -77,6 +77,7 @@ describe('AdminChatsPage', () => {
     });
 
     await user.click(screen.getByTitle(/delete chat/i));
+    await user.click(screen.getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() => {
       expect(screen.queryByText(/updated consultation/i)).not.toBeInTheDocument();
@@ -103,7 +104,6 @@ describe('AdminChatsPage', () => {
   });
 
   it('shows detail and update errors and respects delete cancellation', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     server.use(
       http.get('/admin/chats/:chatId', () =>
         HttpResponse.json({ detail: 'Detail failed' }, { status: 500 })),
@@ -131,12 +131,13 @@ describe('AdminChatsPage', () => {
     await user.click(screen.getByRole('button', { name: /cancel/i }));
 
     await user.click(screen.getByTitle(/delete chat/i));
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
   });
 
   it('lets admins edit specialty and severity, close the modal from the icon button, and surfaces delete errors', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     server.use(
       http.patch('/admin/chats/:chatId', ({ params, request }) =>
         request.json().then((body) =>
@@ -175,6 +176,7 @@ describe('AdminChatsPage', () => {
     expect(screen.queryByRole('heading', { name: /edit chat/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByTitle(/delete chat/i));
+    await user.click(screen.getByRole('button', { name: /^delete$/i }));
     await waitFor(() => {
       expect(screen.getByText(/delete failed/i)).toBeInTheDocument();
     });

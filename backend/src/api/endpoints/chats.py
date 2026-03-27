@@ -1,3 +1,4 @@
+import pathlib
 from typing import List, Optional
 
 from fastapi import (
@@ -9,12 +10,14 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.api.deps import get_current_user_obj
-from src.db.models import User
+from src.core.chat_policy import can_view_chat
+from src.db.models import Chat, User
+from src.db.models.file_attachment import FileAttachment as FileAttachmentModel
 from src.db.session import get_async_db, get_db
 from src.schemas.chat import (
     ChatCreate,
@@ -119,6 +122,39 @@ async def upload_file(
     current_user: User = Depends(get_current_user_obj),
 ):
     return await chat_service.upload_file(db, current_user, chat_id, file)
+
+
+@router.get("/{chat_id}/files/{file_id}")
+def download_file(
+    chat_id: int,
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_obj),
+):
+    """Serve an uploaded file attachment for download."""
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat or not can_view_chat(current_user, chat):
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    attachment = (
+        db.query(FileAttachmentModel)
+        .filter(
+            FileAttachmentModel.id == file_id, FileAttachmentModel.chat_id == chat_id
+        )
+        .first()
+    )
+    if not attachment:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    path = pathlib.Path(attachment.file_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(
+        path=str(path),
+        filename=attachment.filename,
+        media_type=attachment.file_type or "application/octet-stream",
+    )
 
 
 @router.post("/{chat_id}/submit", response_model=ChatResponse)

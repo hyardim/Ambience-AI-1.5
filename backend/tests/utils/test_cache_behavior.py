@@ -123,9 +123,15 @@ def test_get_chat_reads_repo_even_if_cache_contains_stale_detail(monkeypatch):
         user_id=5,
         files=[],
     )
-    monkeypatch.setattr(chat_service.chat_repository, "get", lambda *_args, **_kwargs: chat)
-    monkeypatch.setattr(chat_service.audit_repository, "log", lambda *args, **kwargs: None)
-    monkeypatch.setattr(chat_service.message_repository, "list_for_chat", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        chat_service.chat_repository, "get", lambda *_args, **_kwargs: chat
+    )
+    monkeypatch.setattr(
+        chat_service.audit_repository, "log", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        chat_service.message_repository, "list_for_chat", lambda *args, **kwargs: []
+    )
 
     user = SimpleNamespace(id=5)
     result = chat_service.get_chat(db=None, user=user, chat_id=3)
@@ -144,9 +150,9 @@ def test_create_chat_invalidates_list_cache(monkeypatch):
         title="New Chat",
         status=ChatStatus.OPEN,
         specialty="neuro",
-        severity=None,
-        patient_age=None,
-        patient_gender=None,
+        severity="high",
+        patient_age=45,
+        patient_gender="female",
         patient_notes=None,
         specialist_id=None,
         assigned_at=None,
@@ -170,9 +176,9 @@ def test_create_chat_invalidates_list_cache(monkeypatch):
     payload = SimpleNamespace(
         title="New Chat",
         specialty="neuro",
-        severity=None,
-        patient_age=None,
-        patient_gender=None,
+        severity="high",
+        patient_age=45,
+        patient_gender="female",
         patient_notes=None,
     )
 

@@ -190,15 +190,11 @@ class TestAdminRagStatus:
         ]
 
         async_client_mock = AsyncMock()
-        async_client_mock.get = AsyncMock(
-            side_effect=[health_response, docs_response]
-        )
+        async_client_mock.get = AsyncMock(side_effect=[health_response, docs_response])
         async_client_mock.__aenter__ = AsyncMock(return_value=async_client_mock)
         async_client_mock.__aexit__ = AsyncMock(return_value=False)
 
-        with patch.object(
-            httpx, "AsyncClient", return_value=async_client_mock
-        ):
+        with patch.object(httpx, "AsyncClient", return_value=async_client_mock):
             resp = client.get("/admin/rag/status", headers=admin_headers)
 
         assert resp.status_code == 200
@@ -214,9 +210,7 @@ class TestAdminRagStatus:
         async_client_mock.__aenter__ = AsyncMock(return_value=async_client_mock)
         async_client_mock.__aexit__ = AsyncMock(return_value=False)
 
-        with patch.object(
-            httpx, "AsyncClient", return_value=async_client_mock
-        ):
+        with patch.object(httpx, "AsyncClient", return_value=async_client_mock):
             resp = client.get("/admin/rag/status", headers=admin_headers)
 
         assert resp.status_code == 200

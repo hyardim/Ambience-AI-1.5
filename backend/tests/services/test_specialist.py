@@ -32,7 +32,13 @@ class TestSpecialistQueue:
         # Create and submit a cardiology chat — neurology specialist should NOT see it
         cardio = client.post(
             "/chats/",
-            json={"title": "Cardio Chat", "specialty": "cardiology"},
+            json={
+                "title": "Cardio Chat",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         ).json()
         client.post(
@@ -103,7 +109,13 @@ class TestSpecialistChatDetail:
         # Create and submit a cardiology chat
         cardio = client.post(
             "/chats/",
-            json={"title": "Cardio", "specialty": "cardiology"},
+            json={
+                "title": "Cardio",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         ).json()
         client.post(
@@ -115,7 +127,7 @@ class TestSpecialistChatDetail:
         resp = client.get(
             f"/specialist/chats/{cardio['id']}", headers=specialist_headers
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +198,13 @@ class TestSpecialistAssign:
         # Create and submit a cardiology chat
         cardio = client.post(
             "/chats/",
-            json={"title": "Cardio Chat", "specialty": "cardiology"},
+            json={
+                "title": "Cardio Chat",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         ).json()
         client.post(

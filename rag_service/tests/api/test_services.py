@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from src.api import services as api_services
 from src.api.schemas import SearchResult
 from src.api.services import (
     NO_EVIDENCE_RESPONSE,
@@ -436,8 +439,7 @@ def test_filter_chunks_prefers_lupus_renal_guidance_over_unrelated_rheum_docs() 
     assert filtered[0] == lupus_renal
 
 
-def test_filter_chunks_prefers_migraine_aura_comparison_chunk_over_generic_sensory(
-) -> None:
+def test_filter_chunks_prefers_migraine_aura_comparison_chunk_over_generic_sensory():
     migraine = {
         "text": (
             "Suspect migraine with aura when symptoms are fully reversible, "
@@ -478,8 +480,7 @@ def test_filter_chunks_prefers_migraine_aura_comparison_chunk_over_generic_senso
     assert filtered[0] == migraine
 
 
-def test_filter_chunks_prefers_aura_guidance_over_migraine_appraisal_for_comparison(
-) -> None:
+def test_filter_chunks_prefers_aura_guidance_over_migraine_appraisal_for_comparison():
     aura = {
         "text": (
             "Suspect migraine with aura when visual symptoms are fully reversible, "
@@ -762,6 +763,139 @@ def test_filter_chunks_keeps_high_confidence_semantic_hit_without_token_overlap(
     filtered = filter_chunks("aspirin management", retrieved)
 
     assert filtered == retrieved
+
+
+def test_question_focus_text_falls_back_to_last_unit_without_question_mark() -> None:
+    assert api_services._question_focus_text("First sentence. Final sentence") == (
+        "Final sentence"
+    )
+
+
+def test_question_focus_text_returns_original_query_when_no_units() -> None:
+    assert api_services._question_focus_text("   \n\t") == "   \n\t"
+
+
+def test_select_task_covering_chunks_returns_prefix_for_single_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chunks = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+    monkeypatch.setattr(api_services, "_requested_tasks", lambda _query: ["triage"])
+
+    selected = api_services._select_task_covering_chunks(
+        chunks,
+        original_query="query",
+        max_chunks=2,
+    )
+
+    assert selected == chunks[:2]
+
+
+def test_select_task_covering_chunks_returns_empty_for_non_positive_max() -> None:
+    assert (
+        api_services._select_task_covering_chunks(
+            [{"text": "chunk"}],
+            original_query="query",
+            max_chunks=0,
+        )
+        == []
+    )
+
+
+def test_select_task_covering_chunks_emergency_branch_stops_at_max(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api_services, "_EMERGENCY_QUERY_RE", re.compile("query"))
+    monkeypatch.setattr(api_services, "_MIGRAINE_TIA_QUERY_RE", re.compile("$^"))
+
+    chunks = [
+        {
+            "text": "Refer immediately for cauda equina red flags.",
+            "section_path": "Emergency pathway",
+            "metadata": {"title": "Neurology emergency guideline"},
+        },
+        {
+            "text": "Supportive second chunk",
+            "section_path": "General",
+            "metadata": {"title": "General guidance"},
+        },
+    ]
+
+    selected = api_services._select_task_covering_chunks(
+        chunks,
+        original_query="query",
+        max_chunks=1,
+    )
+
+    assert selected == [chunks[0]]
+
+
+def test_finalize_with_chunk_floor_prefers_primary_when_fallback_below_minimum(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api_services, "_requested_task_count", lambda _query: 2)
+    monkeypatch.setattr(
+        api_services,
+        "_finalize_filtered",
+        lambda chunks, *_a, **_k: chunks,
+    )
+    monkeypatch.setattr(api_services, "_EMERGENCY_QUERY_RE", re.compile("query"))
+    monkeypatch.setattr(api_services, "_MIGRAINE_TIA_QUERY_RE", re.compile("query"))
+
+    primary_selected = [{"id": "p1"}, {"id": "p2"}]
+    fallback_selected = [{"id": "f1"}]
+    calls = iter([primary_selected, fallback_selected])
+    monkeypatch.setattr(
+        api_services,
+        "_select_task_covering_chunks",
+        lambda *_a, **_k: next(calls),
+    )
+
+    result = api_services._finalize_with_chunk_floor(
+        [{"id": "p1"}, {"id": "p2"}],
+        [{"id": "f1"}],
+        original_query="query",
+        expanded_query="query expanded",
+        specialty="neurology",
+    )
+
+    assert result == primary_selected
+
+
+def test_finalize_with_chunk_floor_prefers_fallback_on_higher_task_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api_services, "_requested_task_count", lambda _query: 2)
+    monkeypatch.setattr(
+        api_services,
+        "_finalize_filtered",
+        lambda chunks, *_a, **_k: chunks,
+    )
+    monkeypatch.setattr(api_services, "_EMERGENCY_QUERY_RE", re.compile("$^"))
+    monkeypatch.setattr(api_services, "_MIGRAINE_TIA_QUERY_RE", re.compile("$^"))
+
+    primary_selected = [{"id": "p1"}, {"id": "p2"}]
+    fallback_selected = [{"id": "f1"}, {"id": "f2"}]
+    calls = iter([primary_selected, fallback_selected])
+    monkeypatch.setattr(
+        api_services,
+        "_select_task_covering_chunks",
+        lambda *_a, **_k: next(calls),
+    )
+
+    def fake_task_coverage(chunks, _requested):
+        return 3 if chunks is fallback_selected else 1
+
+    monkeypatch.setattr(api_services, "_task_coverage_count", fake_task_coverage)
+
+    result = api_services._finalize_with_chunk_floor(
+        [{"id": "p1"}, {"id": "p2"}],
+        [{"id": "f1"}, {"id": "f2"}],
+        original_query="query",
+        expanded_query="query expanded",
+        specialty="neurology",
+    )
+
+    assert result == fallback_selected
 
 
 def test_filter_chunks_falls_back_to_semantic_candidates_when_strict_match_empty() -> (

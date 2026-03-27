@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import pytest
 
@@ -228,6 +229,38 @@ def test_ensure_supported_migration_state_raises_for_legacy_backend_tables(monke
 
     with pytest.raises(RuntimeError, match="without Alembic migration history"):
         bootstrap._ensure_supported_migration_state()
+
+
+def test_existing_public_tables_uses_default_schema_for_sqlite(monkeypatch):
+    class FakeInspector:
+        def get_table_names(self, schema=None):
+            assert schema is None
+            return ["users", "chats"]
+
+    monkeypatch.setattr(
+        bootstrap,
+        "engine",
+        SimpleNamespace(dialect=SimpleNamespace(name="sqlite")),
+    )
+    monkeypatch.setattr(bootstrap, "inspect", lambda _engine: FakeInspector())
+
+    assert bootstrap._existing_public_tables() == {"users", "chats"}
+
+
+def test_existing_public_tables_uses_public_schema_for_postgres(monkeypatch):
+    class FakeInspector:
+        def get_table_names(self, schema=None):
+            assert schema == "public"
+            return ["users"]
+
+    monkeypatch.setattr(
+        bootstrap,
+        "engine",
+        SimpleNamespace(dialect=SimpleNamespace(name="postgresql")),
+    )
+    monkeypatch.setattr(bootstrap, "inspect", lambda _engine: FakeInspector())
+
+    assert bootstrap._existing_public_tables() == {"users"}
 
 
 def test_run_migrations_upgrades_to_head(monkeypatch):

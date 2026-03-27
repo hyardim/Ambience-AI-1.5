@@ -68,6 +68,37 @@ def test_list_chats_rejects_invalid_date_to(db_session):
     assert exc.value.status_code == 400
 
 
+def test_list_chats_rejects_inverted_date_range(db_session):
+    user = _user(db_session)
+    with pytest.raises(HTTPException) as exc:
+        chat_service.list_chats(
+            db_session,
+            user,
+            date_from="2099-01-01T00:00:00",
+            date_to="2000-01-01T00:00:00",
+        )
+    assert exc.value.status_code == 400
+    assert "date_from" in str(exc.value.detail)
+
+
+def test_create_chat_rejects_missing_severity(db_session):
+    user = _user(db_session, email="gp-missing-severity@example.com")
+    payload = SimpleNamespace(
+        title="Needs severity",
+        specialty="neurology",
+        severity=None,
+        patient_age=40,
+        patient_gender="female",
+        patient_notes="Details",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        chat_service.create_chat(db_session, user, payload)
+
+    assert exc.value.status_code == 400
+    assert "severity is required" in str(exc.value.detail)
+
+
 def test_list_chats_uses_cache_for_simple_queries(monkeypatch, db_session):
     user = _user(db_session)
     cached_item = {
@@ -245,12 +276,9 @@ def test_select_rag_citations_prefers_citations_used():
         {"citations_used": [1], "citations": [2]}
     ) == [1]
     assert chat_service._select_rag_citations({"citations": [2]}) == [2]
-    assert (
-        chat_service._select_rag_citations(
-            {"citations_used": [], "citations_retrieved": [3]}
-        )
-        == [3]
-    )
+    assert chat_service._select_rag_citations(
+        {"citations_used": [], "citations_retrieved": [3]}
+    ) == [3]
     assert chat_service._select_rag_citations({"citations_used": []}) == []
     assert chat_service._select_rag_citations({}) is None
 
@@ -290,11 +318,19 @@ def test_archive_chat_logs_warning_when_file_delete_fails(monkeypatch, db_sessio
         raise OSError("cannot delete")
 
     monkeypatch.setattr(chat_service.os, "remove", boom)
-    monkeypatch.setattr(chat_service.audit_repository, "log", lambda *args, **kwargs: None)
-    monkeypatch.setattr(chat_service.cache, "delete_pattern_sync", lambda *args, **kwargs: None)
-    monkeypatch.setattr(chat_service, "invalidate_admin_chat_caches_sync", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_service.audit_repository, "log", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        chat_service.cache, "delete_pattern_sync", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        chat_service, "invalidate_admin_chat_caches_sync", lambda *args, **kwargs: None
+    )
     warnings = []
-    monkeypatch.setattr(chat_service.logger, "warning", lambda *args, **kwargs: warnings.append(args))
+    monkeypatch.setattr(
+        chat_service.logger, "warning", lambda *args, **kwargs: warnings.append(args)
+    )
 
     chat_service.archive_chat(db_session, user, chat.id)
 
@@ -309,7 +345,9 @@ async def test_async_generate_ai_response_returns_when_chat_missing(monkeypatch)
     close_chat = AsyncMock()
     monkeypatch.setattr(chat_service.chat_event_bus, "close_chat", close_chat)
     monkeypatch.setattr(
-        chat_service.chat_repository, "async_get_for_update", AsyncMock(return_value=None)
+        chat_service.chat_repository,
+        "async_get_for_update",
+        AsyncMock(return_value=None),
     )
 
     await chat_service._async_generate_ai_response(999, 1, "hello")
@@ -323,7 +361,9 @@ async def test_async_generate_ai_response_skips_when_existing_generation_found(
 ):
     user = _user(db_session)
     chat = _chat(db_session, user, status=ChatStatus.SUBMITTED)
-    db_session.add(Message(chat_id=chat.id, content="busy", sender="ai", is_generating=True))
+    db_session.add(
+        Message(chat_id=chat.id, content="busy", sender="ai", is_generating=True)
+    )
     db_session.commit()
 
     monkeypatch.setattr(chat_service, "AsyncSessionLocal", TestingAsyncSessionLocal)

@@ -599,7 +599,7 @@ async def test_rate_limit_dependency_increments_when_under_limit(monkeypatch):
 
     # Atomic incr is called; expire is NOT called because count > 1
     assert calls == [
-        ("incr", "ratelimit:anon:127.0.0.1"),
+        ("incr", "ratelimit:global:anon:127.0.0.1"),
     ]
 
 
@@ -624,7 +624,7 @@ async def test_rate_limit_dependency_keys_by_session_and_ip(monkeypatch):
 
     await rate_limit.rate_limit_dependency(request)
 
-    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].startswith("ratelimit:global:session:")
     assert seen["key"].endswith(":127.0.0.1")
 
 
@@ -649,7 +649,7 @@ async def test_rate_limit_dependency_uses_access_cookie_subject(monkeypatch):
 
     await rate_limit.rate_limit_dependency(request)
 
-    assert seen["key"].startswith("ratelimit:session:")
+    assert seen["key"].startswith("ratelimit:global:session:")
     assert seen["key"].endswith(":10.0.0.1")
 
 
@@ -828,6 +828,29 @@ def test_enforce_inprocess_limit_triggers_periodic_cleanup(monkeypatch):
 
     assert rate_limit._local_cleanup_counter == rate_limit._LOCAL_CLEANUP_INTERVAL
     assert "test-bucket" in rate_limit._local_windows
+
+
+def test_request_path_falls_back_to_scope_when_url_missing():
+    request = SimpleNamespace(scope={"path": "/api/v1/chats/42"})
+    assert rate_limit._request_path(request) == "/api/v1/chats/42"
+
+
+def test_request_scope_handles_api_v1_prefix_and_auth_subroutes():
+    auth_request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/auth/login"))
+    chat_request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/chats/42"))
+    root_request = SimpleNamespace(url=SimpleNamespace(path="/api/v1"))
+
+    assert rate_limit._request_scope(auth_request) == "auth:login"
+    assert rate_limit._request_scope(chat_request) == "chats"
+    assert rate_limit._request_scope(root_request) == "global"
+
+
+def test_request_subject_for_login_scope_ignores_auth_tokens():
+    request = SimpleNamespace(
+        headers={"authorization": "Bearer keep-me-out"},
+        cookies={core_config.settings.ACCESS_COOKIE_NAME: "cookie-token"},
+    )
+    assert rate_limit._request_subject(request, scope="auth:login") == "anon"
 
 
 @pytest.mark.asyncio

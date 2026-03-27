@@ -530,8 +530,7 @@ def _filter_chunks(
     base_candidates = [
         chunk
         for chunk in retrieved
-        if chunk.get("score", 0) >= MIN_RELEVANCE
-        and _has_citable_source(chunk)
+        if chunk.get("score", 0) >= MIN_RELEVANCE and _has_citable_source(chunk)
     ]
     if not base_candidates:
         if not retrieved:
@@ -665,9 +664,9 @@ def _filter_chunks(
         and (
             chunk.get("score", 0) >= HIGH_CONFIDENCE_RELEVANCE
             or (
-            alignment["total"] >= 3
-            or alignment["text_phrases"] >= 1
-            or alignment["title_section_overlap"] >= 1
+                alignment["total"] >= 3
+                or alignment["text_phrases"] >= 1
+                or alignment["title_section_overlap"] >= 1
             )
         )
     ]
@@ -686,8 +685,7 @@ def _filter_chunks(
     low_score_fallback = [
         chunk
         for chunk in filtered
-        if chunk.get("score", 0) >= low_score_threshold
-        and _raw_query_overlap(chunk)
+        if chunk.get("score", 0) >= low_score_threshold and _raw_query_overlap(chunk)
     ]
     return _finalize_filtered(
         low_score_fallback,
@@ -900,11 +898,7 @@ def _prune_topic_outliers(
         intent = query_intent_alignment_score(
             query,
             title=metadata.get("title", ""),
-            section=(
-                chunk.get("section_path")
-                or metadata.get("section_title")
-                or ""
-            ),
+            section=(chunk.get("section_path") or metadata.get("section_title") or ""),
             text=chunk.get("text") or "",
             doc_type=metadata.get("doc_type", ""),
         )

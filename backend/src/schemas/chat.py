@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -10,8 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 Severity = Literal["low", "medium", "high", "urgent"]
 Gender = Literal["male", "female", "other"]
 ReviewAction = Literal[
-    "approve", "reject", "request_changes", "manual_response", "edit_response",
-    "send_comment", "unassign",
+    "approve",
+    "reject",
+    "request_changes",
+    "manual_response",
+    "edit_response",
+    "send_comment",
+    "unassign",
 ]
 
 # ---------------------------------------------------------------------------
@@ -156,9 +161,34 @@ class AssignRequest(BaseModel):
     specialist_id: int
 
 
+class SourceEntry(BaseModel):
+    """A source with an explicit display name and optional URL."""
+
+    name: str
+    url: Optional[str] = None
+
+
 class ReviewRequest(BaseModel):
     action: ReviewAction
     feedback: Optional[str] = Field(default=None, max_length=10_000)
     replacement_content: Optional[str] = Field(default=None, max_length=50_000)
-    replacement_sources: Optional[List[str]] = None
+    replacement_sources: Optional[List[Union[str, SourceEntry]]] = None
     edited_content: Optional[str] = Field(default=None, max_length=50_000)
+
+    @field_validator("replacement_sources", mode="before")
+    @classmethod
+    def coerce_source_entries(cls, v: Any) -> Any:
+        """Accept plain strings *and* ``{name, url?}`` objects."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            return v
+        out: list[Any] = []
+        for item in v:
+            if isinstance(item, str):
+                out.append(item)
+            elif isinstance(item, dict) and "name" in item:
+                out.append(SourceEntry(**item))
+            else:
+                out.append(item)
+        return out

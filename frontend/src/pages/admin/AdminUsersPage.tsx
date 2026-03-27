@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, UserX, Save, X } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { StatusBadge } from '../../components/Badges';
 import { adminGetUsers, adminUpdateUser, adminDeactivateUser } from '../../services/api';
 import type { UserProfile } from '../../types/api';
@@ -14,6 +15,9 @@ export function AdminUsersPage() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+
+  // Deactivate confirm modal state
+  const [deactivateUserId, setDeactivateUserId] = useState<number | null>(null);
 
   // Edit modal state
   const [editUser, setEditUser] = useState<UserProfile | null>(null);
@@ -47,7 +51,7 @@ export function AdminUsersPage() {
   }, [fetchUsers]);
 
   const handleDeactivate = async (userId: number) => {
-    if (!confirm('Deactivate this user? They will no longer be able to log in.')) return;
+    setDeactivateUserId(null);
     try {
       const updated = await adminDeactivateUser(userId);
       setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
@@ -181,7 +185,7 @@ export function AdminUsersPage() {
                         </button>
                         {user.is_active && (
                           <button
-                            onClick={() => handleDeactivate(user.id)}
+                            onClick={() => setDeactivateUserId(user.id)}
                             className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
                             title="Deactivate user"
                           >
@@ -279,6 +283,15 @@ export function AdminUsersPage() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={deactivateUserId !== null}
+        title="Deactivate User"
+        message="Deactivate this user? They will no longer be able to log in."
+        confirmLabel="Deactivate"
+        variant="danger"
+        onConfirm={() => deactivateUserId !== null && void handleDeactivate(deactivateUserId)}
+        onCancel={() => setDeactivateUserId(null)}
+      />
     </AdminLayout>
   );
 }
