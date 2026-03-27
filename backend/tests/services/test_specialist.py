@@ -6,6 +6,8 @@ Tests for specialist endpoints:
   POST /specialist/chats/{id}/assign
   POST /specialist/chats/{id}/review
   POST /specialist/chats/{id}/message
+
+Admin access tests are grouped in TestAdminSpecialistAccess at the bottom.
 """
 
 
@@ -828,4 +830,90 @@ class TestSpecialistMessage:
             json={"role": "specialist", "content": "Pretending to be specialist."},
             headers=gp_headers,
         )
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Admin access to specialist endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestAdminSpecialistAccess:
+    """Admins should be able to read all specialist endpoints without a 403.
+
+    This covers the bug where GET /specialist/queue and /specialist/assigned
+    returned 403 for admin users, causing the frontend to show
+    "Failed to load chats. Is the backend running?".
+    """
+
+    def test_admin_can_access_queue(self, client, admin_headers, submitted_chat):
+        resp = client.get("/specialist/queue", headers=admin_headers)
+        assert resp.status_code == 200
+
+    def test_admin_queue_shows_all_specialties(
+        self, client, admin_headers, gp_headers
+    ):
+        # Create and submit chats in two different specialties
+        cardio = client.post(
+            "/chats/",
+            json={
+                "title": "Cardio Chat",
+                "specialty": "cardiology",
+                "severity": "high",
+                "patient_age": 55,
+                "patient_gender": "male",
+            },
+            headers=gp_headers,
+        ).json()
+        client.post(
+            f"/chats/{cardio['id']}/message",
+            json={"role": "user", "content": "Chest pain."},
+            headers=gp_headers,
+        )
+        neuro = client.post(
+            "/chats/",
+            json={
+                "title": "Neuro Chat",
+                "specialty": "neurology",
+                "severity": "medium",
+                "patient_age": 40,
+                "patient_gender": "female",
+            },
+            headers=gp_headers,
+        ).json()
+        client.post(
+            f"/chats/{neuro['id']}/message",
+            json={"role": "user", "content": "Headaches."},
+            headers=gp_headers,
+        )
+
+        resp = client.get("/specialist/queue", headers=admin_headers)
+        assert resp.status_code == 200
+        ids = [c["id"] for c in resp.json()]
+        # Admin has no specialty filter — should see both
+        assert cardio["id"] in ids
+        assert neuro["id"] in ids
+
+    def test_admin_assigned_returns_ok(self, client, admin_headers):
+        # Admin has no specialist assignments, so list is empty — but not a 403
+        resp = client.get("/specialist/assigned", headers=admin_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_admin_can_view_chat_detail(
+        self, client, admin_headers, submitted_chat
+    ):
+        resp = client.get(
+            f"/specialist/chats/{submitted_chat['id']}", headers=admin_headers
+        )
+        assert resp.status_code == 200
+        assert "messages" in resp.json()
+
+    def test_gp_still_cannot_access_queue(self, client, gp_headers):
+        # Sanity-check: the fix must not have opened the endpoints to GPs
+        resp = client.get("/specialist/queue", headers=gp_headers)
+        assert resp.status_code == 403
+
+    def test_gp_still_cannot_access_assigned(self, client, gp_headers):
+        resp = client.get("/specialist/assigned", headers=gp_headers)
         assert resp.status_code == 403
