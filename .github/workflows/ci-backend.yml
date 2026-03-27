@@ -59,7 +59,7 @@ jobs:
 
       - name: Pytest (with coverage)
         env:
-          SECRET_KEY: ci-test-secret-key
+          SECRET_KEY: ci-test-secret-key-that-is-at-least-32-bytes-long
           DATABASE_URL: sqlite:///./test.db
           RAG_SERVICE_URL: http://localhost:8001
           RAG_INTERNAL_API_KEY: ci-test-key

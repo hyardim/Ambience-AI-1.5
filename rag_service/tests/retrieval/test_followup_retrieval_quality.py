@@ -19,7 +19,17 @@ Run with:
 
 from __future__ import annotations
 
+import os
 from typing import ClassVar
+
+import pytest
+
+# These tests require a live database with ingested clinical guideline chunks.
+# Skip entirely in CI where no database is available.
+pytestmark = pytest.mark.skipif(
+    os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true",
+    reason="Retrieval quality tests require a live vector database with ingested chunks",
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
