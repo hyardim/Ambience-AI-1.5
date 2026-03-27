@@ -76,7 +76,7 @@ def test_augment_query_with_history_returns_original_for_non_followup() -> None:
 
 
 def test_augment_query_with_history_prefixes_all_gp_lines() -> None:
-    """All prior GP messages (oldest first) should be prepended, not just the most recent."""
+    """All prior GP messages (oldest first) should be prepended."""
     query = "She now has new jaw pain and headache."
     patient_context = {
         "conversation_history": (
