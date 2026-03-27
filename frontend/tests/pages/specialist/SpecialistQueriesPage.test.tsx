@@ -164,11 +164,7 @@ describe('SpecialistQueriesPage', () => {
   });
 
   it('shows error on API failure', async () => {
-    server.use(
-      http.get('/specialist/queue', () => {
-        return HttpResponse.json({ detail: 'Error' }, { status: 500 });
-      }),
-    );
+    server.use(http.get('/specialist/queue', () => HttpResponse.error()));
 
     renderSpecialistQueries();
 
@@ -223,11 +219,7 @@ describe('SpecialistQueriesPage', () => {
   });
 
   it('filters by status and severity and supports retry', async () => {
-    server.use(
-      http.get('/specialist/queue', () =>
-        HttpResponse.json({ detail: 'No backend' }, { status: 500 }),
-      ),
-    );
+    server.use(http.get('/specialist/queue', () => HttpResponse.error()));
 
     renderSpecialistQueries();
     const user = userEvent.setup();

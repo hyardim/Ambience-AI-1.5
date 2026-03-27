@@ -53,7 +53,9 @@ export function SpecialistQueriesPage() {
       setAssignedChatsState(assigned);
     } catch (error) {
       ifNotAbortError(error, () => {
-        const message = error instanceof Error ? error.message : '';
+        // TypeError = low-level network failure (fetch couldn't connect);
+        // Error = API responded with a meaningful detail (e.g. 403 message).
+        const message = error instanceof TypeError ? '' : error instanceof Error ? error.message : '';
         setError(message || 'Failed to load chats. Is the backend running?');
       });
     } finally {

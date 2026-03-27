@@ -850,9 +850,7 @@ class TestAdminSpecialistAccess:
         resp = client.get("/specialist/queue", headers=admin_headers)
         assert resp.status_code == 200
 
-    def test_admin_queue_shows_all_specialties(
-        self, client, admin_headers, gp_headers
-    ):
+    def test_admin_queue_shows_all_specialties(self, client, admin_headers, gp_headers):
         # Create and submit chats in two different specialties
         cardio = client.post(
             "/chats/",
@@ -900,9 +898,7 @@ class TestAdminSpecialistAccess:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_admin_can_view_chat_detail(
-        self, client, admin_headers, submitted_chat
-    ):
+    def test_admin_can_view_chat_detail(self, client, admin_headers, submitted_chat):
         resp = client.get(
             f"/specialist/chats/{submitted_chat['id']}", headers=admin_headers
         )
