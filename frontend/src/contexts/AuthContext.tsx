@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { getProfile, login as apiLogin, logout as apiLogout, refreshSession, register as apiRegister } from '../services/api';
+import {
+  getProfile,
+  login as apiLogin,
+  logout as apiLogout,
+  refreshSession,
+  register as apiRegister,
+} from '../services/api';
 import type { RegisterRequest, UserProfile } from '../types/api';
 import type { UserRole } from '../types';
 import { isAbortError } from '../utils/errors';
@@ -51,7 +57,10 @@ function clearIdentity(): void {
   localStorage.removeItem('user_role');
 }
 
-function buildStateFromUser(user: Pick<UserProfile, 'full_name' | 'email' | 'role'>, token: string | null): AuthState {
+function buildStateFromUser(
+  user: Pick<UserProfile, 'full_name' | 'email' | 'role'>,
+  token: string | null,
+): AuthState {
   return {
     token,
     username: user.full_name || user.email,
@@ -68,11 +77,11 @@ function isTransientAuthBootstrapError(error: unknown): boolean {
   }
   const message = error.message.toLowerCase();
   return (
-    message.includes('too many requests')
-    || message.includes('rate limit')
-    || message.includes('failed to fetch')
-    || message.includes('networkerror')
-    || message.includes('request failed (5')
+    message.includes('too many requests') ||
+    message.includes('rate limit') ||
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('request failed (5')
   );
 }
 

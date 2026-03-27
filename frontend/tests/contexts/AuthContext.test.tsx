@@ -95,9 +95,7 @@ describe('AuthContext', () => {
       http.post('/auth/refresh', () =>
         HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
       ),
-      http.get('/auth/me', () =>
-        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
-      ),
+      http.get('/auth/me', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
     );
 
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -256,7 +254,9 @@ describe('AuthContext', () => {
 
   it('silently ignores aborted profile fallback requests', async () => {
     const profileGate = deferred<void>();
-    const refreshSpy = vi.spyOn(api, 'refreshSession').mockRejectedValueOnce(new Error('refresh failed'));
+    const refreshSpy = vi
+      .spyOn(api, 'refreshSession')
+      .mockRejectedValueOnce(new Error('refresh failed'));
     const profileSpy = vi.spyOn(api, 'getProfile').mockImplementationOnce(async () => {
       await profileGate.promise;
       throw new DOMException('Aborted', 'AbortError');
@@ -283,7 +283,9 @@ describe('AuthContext', () => {
 
   it('does not update state when profile fallback succeeds after logical cancellation', async () => {
     const profileGate = deferred<void>();
-    const refreshSpy = vi.spyOn(api, 'refreshSession').mockRejectedValueOnce(new Error('refresh failed'));
+    const refreshSpy = vi
+      .spyOn(api, 'refreshSession')
+      .mockRejectedValueOnce(new Error('refresh failed'));
     const profileSpy = vi.spyOn(api, 'getProfile').mockImplementationOnce(async () => {
       await profileGate.promise;
       return {
@@ -371,10 +373,10 @@ describe('AuthContext', () => {
 
     let role:
       | {
-        role: string | null;
-        requiresEmailVerification: boolean;
-        message: string;
-      }
+          role: string | null;
+          requiresEmailVerification: boolean;
+          message: string;
+        }
       | undefined;
     await act(async () => {
       role = await result.current.register({
@@ -408,7 +410,8 @@ describe('AuthContext', () => {
             specialty: null,
             is_active: true,
           },
-        })),
+        }),
+      ),
     );
 
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -440,7 +443,8 @@ describe('AuthContext', () => {
             specialty: null,
             is_active: true,
           },
-        })),
+        }),
+      ),
     );
 
     const { result } = renderHook(() => useAuth(), { wrapper });

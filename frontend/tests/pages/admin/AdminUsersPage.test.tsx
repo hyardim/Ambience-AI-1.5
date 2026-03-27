@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -46,7 +46,10 @@ describe('AdminUsersPage', () => {
       expect(screen.getByText('gp_1')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText(/search by identifier or specialty/i), 'specialist');
+    await user.type(
+      screen.getByPlaceholderText(/search by identifier or specialty/i),
+      'specialist',
+    );
 
     expect(screen.queryByText('gp_1')).not.toBeInTheDocument();
     expect(screen.getByText('specialist_2')).toBeInTheDocument();
@@ -100,8 +103,12 @@ describe('AdminUsersPage', () => {
 
   it('closes edit modal from the icon button and shows save/deactivate errors', async () => {
     server.use(
-      http.patch('/admin/users/:userId', () => HttpResponse.json({ detail: 'Save failed' }, { status: 500 })),
-      http.delete('/admin/users/:userId', () => HttpResponse.json({ detail: 'Deactivate failed' }, { status: 500 })),
+      http.patch('/admin/users/:userId', () =>
+        HttpResponse.json({ detail: 'Save failed' }, { status: 500 }),
+      ),
+      http.delete('/admin/users/:userId', () =>
+        HttpResponse.json({ detail: 'Deactivate failed' }, { status: 500 }),
+      ),
     );
 
     renderAdminUsers();
@@ -112,9 +119,13 @@ describe('AdminUsersPage', () => {
     });
 
     await user.click(screen.getAllByText('Edit')[0]);
-    await user.click(screen.getAllByRole('button').find((button) =>
-      button.className.includes('text-gray-400 hover:text-gray-600'),
-    ) as HTMLButtonElement);
+    await user.click(
+      screen
+        .getAllByRole('button')
+        .find((button) =>
+          button.className.includes('text-gray-400 hover:text-gray-600'),
+        ) as HTMLButtonElement,
+    );
     expect(screen.queryByRole('heading', { name: /edit user/i })).not.toBeInTheDocument();
 
     await user.click(screen.getAllByText('Edit')[0]);
@@ -234,7 +245,8 @@ describe('AdminUsersPage', () => {
             specialty: (body as { specialty?: string }).specialty ?? 'rheumatology',
             is_active: true,
           }),
-        )),
+        ),
+      ),
     );
 
     await user.click(screen.getByRole('button', { name: /retry/i }));

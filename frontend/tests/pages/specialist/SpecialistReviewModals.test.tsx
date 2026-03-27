@@ -23,9 +23,7 @@ describe('EditResponseModal', () => {
   };
 
   it('renders nothing when closed', () => {
-    const { container } = render(
-      <EditResponseModal {...defaultProps} open={false} />,
-    );
+    const { container } = render(<EditResponseModal {...defaultProps} open={false} />);
     expect(container.innerHTML).toBe('');
   });
 
@@ -138,7 +136,9 @@ describe('ManualResponseModal', () => {
     expect(screen.getByText('source.txt')).toBeInTheDocument();
 
     const user = userEvent.setup({ applyAccept: false });
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(
       fileInput,
       new File(['x'.repeat(11 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
@@ -179,7 +179,9 @@ describe('ManualResponseModal', () => {
     );
     const user = userEvent.setup({ applyAccept: false });
 
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [existingFile, newFile]);
 
     expect(onFilesChange).toHaveBeenCalledWith([existingFile, newFile]);
@@ -205,7 +207,10 @@ describe('SendCommentModal', () => {
 
     expect(screen.getByRole('button', { name: /send comment/i })).toBeDisabled();
 
-    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Please review the attached plan');
+    await user.type(
+      screen.getByPlaceholderText(/write your comment for the gp/i),
+      'Please review the attached plan',
+    );
     expect(onChange).toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /cancel/i }));
@@ -233,12 +238,7 @@ describe('UnassignConfirmModal', () => {
     const onCancel = vi.fn();
     const onConfirm = vi.fn();
     render(
-      <UnassignConfirmModal
-        open
-        actionLoading={false}
-        onCancel={onCancel}
-        onConfirm={onConfirm}
-      />,
+      <UnassignConfirmModal open actionLoading={false} onCancel={onCancel} onConfirm={onConfirm} />,
     );
     const user = userEvent.setup();
 
@@ -249,14 +249,7 @@ describe('UnassignConfirmModal', () => {
   });
 
   it('shows the loading state while unassigning', () => {
-    render(
-      <UnassignConfirmModal
-        open
-        actionLoading
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
+    render(<UnassignConfirmModal open actionLoading onCancel={vi.fn()} onConfirm={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /unassigning/i })).toBeDisabled();
   });

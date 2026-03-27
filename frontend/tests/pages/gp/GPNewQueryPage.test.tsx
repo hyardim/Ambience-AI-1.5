@@ -82,7 +82,9 @@ describe('GPNewQueryPage', () => {
     await user.type(screen.getByLabelText(/consultation title/i), 'Test');
     fireEvent.submit(form as HTMLFormElement);
 
-    expect(screen.getByText(/please enter a clinical question before submitting/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/please enter a clinical question before submitting/i),
+    ).toBeInTheDocument();
   });
 
   it('creates a consultation and navigates to detail page with draftMessage', async () => {
@@ -98,7 +100,10 @@ describe('GPNewQueryPage', () => {
     await user.type(screen.getByLabelText(/patient age/i), '42');
     await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
     await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
-    await user.type(screen.getByLabelText(/clinical question/i), 'Patient has persistent headaches');
+    await user.type(
+      screen.getByLabelText(/clinical question/i),
+      'Patient has persistent headaches',
+    );
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
 
     await waitFor(() => {
@@ -248,7 +253,9 @@ describe('GPNewQueryPage', () => {
     await user.type(screen.getByLabelText(/clinical question/i), 'Question');
     fireEvent.submit(form as HTMLFormElement);
 
-    expect(screen.getByText(/please enter a valid patient age between 0 and 150/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/please enter a valid patient age between 0 and 150/i),
+    ).toBeInTheDocument();
   });
 
   it('uploads files during submission and shows fallback error when creation fails', async () => {
@@ -309,7 +316,10 @@ describe('GPNewQueryPage', () => {
     await user.type(screen.getByLabelText(/patient age/i), '42');
     await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
     await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
-    await user.type(screen.getByLabelText(/clinical question/i), 'Patient has persistent headaches');
+    await user.type(
+      screen.getByLabelText(/clinical question/i),
+      'Patient has persistent headaches',
+    );
     await user.click(screen.getByRole('button', { name: /submit consultation/i }));
 
     await waitFor(() => {
@@ -336,9 +346,13 @@ describe('GPNewQueryPage', () => {
     expect(screen.getByText('one.pdf')).toBeInTheDocument();
     expect(screen.getByText('two.txt')).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole('button').find((button) =>
-      button.closest('li')?.textContent?.includes('one.pdf'),
-    ) as HTMLButtonElement);
+    await user.click(
+      screen
+        .getAllByRole('button')
+        .find((button) =>
+          button.closest('li')?.textContent?.includes('one.pdf'),
+        ) as HTMLButtonElement,
+    );
     expect(screen.queryByText('one.pdf')).not.toBeInTheDocument();
   });
 
@@ -346,7 +360,7 @@ describe('GPNewQueryPage', () => {
     captureLocationState.mockClear();
     server.use(
       http.post('/chats/', async ({ request }) => {
-        const body = await request.json() as Record<string, unknown>;
+        const body = (await request.json()) as Record<string, unknown>;
         expect(body.title).toBe('Neurology query');
         expect(body.patient_notes).toBeUndefined();
         return HttpResponse.json({ id: 11, ...body });
@@ -378,10 +392,14 @@ describe('GPNewQueryPage', () => {
     const user = userEvent.setup({ applyAccept: false });
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const oversized = new File(['x'.repeat(4 * 1024 * 1024)], 'huge.pdf', { type: 'application/pdf' });
+    const oversized = new File(['x'.repeat(4 * 1024 * 1024)], 'huge.pdf', {
+      type: 'application/pdf',
+    });
     await user.upload(fileInput, oversized);
 
-    expect(screen.getByText(/file\(s\) too large.*huge\.pdf.*maximum size is 3 mb/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/file\(s\) too large.*huge\.pdf.*maximum size is 3 mb/i),
+    ).toBeInTheDocument();
   });
 
   it('shows a duplicate-file notice when the same file is added twice', async () => {
@@ -415,7 +433,8 @@ describe('GPNewQueryPage', () => {
     captureLocationState.mockClear();
     server.use(
       http.post('/chats/:chatId/files', () =>
-        HttpResponse.json({ id: 'file-1', name: 'scan.pdf', size: '1KB', type: 'pdf' })),
+        HttpResponse.json({ id: 'file-1', name: 'scan.pdf', size: '1KB', type: 'pdf' }),
+      ),
     );
     renderNewQuery();
     const user = userEvent.setup({ applyAccept: false });

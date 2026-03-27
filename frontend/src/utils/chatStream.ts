@@ -1,9 +1,6 @@
 type TimeoutPhase = 'idle' | 'connecting' | 'streaming' | 'completed' | 'fallback_polling';
 
-export function settleResolver(
-  resolved: boolean,
-  resolve: () => void,
-) {
+export function settleResolver(resolved: boolean, resolve: () => void) {
   if (!resolved) {
     resolve();
     return true;

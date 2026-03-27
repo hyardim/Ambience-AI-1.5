@@ -5,7 +5,9 @@ import { getCloseReviewTitle, getTerminalConsultationState } from '@/utils/speci
 describe('specialist utils', () => {
   it('builds close-review button titles', () => {
     expect(getCloseReviewTitle(true, false)).toBe('Wait for AI response generation to finish');
-    expect(getCloseReviewTitle(false, false)).toBe('All AI responses must be reviewed before closing');
+    expect(getCloseReviewTitle(false, false)).toBe(
+      'All AI responses must be reviewed before closing',
+    );
     expect(getCloseReviewTitle(false, true)).toBeUndefined();
   });
 

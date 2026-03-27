@@ -31,7 +31,7 @@ export function RegisterPage() {
     password: '',
     confirmPassword: '',
     role: 'gp' as UserRole,
-    specialty: ''
+    specialty: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -57,7 +57,7 @@ export function RegisterPage() {
             ? value
             : prev.specialty,
     }));
-    setFieldErrors(prev => ({ ...prev, [e.target.name]: '' }));
+    setFieldErrors((prev) => ({ ...prev, [e.target.name]: '' }));
   };
 
   /**
@@ -83,7 +83,8 @@ export function RegisterPage() {
     if (!formData.password) {
       errors.password = 'Password is required';
     } else if (!isStrongPassword(formData.password)) {
-      errors.password = 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.';
+      errors.password =
+        'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.';
     }
     if (!formData.confirmPassword) {
       errors.confirmPassword = 'Please confirm your password';
@@ -147,7 +148,11 @@ export function RegisterPage() {
             )}
 
             {error && (
-              <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div
+                role="alert"
+                aria-live="polite"
+                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+              >
                 {error}
               </div>
             )}
@@ -155,7 +160,10 @@ export function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="firstName"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     First Name
                   </label>
                   <input
@@ -168,10 +176,15 @@ export function RegisterPage() {
                     placeholder="John"
                     required
                   />
-                  {fieldErrors.firstName && <p className="text-sm text-red-600 mt-1">{fieldErrors.firstName}</p>}
+                  {fieldErrors.firstName && (
+                    <p className="text-sm text-red-600 mt-1">{fieldErrors.firstName}</p>
+                  )}
                 </div>
                 <div>
-                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="lastName"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Last Name
                   </label>
                   <input
@@ -184,7 +197,9 @@ export function RegisterPage() {
                     placeholder="Smith"
                     required
                   />
-                  {fieldErrors.lastName && <p className="text-sm text-red-600 mt-1">{fieldErrors.lastName}</p>}
+                  {fieldErrors.lastName && (
+                    <p className="text-sm text-red-600 mt-1">{fieldErrors.lastName}</p>
+                  )}
                 </div>
               </div>
 
@@ -202,7 +217,9 @@ export function RegisterPage() {
                   placeholder="john.smith@nhs.uk"
                   required
                 />
-                {fieldErrors.email && <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>}
+                {fieldErrors.email && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>
+                )}
               </div>
 
               <div>
@@ -225,7 +242,10 @@ export function RegisterPage() {
 
               {formData.role === 'specialist' && (
                 <div>
-                  <label htmlFor="specialty" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="specialty"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Specialty <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -240,7 +260,9 @@ export function RegisterPage() {
                     <option value="neurology">Neurology</option>
                     <option value="rheumatology">Rheumatology</option>
                   </select>
-                  {fieldErrors.specialty && <p className="text-sm text-red-600 mt-1">{fieldErrors.specialty}</p>}
+                  {fieldErrors.specialty && (
+                    <p className="text-sm text-red-600 mt-1">{fieldErrors.specialty}</p>
+                  )}
                 </div>
               )}
 
@@ -268,11 +290,16 @@ export function RegisterPage() {
                   </button>
                 </div>
                 <PasswordStrengthMeter password={formData.password} />
-                {fieldErrors.password && <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>}
+                {fieldErrors.password && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>
+                )}
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="confirmPassword"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Confirm Password
                 </label>
                 <div className="relative">
@@ -290,12 +317,20 @@ export function RegisterPage() {
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    aria-label={
+                      showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'
+                    }
                   >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
-                {fieldErrors.confirmPassword && <p className="text-sm text-red-600 mt-1">{fieldErrors.confirmPassword}</p>}
+                {fieldErrors.confirmPassword && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.confirmPassword}</p>
+                )}
               </div>
 
               <button
@@ -309,7 +344,10 @@ export function RegisterPage() {
 
             <p className="mt-6 text-center text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium">
+              <Link
+                to="/login"
+                className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
+              >
                 Login here
               </Link>
             </p>

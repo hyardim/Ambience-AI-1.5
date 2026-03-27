@@ -14,7 +14,12 @@ from src.config import (
 
 
 class TestDatabaseConfig:
-    def test_default_values(self) -> None:
+    def test_default_values(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("POSTGRES_HOST", raising=False)
+        monkeypatch.delenv("POSTGRES_PORT", raising=False)
+        monkeypatch.delenv("POSTGRES_USER", raising=False)
+        monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+        monkeypatch.delenv("POSTGRES_DB", raising=False)
         config = DatabaseConfig()
         assert config.postgres_host == "localhost"
         assert config.postgres_port == 5432

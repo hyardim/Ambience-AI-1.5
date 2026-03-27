@@ -5,7 +5,9 @@ import { renderWithProviders } from '@test/utils';
 
 describe('PasswordStrengthMeter', () => {
   it('renders nothing for an empty password', () => {
-    const { container } = renderWithProviders(<PasswordStrengthMeter password="" />, { withAuth: false });
+    const { container } = renderWithProviders(<PasswordStrengthMeter password="" />, {
+      withAuth: false,
+    });
     expect(container).toBeEmptyDOMElement();
   });
 

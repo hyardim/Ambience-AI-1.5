@@ -8,11 +8,7 @@ type RawCitation = Record<string, unknown> & {
 
 /** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
 export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw) && raw.length > 0
-    ? raw
-    : Array.isArray(fallback)
-      ? fallback
-      : [];
+  const list = Array.isArray(raw) && raw.length > 0 ? raw : Array.isArray(fallback) ? fallback : [];
 
   return list
     .map((entry) => {
@@ -27,33 +23,29 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
       const publishDate = citation.publish_date ?? meta.publish_date;
       const lastUpdatedDate = citation.last_updated_date ?? meta.last_updated_date;
       const title =
-        readString(citation.title)
-        || readString(meta.title)
-        || readString(meta.filename)
-        || readString(citation.source)
-        || 'Source';
+        readString(citation.title) ||
+        readString(meta.title) ||
+        readString(meta.filename) ||
+        readString(citation.source) ||
+        'Source';
       const sourceName =
-        readString(citation.source_name)
-        || readString(meta.source_name)
-        || readString(citation.source)
-        || 'Source';
+        readString(citation.source_name) ||
+        readString(meta.source_name) ||
+        readString(citation.source) ||
+        'Source';
       const explicitDocumentUrl =
-        readString(citation.document_url)
-        || readString(meta.document_url)
-        || readString(meta.document_link);
+        readString(citation.document_url) ||
+        readString(meta.document_url) ||
+        readString(meta.document_link);
       const explicitSourceUrl =
-        readString(citation.source_url)
-        || readString(meta.source_url)
-        || readString(citation.url)
-        || readString(meta.url)
-        || readString(meta.link)
-        || readString(meta.file_url);
-      const inferredSourceUrl = explicitSourceUrl
-        || firstHttpUrl(
-          readString(citation.source),
-          title,
-          sourceName,
-        );
+        readString(citation.source_url) ||
+        readString(meta.source_url) ||
+        readString(citation.url) ||
+        readString(meta.url) ||
+        readString(meta.link) ||
+        readString(meta.file_url);
+      const inferredSourceUrl =
+        explicitSourceUrl || firstHttpUrl(readString(citation.source), title, sourceName);
 
       return {
         doc_id: typeof docId === 'string' ? docId : undefined,
@@ -64,9 +56,7 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
         page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
         document_url:
-          typeof docId === 'string'
-            ? apiUrl(`/documents/${docId}`)
-            : explicitDocumentUrl,
+          typeof docId === 'string' ? apiUrl(`/documents/${docId}`) : explicitDocumentUrl,
         source_url: inferredSourceUrl,
         creation_date: typeof creationDate === 'string' ? creationDate : undefined,
         publish_date: typeof publishDate === 'string' ? publishDate : undefined,
@@ -111,7 +101,11 @@ function looksLikeHttpUrl(value: string): boolean {
 
 /** Map a backend message to the frontend Message shape.
  *  @param viewerRole - 'gp' shows currentUser for GP messages, 'specialist' shows currentUser for specialist messages. */
-export function toFrontendMessage(msg: BackendMessage, currentUser: string, viewerRole: 'gp' | 'specialist' = 'gp'): Message {
+export function toFrontendMessage(
+  msg: BackendMessage,
+  currentUser: string,
+  viewerRole: 'gp' | 'specialist' = 'gp',
+): Message {
   const isAI = msg.sender === 'ai';
   const isSpecialist = msg.sender === 'specialist';
 

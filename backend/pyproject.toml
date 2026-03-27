@@ -65,6 +65,14 @@ ignore = ["E501"]
 "tests/conftest.py" = ["E402"]
 "backend/tests/conftest.py" = ["E402"]
 
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+fail_under = 99
+show_missing = true
+skip_covered = true
+
 [tool.mypy]
 python_version = "3.11"
 warn_unused_configs = true

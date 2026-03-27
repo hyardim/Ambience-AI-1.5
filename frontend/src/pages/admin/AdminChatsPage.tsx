@@ -3,13 +3,12 @@ import { Search, Loader2, Trash2, Save, X, Eye } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
-import {
-  adminGetChats,
-  adminUpdateChat,
-  adminDeleteChat,
-  adminGetChat,
-} from '../../services/api';
-import type { AdminChatResponse, BackendChatWithMessages, ChatUpdateRequest } from '../../types/api';
+import { adminGetChats, adminUpdateChat, adminDeleteChat, adminGetChat } from '../../services/api';
+import type {
+  AdminChatResponse,
+  BackendChatWithMessages,
+  ChatUpdateRequest,
+} from '../../types/api';
 import { filterAdminChats, replaceAdminChat } from '../../utils/adminChatsFilters';
 import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { getAdminChatDetailMessageClass } from '../../utils/adminChats';
@@ -43,9 +42,12 @@ export function AdminChatsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await adminGetChats({
-        status: statusFilter || undefined,
-      }, { signal: controller.signal });
+      const data = await adminGetChats(
+        {
+          status: statusFilter || undefined,
+        },
+        { signal: controller.signal },
+      );
       setChats(data);
     } catch (err) {
       ifNotAbortError(err, () => {
@@ -68,7 +70,7 @@ export function AdminChatsPage() {
     setDeleteChatId(null);
     try {
       await adminDeleteChat(chatId);
-      setChats(prev => prev.filter(c => c.id !== chatId));
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to delete chat'));
     }
@@ -138,13 +140,13 @@ export function AdminChatsPage() {
                 type="text"
                 placeholder="Search by title or owner..."
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
+              onChange={(e) => setStatusFilter(e.target.value)}
               className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white cursor-pointer"
             >
               <option value="">All Status</option>
@@ -163,7 +165,9 @@ export function AdminChatsPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={fetchChats} className="ml-3 underline font-medium">Retry</button>
+            <button onClick={fetchChats} className="ml-3 underline font-medium">
+              Retry
+            </button>
           </div>
         )}
 
@@ -182,15 +186,25 @@ export function AdminChatsPage() {
                 <tr>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Title</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Owner</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Specialist</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Severity</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Created</th>
-                  <th className="text-right px-6 py-3 text-sm font-semibold text-gray-600">Actions</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Specialist
+                  </th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Status
+                  </th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Severity
+                  </th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Created
+                  </th>
+                  <th className="text-right px-6 py-3 text-sm font-semibold text-gray-600">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredChats.map(chat => (
+                {filteredChats.map((chat) => (
                   <tr key={chat.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 max-w-xs truncate">
                       {orFallback(chat.title, 'Untitled')}
@@ -255,7 +269,10 @@ export function AdminChatsPage() {
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">Edit Chat</h2>
-              <button onClick={() => setEditChat(null)} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => setEditChat(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -266,7 +283,7 @@ export function AdminChatsPage() {
                 <input
                   type="text"
                   value={editForm.title || ''}
-                  onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                 />
               </div>
@@ -274,7 +291,7 @@ export function AdminChatsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                 <select
                   value={coalesce(editForm.status, '')}
-                  onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="open">Open</option>
@@ -292,7 +309,7 @@ export function AdminChatsPage() {
                 <input
                   type="text"
                   value={editForm.specialty || ''}
-                  onChange={e => setEditForm({ ...editForm, specialty: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, specialty: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="e.g. neurology"
                 />
@@ -301,7 +318,7 @@ export function AdminChatsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
                 <select
                   value={editForm.severity || ''}
-                  onChange={e => setEditForm({ ...editForm, severity: e.target.value || null })}
+                  onChange={(e) => setEditForm({ ...editForm, severity: e.target.value || null })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="">None</option>
@@ -337,9 +354,7 @@ export function AdminChatsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">
-                {detailChat?.title || 'Loading…'}
-              </h2>
+              <h2 className="text-xl font-bold text-gray-900">{detailChat?.title || 'Loading…'}</h2>
               <button
                 onClick={() => setDetailChat(null)}
                 className="text-gray-400 hover:text-gray-600"
@@ -356,7 +371,7 @@ export function AdminChatsPage() {
               {detailChat && detailChat.messages.length === 0 && (
                 <p className="text-gray-500 text-center py-8">No messages in this chat.</p>
               )}
-              {detailChat?.messages.map(msg => (
+              {detailChat?.messages.map((msg) => (
                 <div
                   key={msg.id}
                   className={`rounded-lg px-4 py-3 ${getAdminChatDetailMessageClass(msg.sender)}`}

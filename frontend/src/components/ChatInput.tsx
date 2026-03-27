@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Paperclip, MoreVertical } from 'lucide-react';
 
-const CHAT_UPLOAD_ACCEPT =
-  '.pdf,.txt,.md,.rtf,.doc,.docx,.csv,.json,.xml';
+const CHAT_UPLOAD_ACCEPT = '.pdf,.txt,.md,.rtf,.doc,.docx,.csv,.json,.xml';
 
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[]) => void;
@@ -11,18 +10,26 @@ interface ChatInputProps {
   existingFileNames?: string[];
 }
 
-export function ChatInput({ onSendMessage, placeholder = 'Type your message here...', disabled = false, existingFileNames = [] }: ChatInputProps) {
+export function ChatInput({
+  onSendMessage,
+  placeholder = 'Type your message here...',
+  disabled = false,
+  existingFileNames = [],
+}: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [duplicateNotice, setDuplicateNotice] = useState<string>('');
   const filesRef = useRef<File[]>([]);
   const duplicateNoticeTimerRef = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (duplicateNoticeTimerRef.current !== null) {
-      window.clearTimeout(duplicateNoticeTimerRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (duplicateNoticeTimerRef.current !== null) {
+        window.clearTimeout(duplicateNoticeTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,20 +43,15 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const currentNames = new Set([
-        ...existingFileNames,
-        ...filesRef.current.map(f => f.name),
-      ]);
+      const currentNames = new Set([...existingFileNames, ...filesRef.current.map((f) => f.name)]);
       const selected = Array.from(e.target.files);
-      const duplicates = selected.filter(f => currentNames.has(f.name));
-      const incoming = selected.filter(f => !currentNames.has(f.name));
+      const duplicates = selected.filter((f) => currentNames.has(f.name));
+      const incoming = selected.filter((f) => !currentNames.has(f.name));
       if (duplicates.length > 0) {
         if (duplicateNoticeTimerRef.current !== null) {
           window.clearTimeout(duplicateNoticeTimerRef.current);
         }
-        setDuplicateNotice(
-          `Already in this chat: ${duplicates.map(f => f.name).join(', ')}`
-        );
+        setDuplicateNotice(`Already in this chat: ${duplicates.map((f) => f.name).join(', ')}`);
         duplicateNoticeTimerRef.current = window.setTimeout(() => {
           setDuplicateNotice('');
           duplicateNoticeTimerRef.current = null;
@@ -71,7 +73,9 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
 
   return (
     <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4 sm:p-6">
-      <p className="text-xs text-gray-400 mb-2">For best results, ask specific clinical questions about a condition or treatment.</p>
+      <p className="text-xs text-gray-400 mb-2">
+        For best results, ask specific clinical questions about a condition or treatment.
+      </p>
       {duplicateNotice && (
         <p className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
           {duplicateNotice}
@@ -80,7 +84,10 @@ export function ChatInput({ onSendMessage, placeholder = 'Type your message here
       {files.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {files.map((file, index) => (
-            <div key={index} className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full text-sm">
+            <div
+              key={index}
+              className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full text-sm"
+            >
               <span className="truncate max-w-32">{file.name}</span>
               <button
                 type="button"

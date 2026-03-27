@@ -53,7 +53,7 @@ export interface Message {
   guidelineReference?: GuidelineReference;
   citations?: Citation[] | null;
   isGenerating?: boolean;
-  reviewStatus?: string | null;       // null | "approved" | "rejected" | "replaced"
+  reviewStatus?: string | null; // null | "approved" | "rejected" | "replaced"
   reviewFeedback?: string | null;
   reviewedAt?: string | null;
 }

@@ -32,7 +32,8 @@ export function LandingPage() {
               ) : isAuthenticated ? (
                 <>
                   <span className="text-white/90 text-sm">
-                    Signed in as <span className="font-semibold">{username || 'User'}</span> ({roleLabel(role)})
+                    Signed in as <span className="font-semibold">{username || 'User'}</span> (
+                    {roleLabel(role)})
                   </span>
                   <Link
                     to={homeRouteForRole(role)}
@@ -80,7 +81,9 @@ export function LandingPage() {
           </p>
         </div>
 
-        <div className={`grid gap-6 lg:gap-8 mb-16 ${role === 'admin' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+        <div
+          className={`grid gap-6 lg:gap-8 mb-16 ${role === 'admin' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}
+        >
           {/* GP Portal */}
           <Link
             to="/gp/queries"
@@ -89,15 +92,12 @@ export function LandingPage() {
             <div className="flex items-center justify-center w-16 h-16 bg-[var(--nhs-blue)] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
               <Stethoscope className="w-8 h-8 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">
-              GP Portal
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">GP Portal</h2>
             <p className="text-gray-600 mb-4 leading-relaxed">
-              Submit clinical queries, receive AI-powered guidance based on NICE and BSR guidelines, and get specialist input when needed.
+              Submit clinical queries, receive AI-powered guidance based on NICE and BSR guidelines,
+              and get specialist input when needed.
             </p>
-            <p className="text-sm text-gray-500 mb-3">
-              Access: GP or Admin accounts
-            </p>
+            <p className="text-sm text-gray-500 mb-3">Access: GP or Admin accounts</p>
             <span className="text-[var(--nhs-blue)] font-medium group-hover:underline">
               Enter as GP →
             </span>
@@ -111,15 +111,12 @@ export function LandingPage() {
             <div className="flex items-center justify-center w-16 h-16 bg-[#007f3b] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
               <Users className="w-8 h-8 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">
-              Specialist Portal
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">Specialist Portal</h2>
             <p className="text-gray-600 mb-4 leading-relaxed">
-              Review AI-generated responses, provide expert oversight, and ensure accurate clinical guidance for GPs.
+              Review AI-generated responses, provide expert oversight, and ensure accurate clinical
+              guidance for GPs.
             </p>
-            <p className="text-sm text-gray-500 mb-3">
-              Access: Specialist or Admin accounts
-            </p>
+            <p className="text-sm text-gray-500 mb-3">Access: Specialist or Admin accounts</p>
             <span className="text-[var(--nhs-blue)] font-medium group-hover:underline">
               Enter as Specialist →
             </span>
@@ -134,15 +131,11 @@ export function LandingPage() {
               <div className="flex items-center justify-center w-16 h-16 bg-[#da291c] rounded-2xl mb-6 group-hover:scale-110 transition-transform">
                 <Shield className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                Admin Panel
-              </h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">Admin Panel</h2>
               <p className="text-gray-600 mb-4 leading-relaxed">
                 Manage users, review all consultations, and audit system activity logs.
               </p>
-              <p className="text-sm text-gray-500 mb-3">
-                Access: Admin accounts only
-              </p>
+              <p className="text-sm text-gray-500 mb-3">Access: Admin accounts only</p>
               <span className="text-[#da291c] font-medium group-hover:underline">
                 Open Admin Panel →
               </span>
@@ -152,9 +145,7 @@ export function LandingPage() {
 
         {/* Info section */}
         <div className="bg-white rounded-2xl shadow-lg p-8 lg:p-10">
-          <h3 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-            How it works
-          </h3>
+          <h3 className="text-2xl font-bold text-gray-900 mb-8 text-center">How it works</h3>
           <div className="grid md:grid-cols-3 gap-8 lg:gap-10">
             <div className="text-center">
               <div className="w-12 h-12 bg-[var(--nhs-blue)] text-white rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-lg">
@@ -189,9 +180,19 @@ export function LandingPage() {
         {/* Footer links */}
         <div className="mt-12 text-center">
           <div className="flex items-center justify-center gap-6 text-[var(--nhs-blue)]">
-            <a href="https://www.nice.org.uk/guidance/published?sp=on" className="hover:underline font-medium">NICE Guidelines</a>
+            <a
+              href="https://www.nice.org.uk/guidance/published?sp=on"
+              className="hover:underline font-medium"
+            >
+              NICE Guidelines
+            </a>
             <span className="text-gray-300">|</span>
-            <a href="https://www.rheumatology.org.uk/guidelines" className="hover:underline font-medium">BSR Guidelines</a>
+            <a
+              href="https://www.rheumatology.org.uk/guidelines"
+              className="hover:underline font-medium"
+            >
+              BSR Guidelines
+            </a>
           </div>
         </div>
       </main>

@@ -26,7 +26,7 @@ describe('ChatInput', () => {
     await user.type(screen.getByPlaceholderText(/type your message/i), 'Hello doctor');
     // Find the submit button by type attribute (icon-only buttons have no accessible name)
     const buttons = screen.getAllByRole('button');
-    const submitBtn = buttons.find(b => b.getAttribute('type') === 'submit');
+    const submitBtn = buttons.find((b) => b.getAttribute('type') === 'submit');
     expect(submitBtn).toBeDefined();
 
     await user.click(submitBtn!);
@@ -40,7 +40,7 @@ describe('ChatInput', () => {
     const user = userEvent.setup();
 
     const buttons = screen.getAllByRole('button');
-    const submitBtn = buttons.find(b => b.getAttribute('type') === 'submit');
+    const submitBtn = buttons.find((b) => b.getAttribute('type') === 'submit');
     await user.click(submitBtn!);
 
     expect(onSend).not.toHaveBeenCalled();
@@ -62,7 +62,9 @@ describe('ChatInput', () => {
 
     const input = screen.getByPlaceholderText(/type your message/i);
     await user.type(input, 'Test message');
-    const submitBtn = screen.getAllByRole('button').find(b => b.getAttribute('type') === 'submit');
+    const submitBtn = screen
+      .getAllByRole('button')
+      .find((b) => b.getAttribute('type') === 'submit');
     await user.click(submitBtn!);
 
     expect(input).toHaveValue('');
@@ -96,7 +98,9 @@ describe('ChatInput', () => {
     expect(screen.queryByText('note.txt')).not.toBeInTheDocument();
 
     await user.upload(input, file);
-    const submitBtn = screen.getAllByRole('button').find(b => b.getAttribute('type') === 'submit');
+    const submitBtn = screen
+      .getAllByRole('button')
+      .find((b) => b.getAttribute('type') === 'submit');
     await user.click(submitBtn!);
 
     expect(onSend).toHaveBeenCalledWith('', [file]);
@@ -111,8 +115,13 @@ describe('ChatInput', () => {
     await user.upload(input, []);
 
     expect(screen.queryByText(/\.txt$/i)).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button').find((button) => button.getAttribute('type') === 'submit')).toBeDisabled();
-    expect(document.querySelector('label[for="chat-file-input"]')).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.getAllByRole('button').find((button) => button.getAttribute('type') === 'submit'),
+    ).toBeDisabled();
+    expect(document.querySelector('label[for="chat-file-input"]')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('submits whitespace messages when files are attached and ignores empty file selections', async () => {
@@ -125,7 +134,9 @@ describe('ChatInput', () => {
     await user.upload(input, []);
     await user.upload(input, file);
     await user.type(screen.getByPlaceholderText(/type your message/i), '   ');
-    await user.click(screen.getAllByRole('button').find((button) => button.getAttribute('type') === 'submit')!);
+    await user.click(
+      screen.getAllByRole('button').find((button) => button.getAttribute('type') === 'submit')!,
+    );
 
     expect(onSend).toHaveBeenCalledWith('   ', [file]);
   });

@@ -14,7 +14,8 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
   const navigate = useNavigate();
   const basePath = userRole === 'admin' ? '/admin' : userRole === 'gp' ? '/gp' : '/specialist';
 
-  const isQueriesActive = location.pathname.includes('/queries') || location.pathname.includes('/query/');
+  const isQueriesActive =
+    location.pathname.includes('/queries') || location.pathname.includes('/query/');
   const isAdminActive = location.pathname.startsWith('/admin');
 
   const handleLogout = () => {

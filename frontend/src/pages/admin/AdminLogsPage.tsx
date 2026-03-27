@@ -28,15 +28,18 @@ export function AdminLogsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await adminGetLogs({
-        search: searchFilter || undefined,
-        category: categoryFilter || undefined,
-        action: actionFilter || undefined,
-        user_id: userIdFilter ? Number(userIdFilter) : undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        limit: limitFilter,
-      }, { signal: controller.signal });
+      const data = await adminGetLogs(
+        {
+          search: searchFilter || undefined,
+          category: categoryFilter || undefined,
+          action: actionFilter || undefined,
+          user_id: userIdFilter ? Number(userIdFilter) : undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          limit: limitFilter,
+        },
+        { signal: controller.signal },
+      );
       setLogs(data);
     } catch (err) {
       ifNotAbortError(err, () => {
@@ -61,8 +64,12 @@ export function AdminLogsPage() {
 
   const formatTimestamp = (iso: string) =>
     new Date(iso).toLocaleString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
 
   const ACTION_STYLES: Record<string, string> = {
@@ -83,11 +90,11 @@ export function AdminLogsPage() {
   };
 
   const CATEGORY_STYLES: Record<string, string> = {
-    AUTH:       'bg-sky-100 text-sky-700',
-    CHAT:       'bg-amber-100 text-amber-700',
+    AUTH: 'bg-sky-100 text-sky-700',
+    CHAT: 'bg-amber-100 text-amber-700',
     SPECIALIST: 'bg-purple-100 text-purple-700',
-    RAG:        'bg-teal-100 text-teal-700',
-    OTHER:      'bg-gray-100 text-gray-600',
+    RAG: 'bg-teal-100 text-teal-700',
+    OTHER: 'bg-gray-100 text-gray-600',
   };
 
   return (
@@ -108,7 +115,10 @@ export function AdminLogsPage() {
         </div>
 
         {/* Filter Controls */}
-        <form onSubmit={handleApplyFilters} className="bg-white rounded-xl shadow-sm p-4 mb-6 space-y-3">
+        <form
+          onSubmit={handleApplyFilters}
+          className="bg-white rounded-xl shadow-sm p-4 mb-6 space-y-3"
+        >
           {/* Row 1: Search + Category + Action */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="relative">
@@ -117,13 +127,13 @@ export function AdminLogsPage() {
                 type="text"
                 placeholder="Search action or details…"
                 value={searchFilter}
-                onChange={e => setSearchFilter(e.target.value)}
+                onChange={(e) => setSearchFilter(e.target.value)}
                 className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               />
             </div>
             <select
               value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
+              onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm"
             >
               <option value="">All categories</option>
@@ -136,7 +146,7 @@ export function AdminLogsPage() {
               type="text"
               placeholder="Exact action (e.g. LOGIN)"
               value={actionFilter}
-              onChange={e => setActionFilter(e.target.value)}
+              onChange={(e) => setActionFilter(e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
             />
           </div>
@@ -146,26 +156,26 @@ export function AdminLogsPage() {
               type="number"
               placeholder="User ID"
               value={userIdFilter}
-              onChange={e => setUserIdFilter(e.target.value)}
+              onChange={(e) => setUserIdFilter(e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
             />
             <input
               type="datetime-local"
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onChange={(e) => setDateFrom(e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               title="From date"
             />
             <input
               type="datetime-local"
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onChange={(e) => setDateTo(e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
               title="To date"
             />
             <select
               value={limitFilter}
-              onChange={e => setLimitFilter(Number(e.target.value))}
+              onChange={(e) => setLimitFilter(Number(e.target.value))}
               className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm"
             >
               <option value={50}>50 rows</option>
@@ -186,7 +196,9 @@ export function AdminLogsPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={fetchLogs} className="ml-3 underline font-medium">Retry</button>
+            <button onClick={fetchLogs} className="ml-3 underline font-medium">
+              Retry
+            </button>
           </div>
         )}
 
@@ -203,15 +215,23 @@ export function AdminLogsPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Timestamp</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Category</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Action</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Timestamp
+                  </th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Category
+                  </th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Action
+                  </th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">User</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Details</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Details
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {logs.map(log => (
+                {logs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                       {formatTimestamp(log.timestamp)}
@@ -237,7 +257,10 @@ export function AdminLogsPage() {
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {formatAuditUserIdentifier(log.user_identifier, log.user_id)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={log.details || ''}>
+                    <td
+                      className="px-6 py-4 text-sm text-gray-600 max-w-md truncate"
+                      title={log.details || ''}
+                    >
                       {log.details || '—'}
                     </td>
                   </tr>

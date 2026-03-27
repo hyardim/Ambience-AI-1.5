@@ -109,8 +109,12 @@ describe('NotificationDropdown', () => {
   it('handles notification API failures and outside clicks gracefully', async () => {
     server.use(
       http.get('/notifications/', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })),
-      http.patch('/notifications/:id/read', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })),
-      http.patch('/notifications/read-all', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })),
+      http.patch('/notifications/:id/read', () =>
+        HttpResponse.json({ detail: 'Nope' }, { status: 500 }),
+      ),
+      http.patch('/notifications/read-all', () =>
+        HttpResponse.json({ detail: 'Nope' }, { status: 500 }),
+      ),
     );
 
     renderDropdown('admin');
@@ -142,8 +146,11 @@ describe('NotificationDropdown', () => {
             is_read: false,
             created_at: '2024-01-15T11:00:00Z',
           },
-        ])),
-      http.patch('/notifications/:id/read', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })),
+        ]),
+      ),
+      http.patch('/notifications/:id/read', () =>
+        HttpResponse.json({ detail: 'Nope' }, { status: 500 }),
+      ),
     );
 
     renderDropdown('gp');
@@ -171,9 +178,13 @@ describe('NotificationDropdown', () => {
             body: '',
             chat_id: null,
             is_read: false,
-            created_at: index === 0 ? new Date().toISOString() : new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            created_at:
+              index === 0
+                ? new Date().toISOString()
+                : new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
           })),
-        )),
+        ),
+      ),
     );
 
     renderDropdown('gp');
@@ -201,7 +212,8 @@ describe('NotificationDropdown', () => {
             is_read: false,
             created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
           },
-        ])),
+        ]),
+      ),
     );
 
     renderDropdown('gp');

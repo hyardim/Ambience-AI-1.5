@@ -21,6 +21,9 @@ export function canSubmitReviewAction(input: string, reviewTargetMessageId: numb
   return reviewTargetMessageId !== null && input.trim().length > 0;
 }
 
-export function canSubmitManualResponse(manualResponseContent: string, reviewTargetMessageId: number | null) {
+export function canSubmitManualResponse(
+  manualResponseContent: string,
+  reviewTargetMessageId: number | null,
+) {
   return reviewTargetMessageId !== null && manualResponseContent.trim().length > 0;
 }

@@ -8,9 +8,12 @@ describe('App', () => {
     window.history.pushState({}, '', '/');
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/NHS Ambience AI 1.5/)).toBeInTheDocument();
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/NHS Ambience AI 1.5/)).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('redirects authenticated admin users to the admin dashboard route', async () => {
@@ -18,11 +21,16 @@ describe('App', () => {
     window.history.pushState({}, '', '/admin/dashboard');
     const { unmount } = render(<App />);
 
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/admin/dashboard');
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(window.location.pathname).toBe('/admin/dashboard');
+      },
+      { timeout: 5000 },
+    );
 
-    expect(await screen.findByRole('button', { name: /refresh/i }, { timeout: 5000 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /refresh/i }, { timeout: 5000 }),
+    ).toBeInTheDocument();
     unmount();
   });
 
@@ -30,9 +38,12 @@ describe('App', () => {
     window.history.pushState({}, '', '/does-not-exist');
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/page not found/i)).toBeInTheDocument();
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/page not found/i)).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('renders the auth routes', async () => {
@@ -48,18 +59,26 @@ describe('App', () => {
     for (const [route, text] of cases) {
       window.history.pushState({}, '', route);
       const { unmount } = render(<App />);
-      await waitFor(() => {
-        expect(screen.getByText(text)).toBeInTheDocument();
-      }, { timeout: 5000 });
+      await waitFor(
+        () => {
+          expect(screen.getByText(text)).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
       unmount();
     }
 
     // ResendVerificationPage has duplicate text, use heading
     window.history.pushState({}, '', '/resend-verification');
     const { unmount: unmountResend } = render(<App />);
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /resend verification email/i })).toBeInTheDocument();
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole('heading', { name: /resend verification email/i }),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
     unmountResend();
   });
 
@@ -74,9 +93,12 @@ describe('App', () => {
       seedAuth({ role: 'gp', username: 'GP User' });
       window.history.pushState({}, '', route);
       const { unmount } = render(<App />);
-      await waitFor(() => {
-        expect(screen.getByText(text)).toBeInTheDocument();
-      }, { timeout: 5000 });
+      await waitFor(
+        () => {
+          expect(screen.getByText(text)).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
       unmount();
     }
   });
@@ -91,9 +113,12 @@ describe('App', () => {
       seedAuth({ role: 'specialist', username: 'Specialist User' });
       window.history.pushState({}, '', route);
       const { unmount } = render(<App />);
-      await waitFor(() => {
-        expect(screen.getByText(text)).toBeInTheDocument();
-      }, { timeout: 5000 });
+      await waitFor(
+        () => {
+          expect(screen.getByText(text)).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
       unmount();
     }
   });
@@ -112,9 +137,12 @@ describe('App', () => {
       seedAuth({ role: 'admin', username: 'Admin User' });
       window.history.pushState({}, '', route);
       const { unmount } = render(<App />);
-      await waitFor(() => {
-        expect(query()).toBeInTheDocument();
-      }, { timeout: 5000 });
+      await waitFor(
+        () => {
+          expect(query()).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
       unmount();
     }
   }, 30000);

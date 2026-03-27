@@ -35,12 +35,11 @@ export function AccessDeniedPage() {
             <AlertTriangle className="w-7 h-7 text-amber-700" />
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900 text-center mb-3">
-            Access Restricted
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900 text-center mb-3">Access Restricted</h1>
 
           <p className="text-gray-600 text-center mb-6">
-            You do not have permission to view <span className="font-medium text-gray-800">{from}</span>.
+            You do not have permission to view{' '}
+            <span className="font-medium text-gray-800">{from}</span>.
           </p>
 
           <div className="bg-[#f8fafc] border border-gray-200 rounded-lg p-4 space-y-2 text-sm text-gray-700 mb-8">

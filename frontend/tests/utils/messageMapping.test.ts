@@ -17,18 +17,20 @@ describe('mapCitations', () => {
   });
 
   it('maps citation fields correctly', () => {
-    const raw = [{
-      doc_id: 'doc-1',
-      metadata: {
-        title: 'Test Doc',
-        source_name: 'NICE',
-        specialty: 'cardiology',
-        source_url: 'https://example.com',
+    const raw = [
+      {
+        doc_id: 'doc-1',
+        metadata: {
+          title: 'Test Doc',
+          source_name: 'NICE',
+          specialty: 'cardiology',
+          source_url: 'https://example.com',
+        },
+        section_path: ['Section 1', 'Sub A'],
+        page_start: 5,
+        page_end: 10,
       },
-      section_path: ['Section 1', 'Sub A'],
-      page_start: 5,
-      page_end: 10,
-    }];
+    ];
 
     const result = mapCitations(raw);
     expect(result).toHaveLength(1);
@@ -59,12 +61,14 @@ describe('mapCitations', () => {
   });
 
   it('preserves string section paths and mapped citation dates', () => {
-    const raw = [{
-      section_path: 'Single section',
-      publish_date: '2024-01-01',
-      creation_date: '2023-12-01',
-      last_updated_date: '2024-02-01',
-    }];
+    const raw = [
+      {
+        section_path: 'Single section',
+        publish_date: '2024-01-01',
+        creation_date: '2023-12-01',
+        last_updated_date: '2024-02-01',
+      },
+    ];
 
     const result = mapCitations(raw);
     expect(result[0].section_path).toBe('Single section');

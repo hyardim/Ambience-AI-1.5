@@ -86,7 +86,11 @@ describe('RegisterPage', () => {
     expect(screen.getByText(/first name is required/i)).toBeInTheDocument();
     expect(screen.getByText(/last name is required/i)).toBeInTheDocument();
     expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
-    expect(screen.getByText(/password must be at least 8 characters and include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /password must be at least 8 characters and include uppercase, lowercase, a number, and a special character/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('shows field validation errors when email and password are missing', async () => {
@@ -364,11 +368,13 @@ describe('RegisterPage', () => {
   it('registers specialists and navigates to the specialist page', async () => {
     server.use(
       http.post('/auth/register', async ({ request }) => {
-        const body = await request.json() as { role: string; specialty?: string };
-        expect(body).toEqual(expect.objectContaining({
-          role: 'specialist',
-          specialty: 'neurology',
-        }));
+        const body = (await request.json()) as { role: string; specialty?: string };
+        expect(body).toEqual(
+          expect.objectContaining({
+            role: 'specialist',
+            specialty: 'neurology',
+          }),
+        );
 
         return HttpResponse.json({
           access_token: 'token',

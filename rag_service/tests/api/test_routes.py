@@ -75,7 +75,8 @@ def test_augment_query_with_history_returns_original_for_non_followup() -> None:
     assert augmented == query
 
 
-def test_augment_query_with_history_prefixes_latest_gp_line() -> None:
+def test_augment_query_with_history_prefixes_all_gp_lines() -> None:
+    """All prior GP messages (oldest first) should be prepended."""
     query = "She now has new jaw pain and headache."
     patient_context = {
         "conversation_history": (
@@ -87,7 +88,9 @@ def test_augment_query_with_history_prefixes_latest_gp_line() -> None:
 
     augmented = routes._augment_query_with_history(query, patient_context)
 
-    assert augmented.startswith("70-year-old with PMR features and raised ESR\n")
+    # Full history: oldest GP message first, then most recent, then current query
+    assert augmented.startswith("Earlier concern\n")
+    assert "70-year-old with PMR features and raised ESR" in augmented
     assert augmented.endswith(query)
 
 

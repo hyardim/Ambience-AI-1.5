@@ -331,7 +331,7 @@ class TestFileDownload:
 
     def test_download_unauthenticated_fails(self, client, created_chat, tmp_path):
         with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
-            upload = client.post(
+            client.post(
                 f"/chats/{created_chat['id']}/files",
                 files={"file": ("note.txt", io.BytesIO(_TXT_CONTENT), "text/plain")},
             )

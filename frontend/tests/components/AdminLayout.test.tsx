@@ -34,7 +34,9 @@ describe('AdminLayout', () => {
   it('marks the active nav item from the current route', () => {
     renderLayout('/admin/guidelines');
 
-    expect(screen.getByRole('link', { name: /guidelines/i }).className).toContain('bg-[var(--nhs-blue)]');
+    expect(screen.getByRole('link', { name: /guidelines/i }).className).toContain(
+      'bg-[var(--nhs-blue)]',
+    );
   });
 
   it('falls back to default admin name when username is missing', () => {
