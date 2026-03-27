@@ -118,6 +118,30 @@ nginx/         Optional TLS reverse proxy (production profile)
 - Docker + Docker Compose
 - Ollama running locally (for default local model path)
 
+### Minimum measured specs (local Med42 8B, 8-bit quantized)
+
+Model: `thewindmom/llama3-med42-8b` (`Q8_0`), download size ~7.95 GB.
+
+Benchmark protocol used (March 27, 2026):
+
+- Host used for measurement: Apple M4 Pro, 14 CPU cores, 24 GB RAM
+- Load profile: 12 sequential `/ask` requests + 16 `/ask` requests at concurrency 4
+- Result quality during run: 100% valid JSON, 100% with citations, 0 fallback responses
+
+Measured peak usage on this setup:
+
+- Ollama runner RSS peak: ~8.13 GiB
+- Docker services peak total: ~1.53 GiB
+- Combined observed service/process peak: ~9.7 GiB (excluding normal OS + browser/editor headroom)
+
+Recommended minimum for reliable local development:
+
+- CPU: 4 physical cores (8 threads)
+- System RAM (model only): 12 GB minimum
+- System RAM (full stack + model): 16 GB minimum (24 GB preferred)
+- Optional GPU for faster inference: 10 GB VRAM minimum (12 GB+ recommended)
+- Free disk space: at least 15 GB total (model + logs/cache + working headroom)
+
 ### 1) Configure environment
 
 ```bash
@@ -185,6 +209,32 @@ Default demo emails:
    - open queue
    - assign one submitted consultation
    - perform review action (`approve`, `request_changes`, or `manual_response`)
+
+## Validated example queries (recommended)
+
+The following prompts were tested repeatedly on March 27, 2026 against the current seeded corpus and consistently returned grounded responses with citations.
+
+1. Specialty: `neurology`  
+   Query: `How can migraine aura be distinguished from transient ischaemic attack (TIA) in primary care?`
+2. Specialty: `rheumatology`  
+   Query: `A patient taking methotrexate has fever and neutropenia. What immediate management steps and referral urgency are recommended?`
+3. Specialty: `neurology`  
+   Query: `For suspected cauda equina syndrome in primary care, what immediate actions are recommended before urgent transfer?`
+4. Specialty: `rheumatology`  
+   Query: `In systemic lupus erythematosus with new proteinuria and rising creatinine, what investigations and referral pathway are recommended?`
+
+Direct API example:
+
+```bash
+curl -s -X POST http://localhost:8001/ask \
+  -H "X-Internal-API-Key: <your-RAG_INTERNAL_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How can migraine aura be distinguished from transient ischaemic attack (TIA) in primary care?",
+    "specialty": "neurology",
+    "top_k": 5
+  }'
+```
 
 ## Database bootstrap notes
 

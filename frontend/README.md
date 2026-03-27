@@ -33,6 +33,9 @@ cross-origin requests to the backend.
 - `npm run dev` - start the Vite dev server
 - `npm run build` - type-check and build production assets
 - `npm run lint` - run ESLint
+- `npm run format` - format source and tests with Prettier
+- `npm run format:check` - check formatting without rewriting files
+- `npm run typecheck` - run TypeScript checks without emitting build output
 - `npm run test` - run Vitest once
 - `npm run test:coverage` - run tests with coverage
 - `npm run test:e2e` - run Playwright browser tests against the frontend app (API routes are mocked in `e2e/app.spec.ts`)
@@ -44,8 +47,10 @@ Tests live in [`tests/`] and mirror the source structure:
 - `tests/components`
 - `tests/contexts`
 - `tests/hooks`
+- `tests/integration`
 - `tests/pages`
 - `tests/services`
+- `tests/support`
 - `tests/utils`
 
 ## Notes

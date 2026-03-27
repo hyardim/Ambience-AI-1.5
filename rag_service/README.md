@@ -13,7 +13,9 @@ src/
 ├── generation/      # Prompt building, provider routing, local/cloud LLM clients
 ├── ingestion/       # Extract, clean, chunk, embed, and store documents
 ├── jobs/            # Retry queue logic
+├── llm/             # LLM compatibility/helpers kept for legacy paths
 ├── orchestration/   # Retrieve-then-generate pipeline helpers
+├── rag/             # Backward-compatible RAG pipeline modules
 ├── retrieval/       # Vector, keyword, fusion, rerank, and citation assembly
 ├── utils/           # Shared DB and logging utilities
 └── main.py          # Thin compatibility entrypoint / public re-export
@@ -184,10 +186,16 @@ Main endpoints exposed by the FastAPI app:
 - `POST /answer`
 - `POST /revise`
 - `POST /ingest`
+- `GET /documents/health`
 - `GET /jobs/{job_id}`
 - `GET /docs/{doc_id}`
 - `GET /health`
 - `POST /ask` (alternate lightweight route)
+
+Authentication:
+
+- `GET /health` is public.
+- All other endpoints require `X-Internal-API-Key: <RAG_INTERNAL_API_KEY>`.
 
 ### Streaming
 
@@ -201,6 +209,7 @@ Example:
 
 ```bash
 curl -s -N http://localhost:8001/answer \
+  -H 'X-Internal-API-Key: <your-RAG_INTERNAL_API_KEY>' \
   -H 'Content-Type: application/json' \
   -d '{"query":"What is migraine?","specialty":"neurology","stream":true}'
 ```
@@ -222,10 +231,8 @@ Tests mirror the `src/` structure under [`tests/`](tests/).
 
 Current state:
 
-- lint passes
-- type checks pass
-- 1254+ tests pass
-- coverage is at 100%
+- CI enforces lint, format check, type-check, and tests with coverage gates.
+- Exact test counts change over time; run `make test` for the current total.
 
 ## Notes for maintainers
 
