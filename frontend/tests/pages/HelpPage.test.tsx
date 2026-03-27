@@ -38,7 +38,7 @@ describe('HelpPage', () => {
       screen.getByText(/enter patient context, specialty, urgency, and a clear clinical question/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/final clinical responsibility remains with the treating gp/i),
+      screen.getByText(/the gp remains responsible for final clinical decisions/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /help/i }).className).toContain(
       'bg-[var(--nhs-dark-blue)]',
@@ -52,12 +52,12 @@ describe('HelpPage', () => {
       expect(screen.getByRole('heading', { name: /specialist workflow/i })).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/step 1: triage incoming consultations/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1: check new consultations/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/assign a consultation when you are taking ownership of the review/i),
+      screen.getByText(/assign the consultation when you are taking responsibility for review/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/queue and my assigned tabs/i)).toBeInTheDocument();
-    expect(screen.getByText(/ai drafts can be incomplete/i)).toBeInTheDocument();
+    expect(screen.getByText(/ai drafts can miss details/i)).toBeInTheDocument();
   });
 
   it('shows shared page sections for features and limitations', async () => {

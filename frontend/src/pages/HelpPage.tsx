@@ -22,7 +22,7 @@ const HELP_CONTENT: Record<HelpRole, HelpContent> = {
   gp: {
     workflowHeading: 'GP Workflow',
     summary:
-      'Use Ambience AI to structure your case, get an AI draft response, and track specialist review outcomes.',
+      'Use Ambience AI to create a case, get a draft answer, and follow specialist feedback.',
     steps: [
       {
         title: 'Step 1: Create the consultation',
@@ -35,7 +35,7 @@ const HELP_CONTENT: Record<HelpRole, HelpContent> = {
         title: 'Step 2: Review the consultation detail',
         bullets: [
           'Open the consultation detail page to review AI responses, citations, and conversation history.',
-          'Use follow-up messages to clarify missing context before clinical decision making.',
+          'Use follow-up messages to ask for missing details before making a decision.',
         ],
       },
       {
@@ -49,7 +49,7 @@ const HELP_CONTENT: Record<HelpRole, HelpContent> = {
         title: 'Step 4: Close out completed work',
         bullets: [
           'Archive completed consultations when they are no longer needed in your active list.',
-          'Retain important outcomes in your local record-keeping workflow as required.',
+          'Record important outcomes in your local notes as needed.',
         ],
       },
     ],
@@ -60,43 +60,43 @@ const HELP_CONTENT: Record<HelpRole, HelpContent> = {
       'Monitor notification updates when specialist actions occur.',
     ],
     limitations: [
-      'The AI output is decision support, not a final diagnosis or treatment directive.',
-      'Final clinical responsibility remains with the treating GP.',
-      'Avoid sharing unnecessary identifying patient information.',
-      'Escalate urgent or high-risk cases through established clinical safety processes.',
+      'AI responses are support only and are not a final diagnosis or treatment plan.',
+      'The GP remains responsible for final clinical decisions.',
+      'Do not add unnecessary identifying patient details.',
+      'Use your normal urgent-care process for high-risk cases.',
     ],
   },
   specialist: {
     workflowHeading: 'Specialist Workflow',
     summary:
-      'Use Ambience AI to triage assigned work, review AI output quality, and send clinically safe specialist decisions.',
+      'Use Ambience AI to review assigned cases, check draft quality, and send safe final advice.',
     steps: [
       {
-        title: 'Step 1: Triage incoming consultations',
+        title: 'Step 1: Check new consultations',
         bullets: [
-          'Open Queries for Review and monitor Queue and My Assigned tabs.',
-          'Sort by severity and status to prioritise urgent specialist work first.',
+          'Open Queries for Review and check Queue and My Assigned tabs.',
+          'Sort by urgency and status so urgent work is handled first.',
         ],
       },
       {
-        title: 'Step 2: Take ownership and assess evidence',
+        title: 'Step 2: Take the case and review details',
         bullets: [
-          'Assign a consultation when you are taking ownership of the review.',
-          'Inspect patient context, message history, and cited sources before deciding.',
+          'Assign the consultation when you are taking responsibility for review.',
+          'Read patient context, message history, and sources before deciding.',
         ],
       },
       {
-        title: 'Step 3: Complete specialist review actions',
+        title: 'Step 3: Choose a review action',
         bullets: [
-          'Use review actions to approve, request changes, or provide a manual response with supporting rationale.',
-          'Provide clear revision instructions when requesting changes from the model.',
+          'Use review actions to approve, request changes, or provide a manual response.',
+          'When requesting changes, write short and clear instructions.',
         ],
       },
       {
-        title: 'Step 4: Confirm resolution',
+        title: 'Step 4: Finish and update status',
         bullets: [
-          'Refresh and monitor statuses so no active consultations are left unresolved.',
-          'Use comments where needed so the GP receives clear next-step guidance.',
+          'Refresh and check statuses so no active consultations are left unresolved.',
+          'Add comments when needed so the GP gets clear next steps.',
         ],
       },
     ],
@@ -107,10 +107,10 @@ const HELP_CONTENT: Record<HelpRole, HelpContent> = {
       'Track pending workload with queue and assignment indicators.',
     ],
     limitations: [
-      'AI drafts can be incomplete and must be clinically validated before approval.',
-      'Specialist comments should be explicit when requesting revisions.',
-      'Do not rely on unsupported claims that lack source evidence.',
-      'Use existing trust escalation pathways for urgent safeguarding scenarios.',
+      'AI drafts can miss details, so always check them before approval.',
+      'Use clear comments so GPs understand what to do next.',
+      'Do not rely on claims that have no supporting source.',
+      'Use your normal emergency and safety process for urgent risks.',
     ],
   },
 };
