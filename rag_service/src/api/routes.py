@@ -62,14 +62,27 @@ _SOURCE_ECHO_RE = re.compile(
 )
 _CITATION_GROUP_RE = re.compile(r"\[(?:\d+(?:\s*,\s*\d+)*)\]")
 
+# Sentinel used to distinguish "caller did not pass specialty_override" from
+# "caller explicitly passed None" in _retrieve_for_answer_request.
+_SENTINEL_UNSET = object()
+
 # Patterns that identify a GP follow-up message that is missing the original
-# clinical context.  When matched, we prepend the most recent prior GP message
-# from the conversation history so that the retrieval embedder sees a complete
-# clinical picture rather than a bare pronoun-led fragment.
+# clinical context.  When matched, the retrieval query is enriched with prior
+# conversation history so the embedding model sees a complete clinical picture.
+#
+# Primary trigger: query starts with a continuation phrase or pronoun.
 _FOLLOWUP_TRIGGER_RE = re.compile(
     r"^(she\b|he\b|they\b|the patient\b|also\b|additionally\b|however\b|"
     r"but\b|on examination\b|her\b|his\b|their\b|it turns out\b|"
     r"patient also\b|patient has\b|patient is\b|patient was\b)",
+    re.IGNORECASE,
+)
+# Secondary trigger: query is short and contains a back-reference pronoun
+# anywhere (e.g. "What dose should she receive?").  Combined with is_short
+# this avoids false-positives on long standalone queries that happen to use
+# a pronoun ("…patients who are elderly and she/he…").
+_FOLLOWUP_PRONOUN_RE = re.compile(
+    r"\b(she|he|they|her|his|their|the patient)\b",
     re.IGNORECASE,
 )
 # Cap on how long an augmented retrieval query may be (characters).
@@ -107,7 +120,15 @@ def _retrieval_quality(
 def _retrieve_for_answer_request(
     request: AnswerRequest,
     query: str,
+    *,
+    specialty_override: str | None = _SENTINEL_UNSET,  # type: ignore[assignment]
 ) -> list[dict[str, Any]]:
+    # When specialty_override is explicitly passed (even as None) use it
+    # instead of request.specialty.  This allows cross-specialty retrieval
+    # for the bare follow-up query without affecting the primary retrieval.
+    specialty = (
+        request.specialty if specialty_override is _SENTINEL_UNSET else specialty_override
+    )
     advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
     if callable(advanced_retriever):
         return cast(
@@ -115,7 +136,7 @@ def _retrieve_for_answer_request(
             advanced_retriever(
                 query=query,
                 top_k=request.top_k,
-                specialty=request.specialty,
+                specialty=specialty,
                 source_name=request.source_name,
                 doc_type=request.doc_type,
                 score_threshold=request.score_threshold,
@@ -125,7 +146,7 @@ def _retrieve_for_answer_request(
     return retrieve_chunks(
         query,
         top_k=request.top_k,
-        specialty=request.specialty,
+        specialty=specialty,
     )
 
 
@@ -159,7 +180,9 @@ def _augment_query_with_history(
 
     stripped = query.strip()
     is_short = len(stripped) < 300
-    is_followup = bool(_FOLLOWUP_TRIGGER_RE.match(stripped))
+    is_followup = bool(_FOLLOWUP_TRIGGER_RE.match(stripped)) or bool(
+        _FOLLOWUP_PRONOUN_RE.search(stripped)
+    )
 
     if not (is_short and is_followup):
         return query
@@ -183,8 +206,22 @@ def _augment_query_with_history(
         # All lines were the current message — no useful prior context available
         return query
 
-    # Use the most recent PRIOR GP message as the clinical context anchor
-    prior_context = filtered[-1][:400].strip()
+    # Build prior context from ALL available prior GP messages (not just the
+    # most recent one).  This preserves the full clinical thread across
+    # multi-turn conversations (e.g. PMR → jaw aching → visual symptoms →
+    # "what dose?").  Fill from most-recent backwards so that if the budget
+    # is exceeded the oldest messages are dropped first.
+    prior_budget = _MAX_AUGMENTED_RETRIEVAL_QUERY - len(stripped) - 1
+    accumulated: list[str] = []
+    total_chars = 0
+    for text in reversed(filtered):
+        entry_len = len(text) + 1  # +1 for the joining newline
+        if total_chars + entry_len > prior_budget and accumulated:
+            break  # budget full — oldest messages already dropped
+        accumulated.append(text)
+        total_chars += entry_len
+    accumulated.reverse()  # restore chronological order
+    prior_context = "\n".join(accumulated)
     augmented = f"{prior_context}\n{stripped}"
     return augmented[:_MAX_AUGMENTED_RETRIEVAL_QUERY]
 
@@ -232,8 +269,16 @@ def _choose_retrieval_query(
     # symptom signal (e.g. "new headache, jaw aching").  Dual retrieval: also
     # retrieve for the bare follow-up and merge, so both context-relevant AND
     # symptom-specific chunks are available to the downstream re-ranker.
+    #
+    # The bare retrieval deliberately drops the specialty filter
+    # (specialty_override=None) because a follow-up can introduce symptoms
+    # belonging to a different specialty (e.g. GCA = neurology after a
+    # rheumatology PMR query).  The downstream filter_chunks re-ranker will
+    # still pick the most relevant chunks regardless of specialty.
     if was_augmented:
-        bare_retrieved = _retrieve_for_answer_request(request, request.query)
+        bare_retrieved = _retrieve_for_answer_request(
+            request, request.query, specialty_override=None
+        )
         retrieved = _merge_retrieved(retrieved, bare_retrieved)
     specialty = request.specialty
     original_filtered, original_quality = _retrieval_quality(
