@@ -11,6 +11,7 @@ FastAPI backend for Ambience-AI-1.5.
 
 ```bash
 cd backend
+cp .env.example .env
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"

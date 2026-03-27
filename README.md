@@ -148,7 +148,10 @@ Recommended minimum for reliable local development:
 cp .env.example .env
 ```
 
-Set required values in `.env` at minimum:
+The checked-in `.env.example` is intentionally runnable for local development
+and assessment. You can start with it as-is.
+
+Before any production/staging deployment, replace at least:
 
 - `POSTGRES_PASSWORD`
 - `SECRET_KEY`
@@ -157,10 +160,11 @@ Set required values in `.env` at minimum:
 - `RAG_INTERNAL_API_KEY`
 - `VITE_STORAGE_KEY`
 
-For local development, ensure:
+For local development, keep:
 
 - `COOKIE_SECURE=false`
 - `FRONTEND_BASE_URL=http://localhost:3000`
+- cloud model vars blank unless you intentionally enable cloud routing
 
 ### 2) Start Ollama and model
 
@@ -249,6 +253,18 @@ For deep service-specific workflows and commands:
 - [backend/README.md](backend/README.md)
 - [frontend/README.md](frontend/README.md)
 - [rag_service/README.md](rag_service/README.md)
+
+Service-level env files are also scaffolded:
+
+- `backend/.env.example`
+- `frontend/.env.example`
+- `rag_service/.env.example`
+
+Each can be copied with:
+
+```bash
+cp <service>/.env.example <service>/.env
+```
 
 ## CI quality gates
 

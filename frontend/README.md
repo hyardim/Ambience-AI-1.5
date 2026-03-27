@@ -28,6 +28,9 @@ By default, keep `VITE_API_URL` empty so requests use Vite proxy routes
 Set `VITE_API_URL=http://localhost:8000` only when you intentionally want direct
 cross-origin requests to the backend.
 
+`VITE_STORAGE_KEY` must be set (the checked-in `.env.example` already includes a
+local fake value that is safe for development).
+
 ## Commands
 
 - `npm run dev` - start the Vite dev server
