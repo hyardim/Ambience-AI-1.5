@@ -1310,3 +1310,59 @@ def test_prune_topic_outliers_keeps_non_negative_intent_chunks() -> None:
     )
 
     assert keeper in result
+
+
+# ---------------------------------------------------------------------------
+# Patient context isolation — retrieval functions must not accept it
+# ---------------------------------------------------------------------------
+
+
+class TestPatientContextNotPassedToRetrieval:
+    """Patient context is for prompt construction only; retrieval must be isolated."""
+
+    def test_retrieve_chunks_does_not_accept_patient_context(self) -> None:
+        """retrieve_chunks() must raise TypeError if patient_context is passed."""
+        import inspect
+
+        sig = inspect.signature(retrieve_chunks)
+        assert "patient_context" not in sig.parameters, (
+            "retrieve_chunks() must NOT have a patient_context parameter — "
+            "patient context must never influence which chunks are retrieved."
+        )
+
+    def test_retrieve_chunks_advanced_does_not_accept_patient_context(self) -> None:
+        """retrieve_chunks_advanced() must not have a patient_context parameter."""
+        import inspect
+
+        from src.api.services import retrieve_chunks_advanced
+
+        sig = inspect.signature(retrieve_chunks_advanced)
+        assert "patient_context" not in sig.parameters, (
+            "retrieve_chunks_advanced() must NOT have a patient_context parameter."
+        )
+
+    def test_retrieve_chunks_raises_on_unexpected_patient_context_kwarg(self) -> None:
+        """Passing patient_context as a kwarg must raise TypeError."""
+        with pytest.raises(TypeError):
+            retrieve_chunks(  # type: ignore[call-arg]
+                "methotrexate dosage",
+                top_k=5,
+                specialty="rheumatology",
+                patient_context={"age": 45, "gender": "female"},
+            )
+
+    def test_retrieve_chunks_advanced_raises_on_unexpected_kwarg(self) -> None:
+        """Passing patient_context to retrieve_chunks_advanced must raise."""
+        from src.api.services import retrieve_chunks_advanced
+
+        with pytest.raises(TypeError):
+            retrieve_chunks_advanced(  # type: ignore[call-arg]
+                "methotrexate dosage",
+                top_k=5,
+                specialty="rheumatology",
+                source_name=None,
+                doc_type=None,
+                score_threshold=0.3,
+                expand_query=True,
+                patient_context={"age": 45, "notes": "eGFR 38"},
+            )
