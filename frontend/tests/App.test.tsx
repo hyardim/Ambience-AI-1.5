@@ -87,6 +87,7 @@ describe('App', () => {
       ['/gp/queries', /my consultations/i],
       ['/gp/queries/new', /new consultation/i],
       ['/gp/query/1', /headache consultation/i],
+      ['/help', /gp workflow/i],
     ] as const;
 
     for (const [route, text] of cases) {
@@ -107,6 +108,7 @@ describe('App', () => {
     const cases = [
       ['/specialist/queries', /queries for review/i],
       ['/specialist/query/1', /headache consultation/i],
+      ['/help', /specialist workflow/i],
     ] as const;
 
     for (const [route, text] of cases) {
@@ -146,4 +148,17 @@ describe('App', () => {
       unmount();
     }
   }, 30000);
+
+  it('blocks admins from the gp and specialist help route', async () => {
+    seedAuth({ role: 'admin', username: 'Admin User' });
+    window.history.pushState({}, '', '/help');
+    render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText(/access restricted/i)).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+  });
 });
