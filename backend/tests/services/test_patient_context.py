@@ -11,6 +11,7 @@ class TestPatientContextCreate:
             json={
                 "title": "Neurology Case",
                 "specialty": "neurology",
+                "severity": "high",
                 "patient_age": 45,
                 "patient_gender": "female",
                 "patient_notes": "Type 2 diabetes, eGFR 38",
@@ -23,56 +24,51 @@ class TestPatientContextCreate:
         assert data["patient_gender"] == "female"
         assert data["patient_notes"] == "Type 2 diabetes, eGFR 38"
 
-    def test_create_chat_without_patient_fields_defaults_to_none(
-        self, client, gp_headers
-    ):
+    def test_create_chat_without_required_fields_rejected(self, client, gp_headers):
         resp = client.post(
             "/chats/", json={"specialty": "neurology"}, headers=gp_headers
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["patient_age"] is None
-        assert data["patient_gender"] is None
-        assert data["patient_notes"] is None
+        assert resp.status_code == 400
+        assert "patient_age" in resp.json()["detail"]
 
-    def test_create_chat_with_age_only(self, client, gp_headers):
+    def test_create_chat_with_age_only_rejected(self, client, gp_headers):
         resp = client.post(
             "/chats/",
             json={
                 "specialty": "rheumatology",
+                "severity": "high",
                 "patient_age": 72,
             },
             headers=gp_headers,
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["patient_age"] == 72
-        assert data["patient_gender"] is None
-        assert data["patient_notes"] is None
+        assert resp.status_code == 400
+        assert "patient_gender" in resp.json()["detail"]
 
-    def test_create_chat_with_gender_only(self, client, gp_headers):
+    def test_create_chat_with_gender_only_rejected(self, client, gp_headers):
         resp = client.post(
             "/chats/",
             json={
                 "specialty": "neurology",
+                "severity": "high",
                 "patient_gender": "male",
             },
             headers=gp_headers,
         )
-        assert resp.status_code == 200
-        assert resp.json()["patient_gender"] == "male"
+        assert resp.status_code == 400
+        assert "patient_age" in resp.json()["detail"]
 
-    def test_create_chat_with_notes_only(self, client, gp_headers):
+    def test_create_chat_with_notes_only_rejected(self, client, gp_headers):
         resp = client.post(
             "/chats/",
             json={
                 "specialty": "neurology",
+                "severity": "high",
                 "patient_notes": "Known penicillin allergy",
             },
             headers=gp_headers,
         )
-        assert resp.status_code == 200
-        assert resp.json()["patient_notes"] == "Known penicillin allergy"
+        assert resp.status_code == 400
+        assert "patient_age" in resp.json()["detail"]
 
     def test_patient_age_zero_stored_correctly(self, client, gp_headers):
         """Age 0 (newborn) is a valid clinical value and must not be dropped."""
@@ -80,7 +76,9 @@ class TestPatientContextCreate:
             "/chats/",
             json={
                 "specialty": "neurology",
+                "severity": "high",
                 "patient_age": 0,
+                "patient_gender": "female",
             },
             headers=gp_headers,
         )
@@ -95,6 +93,7 @@ class TestPatientContextPersistence:
             "/chats/",
             json={
                 "specialty": "neurology",
+                "severity": "high",
                 "patient_age": 60,
                 "patient_gender": "female",
                 "patient_notes": "RRMS on interferon beta-1a",
@@ -112,6 +111,7 @@ class TestPatientContextPersistence:
             "/chats/",
             json={
                 "specialty": "neurology",
+                "severity": "high",
                 "patient_age": 55,
                 "patient_gender": "male",
             },
@@ -168,12 +168,19 @@ class TestPatientContextRAGPayload:
         assert ctx.get("specialty") == "neurology"
         assert ctx.get("severity") == "high"
 
-    def test_no_patient_context_key_when_fields_absent(self, client, gp_headers):
-        """If no patient fields are set, patient_context in RAG payload is absent or empty."""
+    def test_patient_context_notes_optional_when_absent(self, client, gp_headers):
+        """When notes are omitted, the RAG patient context should not include notes."""
         from unittest.mock import MagicMock, patch
 
         chat = client.post(
-            "/chats/", json={"specialty": "neurology"}, headers=gp_headers
+            "/chats/",
+            json={
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
+            headers=gp_headers,
         ).json()
         captured = {}
 
@@ -196,17 +203,23 @@ class TestPatientContextRAGPayload:
                 headers=gp_headers,
             )
 
-        ctx = captured.get("patient_context")
-        if ctx:
-            assert ctx.get("age") is None
-            assert ctx.get("gender") is None
-            assert ctx.get("notes") is None
+        ctx = captured.get("patient_context") or {}
+        assert ctx.get("age") == 45
+        assert ctx.get("gender") == "female"
+        assert ctx.get("notes") is None
 
     def test_recent_conversation_history_forwarded_to_rag(self, client, gp_headers):
         from unittest.mock import MagicMock, patch
 
         chat = client.post(
-            "/chats/", json={"specialty": "neurology"}, headers=gp_headers
+            "/chats/",
+            json={
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
+            headers=gp_headers,
         ).json()
 
         second_payload = {}

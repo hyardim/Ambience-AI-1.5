@@ -77,7 +77,7 @@ def _embedding_text(chunk: dict[str, Any]) -> str:
     elif chunk.get("section_title"):
         parts.append(str(chunk["section_title"]))
 
-    text = chunk.get("text", "")
+    text = str(chunk.get("text", ""))
     if parts:
         return f"[{' — '.join(parts)}] {text}"
     return text

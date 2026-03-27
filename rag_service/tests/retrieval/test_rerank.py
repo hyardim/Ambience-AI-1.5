@@ -489,8 +489,8 @@ class TestBuildRerankerInputSectionTitle:
                 "source_name": "NICE",
                 "doc_type": "guideline",
                 "title": "RA Guide",
-                "section_path": [],         # empty → hits elif
-                "section_title": "Therapy", # fallback used instead
+                "section_path": [],  # empty → hits elif
+                "section_title": "Therapy",  # fallback used instead
                 "page_start": 1,
                 "page_end": 2,
                 "source_url": "https://nice.org.uk",

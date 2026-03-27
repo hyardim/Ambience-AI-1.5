@@ -134,8 +134,8 @@ describe('AdminUsersPage', () => {
       expect(screen.getByText(/save failed/i)).toBeInTheDocument();
     });
 
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
     await user.click(screen.getAllByTitle('Deactivate user')[0]);
+    await user.click(screen.getByRole('button', { name: /^deactivate$/i }));
     await waitFor(() => {
       expect(screen.getByText(/deactivate failed/i)).toBeInTheDocument();
     });
@@ -169,6 +169,7 @@ describe('AdminUsersPage', () => {
 
     const deactivateButtons = screen.getAllByTitle('Deactivate user');
     await user.click(deactivateButtons[0]);
+    await user.click(screen.getByRole('button', { name: /^deactivate$/i }));
 
     // The user should still appear but with updated status (the mock returns is_active: false)
     await waitFor(() => {
@@ -191,7 +192,6 @@ describe('AdminUsersPage', () => {
   });
 
   it('retries load errors, filters by role, saves edit changes, and respects deactivate cancellation', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     server.use(
       http.get('/admin/users', ({ request }) => {
         const role = new URL(request.url).searchParams.get('role');
@@ -267,7 +267,9 @@ describe('AdminUsersPage', () => {
     });
 
     await user.click(screen.getByTitle(/deactivate user/i));
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('updates role, specialty, and active status fields inside the edit modal', async () => {

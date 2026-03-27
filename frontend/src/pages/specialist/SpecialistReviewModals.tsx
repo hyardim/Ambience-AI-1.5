@@ -1,7 +1,43 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle, Edit2, Lock, MessageSquare, PenLine } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Edit2, ExternalLink, Lock, MessageSquare, PenLine } from 'lucide-react';
 
 import { filesFromInput } from '../../utils/control';
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** Renders each non-empty line of `value` — URLs become clickable links. */
+function SourcePreview({ value }: { value: string }) {
+  const lines = value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-1">
+      {lines.map((line, i) =>
+        isHttpUrl(line) ? (
+          <li key={i} className="flex items-center gap-1.5 text-sm">
+            <ExternalLink className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+            <a
+              href={line}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--nhs-blue)] hover:underline truncate"
+            >
+              {line}
+            </a>
+          </li>
+        ) : (
+          <li key={i} className="text-sm text-gray-600 truncate">{line}</li>
+        ),
+      )}
+    </ul>
+  );
+}
 
 const MAX_FILE_SIZE_MB = 3;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -275,6 +311,7 @@ export function ManualResponseModal({
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
             placeholder="e.g. NICE NG228, BSR guideline 2023"
           />
+          <SourcePreview value={manualResponseSources} />
         </div>
         <div className="mt-4 mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -560,6 +597,7 @@ export function EditResponseModal({
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
             placeholder="Optional. Add one source per line."
           />
+          <SourcePreview value={editedSources} />
         </div>
         <div className="mt-4 mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Feedback</label>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, Trash2, Save, X, Eye } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { StatusBadge, SeverityBadge } from '../../components/Badges';
 import { adminGetChats, adminUpdateChat, adminDeleteChat, adminGetChat } from '../../services/api';
 import type {
@@ -19,6 +20,9 @@ export function AdminChatsPage() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Delete confirm modal state
+  const [deleteChatId, setDeleteChatId] = useState<number | null>(null);
 
   // Edit modal state
   const [editChat, setEditChat] = useState<AdminChatResponse | null>(null);
@@ -63,7 +67,7 @@ export function AdminChatsPage() {
   }, [fetchChats]);
 
   const handleDelete = async (chatId: number) => {
-    if (!confirm('Delete this chat and all its messages? This cannot be undone.')) return;
+    setDeleteChatId(null);
     try {
       await adminDeleteChat(chatId);
       setChats((prev) => prev.filter((c) => c.id !== chatId));
@@ -236,7 +240,7 @@ export function AdminChatsPage() {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(chat.id)}
+                          onClick={() => setDeleteChatId(chat.id)}
                           className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
                           title="Delete chat"
                         >
@@ -387,6 +391,16 @@ export function AdminChatsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteChatId !== null}
+        title="Delete Chat"
+        message="Delete this chat and all its messages? This cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => deleteChatId !== null && void handleDelete(deleteChatId)}
+        onCancel={() => setDeleteChatId(null)}
+      />
     </AdminLayout>
   );
 }

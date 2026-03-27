@@ -132,6 +132,14 @@ def test_validate_password_accepts_strong_password():
     auth_service._validate_password("StrongPass1!")
 
 
+def test_login_rejects_invalid_email_format(db_session):
+    with pytest.raises(HTTPException) as exc:
+        auth_service.login(db_session, "not-an-email", "StrongPass1!")
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Please enter a valid email address"
+
+
 def test_profile_update_accepts_explicit_none_new_password():
     payload = ProfileUpdate(new_password=None)
     assert payload.new_password is None

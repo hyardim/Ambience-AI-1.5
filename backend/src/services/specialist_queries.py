@@ -87,9 +87,7 @@ def get_chat_detail(db: Session, specialist: User, chat_id: int) -> ChatWithMess
         raise HTTPException(status_code=404, detail="Chat not found")
 
     if not can_view_chat(specialist, chat):
-        raise HTTPException(
-            status_code=403, detail="You do not have access to this chat"
-        )
+        raise HTTPException(status_code=404, detail="Chat not found")
 
     messages = message_repository.list_for_chat(db, chat.id)
     response = ChatWithMessages(**chat_to_response(chat).model_dump())

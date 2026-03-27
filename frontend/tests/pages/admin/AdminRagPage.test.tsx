@@ -405,4 +405,25 @@ describe('AdminRagPage — search, filter, and sort', () => {
     const documentRows = screen.getAllByRole('row').slice(1);
     expect(documentRows[0]).toHaveTextContent('Alpha Source');
   });
+
+  it('matches search terms against source names when document id does not match', async () => {
+    overrideRagStatus({
+      service_status: 'healthy',
+      documents: [
+        { doc_id: 'alpha-id', source_name: 'Rheumatology Guidance', chunk_count: 1, latest_ingestion: null },
+        { doc_id: 'beta-id', source_name: 'Cardiology', chunk_count: 1, latest_ingestion: null },
+      ],
+      jobs: null,
+    });
+
+    renderRagPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('alpha-id')).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/search/i), 'rheumatology');
+
+    expect(screen.getByText('alpha-id')).toBeInTheDocument();
+    expect(screen.queryByText('beta-id')).not.toBeInTheDocument();
+  });
 });

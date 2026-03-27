@@ -22,26 +22,48 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
       const creationDate = citation.creation_date ?? meta.creation_date;
       const publishDate = citation.publish_date ?? meta.publish_date;
       const lastUpdatedDate = citation.last_updated_date ?? meta.last_updated_date;
+      const title =
+        readString(citation.title)
+        || readString(meta.title)
+        || readString(meta.filename)
+        || readString(citation.source)
+        || 'Source';
+      const sourceName =
+        readString(citation.source_name)
+        || readString(meta.source_name)
+        || readString(citation.source)
+        || 'Source';
+      const explicitDocumentUrl =
+        readString(citation.document_url)
+        || readString(meta.document_url)
+        || readString(meta.document_link);
+      const explicitSourceUrl =
+        readString(citation.source_url)
+        || readString(meta.source_url)
+        || readString(citation.url)
+        || readString(meta.url)
+        || readString(meta.link)
+        || readString(meta.file_url);
+      const inferredSourceUrl = explicitSourceUrl
+        || firstHttpUrl(
+          readString(citation.source),
+          title,
+          sourceName,
+        );
 
       return {
         doc_id: typeof docId === 'string' ? docId : undefined,
-        title:
-          readString(citation.title) ||
-          readString(meta.title) ||
-          readString(meta.filename) ||
-          readString(citation.source) ||
-          'Source',
-        source_name:
-          readString(citation.source_name) ||
-          readString(meta.source_name) ||
-          readString(citation.source) ||
-          'Source',
+        title,
+        source_name: sourceName,
         specialty: readString(citation.specialty) || readString(meta.specialty),
         section_path: readSectionPath(sectionPath),
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
         page_end: typeof pageEnd === 'number' ? pageEnd : undefined,
-        document_url: typeof docId === 'string' ? apiUrl(`/documents/${docId}`) : undefined,
-        source_url: readString(citation.source_url) || readString(meta.source_url),
+        document_url:
+          typeof docId === 'string'
+            ? apiUrl(`/documents/${docId}`)
+            : explicitDocumentUrl,
+        source_url: inferredSourceUrl,
         creation_date: typeof creationDate === 'string' ? creationDate : undefined,
         publish_date: typeof publishDate === 'string' ? publishDate : undefined,
         last_updated_date: typeof lastUpdatedDate === 'string' ? lastUpdatedDate : undefined,
@@ -62,6 +84,25 @@ function readSectionPath(value: unknown): string | string[] | undefined {
     return value;
   }
   return undefined;
+}
+
+function firstHttpUrl(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    if (!value) continue;
+    if (looksLikeHttpUrl(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function looksLikeHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 /** Map a backend message to the frontend Message shape.

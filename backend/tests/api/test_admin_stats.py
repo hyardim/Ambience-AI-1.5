@@ -43,7 +43,13 @@ class TestAdminStats:
     ):
         client.post(
             "/chats/",
-            json={"title": "Test Chat", "specialty": "neurology"},
+            json={
+                "title": "Test Chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         data = client.get("/admin/stats", headers=admin_headers).json()
@@ -54,7 +60,13 @@ class TestAdminStats:
     ):
         client.post(
             "/chats/",
-            json={"title": "Neuro Chat", "specialty": "neurology"},
+            json={
+                "title": "Neuro Chat",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         data = client.get("/admin/stats", headers=admin_headers).json()
@@ -148,7 +160,13 @@ class TestAdminChatListPrivacy:
     ):
         client.post(
             "/chats/",
-            json={"title": "Test", "specialty": "neurology"},
+            json={
+                "title": "Test",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         resp = client.get("/admin/chats", headers=admin_headers)
@@ -164,7 +182,13 @@ class TestAdminChatListPrivacy:
     ):
         client.post(
             "/chats/",
-            json={"title": "Test", "specialty": "neurology"},
+            json={
+                "title": "Test",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         resp = client.get("/admin/chats", headers=admin_headers)
@@ -179,7 +203,13 @@ class TestAdminChatListPrivacy:
     ):
         client.post(
             "/chats/",
-            json={"title": "Test", "specialty": "neurology"},
+            json={
+                "title": "Test",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         resp = client.get("/admin/chats", headers=admin_headers)
@@ -192,7 +222,13 @@ class TestAdminChatListPrivacy:
     ):
         client.post(
             "/chats/",
-            json={"title": "Test", "specialty": "neurology"},
+            json={
+                "title": "Test",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         )
         resp = client.get("/admin/chats", headers=admin_headers)
@@ -211,7 +247,13 @@ class TestAdminChatListPrivacy:
         # Create and submit a chat (sending a message auto-submits)
         chat = client.post(
             "/chats/",
-            json={"title": "Test", "specialty": "neurology"},
+            json={
+                "title": "Test",
+                "specialty": "neurology",
+                "severity": "high",
+                "patient_age": 45,
+                "patient_gender": "female",
+            },
             headers=gp_headers,
         ).json()
         client.post(

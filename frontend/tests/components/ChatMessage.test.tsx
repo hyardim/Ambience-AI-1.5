@@ -255,6 +255,47 @@ describe('ChatMessage', () => {
     expect(screen.queryByText(/published|updated|created/i)).not.toBeInTheDocument();
   });
 
+  it('renders manual URL sources as clickable links that open in a new tab', () => {
+    // Simulates a specialist manual response citation where the source is a URL
+    const specialistMsg: Message = {
+      ...baseMessage,
+      senderType: 'specialist',
+      senderName: 'Dr Specialist',
+      content: 'Use the NICE guideline.',
+      citations: [
+        {
+          title: 'https://nice.org.uk/guidance/ng228',
+          source_name: 'Manual source',
+          source_url: 'https://nice.org.uk/guidance/ng228',
+        },
+        {
+          title: 'NICE NG228',
+          source_name: 'Manual source',
+        },
+        {
+          title: 'uploaded-file.pdf',
+          source_name: 'Manual source',
+          source_url: '/chats/1/files/5',
+        },
+      ],
+    };
+
+    render(<ChatMessage message={specialistMsg} />);
+
+    // URL source → clickable link opening in new tab
+    const urlLink = screen.getByRole('link', { name: 'https://nice.org.uk/guidance/ng228' });
+    expect(urlLink).toHaveAttribute('href', 'https://nice.org.uk/guidance/ng228');
+    expect(urlLink).toHaveAttribute('target', '_blank');
+
+    // Plain text source → not a link
+    expect(screen.getByText('NICE NG228').tagName).toBe('SPAN');
+
+    // Uploaded file source → clickable link to download
+    const fileLink = screen.getByRole('link', { name: 'uploaded-file.pdf' });
+    expect(fileLink).toHaveAttribute('href', '/chats/1/files/5');
+    expect(fileLink).toHaveAttribute('target', '_blank');
+  });
+
   it('falls back to a generic source label in linked and unlinked citations', () => {
     const aiMessage: Message = {
       ...baseMessage,

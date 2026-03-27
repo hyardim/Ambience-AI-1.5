@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded sync Redis client for auth rate limiting.
 _auth_redis_client = None
 _auth_redis_attempted = False
+_SIMPLE_EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _get_auth_redis():
@@ -171,6 +172,15 @@ def _validate_password(password: str) -> None:
         )
 
 
+def _validate_login_email(email: str) -> str:
+    normalized_email = email.lower().strip()
+    if not _SIMPLE_EMAIL_PATTERN.fullmatch(normalized_email):
+        raise HTTPException(
+            status_code=400, detail="Please enter a valid email address"
+        )
+    return normalized_email
+
+
 def _make_auth_response(user: User) -> AuthResponse:
     return AuthResponse(
         access_token=security.create_access_token_for_user(user),
@@ -208,7 +218,7 @@ def _issue_verification_link(db: Session, user: User, now: datetime) -> None:
 
 def login(db: Session, email: str, password: str) -> AuthResponse:
     """Authenticate a user by email and password, returning tokens on success."""
-    email = email.lower().strip()
+    email = _validate_login_email(email)
     user = user_repository.get_by_email(db, email)
     if not user or not security.verify_password(password, user.hashed_password):
         raise HTTPException(

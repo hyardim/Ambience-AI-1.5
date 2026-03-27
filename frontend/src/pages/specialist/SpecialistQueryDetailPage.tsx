@@ -7,12 +7,13 @@ import {
   getSpecialistChatDetail,
   getProfile,
   assignChat,
+  apiUrl,
   reviewChat,
   reviewMessage,
   sendSpecialistMessage,
   uploadChatFile,
 } from '../../services/api';
-import type { BackendChatWithMessages } from '../../types/api';
+import type { BackendChatWithMessages, FileAttachment, SourceEntry } from '../../types/api';
 import type { Message } from '../../types';
 import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { orFallback } from '../../utils/value';
@@ -73,6 +74,40 @@ export function SpecialistQueryDetailPage() {
       result.status === 'rejected' ? [files[index]?.name ?? `file ${index + 1}`] : [],
     );
     return failedFiles.length > 0 ? failedFiles.join(', ') : null;
+  };
+
+  const uploadedFileCitationSources = (
+    results: PromiseSettledResult<FileAttachment>[],
+    files: File[],
+    chatId: number,
+  ): SourceEntry[] => (
+    results.flatMap((result, index) => {
+      if (result.status !== 'fulfilled') return [];
+      const attachment = result.value;
+      const filename = attachment?.filename?.trim() || files[index]?.name?.trim();
+      if (!filename) return [];
+      const url = attachment?.id != null
+        ? apiUrl(`/chats/${chatId}/files/${attachment.id}`)
+        : undefined;
+      return [{ name: filename, url }];
+    })
+  );
+
+  const mergeUniqueSources = (
+    ...groups: (string | SourceEntry)[][]
+  ): (string | SourceEntry)[] => {
+    const seen = new Set<string>();
+    const merged: (string | SourceEntry)[] = [];
+    for (const group of groups) {
+      for (const source of group) {
+        const name = typeof source === 'string' ? source : source.name;
+        const key = name.trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(typeof source === 'string' ? source.trim() : { ...source, name: source.name.trim() });
+      }
+    }
+    return merged;
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -261,15 +296,17 @@ export function SpecialistQueryDetailPage() {
   const handleRequestChanges = async () => {
     const currentChat = chat!;
     const targetMessageId = reviewTargetMessageId!;
+    const reason = rejectReason.trim();
+    // Dismiss the modal immediately so the user isn't blocked
+    setShowRejectModal(false);
+    setRejectReason('');
+    setReviewTargetMessageId(null);
     setActionLoading(true);
     setError('');
     try {
       // Open SSE *before* the API call so we catch the revision stream events
       await connectStream(currentChat.id);
-      await reviewMessage(currentChat.id, targetMessageId, 'request_changes', rejectReason.trim());
-      setShowRejectModal(false);
-      setRejectReason('');
-      setReviewTargetMessageId(null);
+      await reviewMessage(currentChat.id, targetMessageId, 'request_changes', reason);
       // Reconcile with persisted state (streaming will update progressively)
       await loadData({ silent: true });
     } catch (err) {
@@ -286,19 +323,22 @@ export function SpecialistQueryDetailPage() {
     setError('');
     try {
       let uploadWarning = '';
+      let uploadedSources: SourceEntry[] = [];
       if (manualResponseFiles.length > 0) {
         const uploadResults = await Promise.allSettled(
           manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)),
         );
+        uploadedSources = uploadedFileCitationSources(uploadResults, manualResponseFiles, currentChat.id);
         const failures = formatUploadFailures(uploadResults, manualResponseFiles);
         if (failures) {
           uploadWarning = `Manual response sent, but some files failed to upload: ${failures}`;
         }
       }
-      const sources = manualResponseSources
+      const typedSources = manualResponseSources
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean);
+      const sources = mergeUniqueSources(typedSources, uploadedSources);
       await reviewMessage(
         currentChat.id,
         targetMessageId,
@@ -372,13 +412,15 @@ export function SpecialistQueryDetailPage() {
 
   const handleConsultationRequestRevision = async () => {
     const currentChat = chat!;
+    const reason = consultationRejectReason.trim();
+    // Dismiss the modal immediately so the user isn't blocked
+    setShowConsultationRejectModal(false);
+    setConsultationRejectReason('');
     setActionLoading(true);
     setError('');
     try {
       await connectStream(currentChat.id);
-      await reviewChat(currentChat.id, 'request_changes', consultationRejectReason.trim());
-      setShowConsultationRejectModal(false);
-      setConsultationRejectReason('');
+      await reviewChat(currentChat.id, 'request_changes', reason);
       await loadData({ silent: true });
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to request revision'));
@@ -423,20 +465,23 @@ export function SpecialistQueryDetailPage() {
     setActionLoading(true);
     setError('');
     try {
+      let uploadedSources: SourceEntry[] = [];
       if (consultationManualFiles.length > 0) {
-        await Promise.all(consultationManualFiles.map((f) => uploadChatFile(currentChat.id, f)));
+        const uploadResults = await Promise.allSettled(
+          consultationManualFiles.map((file) => uploadChatFile(currentChat.id, file)),
+        );
+        uploadedSources = uploadedFileCitationSources(uploadResults, consultationManualFiles, currentChat.id);
+        const failures = formatUploadFailures(uploadResults, consultationManualFiles);
+        if (failures) {
+          setError(`Manual response sent, but some files failed to upload: ${failures}`);
+        }
       }
-      const sources = consultationManualSources
+      const typedSources = consultationManualSources
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean);
-      await reviewChat(
-        currentChat.id,
-        'manual_response',
-        undefined,
-        consultationManualContent.trim(),
-        sources,
-      );
+      const sources = mergeUniqueSources(typedSources, uploadedSources);
+      await reviewChat(currentChat.id, 'manual_response', undefined, consultationManualContent.trim(), sources);
       setShowConsultationManualResponseModal(false);
       setConsultationManualContent('');
       setConsultationManualSources('');

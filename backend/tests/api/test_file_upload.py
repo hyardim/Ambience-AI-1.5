@@ -310,3 +310,57 @@ class TestFileUploadLimits:
 
         assert resp.status_code == 415
         assert "Binary MIME type" in resp.json()["detail"]
+
+
+class TestFileDownload:
+    def test_download_own_file(self, client, gp_headers, created_chat, tmp_path):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            upload = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("note.txt", io.BytesIO(_TXT_CONTENT), "text/plain")},
+                headers=gp_headers,
+            )
+        assert upload.status_code == 201
+        file_id = upload.json()["id"]
+        resp = client.get(
+            f"/chats/{created_chat['id']}/files/{file_id}",
+            headers=gp_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.content == _TXT_CONTENT
+
+    def test_download_unauthenticated_fails(self, client, created_chat, tmp_path):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            upload = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("note.txt", io.BytesIO(_TXT_CONTENT), "text/plain")},
+            )
+        # Upload fails (401), so just test download with arbitrary id
+        resp = client.get(f"/chats/{created_chat['id']}/files/1")
+        assert resp.status_code == 401
+
+    def test_download_nonexistent_file_returns_404(
+        self, client, gp_headers, created_chat
+    ):
+        resp = client.get(
+            f"/chats/{created_chat['id']}/files/99999",
+            headers=gp_headers,
+        )
+        assert resp.status_code == 404
+
+    def test_download_other_users_chat_file_returns_404(
+        self, client, gp_headers, second_gp_headers, created_chat, tmp_path
+    ):
+        with patch("src.services.chat_service.UPLOAD_DIR", tmp_path):
+            upload = client.post(
+                f"/chats/{created_chat['id']}/files",
+                files={"file": ("note.txt", io.BytesIO(_TXT_CONTENT), "text/plain")},
+                headers=gp_headers,
+            )
+        assert upload.status_code == 201
+        file_id = upload.json()["id"]
+        resp = client.get(
+            f"/chats/{created_chat['id']}/files/{file_id}",
+            headers=second_gp_headers,
+        )
+        assert resp.status_code == 404

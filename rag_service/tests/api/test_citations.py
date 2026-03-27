@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from src.api.citations import (
+    _enforce_grounded_sentences,
     _enforce_partial_question_coverage,
     _enforce_requested_scope,
     _has_cited_sentence_matching,
@@ -198,8 +199,7 @@ def test_extract_citation_results_keeps_initiation_queries() -> None:
         citations,
         strip_references=False,
         query=(
-            "Can methotrexate be initiated in primary care for inflammatory "
-            "arthritis?"
+            "Can methotrexate be initiated in primary care for inflammatory arthritis?"
         ),
     )
 
@@ -260,8 +260,9 @@ def test_extract_citation_results_preserves_cited_scope_sentence() -> None:
     assert used == [citations[0]]
 
 
-def test_extract_citation_results_returns_empty_for_query_without_cited_support(
-) -> None:
+def test_extract_citation_results_returns_empty_for_query_without_cited_support() -> (
+    None
+):
     answer, used = extract_citation_results(
         "Referral should be urgent.",
         [],
@@ -274,8 +275,9 @@ def test_extract_citation_results_returns_empty_for_query_without_cited_support(
     assert used == []
 
 
-def test_extract_citation_results_keeps_answer_when_all_requested_parts_are_cited(
-) -> None:
+def test_extract_citation_results_keeps_answer_when_all_requested_parts_are_cited() -> (
+    None
+):
     citations = [SearchResult(text="A", source="S", score=0.9)]
 
     answer, used = extract_citation_results(
@@ -368,6 +370,49 @@ def test_join_labels_handles_empty_and_two_labels() -> None:
     assert _join_labels(["imaging", "referral"]) == "imaging and referral"
 
 
+def test_question_focus_text_returns_last_unit_without_question_mark() -> None:
+    assert _question_focus_text("First sentence. Last sentence") == "Last sentence"
+
+
+def test_enforce_grounded_sentences_skips_blank_units() -> None:
+    cleaned = _enforce_grounded_sentences(
+        "[1].\n\nRefer urgently [1].",
+        has_citations=True,
+    )
+    assert "Refer urgently [1]" in cleaned
+
+
+def test_enforce_grounded_sentences_handles_empty_split_units(
+    monkeypatch,
+) -> None:
+    import src.api.citations as citations_module
+
+    monkeypatch.setattr(citations_module, "_SENTENCE_SPLIT_RE", re.compile(r"\|"))
+    cleaned = citations_module._enforce_grounded_sentences(
+        "Refer [1]||Urgent [1]",
+        has_citations=True,
+    )
+
+    assert "Refer [1]" in cleaned
+
+
+def test_has_cited_sentence_matching_returns_false_when_pattern_missing() -> None:
+    assert (
+        _has_cited_sentence_matching(
+            "Consider referral [1].",
+            re.compile(r"\bimaging\b", re.IGNORECASE),
+        )
+        is False
+    )
+
+
+def test_join_labels_handles_one_and_three_labels() -> None:
+    assert _join_labels(["referral"]) == "referral"
+    assert _join_labels(["tests", "imaging", "urgency"]) == (
+        "tests, imaging, and urgency"
+    )
+
+
 def test_enforce_partial_question_coverage_returns_empty_without_citations() -> None:
     # _enforce_partial_question_coverage is a no-op; answer is preserved unchanged.
     assert (
@@ -456,9 +501,7 @@ def test_enforce_requested_scope_keeps_treatment_for_ambiguous_management_querie
 ):
     answer = _enforce_requested_scope(
         "PMR can be started on prednisolone in primary care [1].",
-        query=(
-            "Should polymyalgia rheumatica be started on steroids in primary care?"
-        ),
+        query=("Should polymyalgia rheumatica be started on steroids in primary care?"),
     )
 
     assert "prednisolone" in answer.lower()

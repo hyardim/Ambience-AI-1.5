@@ -225,6 +225,59 @@ def test_get_refresh_user_returns_user_with_valid_refresh_cookie(db_session):
     assert resolved.email == user.email
 
 
+def test_get_refresh_user_rejects_disallowed_origin(db_session):
+    from src.db.models import User
+
+    user = User(
+        email="refresh-origin@example.com",
+        hashed_password="hash",
+        full_name="Refresh Origin User",
+        role=UserRole.GP,
+        specialty=None,
+        is_active=True,
+        session_version=0,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = security.create_refresh_token_for_user(user)
+    request = SimpleNamespace(
+        cookies={settings.REFRESH_COOKIE_NAME: token},
+        headers={"origin": "https://evil.example"},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        security.get_refresh_user(request=request, db=db_session)
+    assert exc.value.status_code == 403
+    assert "origin" in exc.value.detail.lower()
+
+
+def test_get_refresh_user_allows_whitelisted_origin(db_session):
+    from src.db.models import User
+
+    user = User(
+        email="refresh-allowed@example.com",
+        hashed_password="hash",
+        full_name="Refresh Allowed User",
+        role=UserRole.GP,
+        specialty=None,
+        is_active=True,
+        session_version=0,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = security.create_refresh_token_for_user(user)
+    allowed_origin = settings.ALLOWED_ORIGINS[0]
+    request = SimpleNamespace(
+        cookies={settings.REFRESH_COOKIE_NAME: token},
+        headers={"origin": allowed_origin},
+    )
+
+    resolved = security.get_refresh_user(request=request, db=db_session)
+    assert resolved.email == user.email
+
+
 def test_get_current_user_from_cookie_or_header_accepts_bearer_token(db_session):
     from src.db.models import User
 

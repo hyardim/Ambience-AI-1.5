@@ -105,6 +105,19 @@ describe('ErrorBoundary', () => {
     );
   });
 
+  it('handles Error unhandled promise rejections', () => {
+    const boundary = new ErrorBoundary({ children: <div>child</div> });
+    const setState = vi.fn();
+    boundary.setState = setState as typeof boundary.setState;
+
+    const reason = new Error('boom rejection');
+    boundary.handleUnhandledRejection({
+      reason,
+    } as PromiseRejectionEvent);
+
+    expect(setState).toHaveBeenCalledWith({ hasError: true, error: reason });
+  });
+
   it('registers and unregisters the global unhandledrejection listener', () => {
     const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');

@@ -224,6 +224,50 @@ describe('API service', () => {
       await expect(getProfile()).rejects.toThrow('field required; must be a valid email');
     });
 
+    it('falls back to status message when validation detail array has no messages', async () => {
+      server.use(
+        http.get('/auth/me', () =>
+          HttpResponse.json(
+            {
+              detail: [{}],
+            },
+            { status: 422 },
+          )),
+      );
+
+      await expect(getProfile()).rejects.toThrow('Request failed (422)');
+    });
+
+    it('falls back to status message when JSON error body is empty', async () => {
+      server.use(
+        http.get('/auth/me', () =>
+          new HttpResponse('', {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          })),
+      );
+
+      await expect(getProfile()).rejects.toThrow('Request failed (400)');
+    });
+
+    it('does not persist session when refresh response omits token and user', async () => {
+      secureStorage.setItem('access_token', 'existing-token');
+      localStorage.setItem('username', 'Existing User');
+      localStorage.setItem('user_role', 'gp');
+      localStorage.setItem('user_email', 'existing@example.com');
+
+      server.use(
+        http.post('/auth/refresh', () =>
+          HttpResponse.json({}, { status: 200 })),
+      );
+
+      await expect(refreshSession()).resolves.toEqual({});
+      expect(secureStorage.getItem('access_token')).toBe('existing-token');
+      expect(localStorage.getItem('username')).toBe('Existing User');
+      expect(localStorage.getItem('user_role')).toBe('gp');
+      expect(localStorage.getItem('user_email')).toBe('existing@example.com');
+    });
+
     it('retries the original request after a successful refresh', async () => {
       let meCalls = 0;
       server.use(

@@ -310,6 +310,92 @@ describe('SpecialistQueriesPage', () => {
     expect(screen.getByText(/assigned 16 jan 2025/i)).toBeInTheDocument();
   });
 
+  it('sorts safely when date and text sort fields are missing', async () => {
+    server.use(
+      http.get('/specialist/queue', () =>
+        HttpResponse.json([
+          {
+            id: 10,
+            title: 'Has specialty',
+            status: 'submitted',
+            specialty: 'neurology',
+            severity: 'medium',
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+          {
+            id: 11,
+            title: 'No specialty',
+            status: 'submitted',
+            specialty: null,
+            severity: 'low',
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-14T10:00:00Z',
+            user_id: 1,
+          },
+        ]),
+      ),
+      http.get('/specialist/assigned', () =>
+        HttpResponse.json([
+          {
+            id: 12,
+            title: 'Assigned with date',
+            status: 'assigned',
+            specialty: 'neurology',
+            severity: 'high',
+            specialist_id: 2,
+            assigned_at: '2025-01-18T10:00:00Z',
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-17T10:00:00Z',
+            user_id: 1,
+          },
+          {
+            id: 13,
+            title: 'Assigned without date',
+            status: 'reviewing',
+            specialty: 'rheumatology',
+            severity: 'high',
+            specialist_id: 2,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-16T10:00:00Z',
+            user_id: 1,
+          },
+        ]),
+      ),
+    );
+
+    renderSpecialistQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Has specialty')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText(/sort by/i), 'specialty');
+    await user.selectOptions(screen.getByLabelText(/sort direction/i), 'asc');
+
+    await user.click(screen.getByText(/my assigned/i));
+    await user.selectOptions(screen.getByLabelText(/sort by/i), 'assigned_at');
+    await user.selectOptions(screen.getByLabelText(/sort direction/i), 'asc');
+
+    await waitFor(() => {
+      const headings = screen
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+      expect(headings[0]).toBe('Assigned without date');
+    });
+  });
+
   it('formats specialty labels safely', () => {
     expect(formatSpecialtyLabel('neurology')).toBe('Neurology');
     expect(formatSpecialtyLabel(null)).toBe('—');

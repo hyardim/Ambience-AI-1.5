@@ -53,7 +53,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.alter_column("notifications", "is_read", existing_type=sa.Boolean(), nullable=True)
+    op.alter_column(
+        "notifications", "is_read", existing_type=sa.Boolean(), nullable=True
+    )
 
     op.alter_column(
         "messages",

@@ -103,6 +103,13 @@ def create_chat(db: Session, user: User, data: ChatCreate) -> ChatResponse:
     Returns:
         The newly created chat as a ChatResponse.
     """
+    if data.patient_age is None:
+        raise HTTPException(status_code=400, detail="patient_age is required")
+    if data.patient_gender is None:
+        raise HTTPException(status_code=400, detail="patient_gender is required")
+    if data.severity is None:
+        raise HTTPException(status_code=400, detail="severity is required")
+
     patient_context = {
         k: v
         for k, v in {
@@ -185,6 +192,16 @@ def list_chats(
             parsed_date_to = datetime.fromisoformat(date_to)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid date_to: {date_to}")
+
+    if (
+        parsed_date_from is not None
+        and parsed_date_to is not None
+        and parsed_date_from > parsed_date_to
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="date_from must be before or equal to date_to",
+        )
 
     # Avoid cache collisions for filter combinations not encoded in cache key.
     should_cache = not (search or date_from or date_to)

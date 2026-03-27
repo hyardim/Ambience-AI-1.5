@@ -136,6 +136,11 @@ export interface AssignRequest {
   specialist_id: number;
 }
 
+export interface SourceEntry {
+  name: string;
+  url?: string;
+}
+
 export interface ReviewRequest {
   action:
     | 'approve'
@@ -147,7 +152,7 @@ export interface ReviewRequest {
     | 'unassign';
   feedback?: string | null;
   replacement_content?: string | null;
-  replacement_sources?: string[] | null;
+  replacement_sources?: (string | SourceEntry)[] | null;
   edited_content?: string | null;
 }
 

@@ -428,11 +428,16 @@ def chunk_section_group(
 
     # Carry a small overlap across section boundaries so retrieval can
     # find content that spans adjacent sections.
-    final_overlap = _compute_overlap(
-        [s for s, _ in current_pairs] if not chunks else
-        [s for s, _ in sentence_block_pairs[-3:]],
-        overlap_tokens=overlap_tokens,
-    ) if sentence_block_pairs else []
+    final_overlap = (
+        _compute_overlap(
+            [s for s, _ in current_pairs]
+            if not chunks
+            else [s for s, _ in sentence_block_pairs[-3:]],
+            overlap_tokens=overlap_tokens,
+        )
+        if sentence_block_pairs
+        else []
+    )
     return chunks, final_overlap
 
 

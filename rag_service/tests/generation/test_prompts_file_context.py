@@ -29,7 +29,9 @@ class TestGroundedPromptFileContext:
     def test_context_uses_simple_numbered_passage_format(self):
         prompt = build_grounded_prompt("What DMT?", _CHUNKS, file_context=_FILE_CONTEXT)
 
-        context_block = prompt.split("Context:\n", 1)[1].split("\n\nUPLOADED DOCUMENTS", 1)[0]
+        context_block = prompt.split("Context:\n", 1)[1].split(
+            "\n\nUPLOADED DOCUMENTS", 1
+        )[0]
 
         assert "Match cues:" not in context_block
         assert "Source:" not in context_block

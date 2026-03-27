@@ -208,6 +208,14 @@ def review(
         _invalidate_chat_views(chat, specialist.id)
         return chat_to_response(chat)
 
+    if body.action == "request_changes" and (
+        not body.feedback or not body.feedback.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="feedback is required for request_changes action",
+        )
+
     _mark_last_ai_message(db, chat.id, body)
 
     if body.action == "request_changes":
@@ -329,6 +337,14 @@ def review_message(
         raise HTTPException(
             status_code=400,
             detail="edited_content is required for edit_response action",
+        )
+
+    if body.action == "request_changes" and (
+        not body.feedback or not body.feedback.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="feedback is required for request_changes action",
         )
 
     _mark_message(db, target, body)

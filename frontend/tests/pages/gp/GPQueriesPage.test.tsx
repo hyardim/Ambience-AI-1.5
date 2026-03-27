@@ -434,6 +434,39 @@ describe('GPQueriesPage', () => {
     });
   });
 
+  it('sorts safely when text sort fields are missing', async () => {
+    server.use(
+      http.get('/chats/', () =>
+        HttpResponse.json([
+          { id: 1, title: 'Has specialty', status: 'open', specialty: 'neurology', severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T10:00:00Z', user_id: 1 },
+          { id: 2, title: 'No specialty', status: 'submitted', specialty: null, severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T09:00:00Z', user_id: 1 },
+        ]),
+      ),
+    );
+
+    renderGPQueries();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('Has specialty')).toBeInTheDocument();
+    });
+
+    // Ensure we are on the correct tab (submitted)
+    await user.click(screen.getByRole('button', { name: /submitted/i }));
+    await user.click(screen.getByLabelText('Toggle filters'));
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'specialty');
+    await user.selectOptions(screen.getByLabelText('Direction'), 'asc');
+
+    await waitFor(() => {
+      const headings = screen
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+      // Accept either order, as null/undefined may sort differently by engine
+      expect(headings).toContain('No specialty');
+      expect(headings).toContain('Has specialty');
+    });
+  });
+
   it('switches tabs and shows closed consultations', async () => {
     renderGPQueries();
     const user = userEvent.setup();

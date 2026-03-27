@@ -67,9 +67,7 @@ def test_rheumatology_canonicalization_triggers_for_sle_renal_referral_query() -
     assert canonical == RHEUMATOLOGY_SLE_RENAL_CANONICAL_QUERY
 
 
-def test_rheumatology_sle_canonicalization_does_not_trigger_without_referral_intent() -> (
-    None
-):
+def test_rheumatology_sle_canonicalization_does_not_trigger_without_referral_intent():
     query = (
         "Known SLE with mild proteinuria and stable creatinine. What does this "
         "mean over time?"
@@ -116,9 +114,7 @@ def test_neurology_canonicalization_triggers_for_nph_style_query() -> None:
     assert canonical == NEUROLOGY_NPH_CANONICAL_QUERY
 
 
-def test_neurology_canonicalization_triggers_for_rapid_gait_disturbance_nph_query() -> (
-    None
-):
+def test_neurology_canonicalization_triggers_for_rapid_gait_disturbance_nph_query():
     query = (
         "65-year-old with rapidly progressive gait disturbance and urinary "
         "incontinence over 3 months, ventriculomegaly on CT. Should normal "
@@ -149,9 +145,7 @@ def test_neurology_canonicalization_triggers_for_acute_vertigo_focal_deficit() -
     assert canonical == NEUROLOGY_ACUTE_VERTIGO_CANONICAL_QUERY
 
 
-def test_neurology_canonicalization_does_not_trigger_for_benign_vertigo_without_focal_deficit() -> (
-    None
-):
+def test_neurology_canonicalization_no_trigger_for_benign_vertigo():
     query = (
         "Adult with recurrent positional vertigo for 3 months without diplopia, "
         "ataxia, weakness, or other focal neurological deficits. Is routine referral "
@@ -161,6 +155,71 @@ def test_neurology_canonicalization_does_not_trigger_for_benign_vertigo_without_
     canonical = build_canonical_retrieval_query(
         query=query,
         specialty="neurology",
+        allowed_specialties={"neurology"},
+    )
+
+    assert canonical is None
+
+
+def test_canonicalization_returns_none_for_disallowed_specialty() -> None:
+    canonical = build_canonical_retrieval_query(
+        query="Referral question",
+        specialty="cardiology",
+        allowed_specialties={"rheumatology", "neurology"},
+    )
+
+    assert canonical is None
+
+
+def test_canonicalization_triggers_sle_renal_when_specialty_missing() -> None:
+    query = (
+        "45-year-old with known SLE and new proteinuria with rising creatinine. "
+        "What immediate investigations and referral pathway are recommended?"
+    )
+
+    canonical = build_canonical_retrieval_query(
+        query=query,
+        specialty=None,
+        allowed_specialties={"rheumatology"},
+    )
+
+    assert canonical == RHEUMATOLOGY_SLE_RENAL_CANONICAL_QUERY
+
+
+def test_canonicalization_triggers_neuro_nph_when_specialty_missing() -> None:
+    query = (
+        "79-year-old with gait disturbance, urinary urgency and ventriculomegaly. "
+        "Should normal pressure hydrocephalus be suspected?"
+    )
+
+    canonical = build_canonical_retrieval_query(
+        query=query,
+        specialty=None,
+        allowed_specialties={"neurology"},
+    )
+
+    assert canonical == NEUROLOGY_NPH_CANONICAL_QUERY
+
+
+def test_canonicalization_triggers_neuro_acute_vertigo_when_specialty_missing() -> None:
+    query = (
+        "Sudden severe vertigo with diplopia and ataxia in the last hour. "
+        "What referral urgency is recommended?"
+    )
+
+    canonical = build_canonical_retrieval_query(
+        query=query,
+        specialty=None,
+        allowed_specialties={"neurology"},
+    )
+
+    assert canonical == NEUROLOGY_ACUTE_VERTIGO_CANONICAL_QUERY
+
+
+def test_canonicalization_returns_none_when_no_missing_specialty_rule_matches() -> None:
+    canonical = build_canonical_retrieval_query(
+        query="General wellbeing question without referral red flags.",
+        specialty=None,
         allowed_specialties={"neurology"},
     )
 

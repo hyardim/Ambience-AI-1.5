@@ -88,9 +88,11 @@ _NEGATIVE_DOC_PATTERNS: tuple[tuple[str, float], ...] = (
     ("safety and efficacy of carotid stenting", -0.18),
     ("fracture risk assessment", -0.10),
     ("quality measures", -0.10),
-    # Cross-specialty noise — chunks about unrelated conditions pulled by embedding proximity.
+    # Cross-specialty noise: chunks about unrelated conditions pulled by
+    # embedding proximity.
     ("pancreatic cancer", -0.22),
-    # Clinical trial / HTA process sections — contain study data, not clinical recs.
+    # Clinical trial / HTA process sections: contain study data, not
+    # clinical recommendations.
     ("clinical effectiveness", -0.16),
     ("rct network meta-analyses", -0.22),
     ("decision problem", -0.18),

@@ -289,6 +289,36 @@ describe('useChatStream', () => {
     expect(wrapper.getMessages()).toHaveLength(1);
   });
 
+  it('does not append a placeholder when the target message already exists', () => {
+    const seeded = createWrapperWithMessages([
+      {
+        id: '42',
+        senderId: 'ai',
+        senderName: 'NHS AI Assistant',
+        senderType: 'ai',
+        content: 'Existing message',
+        timestamp: new Date(),
+        isGenerating: false,
+      },
+    ]);
+
+    const { result } = renderHook(() =>
+      useChatStream(seeded.setMessages, {
+        chatId: 1,
+        onRefresh: mockRefresh,
+      }),
+    );
+
+    act(() => {
+      result.current.connectStream(1);
+      latestCallbacks.onStreamStart?.(42);
+    });
+
+    expect(seeded.getMessages()).toEqual([
+      expect.objectContaining({ id: '42', content: 'Existing message', isGenerating: false }),
+    ]);
+  });
+
   it('reuses an existing generating AI message instead of appending a second placeholder', () => {
     const seeded = createWrapperWithMessages([
       {

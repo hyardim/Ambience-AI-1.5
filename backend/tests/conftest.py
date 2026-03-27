@@ -262,7 +262,13 @@ def second_gp_headers(registered_second_gp):
 def created_chat(client, gp_headers):
     resp = client.post(
         "/chats/",
-        json={"title": "Test Chat", "specialty": "neurology"},
+        json={
+            "title": "Test Chat",
+            "specialty": "neurology",
+            "severity": "high",
+            "patient_age": 45,
+            "patient_gender": "female",
+        },
         headers=gp_headers,
     )
     assert resp.status_code == 200, resp.text
@@ -273,7 +279,13 @@ def created_chat(client, gp_headers):
 def submitted_chat(client, gp_headers):
     chat = client.post(
         "/chats/",
-        json={"title": "Submitted Chat", "specialty": "neurology"},
+        json={
+            "title": "Submitted Chat",
+            "specialty": "neurology",
+            "severity": "high",
+            "patient_age": 45,
+            "patient_gender": "female",
+        },
         headers=gp_headers,
     ).json()
     client.post(

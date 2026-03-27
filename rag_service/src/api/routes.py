@@ -191,7 +191,7 @@ def _augment_query_with_history(
 
     # Extract GP messages from the history string (format: "GP: <text>")
     gp_lines = [
-        line[len("GP:"):].strip()
+        line[len("GP:") :].strip()
         for line in history.split("\n")
         if line.strip().startswith("GP:")
     ]
@@ -314,9 +314,8 @@ def _choose_retrieval_query(
     )
 
     if (
-        (not original_filtered and canonical_filtered)
-        or canonical_quality > original_quality + 0.2
-    ):
+        not original_filtered and canonical_filtered
+    ) or canonical_quality > original_quality + 0.2:
         logger.info(
             "Using canonical retrieval query for answer route",
             extra={

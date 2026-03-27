@@ -452,7 +452,7 @@ class TestNormalisation:
 
 class TestEmbeddingTextSectionTitleFallback:
     def test_uses_section_title_when_section_path_is_empty(self) -> None:
-        """When section_path is absent/empty but section_title is set, use section_title."""
+        """Use section_title when section_path is absent/empty."""
         from src.ingestion.embed import _embedding_text
 
         chunk = {
