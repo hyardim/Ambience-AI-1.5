@@ -91,3 +91,17 @@ class Chat(Base):
     @property
     def patient_notes(self) -> Any | None:
         return (self.patient_context or {}).get("notes")
+
+    @property
+    def is_archived(self) -> bool:
+        """Backwards-compatible archive flag derived from chat status."""
+        return self.status == ChatStatus.ARCHIVED
+
+    @is_archived.setter
+    def is_archived(self, value: bool) -> None:
+        # Keep compatibility with older call sites that treated archiving as a
+        # boolean flag while the persisted source of truth is Chat.status.
+        if value:
+            self.status = ChatStatus.ARCHIVED
+        elif self.status == ChatStatus.ARCHIVED:
+            self.status = ChatStatus.OPEN
