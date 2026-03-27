@@ -204,8 +204,7 @@ def _augment_query_with_history(
     # Drop any trailing GP lines that are identical (or nearly identical) to
     # the current query so we always anchor on the PRIOR clinical context.
     filtered = [
-        line for line in gp_lines
-        if line[:200].lower() != stripped[:200].lower()
+        line for line in gp_lines if line[:200].lower() != stripped[:200].lower()
     ]
     if not filtered:
         # All lines were the current message — no useful prior context available
