@@ -59,11 +59,11 @@ def list_for_user(
     search: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
-    include_archived: bool = False,
 ) -> list[Chat]:
-    query = db.query(Chat).filter(Chat.user_id == user_id)
-    if not include_archived:
-        query = query.filter(Chat.is_archived.is_(False))
+    query = db.query(Chat).filter(
+        Chat.user_id == user_id,
+        Chat.status != ChatStatus.ARCHIVED,
+    )
     if status:
         query = query.filter(Chat.status == ChatStatus(status))
     if specialty:
@@ -117,7 +117,7 @@ async def async_update(db: AsyncSession, chat: Chat, **fields) -> Chat:
 
 
 def archive(db: Session, chat: Chat) -> None:
-    chat.is_archived = True
+    chat.status = ChatStatus.ARCHIVED
     db.commit()
     db.refresh(chat)
 

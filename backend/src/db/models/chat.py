@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
-    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -36,9 +35,6 @@ class Chat(Base):
         Index("ix_chats_user_created_at", "user_id", "created_at"),
         Index("ix_chats_status_created_at", "status", "created_at"),
         Index(
-            "ix_chats_user_archived_created_at", "user_id", "is_archived", "created_at"
-        ),
-        Index(
             "ix_chats_status_specialty_created_at", "status", "specialty", "created_at"
         ),
         Index(
@@ -63,7 +59,6 @@ class Chat(Base):
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     review_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, default=utc_now, onupdate=utc_now
@@ -96,3 +91,17 @@ class Chat(Base):
     @property
     def patient_notes(self) -> Any | None:
         return (self.patient_context or {}).get("notes")
+
+    @property
+    def is_archived(self) -> bool:
+        """Backwards-compatible archive flag derived from chat status."""
+        return self.status == ChatStatus.ARCHIVED
+
+    @is_archived.setter
+    def is_archived(self, value: bool) -> None:
+        # Keep compatibility with older call sites that treated archiving as a
+        # boolean flag while the persisted source of truth is Chat.status.
+        if value:
+            self.status = ChatStatus.ARCHIVED
+        elif self.status == ChatStatus.ARCHIVED:
+            self.status = ChatStatus.OPEN
