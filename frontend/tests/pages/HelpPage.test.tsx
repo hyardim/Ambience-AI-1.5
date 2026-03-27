@@ -32,7 +32,11 @@ describe('HelpPage', () => {
     });
 
     expect(screen.getByRole('heading', { name: /gp workflow/i })).toBeInTheDocument();
+    expect(screen.getByText(/step 1: create the consultation/i)).toBeInTheDocument();
     expect(screen.getByText(/start in queries and select new consultation/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/enter patient context, specialty, urgency, and a clear clinical question/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/final clinical responsibility remains with the treating gp/i),
     ).toBeInTheDocument();
@@ -48,6 +52,7 @@ describe('HelpPage', () => {
       expect(screen.getByRole('heading', { name: /specialist workflow/i })).toBeInTheDocument();
     });
 
+    expect(screen.getByText(/step 1: triage incoming consultations/i)).toBeInTheDocument();
     expect(
       screen.getByText(/assign a consultation when you are taking ownership of the review/i),
     ).toBeInTheDocument();
