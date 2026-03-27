@@ -75,13 +75,16 @@ const HELP_CONTENT: Record<HelpRole, HelpContent> = {
         title: 'Step 1: Check new consultations',
         bullets: [
           'Open Queries for Review and check Queue and My Assigned tabs.',
+          'The Queue tab shows queries that are available to assign to yourself.',
+          'The My Assigned tab shows queries you already own.',
           'Sort by urgency and status so urgent work is handled first.',
         ],
       },
       {
         title: 'Step 2: Take the case and review details',
         bullets: [
-          'Assign the consultation when you are taking responsibility for review.',
+          'Open a query from Queue and press Assign to Me to take ownership.',
+          'You must assign the query to yourself before you can respond to it.',
           'Read patient context, message history, and sources before deciding.',
         ],
       },

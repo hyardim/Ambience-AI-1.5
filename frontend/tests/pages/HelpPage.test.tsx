@@ -54,7 +54,13 @@ describe('HelpPage', () => {
 
     expect(screen.getByText(/step 1: check new consultations/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/assign the consultation when you are taking responsibility for review/i),
+      screen.getByText(/queue tab shows queries that are available to assign to yourself/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/open a query from queue and press assign to me to take ownership/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/you must assign the query to yourself before you can respond to it/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/queue and my assigned tabs/i)).toBeInTheDocument();
     expect(screen.getByText(/ai drafts can miss details/i)).toBeInTheDocument();
