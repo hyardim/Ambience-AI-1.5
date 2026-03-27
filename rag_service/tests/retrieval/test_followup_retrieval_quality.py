@@ -28,7 +28,7 @@ import pytest
 # Skip entirely in CI where no database is available.
 pytestmark = pytest.mark.skipif(
     os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true",
-    reason="Retrieval quality tests require a live vector database with ingested chunks",
+    reason="Requires a live vector database with ingested chunks",
 )
 
 # ---------------------------------------------------------------------------

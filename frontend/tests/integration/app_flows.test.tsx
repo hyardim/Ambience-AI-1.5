@@ -110,8 +110,8 @@ describe('app integration flows', () => {
 
     await waitFor(() => {
       expect(screen.queryByText(mockChat.title)).not.toBeInTheDocument();
+      expect(screen.getByText(mockChat2.title)).toBeInTheDocument();
     });
-    expect(screen.getByText(mockChat2.title)).toBeInTheDocument();
   });
 
   it('specialist queue and assigned tabs', async () => {
