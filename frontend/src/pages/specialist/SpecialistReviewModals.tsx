@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle, Edit2, ExternalLink, Lock, MessageSquare, PenLine } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  Edit2,
+  ExternalLink,
+  Lock,
+  MessageSquare,
+  PenLine,
+} from 'lucide-react';
 
 import { filesFromInput } from '../../utils/control';
 
@@ -14,7 +22,10 @@ function isHttpUrl(value: string): boolean {
 
 /** Renders each non-empty line of `value` — URLs become clickable links. */
 function SourcePreview({ value }: { value: string }) {
-  const lines = value.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = value
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
   if (lines.length === 0) return null;
   return (
     <ul className="mt-2 space-y-1">
@@ -32,7 +43,9 @@ function SourcePreview({ value }: { value: string }) {
             </a>
           </li>
         ) : (
-          <li key={i} className="text-sm text-gray-600 truncate">{line}</li>
+          <li key={i} className="text-sm text-gray-600 truncate">
+            {line}
+          </li>
         ),
       )}
     </ul>

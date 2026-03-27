@@ -232,7 +232,8 @@ describe('API service', () => {
               detail: [{}],
             },
             { status: 422 },
-          )),
+          ),
+        ),
       );
 
       await expect(getProfile()).rejects.toThrow('Request failed (422)');
@@ -240,11 +241,14 @@ describe('API service', () => {
 
     it('falls back to status message when JSON error body is empty', async () => {
       server.use(
-        http.get('/auth/me', () =>
-          new HttpResponse('', {
-            status: 400,
-            headers: { 'content-type': 'application/json' },
-          })),
+        http.get(
+          '/auth/me',
+          () =>
+            new HttpResponse('', {
+              status: 400,
+              headers: { 'content-type': 'application/json' },
+            }),
+        ),
       );
 
       await expect(getProfile()).rejects.toThrow('Request failed (400)');
@@ -256,10 +260,7 @@ describe('API service', () => {
       localStorage.setItem('user_role', 'gp');
       localStorage.setItem('user_email', 'existing@example.com');
 
-      server.use(
-        http.post('/auth/refresh', () =>
-          HttpResponse.json({}, { status: 200 })),
-      );
+      server.use(http.post('/auth/refresh', () => HttpResponse.json({}, { status: 200 })));
 
       await expect(refreshSession()).resolves.toEqual({});
       expect(secureStorage.getItem('access_token')).toBe('existing-token');

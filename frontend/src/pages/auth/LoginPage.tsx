@@ -6,7 +6,6 @@ import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
 import { getErrorMessage } from '../../utils/errors';
 
-
 function routeForRole(role: UserRole | null): string {
   if (role === 'specialist') return '/specialist/queries';
   if (role === 'admin') return '/admin/users';

@@ -438,8 +438,32 @@ describe('GPQueriesPage', () => {
     server.use(
       http.get('/chats/', () =>
         HttpResponse.json([
-          { id: 1, title: 'Has specialty', status: 'open', specialty: 'neurology', severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T10:00:00Z', user_id: 1 },
-          { id: 2, title: 'No specialty', status: 'submitted', specialty: null, severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T09:00:00Z', user_id: 1 },
+          {
+            id: 1,
+            title: 'Has specialty',
+            status: 'open',
+            specialty: 'neurology',
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+          {
+            id: 2,
+            title: 'No specialty',
+            status: 'submitted',
+            specialty: null,
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T09:00:00Z',
+            user_id: 1,
+          },
         ]),
       ),
     );

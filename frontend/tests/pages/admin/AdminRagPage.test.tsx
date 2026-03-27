@@ -410,7 +410,12 @@ describe('AdminRagPage — search, filter, and sort', () => {
     overrideRagStatus({
       service_status: 'healthy',
       documents: [
-        { doc_id: 'alpha-id', source_name: 'Rheumatology Guidance', chunk_count: 1, latest_ingestion: null },
+        {
+          doc_id: 'alpha-id',
+          source_name: 'Rheumatology Guidance',
+          chunk_count: 1,
+          latest_ingestion: null,
+        },
         { doc_id: 'beta-id', source_name: 'Cardiology', chunk_count: 1, latest_ingestion: null },
       ],
       jobs: null,

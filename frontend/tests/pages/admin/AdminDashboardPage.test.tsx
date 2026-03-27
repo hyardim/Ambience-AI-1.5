@@ -122,8 +122,12 @@ describe('AdminDashboardPage', () => {
 
   it('preserves the first error when both stats and rag logs fail', async () => {
     server.use(
-      http.get('/admin/stats', () => HttpResponse.json({ detail: 'Stats unavailable' }, { status: 500 })),
-      http.get('/admin/logs', () => HttpResponse.json({ detail: 'RAG logs unavailable' }, { status: 500 })),
+      http.get('/admin/stats', () =>
+        HttpResponse.json({ detail: 'Stats unavailable' }, { status: 500 }),
+      ),
+      http.get('/admin/logs', () =>
+        HttpResponse.json({ detail: 'RAG logs unavailable' }, { status: 500 }),
+      ),
     );
 
     renderDashboard();
@@ -131,7 +135,9 @@ describe('AdminDashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/stats unavailable|failed to load stats/i)).toBeInTheDocument();
     });
-    expect(screen.queryByText(/rag logs unavailable|failed to load rag logs/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/rag logs unavailable|failed to load rag logs/i),
+    ).not.toBeInTheDocument();
   });
 
   it('renders query and log fallbacks for partially empty datasets', async () => {

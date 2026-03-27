@@ -395,7 +395,12 @@ describe('GPQueryDetailPage', () => {
           ...base,
           messages: [
             ...mockChatWithMessages.messages,
-            { id: 777, content: 'Fetched AI response', sender: 'ai', created_at: '2025-01-15T10:03:00Z' },
+            {
+              id: 777,
+              content: 'Fetched AI response',
+              sender: 'ai',
+              created_at: '2025-01-15T10:03:00Z',
+            },
           ],
         });
       }),
@@ -466,7 +471,8 @@ describe('GPQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'open',
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -499,7 +505,8 @@ describe('GPQueryDetailPage', () => {
               created_at: '2025-01-15T10:00:00Z',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();

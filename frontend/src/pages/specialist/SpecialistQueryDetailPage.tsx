@@ -80,22 +80,18 @@ export function SpecialistQueryDetailPage() {
     results: PromiseSettledResult<FileAttachment>[],
     files: File[],
     chatId: number,
-  ): SourceEntry[] => (
+  ): SourceEntry[] =>
     results.flatMap((result, index) => {
       if (result.status !== 'fulfilled') return [];
       const attachment = result.value;
       const filename = attachment?.filename?.trim() || files[index]?.name?.trim();
       if (!filename) return [];
-      const url = attachment?.id != null
-        ? apiUrl(`/chats/${chatId}/files/${attachment.id}`)
-        : undefined;
+      const url =
+        attachment?.id != null ? apiUrl(`/chats/${chatId}/files/${attachment.id}`) : undefined;
       return [{ name: filename, url }];
-    })
-  );
+    });
 
-  const mergeUniqueSources = (
-    ...groups: (string | SourceEntry)[][]
-  ): (string | SourceEntry)[] => {
+  const mergeUniqueSources = (...groups: (string | SourceEntry)[][]): (string | SourceEntry)[] => {
     const seen = new Set<string>();
     const merged: (string | SourceEntry)[] = [];
     for (const group of groups) {
@@ -104,7 +100,9 @@ export function SpecialistQueryDetailPage() {
         const key = name.trim().toLowerCase();
         if (!key || seen.has(key)) continue;
         seen.add(key);
-        merged.push(typeof source === 'string' ? source.trim() : { ...source, name: source.name.trim() });
+        merged.push(
+          typeof source === 'string' ? source.trim() : { ...source, name: source.name.trim() },
+        );
       }
     }
     return merged;
@@ -328,7 +326,11 @@ export function SpecialistQueryDetailPage() {
         const uploadResults = await Promise.allSettled(
           manualResponseFiles.map((file) => uploadChatFile(currentChat.id, file)),
         );
-        uploadedSources = uploadedFileCitationSources(uploadResults, manualResponseFiles, currentChat.id);
+        uploadedSources = uploadedFileCitationSources(
+          uploadResults,
+          manualResponseFiles,
+          currentChat.id,
+        );
         const failures = formatUploadFailures(uploadResults, manualResponseFiles);
         if (failures) {
           uploadWarning = `Manual response sent, but some files failed to upload: ${failures}`;
@@ -470,7 +472,11 @@ export function SpecialistQueryDetailPage() {
         const uploadResults = await Promise.allSettled(
           consultationManualFiles.map((file) => uploadChatFile(currentChat.id, file)),
         );
-        uploadedSources = uploadedFileCitationSources(uploadResults, consultationManualFiles, currentChat.id);
+        uploadedSources = uploadedFileCitationSources(
+          uploadResults,
+          consultationManualFiles,
+          currentChat.id,
+        );
         const failures = formatUploadFailures(uploadResults, consultationManualFiles);
         if (failures) {
           setError(`Manual response sent, but some files failed to upload: ${failures}`);
@@ -481,7 +487,13 @@ export function SpecialistQueryDetailPage() {
         .map((line) => line.trim())
         .filter(Boolean);
       const sources = mergeUniqueSources(typedSources, uploadedSources);
-      await reviewChat(currentChat.id, 'manual_response', undefined, consultationManualContent.trim(), sources);
+      await reviewChat(
+        currentChat.id,
+        'manual_response',
+        undefined,
+        consultationManualContent.trim(),
+        sources,
+      );
       setShowConsultationManualResponseModal(false);
       setConsultationManualContent('');
       setConsultationManualSources('');

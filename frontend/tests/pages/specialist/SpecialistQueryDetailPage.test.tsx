@@ -222,7 +222,7 @@ describe('SpecialistQueryDetailPage', () => {
         }),
       ),
       http.post('/specialist/chats/:chatId/review', async ({ request }) => {
-        const body = await request.json() as {
+        const body = (await request.json()) as {
           action: string;
           replacement_sources?: string[] | null;
         };
@@ -286,10 +286,7 @@ describe('SpecialistQueryDetailPage', () => {
       expect(reviewActions).toContain('manual_response');
     });
     expect(manualResponseSources[0]).toEqual(
-      expect.arrayContaining([
-        'NICE NG228',
-        expect.objectContaining({ name: 'source.txt' }),
-      ]),
+      expect.arrayContaining(['NICE NG228', expect.objectContaining({ name: 'source.txt' })]),
     );
   }, 15000);
 
@@ -575,11 +572,13 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/files', () =>
-        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 }),
+      ),
       http.post('/specialist/chats/:chatId/review', async ({ request }) => {
-        const body = await request.json() as { action: string };
+        const body = (await request.json()) as { action: string };
         reviewActions.push(body.action);
         return HttpResponse.json({ ...mockChatWithMessages, status: 'approved' });
       }),
@@ -589,11 +588,16 @@ describe('SpecialistQueryDetailPage', () => {
     const user = userEvent.setup({ applyAccept: false });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /replace with manual response/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /replace with manual response/i }),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
-    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
+    await user.type(
+      screen.getByPlaceholderText(/type your replacement response/i),
+      'Use this instead',
+    );
     const fileInput = screen
       .getByText(/attach files/i)
       .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
