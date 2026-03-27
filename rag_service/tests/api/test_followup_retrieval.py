@@ -8,8 +8,7 @@ Covers:
     jaw claudication + new headache appear in a PMR patient.
 """
 
-import pytest
-
+from src.api.citations import _clean_answer_text
 from src.api.routes import _augment_query_with_history
 from src.generation.prompts import build_grounded_prompt
 
@@ -34,11 +33,18 @@ class TestAugmentQueryWithHistory:
                 "polymyalgia rheumatica be started on steroids in primary care?"
             )
         }
-        followup = "She also mentions a new headache over the last 3 days and some jaw aching when chewing."
+        followup = (
+            "She also mentions a new headache over the last "
+            "3 days and some jaw aching when chewing."
+        )
         augmented = _augment_query_with_history(followup, ctx)
 
         # Prior GP message is prepended
-        assert "PMR" in augmented or "polymyalgia" in augmented.lower() or "shoulder" in augmented
+        assert (
+            "PMR" in augmented
+            or "polymyalgia" in augmented.lower()
+            or "shoulder" in augmented
+        )
         assert "raised ESR" in augmented or "ESR" in augmented
         # Follow-up is still present
         assert "headache" in augmented
@@ -53,9 +59,7 @@ class TestAugmentQueryWithHistory:
         """A query that starts with a clinical noun (not a trigger pronoun/word)
         and already contains the full clinical context must not be augmented,
         regardless of whether the conversation history also has context."""
-        ctx = {
-            "conversation_history": "GP: Patient has type 2 diabetes."
-        }
+        ctx = {"conversation_history": "GP: Patient has type 2 diabetes."}
         # Does NOT start with a follow-up trigger word — full standalone query
         standalone_query = (
             "70-year-old female with confirmed PMR on prednisolone 15 mg/day, "
@@ -69,9 +73,7 @@ class TestAugmentQueryWithHistory:
     def test_pronoun_led_query_over_300_chars_is_not_augmented(self):
         """A pronoun-led query that is ≥300 chars already contains its own context
         and must not be augmented."""
-        ctx = {
-            "conversation_history": "GP: Patient has MS."
-        }
+        ctx = {"conversation_history": "GP: Patient has MS."}
         # Starts with 'She' but is >300 chars — already self-contained
         query = (
             "She is a 58-year-old with confirmed relapsing-remitting MS on "
@@ -91,9 +93,7 @@ class TestAugmentQueryWithHistory:
     def test_query_not_starting_with_followup_trigger_is_unchanged(self):
         """A query that starts with a clinical noun, not a pronoun/continuation
         word, is returned unchanged even if it is short."""
-        ctx = {
-            "conversation_history": "GP: Patient has rheumatoid arthritis."
-        }
+        ctx = {"conversation_history": "GP: Patient has rheumatoid arthritis."}
         query = "What is the monitoring schedule for methotrexate?"
         result = _augment_query_with_history(query, ctx)
         assert result == query
@@ -198,7 +198,7 @@ _GCA_CHUNKS = [
         "text": (
             "Giant Cell Arteritis (GCA) presents with new-onset headache, "
             "scalp tenderness, and jaw claudication in patients over 50. "
-            "BSR guidance: start prednisolone 40–60 mg/day immediately. "
+            "BSR guidance: start prednisolone 40-60 mg/day immediately. "
             "Do not wait for temporal artery biopsy before starting treatment. "
             "Biopsy within 2 weeks of starting steroids remains diagnostic. "
             "Visual symptoms (amaurosis fugax, diplopia) require IV methylprednisolone."
@@ -250,9 +250,11 @@ class TestGCAEmergencyRuleInPrompt:
             patient_context=ctx,
         )
         # Emergency override rule for GCA must be in the instructions part
-        instructions_section = prompt[:prompt.index("Context:")]
-        assert "jaw claudication" in instructions_section.lower() or \
-               "jaw pain on chewing" in instructions_section.lower()
+        instructions_section = prompt[: prompt.index("Context:")]
+        assert (
+            "jaw claudication" in instructions_section.lower()
+            or "jaw pain on chewing" in instructions_section.lower()
+        )
 
     def test_gca_rule_requires_immediate_steroids_not_wait(self):
         """The instructions must say start steroids immediately — never say
@@ -263,11 +265,14 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         # Must instruct immediate treatment
         assert "immediately" in instructions_section.lower()
         # Must explicitly warn against holding back
-        assert "do not" in instructions_section.lower() or "never" in instructions_section.lower()
+        assert (
+            "do not" in instructions_section.lower()
+            or "never" in instructions_section.lower()
+        )
         # Biopsy timing guidance present
         assert "biopsy" in instructions_section.lower()
 
@@ -279,7 +284,7 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         assert "vision" in instructions_section.lower()
 
     def test_gca_rule_is_in_emergency_block_alongside_cauda_equina(self):
@@ -291,16 +296,19 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         # Both emergencies in same rule
         rule11_pos = instructions_section.lower().find("emergencies")
         assert rule11_pos != -1
         rule11_text = instructions_section[rule11_pos:]
         assert "cauda equina" in rule11_text.lower()
-        assert "giant cell arteritis" in rule11_text.lower() or "gca" in rule11_text.lower()
+        assert (
+            "giant cell arteritis" in rule11_text.lower()
+            or "gca" in rule11_text.lower()
+        )
 
     def test_prednisolone_dose_range_present_in_instructions(self):
-        """The specific dose range (40–60 mg/day) must be in the instructions
+        """The specific dose range (40-60 mg/day) must be in the instructions
         so the LLM gives actionable guidance even if chunks are missing."""
         ctx = {"age": 71}
         prompt = build_grounded_prompt(
@@ -308,8 +316,9 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
-        assert "40" in instructions_section and "60" in instructions_section
+        instructions_section = prompt[: prompt.index("Context:")]
+        assert "40" in instructions_section
+        assert "60" in instructions_section
 
     def test_urgent_referral_instruction_present(self):
         """The instructions must mention urgent referral for GCA."""
@@ -319,7 +328,7 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         assert "referral" in instructions_section.lower()
         assert "rheumatology" in instructions_section.lower()
 
@@ -332,12 +341,17 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         # Rule must not require BOTH headache AND jaw claudication
-        assert "jaw claudication" in instructions_section.lower() or \
-               "jaw pain on chewing" in instructions_section.lower()
+        assert (
+            "jaw claudication" in instructions_section.lower()
+            or "jaw pain on chewing" in instructions_section.lower()
+        )
         # Must not give the model an out based on absence of features
-        assert "do not" in instructions_section.lower() or "never" in instructions_section.lower()
+        assert (
+            "do not" in instructions_section.lower()
+            or "never" in instructions_section.lower()
+        )
 
     def test_gca_rule_forbids_gca_is_less_likely_phrasing(self):
         """The instructions must explicitly forbid the LLM from concluding GCA
@@ -348,10 +362,12 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         # Explicit prohibition against downgrading urgency
-        assert "less likely" in instructions_section.lower() or \
-               "high-specificity" in instructions_section.lower()
+        assert (
+            "less likely" in instructions_section.lower()
+            or "high-specificity" in instructions_section.lower()
+        )
 
     def test_gca_rule_overrides_own_clinical_reasoning(self):
         """Rule 11 must explicitly state it overrides the model's own clinical
@@ -362,16 +378,16 @@ class TestGCAEmergencyRuleInPrompt:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
-        assert "clinical reasoning" in instructions_section.lower() or \
-               "probability assessment" in instructions_section.lower()
+        instructions_section = prompt[: prompt.index("Context:")]
+        assert (
+            "clinical reasoning" in instructions_section.lower()
+            or "probability assessment" in instructions_section.lower()
+        )
 
 
 # ---------------------------------------------------------------------------
 # Hallucinated "Uploaded document" post-processing
 # ---------------------------------------------------------------------------
-
-from src.api.citations import _clean_answer_text
 
 
 class TestHallucinatedUploadedDocStripping:
@@ -438,7 +454,7 @@ class TestMetaNoteStripping:
         """The canonical hallucination: model adds a note explaining why it
         deviated from the expected format after firing the emergency rule."""
         text = (
-            "Immediate action: Start high-dose prednisolone NOW (40–60 mg/day). "
+            "Immediate action: Start high-dose prednisolone NOW (40-60 mg/day). "
             "Arrange urgent same-day rheumatology referral. "
             "[Note: This response is not directly addressing the primary care "
             "question about polymyalgia rheumatica, but it is an urgent "
@@ -492,12 +508,16 @@ class TestEmergencyRuleStopsAfterResponse:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         # Must explicitly say not to add follow-on content
-        assert "do not add" in instructions_section.lower() or \
-               "do not address any other" in instructions_section.lower()
-        assert "meta-commentary" in instructions_section.lower() or \
-               "disclaimer" in instructions_section.lower()
+        assert (
+            "do not add" in instructions_section.lower()
+            or "do not address any other" in instructions_section.lower()
+        )
+        assert (
+            "meta-commentary" in instructions_section.lower()
+            or "disclaimer" in instructions_section.lower()
+        )
 
     def test_instructions_forbid_acknowledging_irrelevant_chunks(self):
         """Rule 13 must explicitly say not to acknowledge irrelevant passages
@@ -508,11 +528,13 @@ class TestEmergencyRuleStopsAfterResponse:
             _GCA_CHUNKS,
             patient_context=ctx,
         )
-        instructions_section = prompt[:prompt.index("Context:")]
+        instructions_section = prompt[: prompt.index("Context:")]
         rule13_pos = instructions_section.lower().rfind("13.")
         assert rule13_pos != -1
         rule13_text = instructions_section[rule13_pos:]
         # Must say to not acknowledge/mention irrelevant passages at all
-        assert "acknowledge" in rule13_text.lower() or \
-               "do not write" in rule13_text.lower() or \
-               "completely" in rule13_text.lower()
+        assert (
+            "acknowledge" in rule13_text.lower()
+            or "do not write" in rule13_text.lower()
+            or "completely" in rule13_text.lower()
+        )

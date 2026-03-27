@@ -485,7 +485,7 @@ describe('GPNewQueryPage', () => {
     fireEvent.change(screen.getByLabelText(/consultation title/i), {
       target: { value: 'x'.repeat(181) },
     });
-    fireEvent.change(screen.getByLabelText(/additional clinical context/i), {
+    fireEvent.change(screen.getByLabelText(/additional patient context/i), {
       target: { value: 'y'.repeat(1801) },
     });
 
