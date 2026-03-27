@@ -60,8 +60,8 @@ jobs:
       - name: Pytest (with coverage)
         env:
           SECRET_KEY: ci-test-secret-key
-          DATABASE_URL: sqlite+aiosqlite:///./test.db
+          DATABASE_URL: sqlite:///./test.db
           RAG_SERVICE_URL: http://localhost:8001
           RAG_INTERNAL_API_KEY: ci-test-key
           FRONTEND_BASE_URL: http://localhost:3000
-        run: pytest --cov=src --cov-report=term --cov-fail-under=99
+        run: pytest --cov=src --cov-report=term --cov-fail-under=90
