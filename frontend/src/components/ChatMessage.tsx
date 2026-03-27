@@ -134,9 +134,11 @@ export function ChatMessage({
             const page = formatPage(c);
             const section = formatSection(c);
             const docDate = formatDate(c);
-            // Prefer the authenticated in-app PDF route when available so
-            // citations open directly to the document, not a landing page.
-            const targetUrl = c.document_url || c.source_url;
+            // Prefer the external source URL (e.g. NICE guideline page) when
+            // available; fall back to the in-app document proxy only when no
+            // external URL exists, since the proxy may 404 if the file path
+            // cannot be resolved on disk.
+            const targetUrl = c.source_url || c.document_url;
             const href = targetUrl
               ? c.page_start != null
                 ? `${targetUrl}#page=${c.page_start}`

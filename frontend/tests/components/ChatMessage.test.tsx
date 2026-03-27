@@ -110,7 +110,7 @@ describe('ChatMessage', () => {
     expect(screen.getByText(/published 2024-01-01/i)).toBeInTheDocument();
   });
 
-  it('prefers in-app document links over absolute source URLs', () => {
+  it('prefers external source URL over in-app document proxy', () => {
     const aiMessage: Message = {
       ...baseMessage,
       senderType: 'ai',
@@ -129,11 +129,11 @@ describe('ChatMessage', () => {
 
     expect(screen.getByRole('link', { name: 'Guideline A' })).toHaveAttribute(
       'href',
-      '/documents/doc-1#page=3',
+      'https://www.nice.org.uk#page=3',
     );
   });
 
-  it('uses in-app document links when source URLs are not absolute', () => {
+  it('falls back to document proxy when source URL is a relative path', () => {
     const aiMessage: Message = {
       ...baseMessage,
       senderType: 'ai',
@@ -152,7 +152,7 @@ describe('ChatMessage', () => {
 
     expect(screen.getByRole('link', { name: 'Guideline A' })).toHaveAttribute(
       'href',
-      '/documents/doc-1#page=3',
+      '/docs/doc-1#page=3',
     );
   });
 
