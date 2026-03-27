@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from src.api.deps import get_specialist_user
+from src.api.deps import get_specialist_or_admin_user
 from src.db.models import User
 from src.db.session import get_db
 from src.schemas.chat import (
@@ -21,7 +21,7 @@ router = APIRouter()
 @router.get("/queue", response_model=List[ChatResponse])
 def get_queue(
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.get_queue(db, specialist)
 
@@ -29,7 +29,7 @@ def get_queue(
 @router.get("/assigned", response_model=List[ChatResponse])
 def get_assigned(
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.get_assigned(db, specialist)
 
@@ -38,7 +38,7 @@ def get_assigned(
 def get_chat_detail(
     chat_id: int,
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.get_chat_detail(db, specialist, chat_id)
 
@@ -47,7 +47,7 @@ def get_chat_detail(
 def unassign_chat(
     chat_id: int,
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     """Unassign the current specialist from a chat."""
     return specialist_service.unassign(db, specialist, chat_id)
@@ -58,7 +58,7 @@ def assign_specialist(
     chat_id: int,
     body: AssignRequest,
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.assign(db, specialist, chat_id, body)
 
@@ -68,7 +68,7 @@ def review_chat(
     chat_id: int,
     body: ReviewRequest,
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.review(db, specialist, chat_id, body)
 
@@ -81,7 +81,7 @@ def review_message(
     message_id: int,
     body: ReviewRequest,
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.review_message(db, specialist, chat_id, message_id, body)
 
@@ -91,6 +91,6 @@ def send_message(
     chat_id: int,
     message: MessageCreate,
     db: Session = Depends(get_db),
-    specialist: User = Depends(get_specialist_user),
+    specialist: User = Depends(get_specialist_or_admin_user),
 ):
     return specialist_service.send_message(db, specialist, chat_id, message.content)

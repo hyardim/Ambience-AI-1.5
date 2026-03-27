@@ -53,7 +53,8 @@ export function SpecialistQueriesPage() {
       setAssignedChatsState(assigned);
     } catch (error) {
       ifNotAbortError(error, () => {
-        setError('Failed to load chats. Is the backend running?');
+        const message = error instanceof Error ? error.message : '';
+        setError(message || 'Failed to load chats. Is the backend running?');
       });
     } finally {
       setLoading(false);
