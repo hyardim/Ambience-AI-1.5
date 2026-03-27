@@ -119,6 +119,7 @@ def clear_forgot_password_rate_limit_state():
 def default_email_verification_flags(monkeypatch):
     monkeypatch.setattr(settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
     monkeypatch.setattr(settings, "ALLOW_LEGACY_UNVERIFIED_LOGIN", False)
+    monkeypatch.setattr(settings, "COOKIE_SECURE", False)
 
 
 @pytest.fixture()
