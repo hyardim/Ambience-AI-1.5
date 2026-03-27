@@ -115,7 +115,7 @@ export function GPQueriesPage() {
     e.stopPropagation();
     if (
       !confirm(
-        'Archive this consultation? It will be hidden from your list but the record will be preserved.',
+        'Permanently remove this consultation from your list?\n\nThis cannot be undone — you will no longer be able to access it. The record is retained internally for audit purposes only.',
       )
     )
       return;
