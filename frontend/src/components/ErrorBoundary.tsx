@@ -62,9 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-[300px] flex items-center justify-center p-8">
           <div className="max-w-md w-full bg-white border border-red-200 rounded-lg shadow-sm p-6 text-center">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">
-              Something went wrong
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h2>
             <p className="text-sm text-gray-600 mb-4">
               An unexpected error occurred. Please try refreshing the page.
             </p>

@@ -50,7 +50,7 @@ export function AdminUsersPage() {
     if (!confirm('Deactivate this user? They will no longer be able to log in.')) return;
     try {
       const updated = await adminDeactivateUser(userId);
-      setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to deactivate user'));
     }
@@ -70,7 +70,7 @@ export function AdminUsersPage() {
     setSaving(true);
     try {
       const updated = await adminUpdateUser(userId, editForm);
-      setUsers(prev => prev.map(u => (u.id === userId ? updated : u)));
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
       setEditUser(null);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to update user'));
@@ -79,9 +79,10 @@ export function AdminUsersPage() {
     }
   };
 
-  const filteredUsers = users.filter(u =>
-    `${u.role}_${u.id}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (u.specialty || '').toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredUsers = users.filter(
+    (u) =>
+      `${u.role}_${u.id}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.specialty || '').toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -103,13 +104,13 @@ export function AdminUsersPage() {
                 type="text"
                 placeholder="Search by identifier or specialty..."
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
               />
             </div>
             <select
               value={roleFilter}
-              onChange={e => setRoleFilter(e.target.value)}
+              onChange={(e) => setRoleFilter(e.target.value)}
               className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white cursor-pointer"
             >
               <option value="">All Roles</option>
@@ -124,7 +125,9 @@ export function AdminUsersPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={fetchUsers} className="ml-3 underline font-medium">Retry</button>
+            <button onClick={fetchUsers} className="ml-3 underline font-medium">
+              Retry
+            </button>
           </div>
         )}
 
@@ -143,15 +146,23 @@ export function AdminUsersPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Identifier</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Identifier
+                  </th>
                   <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Role</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Specialty</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
-                  <th className="text-right px-6 py-3 text-sm font-semibold text-gray-600">Actions</th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Specialty
+                  </th>
+                  <th className="text-left px-6 py-3 text-sm font-semibold text-gray-600">
+                    Status
+                  </th>
+                  <th className="text-right px-6 py-3 text-sm font-semibold text-gray-600">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map(user => (
+                {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {`${user.role}_${user.id}`}
@@ -211,7 +222,10 @@ export function AdminUsersPage() {
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">Edit User</h2>
-              <button onClick={() => setEditUser(null)} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => setEditUser(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -222,7 +236,7 @@ export function AdminUsersPage() {
                 <input
                   type="text"
                   value={editForm.full_name || ''}
-                  onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                 />
               </div>
@@ -230,7 +244,7 @@ export function AdminUsersPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
                   value={coalesce(editForm.role, '')}
-                  onChange={e => setEditForm({ ...editForm, role: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white"
                 >
                   <option value="gp">GP</option>
@@ -243,7 +257,7 @@ export function AdminUsersPage() {
                 <input
                   type="text"
                   value={editForm.specialty || ''}
-                  onChange={e => setEditForm({ ...editForm, specialty: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, specialty: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="e.g. neurology, rheumatology"
                 />
@@ -253,10 +267,12 @@ export function AdminUsersPage() {
                   type="checkbox"
                   id="is_active"
                   checked={coalesce(editForm.is_active, true)}
-                  onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })}
+                  onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
                   className="w-4 h-4 text-[var(--nhs-blue)] rounded border-gray-300"
                 />
-                <label htmlFor="is_active" className="text-sm text-gray-700">Active</label>
+                <label htmlFor="is_active" className="text-sm text-gray-700">
+                  Active
+                </label>
               </div>
             </div>
 

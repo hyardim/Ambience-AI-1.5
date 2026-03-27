@@ -39,7 +39,9 @@ describe('ResetPasswordPage', () => {
     await user.type(screen.getByLabelText(/^Confirm new password$/i), 'password1!');
     fireEvent.submit(form);
 
-    expect(screen.getByText(/include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/include uppercase, lowercase, a number, and a special character/i),
+    ).toBeInTheDocument();
   });
 
   it('toggles password visibility and completes reset flow', async () => {
@@ -78,7 +80,8 @@ describe('ResetPasswordPage', () => {
   it('shows API errors', async () => {
     server.use(
       http.post('/auth/reset-password/confirm', () =>
-        HttpResponse.json({ detail: 'Reset failed' }, { status: 400 })),
+        HttpResponse.json({ detail: 'Reset failed' }, { status: 400 }),
+      ),
     );
 
     renderReset();

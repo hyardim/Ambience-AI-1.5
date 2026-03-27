@@ -13,14 +13,16 @@ describe('AccessDeniedPage', () => {
         <Route path="/access-denied" element={<AccessDeniedPage />} />
       </Routes>,
       {
-        routes: [{
-          pathname: '/access-denied',
-          state: {
-            from: '/admin/users',
-            currentRole: 'specialist',
-            requiredRoles: ['admin'],
+        routes: [
+          {
+            pathname: '/access-denied',
+            state: {
+              from: '/admin/users',
+              currentRole: 'specialist',
+              requiredRoles: ['admin'],
+            },
           },
-        }],
+        ],
       },
     );
 

@@ -83,7 +83,10 @@ export function ForgotPasswordPage() {
                       id="email"
                       type="email"
                       value={email}
-                      onChange={(e) => { setEmail(e.target.value); setFieldError(''); }}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setFieldError('');
+                      }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#005eb8] focus:border-transparent"
                       placeholder="you@example.com"
                       autoComplete="email"

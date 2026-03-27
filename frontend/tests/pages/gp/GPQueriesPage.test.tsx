@@ -124,7 +124,9 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('No consultations found')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('No submitted consultations. Create one to get started.')).toBeInTheDocument();
+    expect(
+      screen.getByText('No submitted consultations. Create one to get started.'),
+    ).toBeInTheDocument();
   });
 
   it('renders consultations without a specialty badge when specialty is null', async () => {
@@ -191,7 +193,21 @@ describe('GPQueriesPage', () => {
         if (callCount === 1) {
           return HttpResponse.json({ detail: 'Error' }, { status: 500 });
         }
-        return HttpResponse.json([{ id: 1, title: 'Recovered chat', status: 'open', specialty: null, severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T10:00:00Z', user_id: 1 }]);
+        return HttpResponse.json([
+          {
+            id: 1,
+            title: 'Recovered chat',
+            status: 'open',
+            specialty: null,
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+        ]);
       }),
     );
 
@@ -211,9 +227,7 @@ describe('GPQueriesPage', () => {
 
   it('archives a chat when archive button is clicked', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    server.use(
-      http.delete('/chats/:chatId', () => HttpResponse.json({ status: 'ok' })),
-    );
+    server.use(http.delete('/chats/:chatId', () => HttpResponse.json({ status: 'ok' })));
     renderGPQueries();
     const user = userEvent.setup();
 
@@ -221,7 +235,9 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText('Headache consultation')).toBeInTheDocument();
     });
 
-    const headacheCard = screen.getByText('Headache consultation').closest('div[class*="bg-white"]')!;
+    const headacheCard = screen
+      .getByText('Headache consultation')
+      .closest('div[class*="bg-white"]')!;
     await user.click(within(headacheCard).getByTitle('Archive consultation'));
 
     await waitFor(() => {
@@ -368,8 +384,32 @@ describe('GPQueriesPage', () => {
     server.use(
       http.get('/chats/', () =>
         HttpResponse.json([
-          { id: 1, title: 'Zulu case', status: 'submitted', specialty: 'rheumatology', severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T10:00:00Z', user_id: 1 },
-          { id: 2, title: 'Alpha case', status: 'open', specialty: 'neurology', severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T09:00:00Z', user_id: 1 },
+          {
+            id: 1,
+            title: 'Zulu case',
+            status: 'submitted',
+            specialty: 'rheumatology',
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+          {
+            id: 2,
+            title: 'Alpha case',
+            status: 'open',
+            specialty: 'neurology',
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T09:00:00Z',
+            user_id: 1,
+          },
         ]),
       ),
     );
@@ -439,8 +479,21 @@ describe('GPQueriesPage', () => {
     server.use(
       http.get('/chats/', () =>
         HttpResponse.json([
-          { id: 3, title: '', status: 'open', specialty: null, severity: null, specialist_id: null, assigned_at: null, reviewed_at: null, review_feedback: null, created_at: '2025-01-15T10:00:00Z', user_id: 1 },
-        ])),
+          {
+            id: 3,
+            title: '',
+            status: 'open',
+            specialty: null,
+            severity: null,
+            specialist_id: null,
+            assigned_at: null,
+            reviewed_at: null,
+            review_feedback: null,
+            created_at: '2025-01-15T10:00:00Z',
+            user_id: 1,
+          },
+        ]),
+      ),
     );
 
     renderGPQueries();
@@ -475,7 +528,9 @@ describe('GPQueriesPage', () => {
     renderGPQueries();
 
     await waitFor(() => {
-      expect(screen.getByText(/no submitted consultations\. create one to get started\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/no submitted consultations\. create one to get started\./i),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getAllByRole('button', { name: /new consultation/i }).at(-1)!);
@@ -508,5 +563,4 @@ describe('GPQueriesPage', () => {
       expect(screen.getByText(/start date must be before end date/i)).toBeInTheDocument();
     });
   });
-
 });

@@ -59,9 +59,17 @@ export function LoginPage() {
     } catch (err) {
       const message = getErrorMessage(err, 'Incorrect username or password');
       // Map well-known status codes to user-friendly messages
-      if (message.includes('401') || message.toLowerCase().includes('incorrect') || message.toLowerCase().includes('invalid')) {
+      if (
+        message.includes('401') ||
+        message.toLowerCase().includes('incorrect') ||
+        message.toLowerCase().includes('invalid')
+      ) {
         setError('Invalid email or password');
-      } else if (message.includes('403') || message.toLowerCase().includes('deactivated') || message.toLowerCase().includes('disabled')) {
+      } else if (
+        message.includes('403') ||
+        message.toLowerCase().includes('deactivated') ||
+        message.toLowerCase().includes('disabled')
+      ) {
         setError('Account deactivated');
       } else if (message.includes('429') || message.toLowerCase().includes('too many')) {
         setError('Too many attempts, please wait');
@@ -95,8 +103,9 @@ export function LoginPage() {
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials</p>
               <p className="text-sm text-blue-700">
-                Username: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.email}</code> &nbsp;
-                Password: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.password}</code>
+                Username: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.email}</code>{' '}
+                &nbsp; Password:{' '}
+                <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.password}</code>
               </p>
               <button
                 type="button"
@@ -108,7 +117,11 @@ export function LoginPage() {
             </div>
 
             {error && (
-              <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div
+                role="alert"
+                aria-live="polite"
+                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+              >
                 {error}
                 {unverifiedEmail && (
                   <div className="mt-2">
@@ -132,12 +145,17 @@ export function LoginPage() {
                   type="text"
                   id="email"
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); setFieldErrors(prev => ({ ...prev, email: undefined })); }}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent"
                   placeholder="Enter your username or email"
                   required
                 />
-                {fieldErrors.email && <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>}
+                {fieldErrors.email && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.email}</p>
+                )}
               </div>
 
               <div>
@@ -149,7 +167,10 @@ export function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     id="password"
                     value={password}
-                    onChange={(e) => { setPassword(e.target.value); setFieldErrors(prev => ({ ...prev, password: undefined })); }}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                    }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent pr-12"
                     placeholder="Enter your password"
                     required
@@ -162,7 +183,9 @@ export function LoginPage() {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-                {fieldErrors.password && <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>}
+                {fieldErrors.password && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.password}</p>
+                )}
               </div>
 
               <div className="text-right">
@@ -185,7 +208,10 @@ export function LoginPage() {
 
             <p className="mt-8 text-center text-gray-600">
               Don't have an account?{' '}
-              <Link to="/register" className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium">
+              <Link
+                to="/register"
+                className="text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium"
+              >
                 Register here
               </Link>
             </p>

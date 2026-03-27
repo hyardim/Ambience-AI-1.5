@@ -53,7 +53,8 @@ describe('VerifyEmailPage', () => {
   it('shows error on verification failure', async () => {
     server.use(
       http.post('/auth/verify-email/confirm', () =>
-        HttpResponse.json({ detail: 'Token expired' }, { status: 400 })),
+        HttpResponse.json({ detail: 'Token expired' }, { status: 400 }),
+      ),
     );
 
     renderVerifyEmail('/verify-email?token=expired-token');
@@ -68,7 +69,8 @@ describe('VerifyEmailPage', () => {
   it('shows fallback error when error has no message', async () => {
     server.use(
       http.post('/auth/verify-email/confirm', () =>
-        HttpResponse.json({ detail: 'Verification failed' }, { status: 400 })),
+        HttpResponse.json({ detail: 'Verification failed' }, { status: 400 }),
+      ),
     );
 
     renderVerifyEmail('/verify-email?token=bad-token');
@@ -79,10 +81,7 @@ describe('VerifyEmailPage', () => {
   });
 
   it('uses fallback message when response has no message field', async () => {
-    server.use(
-      http.post('/auth/verify-email/confirm', () =>
-        HttpResponse.json({})),
-    );
+    server.use(http.post('/auth/verify-email/confirm', () => HttpResponse.json({})));
 
     renderVerifyEmail('/verify-email?token=no-msg-token');
 
@@ -94,7 +93,10 @@ describe('VerifyEmailPage', () => {
   it('does not update state when component unmounts before API resolves', async () => {
     let resolveApi!: (value: { message: string }) => void;
     vi.spyOn(api, 'confirmEmailVerification').mockImplementationOnce(
-      () => new Promise((resolve) => { resolveApi = resolve; }),
+      () =>
+        new Promise((resolve) => {
+          resolveApi = resolve;
+        }),
     );
 
     const { unmount } = renderVerifyEmail('/verify-email?token=unmount-token');
@@ -132,7 +134,10 @@ describe('VerifyEmailPage', () => {
   it('does not set error state when a rejection resolves after unmount', async () => {
     let rejectApi!: (error: unknown) => void;
     vi.spyOn(api, 'confirmEmailVerification').mockImplementationOnce(
-      () => new Promise((_, reject) => { rejectApi = reject; }),
+      () =>
+        new Promise((_, reject) => {
+          rejectApi = reject;
+        }),
     );
 
     const { unmount } = renderVerifyEmail('/verify-email?token=reject-after-unmount');

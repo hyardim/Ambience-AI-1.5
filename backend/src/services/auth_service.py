@@ -491,7 +491,8 @@ def reset_password_confirm(db: Session, payload: PasswordResetConfirmRequest) ->
     _validate_password(payload.new_password)
     if security.verify_password(payload.new_password, user.hashed_password):
         raise HTTPException(
-            status_code=400, detail="New password must be different from current password"
+            status_code=400,
+            detail="New password must be different from current password",
         )
     user_repository.update(
         db,

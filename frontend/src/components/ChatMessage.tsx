@@ -1,4 +1,15 @@
-import { FileText, Bot, User, CheckCircle, Clock, Edit2, RotateCcw, MessageSquare, PenLine, Loader2 } from 'lucide-react';
+import {
+  FileText,
+  Bot,
+  User,
+  CheckCircle,
+  Clock,
+  Edit2,
+  RotateCcw,
+  MessageSquare,
+  PenLine,
+  Loader2,
+} from 'lucide-react';
 import type { Message, Citation } from '../types';
 
 interface ChatMessageProps {
@@ -163,7 +174,8 @@ export function ChatMessage({
   // Determine the border colour for AI messages based on review status
   const getAIBorderClass = () => {
     if (reviewStatus === 'approved') return 'border-l-4 border-[#007f3b]';
-    if (reviewStatus === 'rejected' || reviewStatus === 'replaced') return 'border-l-4 border-[#da291c]';
+    if (reviewStatus === 'rejected' || reviewStatus === 'replaced')
+      return 'border-l-4 border-[#da291c]';
     if (showReviewStatus && !reviewStatus) return 'border-l-4 border-amber-400';
     return 'border-l-4 border-[var(--nhs-blue)]';
   };
@@ -220,15 +232,17 @@ export function ChatMessage({
     <div className={`flex gap-3 sm:gap-4 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
       {/* Avatar */}
       <div className="shrink-0">
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
-          message.senderType === 'ai'
-            ? reviewStatus === 'approved'
-              ? 'bg-green-100'
-              : reviewStatus === 'rejected' || reviewStatus === 'replaced'
-                ? 'bg-red-100'
-                : 'bg-blue-100'
-            : 'bg-gray-100'
-        }`}>
+        <div
+          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
+            message.senderType === 'ai'
+              ? reviewStatus === 'approved'
+                ? 'bg-green-100'
+                : reviewStatus === 'rejected' || reviewStatus === 'replaced'
+                  ? 'bg-red-100'
+                  : 'bg-blue-100'
+              : 'bg-gray-100'
+          }`}
+        >
           {getAvatarContent()}
         </div>
       </div>
@@ -236,22 +250,28 @@ export function ChatMessage({
       {/* Message content */}
       <div className={`flex-1 max-w-3xl ${isOwnMessage ? 'flex flex-col items-end' : ''}`}>
         {/* Header */}
-        <div className={`flex items-center gap-2 sm:gap-3 mb-2 flex-wrap ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-          <span className="font-semibold text-gray-900 text-sm sm:text-base">{getSenderLabel()}</span>
+        <div
+          className={`flex items-center gap-2 sm:gap-3 mb-2 flex-wrap ${isOwnMessage ? 'flex-row-reverse' : ''}`}
+        >
+          <span className="font-semibold text-gray-900 text-sm sm:text-base">
+            {getSenderLabel()}
+          </span>
           <span className="text-xs sm:text-sm text-gray-500">{formatTime(message.timestamp)}</span>
           {renderReviewBadge()}
         </div>
 
         {/* Message bubble */}
-        <div className={`rounded-2xl px-4 sm:px-5 py-3 sm:py-4 ${
-          isOwnMessage
-            ? 'bg-[#e8edee] text-gray-900'
-            : isAI
-              ? `bg-white ${getAIBorderClass()} shadow-sm`
-              : 'bg-white shadow-sm'
-        }`}>
+        <div
+          className={`rounded-2xl px-4 sm:px-5 py-3 sm:py-4 ${
+            isOwnMessage
+              ? 'bg-[#e8edee] text-gray-900'
+              : isAI
+                ? `bg-white ${getAIBorderClass()} shadow-sm`
+                : 'bg-white shadow-sm'
+          }`}
+        >
           <div className="whitespace-pre-wrap text-gray-800 leading-relaxed text-sm sm:text-base">
-              {isGenerating && !message.content ? (
+            {isGenerating && !message.content ? (
               <div className="flex items-center gap-1.5 py-1">
                 <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>
                 <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.15s]"></span>
@@ -283,21 +303,29 @@ export function ChatMessage({
           {/* Guideline reference */}
           {message.guidelineReference && (
             <div className="mt-4 bg-blue-50 rounded-lg px-4 py-3 border-l-4 border-[var(--nhs-blue)]">
-              <p className="font-semibold text-[var(--nhs-blue)] text-sm">{message.guidelineReference.title}</p>
-              <p className="text-gray-600 text-sm">Reference No: {message.guidelineReference.referenceNo}</p>
-              <p className="text-gray-500 text-xs italic mt-1">Last Updated: {message.guidelineReference.lastUpdated}</p>
+              <p className="font-semibold text-[var(--nhs-blue)] text-sm">
+                {message.guidelineReference.title}
+              </p>
+              <p className="text-gray-600 text-sm">
+                Reference No: {message.guidelineReference.referenceNo}
+              </p>
+              <p className="text-gray-500 text-xs italic mt-1">
+                Last Updated: {message.guidelineReference.lastUpdated}
+              </p>
             </div>
           )}
 
           {renderCitations()}
 
           {/* Review feedback (shown on rejected/replaced AI messages) */}
-          {isAI && (reviewStatus === 'rejected' || reviewStatus === 'replaced') && message.reviewFeedback && (
-            <div className="mt-4 bg-red-50 rounded-lg px-4 py-3 border border-red-200">
-              <p className="text-xs font-semibold text-red-700 mb-1">Specialist Feedback</p>
-              <p className="text-sm text-red-800">{message.reviewFeedback}</p>
-            </div>
-          )}
+          {isAI &&
+            (reviewStatus === 'rejected' || reviewStatus === 'replaced') &&
+            message.reviewFeedback && (
+              <div className="mt-4 bg-red-50 rounded-lg px-4 py-3 border border-red-200">
+                <p className="text-xs font-semibold text-red-700 mb-1">Specialist Feedback</p>
+                <p className="text-sm text-red-800">{message.reviewFeedback}</p>
+              </div>
+            )}
 
           {/* Inline specialist review actions (secondary / advanced) */}
           {showReviewActions && (

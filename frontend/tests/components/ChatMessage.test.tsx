@@ -42,9 +42,7 @@ describe('ChatMessage', () => {
   it('renders attachments when present', () => {
     const msgWithAttachments: Message = {
       ...baseMessage,
-      attachments: [
-        { id: 'f1', name: 'report.pdf', size: '2MB', type: 'pdf' },
-      ],
+      attachments: [{ id: 'f1', name: 'report.pdf', size: '2MB', type: 'pdf' }],
     };
     render(<ChatMessage message={msgWithAttachments} />);
     expect(screen.getByText('report.pdf')).toBeInTheDocument();
@@ -209,7 +207,7 @@ describe('ChatMessage', () => {
   it('falls back to "Unknown time" when timestamp cannot be parsed', () => {
     const invalidTimestampMessage: Message = {
       ...baseMessage,
-      timestamp: ({ bad: true } as unknown) as Date,
+      timestamp: { bad: true } as unknown as Date,
     };
 
     render(<ChatMessage message={invalidTimestampMessage} />);
@@ -220,7 +218,7 @@ describe('ChatMessage', () => {
   it('accepts ISO timestamp strings and formats them safely', () => {
     const stringTimestampMessage: Message = {
       ...baseMessage,
-      timestamp: ('2024-01-20T09:30:00Z' as unknown) as Date,
+      timestamp: '2024-01-20T09:30:00Z' as unknown as Date,
     };
 
     render(<ChatMessage message={stringTimestampMessage} />);
@@ -231,7 +229,7 @@ describe('ChatMessage', () => {
   it('falls back when a string timestamp cannot be parsed', () => {
     const invalidStringTimestampMessage: Message = {
       ...baseMessage,
-      timestamp: ('not-a-date' as unknown) as Date,
+      timestamp: 'not-a-date' as unknown as Date,
     };
 
     render(<ChatMessage message={invalidStringTimestampMessage} />);
@@ -317,18 +315,12 @@ describe('ChatMessage', () => {
     expect(manualResponse).toHaveBeenCalled();
 
     rerender(
-      <ChatMessage
-        message={{ ...reviewedMessage, reviewStatus: 'approved' }}
-        showReviewStatus
-      />,
+      <ChatMessage message={{ ...reviewedMessage, reviewStatus: 'approved' }} showReviewStatus />,
     );
     expect(screen.getByText(/specialist approved/i)).toBeInTheDocument();
 
     rerender(
-      <ChatMessage
-        message={{ ...reviewedMessage, reviewStatus: 'replaced' }}
-        showReviewStatus
-      />,
+      <ChatMessage message={{ ...reviewedMessage, reviewStatus: 'replaced' }} showReviewStatus />,
     );
     expect(screen.getByText(/replaced by specialist/i)).toBeInTheDocument();
 

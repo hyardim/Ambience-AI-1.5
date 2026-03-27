@@ -9,23 +9,19 @@ const SOURCE_GROUPS = [
   {
     group: 'Rheumatology',
     sources: [
-      { key: 'NICE',             label: 'NICE Guidelines'             },
-      { key: 'BSR',              label: 'BSR Guidelines'              },
-      { key: 'BNF_RHEUMATOLOGY',   label: 'BNF (British National Formulary)' },
-      { key: 'OTHER_RHEUMATOLOGY', label: 'Other (Rheumatology)'              },
+      { key: 'NICE', label: 'NICE Guidelines' },
+      { key: 'BSR', label: 'BSR Guidelines' },
+      { key: 'BNF_RHEUMATOLOGY', label: 'BNF (British National Formulary)' },
+      { key: 'OTHER_RHEUMATOLOGY', label: 'Other (Rheumatology)' },
     ],
   },
   {
     group: 'Neurology',
-    sources: [
-      { key: 'NICE_NEURO', label: 'NICE Guidelines' },
-    ],
+    sources: [{ key: 'NICE_NEURO', label: 'NICE Guidelines' }],
   },
   {
     group: 'Other',
-    sources: [
-      { key: 'OTHER', label: 'Other / Miscellaneous' },
-    ],
+    sources: [{ key: 'OTHER', label: 'Other / Miscellaneous' }],
   },
 ];
 
@@ -78,16 +74,16 @@ export function AdminGuidelinesPage() {
       <div className="max-w-2xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Guidelines</h1>
-          <p className="text-gray-600 mt-1">Upload a PDF guideline to index it into the knowledge base</p>
+          <p className="text-gray-600 mt-1">
+            Upload a PDF guideline to index it into the knowledge base
+          </p>
         </div>
 
         {/* Upload Form */}
         <form onSubmit={handleUpload} className="bg-white rounded-xl shadow-sm p-6 space-y-5">
           {/* Source selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Source
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
             <select
               value={selectedSource}
               onChange={(e) => {
@@ -97,10 +93,12 @@ export function AdminGuidelinesPage() {
               disabled={uploading}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent bg-white text-sm disabled:opacity-50"
             >
-              {SOURCE_GROUPS.map(g => (
+              {SOURCE_GROUPS.map((g) => (
                 <optgroup key={g.group} label={g.group}>
-                  {g.sources.map(s => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
+                  {g.sources.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
                   ))}
                 </optgroup>
               ))}
@@ -109,9 +107,7 @@ export function AdminGuidelinesPage() {
 
           {/* File picker */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              PDF File
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">PDF File</label>
             <input
               ref={fileInputRef}
               type="file"
@@ -122,7 +118,8 @@ export function AdminGuidelinesPage() {
             />
             {file && (
               <p className="mt-1.5 text-xs text-gray-500">
-                Selected: <span className="font-medium">{file.name}</span> ({(file.size / 1024).toFixed(0)} KB)
+                Selected: <span className="font-medium">{file.name}</span> (
+                {(file.size / 1024).toFixed(0)} KB)
               </p>
             )}
           </div>
@@ -149,7 +146,11 @@ export function AdminGuidelinesPage() {
 
         {/* Error */}
         {error && (
-          <div role="alert" aria-live="polite" className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div
+            role="alert"
+            aria-live="polite"
+            className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+          >
             {error}
           </div>
         )}
@@ -180,8 +181,8 @@ export function AdminGuidelinesPage() {
             </dl>
             {(result.files_failed > 0 || result.embeddings_failed > 0 || result.db.failed > 0) && (
               <p className="mt-3 text-xs text-amber-600">
-                Warning: {result.files_failed} file(s) failed, {result.embeddings_failed} embedding(s) failed,{' '}
-                {result.db.failed} DB write(s) failed.
+                Warning: {result.files_failed} file(s) failed, {result.embeddings_failed}{' '}
+                embedding(s) failed, {result.db.failed} DB write(s) failed.
               </p>
             )}
           </div>

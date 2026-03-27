@@ -75,7 +75,9 @@ def _admin(db_session):
 def test_update_user_not_found(db_session):
     admin = _admin(db_session)
     with pytest.raises(HTTPException) as exc:
-        admin_service.update_user(db_session, 999, UserUpdateAdmin(full_name="X"), current_user=admin)
+        admin_service.update_user(
+            db_session, 999, UserUpdateAdmin(full_name="X"), current_user=admin
+        )
     assert exc.value.status_code == 404
 
 

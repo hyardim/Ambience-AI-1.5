@@ -70,7 +70,8 @@ describe('ForgotPasswordPage', () => {
   it('shows error on API failure', async () => {
     server.use(
       http.post('/auth/forgot-password', () =>
-        HttpResponse.json({ detail: 'Rate limit exceeded' }, { status: 429 })),
+        HttpResponse.json({ detail: 'Rate limit exceeded' }, { status: 429 }),
+      ),
     );
 
     renderForgotPassword();
@@ -85,10 +86,7 @@ describe('ForgotPasswordPage', () => {
   });
 
   it('shows fallback error for non-Error exceptions', async () => {
-    server.use(
-      http.post('/auth/forgot-password', () =>
-        new HttpResponse(null, { status: 500 })),
-    );
+    server.use(http.post('/auth/forgot-password', () => new HttpResponse(null, { status: 500 })));
 
     renderForgotPassword();
     const user = userEvent.setup();

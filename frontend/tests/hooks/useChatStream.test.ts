@@ -625,15 +625,22 @@ describe('useChatStream', () => {
       await Promise.resolve();
     });
 
-    expect(seeded.getMessages().find((message) => message.id === '7')?.content).toBe('Existing message');
-    expect(seeded.getMessages().find((message) => message.id === '42')?.content).toBe('Final answer');
+    expect(seeded.getMessages().find((message) => message.id === '7')?.content).toBe(
+      'Existing message',
+    );
+    expect(seeded.getMessages().find((message) => message.id === '42')?.content).toBe(
+      'Final answer',
+    );
   });
 
   it('does not reset to idle after completion when refresh resolves after unmount', async () => {
     let resolveRefresh: (() => void) | null = null;
-    const deferredRefresh = vi.fn(() => new Promise<void>((resolve) => {
-      resolveRefresh = resolve;
-    }));
+    const deferredRefresh = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
 
     const { result, unmount } = renderHook(() =>
       useChatStream(wrapper.setMessages, {

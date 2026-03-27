@@ -3,9 +3,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Routes, Route } from 'react-router-dom';
-import {
-  SpecialistQueryDetailPage,
-} from '@/pages/specialist/SpecialistQueryDetailPage';
+import { SpecialistQueryDetailPage } from '@/pages/specialist/SpecialistQueryDetailPage';
 import {
   canAssignSpecialist,
   canSubmitManualResponse,
@@ -62,23 +60,23 @@ vi.mock('@/hooks/useChatStream', () => ({
 }));
 
 vi.mock('@/components/ChatInput', () => ({
-  ChatInput: ({
-    onSendMessage,
-  }: {
-    onSendMessage: (content: string, files?: File[]) => void;
-  }) => (
+  ChatInput: ({ onSendMessage }: { onSendMessage: (content: string, files?: File[]) => void }) => (
     <div>
       <button onClick={() => onSendMessage('Specialist note')}>Send specialist note</button>
       <button
         onClick={() =>
-          onSendMessage('Specialist small file', [new File(['small'], 'note.txt', { type: 'text/plain' })])
+          onSendMessage('Specialist small file', [
+            new File(['small'], 'note.txt', { type: 'text/plain' }),
+          ])
         }
       >
         Send specialist small file
       </button>
       <button
         onClick={() =>
-          onSendMessage('Specialist file', [new File(['x'.repeat(4 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' })])
+          onSendMessage('Specialist file', [
+            new File(['x'.repeat(4 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
+          ])
         }
       >
         Send specialist oversized
@@ -106,7 +104,9 @@ vi.mock('@/components/ChatMessage', () => ({
     <div>
       <div>{message.content}</div>
       {onApprove ? <button onClick={onApprove}>Approve action</button> : null}
-      {onApproveWithComment ? <button onClick={onApproveWithComment}>Approve with comment action</button> : null}
+      {onApproveWithComment ? (
+        <button onClick={onApproveWithComment}>Approve with comment action</button>
+      ) : null}
       {onRequestChanges ? <button onClick={onRequestChanges}>Request changes action</button> : null}
       {onManualResponse ? <button onClick={onManualResponse}>Manual response action</button> : null}
       {onEditResponse ? <button onClick={onEditResponse}>Edit response action</button> : null}
@@ -144,14 +144,16 @@ describe('SpecialistQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'submitted',
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/assign', ({ params }) =>
         HttpResponse.json({
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'assigned',
           specialist_id: mockSpecialistUser.id,
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -185,7 +187,8 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:00:00Z',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -215,9 +218,10 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/review', async ({ request }) => {
-        const body = await request.json() as { action: string };
+        const body = (await request.json()) as { action: string };
         reviewActions.push(body.action);
         if (body.action === 'request_changes') {
           currentStatus = 'reviewing';
@@ -237,7 +241,10 @@ describe('SpecialistQueryDetailPage', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /request revision/i }));
-    await user.type(screen.getByPlaceholderText(/describe the required changes/i), 'Clarify the monitoring plan');
+    await user.type(
+      screen.getByPlaceholderText(/describe the required changes/i),
+      'Clarify the monitoring plan',
+    );
     await user.click(screen.getByRole('button', { name: /submit feedback/i }));
     await waitFor(() => {
       expect(reviewActions).toContain('request_changes');
@@ -245,16 +252,27 @@ describe('SpecialistQueryDetailPage', () => {
     expect(mockConnectStream).toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /send comment to gp/i }));
-    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Please review the latest bloods');
+    await user.type(
+      screen.getByPlaceholderText(/write your comment for the gp/i),
+      'Please review the latest bloods',
+    );
     await user.click(screen.getByRole('button', { name: /^send comment$/i }));
     await waitFor(() => {
       expect(reviewActions).toContain('send_comment');
     });
 
     await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
-    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use the specialist plan instead');
-    await user.type(screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i), 'NICE NG228');
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.type(
+      screen.getByPlaceholderText(/type your replacement response/i),
+      'Use the specialist plan instead',
+    );
+    await user.type(
+      screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i),
+      'NICE NG228',
+    );
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
     await user.click(screen.getByRole('button', { name: /send manual response/i }));
     await waitFor(() => {
@@ -280,9 +298,10 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/review', async ({ request }) => {
-        const body = await request.json() as { action: string };
+        const body = (await request.json()) as { action: string };
         reviewActions.push(body.action);
         return HttpResponse.json({ ...mockChatWithMessages, status: 'submitted' });
       }),
@@ -322,9 +341,10 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/review', async ({ request }) => {
-        const body = await request.json() as { action: string };
+        const body = (await request.json()) as { action: string };
         reviewActions.push(body.action);
         const detail =
           body.action === 'request_changes'
@@ -333,7 +353,7 @@ describe('SpecialistQueryDetailPage', () => {
               ? 'Comment failed'
               : body.action === 'manual_response'
                 ? 'Manual response failed'
-              : 'Unassign failed';
+                : 'Unassign failed';
         return HttpResponse.json({ detail }, { status: 500 });
       }),
       http.post('/chats/:chatId/files', () => HttpResponse.json({ id: 'file-1' })),
@@ -352,7 +372,10 @@ describe('SpecialistQueryDetailPage', () => {
     expect(screen.queryByDisplayValue('Needs changes')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /send comment to gp/i }));
-    await user.type(screen.getByPlaceholderText(/write your comment for the gp/i), 'Temporary comment');
+    await user.type(
+      screen.getByPlaceholderText(/write your comment for the gp/i),
+      'Temporary comment',
+    );
     await user.click(screen.getByRole('button', { name: /^cancel$/i }));
     expect(screen.queryByDisplayValue('Temporary comment')).not.toBeInTheDocument();
 
@@ -367,7 +390,10 @@ describe('SpecialistQueryDetailPage', () => {
     expect(screen.queryByRole('button', { name: /confirm unassign/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /request revision/i }));
-    await user.type(screen.getByPlaceholderText(/describe the required changes/i), 'Retry revision');
+    await user.type(
+      screen.getByPlaceholderText(/describe the required changes/i),
+      'Retry revision',
+    );
     await user.click(screen.getByRole('button', { name: /submit feedback/i }));
     await waitFor(() => {
       expect(screen.getByText(/revision failed/i)).toBeInTheDocument();
@@ -382,7 +408,9 @@ describe('SpecialistQueryDetailPage', () => {
 
     await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
     await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Retry manual');
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
     await user.click(screen.getByRole('button', { name: /send manual response/i }));
     await waitFor(() => {
@@ -413,12 +441,17 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/message', () =>
-        HttpResponse.json({ status: 'ok', message_id: 99 })),
+        HttpResponse.json({ status: 'ok', message_id: 99 }),
+      ),
       http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
-        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' })),
-      http.post('/chats/:chatId/files', () => HttpResponse.json({ id: 'file-1', name: 'source.txt', size: '1KB', type: 'txt' })),
+        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' }),
+      ),
+      http.post('/chats/:chatId/files', () =>
+        HttpResponse.json({ id: 'file-1', name: 'source.txt', size: '1KB', type: 'txt' }),
+      ),
     );
 
     renderPage();
@@ -436,14 +469,25 @@ describe('SpecialistQueryDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /send & approve/i }));
 
     await user.click(screen.getByRole('button', { name: /request changes action/i }));
-    await user.type(screen.getByPlaceholderText(/describe the required changes/i), 'Clarify dosing');
+    await user.type(
+      screen.getByPlaceholderText(/describe the required changes/i),
+      'Clarify dosing',
+    );
     await user.click(screen.getByRole('button', { name: /submit feedback/i }));
     expect(mockConnectStream).toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /manual response action/i }));
-    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
-    await user.type(screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i), 'NICE CG1');
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.type(
+      screen.getByPlaceholderText(/type your replacement response/i),
+      'Use this instead',
+    );
+    await user.type(
+      screen.getByPlaceholderText(/e\.g\. nice ng228, bsr guideline 2023/i),
+      'NICE CG1',
+    );
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
     expect(screen.getByText('source.txt')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /send manual response/i }));
@@ -465,11 +509,14 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/files', () =>
-        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 }),
+      ),
       http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
-        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' })),
+        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' }),
+      ),
     );
 
     renderPage();
@@ -480,13 +527,20 @@ describe('SpecialistQueryDetailPage', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /manual response action/i }));
-    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.type(
+      screen.getByPlaceholderText(/type your replacement response/i),
+      'Use this instead',
+    );
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
     await user.click(screen.getByRole('button', { name: /send manual response/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/manual response sent, but some files failed to upload/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/manual response sent, but some files failed to upload/i),
+      ).toBeInTheDocument();
     });
   }, 15000);
 
@@ -507,11 +561,14 @@ describe('SpecialistQueryDetailPage', () => {
               review_status: 'approved',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/review', () =>
-        HttpResponse.json({ ...mockChatWithMessages, status: 'approved' })),
+        HttpResponse.json({ ...mockChatWithMessages, status: 'approved' }),
+      ),
       http.post('/specialist/chats/:chatId/message', () =>
-        HttpResponse.json({ detail: 'Send failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Send failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -534,7 +591,11 @@ describe('SpecialistQueryDetailPage', () => {
       expect(screen.getByText(/maximum size is 3 mb/i)).toBeInTheDocument();
     });
 
-    server.use(http.get('/specialist/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })));
+    server.use(
+      http.get('/specialist/chats/:chatId', () =>
+        HttpResponse.json({ detail: 'Missing' }, { status: 404 }),
+      ),
+    );
     renderPage('/specialist/query/999');
     await waitFor(() => {
       expect(screen.getByText(/query not found/i)).toBeInTheDocument();
@@ -560,7 +621,8 @@ describe('SpecialistQueryDetailPage', () => {
               review_status: 'rejected',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -605,7 +667,8 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -616,8 +679,13 @@ describe('SpecialistQueryDetailPage', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /manual response action/i }));
-    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
-    const fileInput = screen.getByText(/attach files/i).parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.type(
+      screen.getByPlaceholderText(/type your replacement response/i),
+      'Use this instead',
+    );
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(
       fileInput,
       new File(['x'.repeat(4 * 1024 * 1024)], 'too-large.pdf', { type: 'application/pdf' }),
@@ -644,7 +712,8 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -666,34 +735,42 @@ describe('SpecialistQueryDetailPage', () => {
   });
 
   it('only auto-connects for eligible specialist stream states', () => {
-    expect(shouldAutoConnectSpecialistStream({
-      hasChat: true,
-      streamConnected: false,
-      streamPhase: 'idle',
-      hasPendingAIResponse: true,
-      hasRevisionInProgress: false,
-    })).toBe(true);
-    expect(shouldAutoConnectSpecialistStream({
-      hasChat: true,
-      streamConnected: false,
-      streamPhase: 'fallback_polling',
-      hasPendingAIResponse: false,
-      hasRevisionInProgress: true,
-    })).toBe(true);
-    expect(shouldAutoConnectSpecialistStream({
-      hasChat: true,
-      streamConnected: false,
-      streamPhase: 'streaming',
-      hasPendingAIResponse: true,
-      hasRevisionInProgress: false,
-    })).toBe(false);
-    expect(shouldAutoConnectSpecialistStream({
-      hasChat: false,
-      streamConnected: false,
-      streamPhase: 'idle',
-      hasPendingAIResponse: true,
-      hasRevisionInProgress: false,
-    })).toBe(false);
+    expect(
+      shouldAutoConnectSpecialistStream({
+        hasChat: true,
+        streamConnected: false,
+        streamPhase: 'idle',
+        hasPendingAIResponse: true,
+        hasRevisionInProgress: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoConnectSpecialistStream({
+        hasChat: true,
+        streamConnected: false,
+        streamPhase: 'fallback_polling',
+        hasPendingAIResponse: false,
+        hasRevisionInProgress: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoConnectSpecialistStream({
+        hasChat: true,
+        streamConnected: false,
+        streamPhase: 'streaming',
+        hasPendingAIResponse: true,
+        hasRevisionInProgress: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoConnectSpecialistStream({
+        hasChat: false,
+        streamConnected: false,
+        streamPhase: 'idle',
+        hasPendingAIResponse: true,
+        hasRevisionInProgress: false,
+      }),
+    ).toBe(false);
   });
 
   it('refreshes through the stream hook callback and uploads a small specialist file successfully', async () => {
@@ -712,10 +789,12 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/files', () => HttpResponse.json({ id: 'small-file' })),
       http.post('/specialist/chats/:chatId/message', () =>
-        HttpResponse.json({ status: 'ok', message_id: 199 })),
+        HttpResponse.json({ status: 'ok', message_id: 199 }),
+      ),
     );
 
     renderPage();
@@ -747,11 +826,14 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/files', () =>
-        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 }),
+      ),
       http.post('/specialist/chats/:chatId/message', () =>
-        HttpResponse.json({ status: 'ok', message_id: 199 })),
+        HttpResponse.json({ status: 'ok', message_id: 199 }),
+      ),
     );
 
     renderPage();
@@ -764,7 +846,9 @@ describe('SpecialistQueryDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /send specialist small file/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/message sent, but some files failed to upload/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/message sent, but some files failed to upload/i),
+      ).toBeInTheDocument();
     });
   }, 30000);
 
@@ -786,7 +870,8 @@ describe('SpecialistQueryDetailPage', () => {
               review_status: 'approved',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -801,7 +886,9 @@ describe('SpecialistQueryDetailPage', () => {
     expect(screen.getByRole('button', { name: /approve and send/i })).toBeInTheDocument();
 
     server.use(
-      http.get('/specialist/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })),
+      http.get('/specialist/chats/:chatId', () =>
+        HttpResponse.json({ detail: 'Missing' }, { status: 404 }),
+      ),
     );
     renderPage('/specialist/query/999');
 
@@ -831,7 +918,8 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/messages/:messageId/review', ({ request }) =>
         request.json().then((body) => {
           const action = (body as { action?: string }).action;
@@ -842,9 +930,11 @@ describe('SpecialistQueryDetailPage', () => {
                 ? 'Request failed'
                 : 'Manual failed';
           return HttpResponse.json({ detail }, { status: 500 });
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/message', () =>
-        HttpResponse.json({ detail: 'Comment failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Comment failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -893,9 +983,11 @@ describe('SpecialistQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'submitted',
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/assign', () =>
-        HttpResponse.json({ detail: 'Assign failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Assign failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -928,9 +1020,11 @@ describe('SpecialistQueryDetailPage', () => {
               review_status: 'approved',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/review', () =>
-        HttpResponse.json({ detail: 'Close failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Close failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -956,7 +1050,8 @@ describe('SpecialistQueryDetailPage', () => {
           id: Number(params.chatId),
           status: 'reviewing',
           messages: [],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -990,9 +1085,11 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
-        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' })),
+        HttpResponse.json({ ...mockChatWithMessages, status: 'reviewing' }),
+      ),
     );
 
     renderPage();
@@ -1015,7 +1112,10 @@ describe('SpecialistQueryDetailPage', () => {
     await user.type(contentTextarea, 'Edited answer');
 
     await user.type(screen.getByPlaceholderText(/optional. add one source per line/i), 'NICE CG1');
-    await user.type(screen.getByPlaceholderText(/optional. explain what you changed/i), 'Fixed phrasing');
+    await user.type(
+      screen.getByPlaceholderText(/optional. explain what you changed/i),
+      'Fixed phrasing',
+    );
     await user.click(screen.getByRole('button', { name: /save edited response/i }));
   }, 15000);
 
@@ -1035,9 +1135,11 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/specialist/chats/:chatId/messages/:messageId/review', () =>
-        HttpResponse.json({ detail: 'Edit failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Edit failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -1074,7 +1176,8 @@ describe('SpecialistQueryDetailPage', () => {
               created_at: '2025-01-15T10:01:05Z',
             },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -1101,7 +1204,8 @@ describe('SpecialistQueryDetailPage', () => {
           id: Number(params.chatId),
           status: 'reviewing',
           messages: [],
-        })),
+        }),
+      ),
     );
 
     renderPage();

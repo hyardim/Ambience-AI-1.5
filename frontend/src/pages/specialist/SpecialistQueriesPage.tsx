@@ -62,7 +62,9 @@ export function SpecialistQueriesPage() {
 
   const currentList = tab === 'queue' ? queueChats : assignedChats;
 
-  const filteredChats = [...filterSpecialistChats(currentList, searchTerm, statusFilter, severityFilter)].sort((a, b) => {
+  const filteredChats = [
+    ...filterSpecialistChats(currentList, searchTerm, statusFilter, severityFilter),
+  ].sort((a, b) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
     if (sortKey === 'created_at' || sortKey === 'assigned_at') {
       const aTime = a[sortKey] ? new Date(a[sortKey] as string).getTime() : 0;
@@ -74,14 +76,20 @@ export function SpecialistQueriesPage() {
     return aValue.localeCompare(bValue) * direction;
   });
 
-  const pendingCount = queueChats.length + assignedChats.filter(c => ['assigned', 'reviewing'].includes(c.status)).length;
+  const pendingCount =
+    queueChats.length +
+    assignedChats.filter((c) => ['assigned', 'reviewing'].includes(c.status)).length;
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-      <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
+      <Header
+        userRole="specialist"
+        userName={orFallback(username, 'Specialist User')}
+        onLogout={logout}
+      />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
@@ -201,7 +209,9 @@ export function SpecialistQueriesPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={fetchAll} className="ml-3 underline font-medium">Retry</button>
+            <button onClick={fetchAll} className="ml-3 underline font-medium">
+              Retry
+            </button>
           </div>
         )}
 
@@ -216,7 +226,7 @@ export function SpecialistQueriesPage() {
         {!loading && (
           <div className="space-y-4">
             {filteredChats.length > 0 ? (
-              filteredChats.map(chat => (
+              filteredChats.map((chat) => (
                 <div
                   key={chat.id}
                   onClick={() => navigate(`/specialist/query/${chat.id}`)}
@@ -226,7 +236,7 @@ export function SpecialistQueriesPage() {
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">
                       {chat.title || 'Untitled Consultation'}
                     </h3>
-                        {chat.specialty && (
+                    {chat.specialty && (
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium shrink-0">
                         {formatSpecialtyLabel(chat.specialty)}
                       </span>

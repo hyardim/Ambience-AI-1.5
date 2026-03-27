@@ -7,7 +7,7 @@
 export interface BackendMessage {
   id: number;
   content: string;
-  sender: string;          // "user" | "ai" | "specialist"
+  sender: string; // "user" | "ai" | "specialist"
   created_at: string;
   citations?: unknown[] | null;
   citations_used?: unknown[] | null;
@@ -25,7 +25,7 @@ export interface BackendMessage {
 export interface BackendChat {
   id: number;
   title: string;
-  status: string;            // ChatStatus enum on backend
+  status: string; // ChatStatus enum on backend
   specialty: string | null;
   severity: string | null;
   patient_age?: number | null;
@@ -137,7 +137,14 @@ export interface AssignRequest {
 }
 
 export interface ReviewRequest {
-  action: 'approve' | 'reject' | 'request_changes' | 'manual_response' | 'edit_response' | 'send_comment' | 'unassign';
+  action:
+    | 'approve'
+    | 'reject'
+    | 'request_changes'
+    | 'manual_response'
+    | 'edit_response'
+    | 'send_comment'
+    | 'unassign';
   feedback?: string | null;
   replacement_content?: string | null;
   replacement_sources?: string[] | null;
@@ -169,7 +176,7 @@ export interface RagStatusResponse {
 
 export interface NotificationResponse {
   id: number;
-  type: string;       // "chat_assigned" | "specialist_msg" | "chat_approved" | "chat_rejected"
+  type: string; // "chat_assigned" | "specialist_msg" | "chat_approved" | "chat_rejected"
   title: string;
   body: string | null;
   chat_id: number | null;
@@ -209,7 +216,7 @@ export interface AuditLogResponse {
   user_id: number | null;
   user_identifier: string | null;
   action: string;
-  category: string;   // "AUTH" | "CHAT" | "SPECIALIST" | "RAG" | "OTHER"
+  category: string; // "AUTH" | "CHAT" | "SPECIALIST" | "RAG" | "OTHER"
   details: string | null;
   timestamp: string;
 }

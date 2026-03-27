@@ -198,7 +198,9 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
 
     server.use(
-      http.post('/auth/login', () => HttpResponse.json({ detail: 'Incorrect email or password' }, { status: 400 })),
+      http.post('/auth/login', () =>
+        HttpResponse.json({ detail: 'Incorrect email or password' }, { status: 400 }),
+      ),
     );
     renderLogin();
 
@@ -211,7 +213,9 @@ describe('LoginPage', () => {
     });
 
     server.use(
-      http.post('/auth/login', () => HttpResponse.json({ detail: 'Account deactivated' }, { status: 403 })),
+      http.post('/auth/login', () =>
+        HttpResponse.json({ detail: 'Account deactivated' }, { status: 403 }),
+      ),
     );
     await user.click(screen.getByRole('button', { name: /login/i }));
 
@@ -220,7 +224,9 @@ describe('LoginPage', () => {
     });
 
     server.use(
-      http.post('/auth/login', () => HttpResponse.json({ detail: 'Too many attempts' }, { status: 429 })),
+      http.post('/auth/login', () =>
+        HttpResponse.json({ detail: 'Too many attempts' }, { status: 429 }),
+      ),
     );
     await user.click(screen.getByRole('button', { name: /login/i }));
 
@@ -273,14 +279,20 @@ describe('LoginPage', () => {
       expect(screen.getByText(/forgot your password/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/forgot your password/i).closest('a')).toHaveAttribute('href', '/forgot-password');
+    expect(screen.getByText(/forgot your password/i).closest('a')).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
   });
 
   it('shows resend verification guidance when login is blocked for unverified email', async () => {
     server.use(
       http.post('/auth/login', () => {
         return HttpResponse.json(
-          { detail: 'Please verify your email before logging in. You can request a new verification email.' },
+          {
+            detail:
+              'Please verify your email before logging in. You can request a new verification email.',
+          },
           { status: 403 },
         );
       }),

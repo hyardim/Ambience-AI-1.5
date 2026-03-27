@@ -1,7 +1,4 @@
-export function runUnlessSilent(
-  silent: boolean | undefined,
-  callback: () => void,
-): void {
+export function runUnlessSilent(silent: boolean | undefined, callback: () => void): void {
   if (!silent) {
     callback();
   }

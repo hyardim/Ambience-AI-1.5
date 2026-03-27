@@ -100,7 +100,9 @@ export function ProfilePage() {
         /\d/.test(newPassword) &&
         /[!@#$%^&*()_+\-=[\]{}|;:'",.<>?/`~\\]/.test(newPassword);
       if (!strongEnough) {
-        setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+        setError(
+          'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.',
+        );
         return;
       }
     }
@@ -144,7 +146,11 @@ export function ProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-        <Header userRole={orFallback(role, 'gp')} userName={orFallback(username, 'User')} onLogout={logout} />
+        <Header
+          userRole={orFallback(role, 'gp')}
+          userName={orFallback(username, 'User')}
+          onLogout={logout}
+        />
         <main className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
         </main>
@@ -154,7 +160,11 @@ export function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-      <Header userRole={orFallback(role, 'gp')} userName={orFallback(username, 'User')} onLogout={logout} />
+      <Header
+        userRole={orFallback(role, 'gp')}
+        userName={orFallback(username, 'User')}
+        onLogout={logout}
+      />
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Back */}
@@ -304,12 +314,20 @@ export function ProfilePage() {
 
             {/* Feedback */}
             {error && (
-              <div role="alert" aria-live="polite" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div
+                role="alert"
+                aria-live="polite"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+              >
                 {error}
               </div>
             )}
             {successMsg && (
-              <div role="status" aria-live="polite" className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+              <div
+                role="status"
+                aria-live="polite"
+                className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2"
+              >
                 <CheckCircle className="w-4 h-4" />
                 {successMsg}
               </div>
@@ -321,11 +339,7 @@ export function ProfilePage() {
               disabled={saving}
               className="inline-flex items-center gap-2 bg-[var(--nhs-blue)] text-white px-6 py-3 rounded-lg font-medium hover:bg-[var(--nhs-dark-blue)] transition-colors disabled:opacity-50"
             >
-              {saving ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Save className="w-5 h-5" />
-              )}
+              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
           </form>

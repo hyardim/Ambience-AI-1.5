@@ -13,7 +13,9 @@ def _normalise_email(email: str) -> str:
 
 def get_by_email(db: Session, email: str) -> Optional[User]:
     """Look up a user by email using case-insensitive matching."""
-    return db.query(User).filter(func.lower(User.email) == _normalise_email(email)).first()
+    return (
+        db.query(User).filter(func.lower(User.email) == _normalise_email(email)).first()
+    )
 
 
 def get_by_id(db: Session, user_id: int) -> Optional[User]:

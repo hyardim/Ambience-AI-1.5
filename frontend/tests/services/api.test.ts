@@ -110,8 +110,7 @@ describe('API service', () => {
 
     it('surfaces non-401 login failures', async () => {
       server.use(
-        http.post('/auth/login', () =>
-          HttpResponse.json({ detail: 'Bad creds' }, { status: 400 })),
+        http.post('/auth/login', () => HttpResponse.json({ detail: 'Bad creds' }, { status: 400 })),
       );
 
       await expect(login('bad', 'creds')).rejects.toThrow('Bad creds');
@@ -120,7 +119,8 @@ describe('API service', () => {
     it('surfaces the friendly login error on 401 responses', async () => {
       server.use(
         http.post('/auth/login', () =>
-          HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
+          HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+        ),
       );
 
       await expect(login('bad', 'creds')).rejects.toThrow('Incorrect email or password');
@@ -185,9 +185,7 @@ describe('API service', () => {
     });
 
     it('surfaces plain-text errors and redirects on 401 responses', async () => {
-      server.use(
-        http.get('/auth/me', () => new HttpResponse('Plain failure', { status: 500 })),
-      );
+      server.use(http.get('/auth/me', () => new HttpResponse('Plain failure', { status: 500 })));
       await expect(getProfile()).rejects.toThrow('Request failed (500)');
 
       localStorage.setItem('username', 'Dr GP');
@@ -195,7 +193,9 @@ describe('API service', () => {
       localStorage.setItem('user_email', 'gp@example.com');
 
       server.use(
-        http.post('/auth/refresh', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
+        http.post('/auth/refresh', () =>
+          HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+        ),
         http.get('/auth/me', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
       );
 
@@ -204,9 +204,7 @@ describe('API service', () => {
     });
 
     it('falls back to a status-based error message when the body is empty', async () => {
-      server.use(
-        http.get('/auth/me', () => new HttpResponse(null, { status: 500 })),
-      );
+      server.use(http.get('/auth/me', () => new HttpResponse(null, { status: 500 })));
 
       await expect(getProfile()).rejects.toThrow('Request failed (500)');
     });
@@ -216,13 +214,11 @@ describe('API service', () => {
         http.get('/auth/me', () =>
           HttpResponse.json(
             {
-              detail: [
-                { msg: 'field required' },
-                { msg: 'must be a valid email' },
-              ],
+              detail: [{ msg: 'field required' }, { msg: 'must be a valid email' }],
             },
             { status: 422 },
-          )),
+          ),
+        ),
       );
 
       await expect(getProfile()).rejects.toThrow('field required; must be a valid email');
@@ -339,14 +335,21 @@ describe('API service', () => {
     it('creates, updates, submits, deletes, uploads, and sends messages for chats', async () => {
       server.use(
         http.post('/chats/:chatId/files', () =>
-          HttpResponse.json({ id: 'file-1', name: 'report.pdf', size: '2MB', type: 'pdf' })),
+          HttpResponse.json({ id: 'file-1', name: 'report.pdf', size: '2MB', type: 'pdf' }),
+        ),
       );
 
-      await expect(createChat({ title: 'Test', specialty: 'neurology' })).resolves.toMatchObject({ id: 1 });
+      await expect(createChat({ title: 'Test', specialty: 'neurology' })).resolves.toMatchObject({
+        id: 1,
+      });
       await expect(updateChat(1, { title: 'Updated' })).resolves.toMatchObject({ id: 1 });
       await expect(submitForReview(1)).resolves.toMatchObject({ status: 'submitted' });
-      await expect(sendMessage(1, 'Hello')).resolves.toMatchObject({ ai_response: 'AI says hello' });
-      await expect(uploadChatFile(1, new File(['hello'], 'report.pdf', { type: 'application/pdf' }))).resolves.toMatchObject({ name: 'report.pdf' });
+      await expect(sendMessage(1, 'Hello')).resolves.toMatchObject({
+        ai_response: 'AI says hello',
+      });
+      await expect(
+        uploadChatFile(1, new File(['hello'], 'report.pdf', { type: 'application/pdf' })),
+      ).resolves.toMatchObject({ name: 'report.pdf' });
       await expect(deleteChat(1)).resolves.toBeUndefined();
     });
   });
@@ -363,7 +366,7 @@ describe('API service', () => {
     it('assigns, reviews, reviews messages, and sends specialist messages', async () => {
       server.use(
         http.post('/specialist/chats/:chatId/messages/:messageId/review', async ({ request }) => {
-          const body = await request.json() as Record<string, unknown>;
+          const body = (await request.json()) as Record<string, unknown>;
           expect(body.action).toBe('manual_response');
           expect(body.feedback).toBe('Needs correction');
           expect(body.replacement_content).toBe('Replacement');
@@ -373,11 +376,15 @@ describe('API service', () => {
       );
 
       await expect(assignChat(1, 2)).resolves.toMatchObject({ specialist_id: 2 });
-      await expect(reviewChat(1, 'approve', 'Looks good')).resolves.toMatchObject({ status: 'approved' });
+      await expect(reviewChat(1, 'approve', 'Looks good')).resolves.toMatchObject({
+        status: 'approved',
+      });
       await expect(
         reviewMessage(1, 2, 'manual_response', 'Needs correction', 'Replacement', ['NICE']),
       ).resolves.toMatchObject({ status: 'reviewing' });
-      await expect(sendSpecialistMessage(1, 'Hello from specialist')).resolves.toMatchObject({ message_id: 99 });
+      await expect(sendSpecialistMessage(1, 'Hello from specialist')).resolves.toMatchObject({
+        message_id: 99,
+      });
     });
   });
 
@@ -419,7 +426,14 @@ describe('API service', () => {
             return HttpResponse.json([]);
           }
           return HttpResponse.json([
-            { id: 1, email: 'gp@example.com', full_name: 'Dr GP', role: 'gp', specialty: null, is_active: true },
+            {
+              id: 1,
+              email: 'gp@example.com',
+              full_name: 'Dr GP',
+              role: 'gp',
+              specialty: null,
+              is_active: true,
+            },
           ]);
         }),
       );
@@ -427,7 +441,9 @@ describe('API service', () => {
       await expect(adminGetUsers()).resolves.toHaveLength(1);
       await expect(adminGetUsers('specialist')).resolves.toEqual([]);
       await expect(adminGetUser(1)).resolves.toMatchObject({ email: 'gp@example.com' });
-      await expect(adminUpdateUser(1, { full_name: 'Updated' })).resolves.toMatchObject({ email: 'gp@example.com' });
+      await expect(adminUpdateUser(1, { full_name: 'Updated' })).resolves.toMatchObject({
+        email: 'gp@example.com',
+      });
       await expect(adminDeactivateUser(1)).resolves.toMatchObject({ is_active: false });
     });
 
@@ -482,7 +498,7 @@ describe('API service', () => {
           ]);
         }),
         http.patch('/admin/chats/:chatId', async ({ params, request }) => {
-          const body = await request.json() as Record<string, unknown>;
+          const body = (await request.json()) as Record<string, unknown>;
           return HttpResponse.json({
             id: Number(params.chatId),
             title: body.title ?? 'Updated title',
@@ -514,7 +530,9 @@ describe('API service', () => {
         }),
       ).resolves.toEqual([]);
       await expect(adminGetChat(1)).resolves.toMatchObject({ messages: expect.any(Array) });
-      await expect(adminUpdateChat(1, { title: 'Updated title' })).resolves.toMatchObject({ title: 'Updated title' });
+      await expect(adminUpdateChat(1, { title: 'Updated title' })).resolves.toMatchObject({
+        title: 'Updated title',
+      });
       await expect(adminDeleteChat(1)).resolves.toBeUndefined();
       await expect(adminGetStats()).resolves.toMatchObject({ total_ai_responses: 24 });
     });
@@ -550,7 +568,10 @@ describe('API service', () => {
         }),
       ).resolves.toEqual([]);
       await expect(
-        adminUploadGuideline(new File(['pdf'], 'guideline.pdf', { type: 'application/pdf' }), 'NICE'),
+        adminUploadGuideline(
+          new File(['pdf'], 'guideline.pdf', { type: 'application/pdf' }),
+          'NICE',
+        ),
       ).resolves.toMatchObject({ source_name: 'NICE' });
     });
 
@@ -567,9 +588,7 @@ describe('API service', () => {
     });
 
     it('throws with raw text when the body is not JSON', async () => {
-      server.use(
-        http.get('/health', () => new HttpResponse('Something broke', { status: 500 })),
-      );
+      server.use(http.get('/health', () => new HttpResponse('Something broke', { status: 500 })));
 
       await expect(healthCheck()).rejects.toThrow('Request failed (500)');
     });
@@ -579,7 +598,9 @@ describe('API service', () => {
       localStorage.setItem('user_role', 'gp');
       localStorage.setItem('user_email', 'gp@example.com');
       server.use(
-        http.post('/auth/refresh', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
+        http.post('/auth/refresh', () =>
+          HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+        ),
         http.get('/auth/me', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
       );
 
@@ -706,7 +727,8 @@ describe('API service', () => {
     it('adminGetChat returns empty messages array when messages field is missing', async () => {
       server.use(
         http.get('/admin/chats/:chatId', () =>
-          HttpResponse.json({ id: 5, title: 'No messages', status: 'open' })),
+          HttpResponse.json({ id: 5, title: 'No messages', status: 'open' }),
+        ),
       );
 
       const result = await adminGetChat(5);
@@ -715,8 +737,10 @@ describe('API service', () => {
 
     it('markNotificationRead returns fallback is_read when response is 204', async () => {
       server.use(
-        http.patch('/notifications/:notificationId/read', () =>
-          new HttpResponse(null, { status: 204 })),
+        http.patch(
+          '/notifications/:notificationId/read',
+          () => new HttpResponse(null, { status: 204 }),
+        ),
       );
 
       const result = await markNotificationRead(1);
@@ -725,8 +749,7 @@ describe('API service', () => {
 
     it('markAllNotificationsRead returns fallback when response is 204', async () => {
       server.use(
-        http.patch('/notifications/read-all', () =>
-          new HttpResponse(null, { status: 204 })),
+        http.patch('/notifications/read-all', () => new HttpResponse(null, { status: 204 })),
       );
 
       const result = await markAllNotificationsRead();
@@ -752,8 +775,7 @@ describe('API service', () => {
   describe('healthCheck unhealthy branch', () => {
     it('returns the payload directly when status is not healthy', async () => {
       server.use(
-        http.get('/health', () =>
-          HttpResponse.json({ status: 'degraded', system: 'database' })),
+        http.get('/health', () => HttpResponse.json({ status: 'degraded', system: 'database' })),
       );
 
       const result = await healthCheck();

@@ -1,5 +1,15 @@
 import { http, HttpResponse } from 'msw';
-import type { LoginResponse, UserProfile, BackendChat, BackendChatWithMessages, GPMessageResponse, NotificationResponse, AdminChatResponse, AuditLogResponse, RagStatusResponse } from '@/types/api';
+import type {
+  LoginResponse,
+  UserProfile,
+  BackendChat,
+  BackendChatWithMessages,
+  GPMessageResponse,
+  NotificationResponse,
+  AdminChatResponse,
+  AuditLogResponse,
+  RagStatusResponse,
+} from '@/types/api';
 import type { AdminStatsResponse } from '@/types/api';
 import type { IngestionReport } from '@/services/api';
 
@@ -70,8 +80,18 @@ export const mockChat2: BackendChat = {
 export const mockChatWithMessages: BackendChatWithMessages = {
   ...mockChat,
   messages: [
-    { id: 1, content: 'Patient has a headache', sender: 'user', created_at: '2025-01-15T10:01:00Z' },
-    { id: 2, content: 'Based on the symptoms described...', sender: 'ai', created_at: '2025-01-15T10:01:05Z' },
+    {
+      id: 1,
+      content: 'Patient has a headache',
+      sender: 'user',
+      created_at: '2025-01-15T10:01:00Z',
+    },
+    {
+      id: 2,
+      content: 'Based on the symptoms described...',
+      sender: 'ai',
+      created_at: '2025-01-15T10:01:05Z',
+    },
   ],
 };
 
@@ -196,23 +216,29 @@ export const handlers = [
       user: {
         ...mockGPUser,
         email,
-        full_name: email === mockAdminUser.email
-          ? mockAdminUser.full_name
-          : email === mockSpecialistUser.email
-            ? mockSpecialistUser.full_name
-            : mockGPUser.full_name,
-        role: email === mockAdminUser.email
-          ? 'admin'
-          : email === mockSpecialistUser.email
-            ? 'specialist'
-            : 'gp',
+        full_name:
+          email === mockAdminUser.email
+            ? mockAdminUser.full_name
+            : email === mockSpecialistUser.email
+              ? mockSpecialistUser.full_name
+              : mockGPUser.full_name,
+        role:
+          email === mockAdminUser.email
+            ? 'admin'
+            : email === mockSpecialistUser.email
+              ? 'specialist'
+              : 'gp',
         specialty: email === mockSpecialistUser.email ? mockSpecialistUser.specialty : null,
       },
     });
   }),
 
   http.post('/auth/register', async ({ request }) => {
-    const body = await request.json() as Partial<UserProfile> & { email?: string; role?: string; full_name?: string };
+    const body = (await request.json()) as Partial<UserProfile> & {
+      email?: string;
+      role?: string;
+      full_name?: string;
+    };
     return HttpResponse.json({
       ...mockLoginResponse,
       user: {
@@ -228,7 +254,8 @@ export const handlers = [
 
   http.post('/auth/resend-verification', () => {
     return HttpResponse.json({
-      message: 'If an account exists and requires verification, a verification link will be sent shortly',
+      message:
+        'If an account exists and requires verification, a verification link will be sent shortly',
     });
   }),
 
@@ -297,11 +324,11 @@ export const handlers = [
     let chats = [mockChat, mockChat2];
     const search = url.searchParams.get('search');
     if (search) {
-      chats = chats.filter(c => c.title.toLowerCase().includes(search.toLowerCase()));
+      chats = chats.filter((c) => c.title.toLowerCase().includes(search.toLowerCase()));
     }
     const specialty = url.searchParams.get('specialty');
     if (specialty) {
-      chats = chats.filter(c => c.specialty === specialty);
+      chats = chats.filter((c) => c.specialty === specialty);
     }
     return HttpResponse.json(chats);
   }),
@@ -379,13 +406,17 @@ export const handlers = [
       ...mockNotifications[0],
       id: Number(params.notificationId),
       is_read: true,
-    })),
+    }),
+  ),
   http.patch('/notifications/read-all', () => HttpResponse.json({ marked_read: 2 })),
 
-  http.get('/admin/users', () => HttpResponse.json([mockGPUser, mockSpecialistUser, mockAdminUser])),
+  http.get('/admin/users', () =>
+    HttpResponse.json([mockGPUser, mockSpecialistUser, mockAdminUser]),
+  ),
   http.get('/admin/users/:userId', ({ params }) => {
     const userId = Number(params.userId);
-    const user = [mockGPUser, mockSpecialistUser, mockAdminUser].find(u => u.id === userId) ?? mockGPUser;
+    const user =
+      [mockGPUser, mockSpecialistUser, mockAdminUser].find((u) => u.id === userId) ?? mockGPUser;
     return HttpResponse.json(user);
   }),
   http.patch('/admin/users/:userId', () => HttpResponse.json(mockGPUser)),
@@ -394,7 +425,8 @@ export const handlers = [
       ...mockGPUser,
       id: Number(params.userId),
       is_active: false,
-    })),
+    }),
+  ),
 
   http.get('/admin/chats', () => HttpResponse.json(mockAdminChats)),
   http.get('/admin/chats/:chatId', ({ params }) =>
@@ -402,7 +434,8 @@ export const handlers = [
       ...mockAdminChats[0],
       id: Number(params.chatId),
       messages: mockChatWithMessages.messages,
-    })),
+    }),
+  ),
   http.patch('/admin/chats/:chatId', () => HttpResponse.json(mockAdminChats[0])),
   http.delete('/admin/chats/:chatId', () => new HttpResponse(null, { status: 204 })),
 

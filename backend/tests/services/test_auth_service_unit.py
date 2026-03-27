@@ -96,7 +96,9 @@ def test_refresh_returns_auth_response(db_session):
 
 
 def test_register_normalizes_email_before_storage(db_session, monkeypatch):
-    monkeypatch.setattr(auth_service.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False)
+    monkeypatch.setattr(
+        auth_service.settings, "NEW_USERS_REQUIRE_EMAIL_VERIFICATION", False
+    )
 
     result = auth_service.register(
         db_session,

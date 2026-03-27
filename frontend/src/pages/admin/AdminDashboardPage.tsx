@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
 } from 'recharts';
 import { Activity, MessageSquare, Users, ClipboardList, RefreshCw, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/AdminLayout';
@@ -11,14 +22,14 @@ import { getErrorMessage, ifNotAbortError } from '../../utils/errors';
 import { coalesce } from '../../utils/value';
 
 const STATUS_COLOURS: Record<string, string> = {
-  open:       '#94a3b8',
-  submitted:  '#f59e0b',
-  assigned:   '#3b82f6',
-  reviewing:  '#8b5cf6',
-  approved:   '#22c55e',
-  rejected:   '#ef4444',
-  closed:     '#6b7280',
-  flagged:    '#f97316',
+  open: '#94a3b8',
+  submitted: '#f59e0b',
+  assigned: '#3b82f6',
+  reviewing: '#8b5cf6',
+  approved: '#22c55e',
+  rejected: '#ef4444',
+  closed: '#6b7280',
+  flagged: '#f97316',
 };
 
 const SPECIALTY_COLOURS = [
@@ -30,9 +41,18 @@ const SPECIALTY_COLOURS = [
   'var(--nhs-pale-grey)',
 ];
 
-function StatCard({ label, value, sub, icon: Icon, colour }: {
-  label: string; value: string | number; sub?: string;
-  icon: React.ElementType; colour: string;
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  colour,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  colour: string;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-start gap-4">
@@ -81,7 +101,9 @@ export default function AdminDashboardPage() {
         setRagLogs(ragLogResult.value);
       } else {
         ifNotAbortError(ragLogResult.reason, () => {
-          setError(prev => prev ? prev : getErrorMessage(ragLogResult.reason, 'Failed to load RAG logs'));
+          setError((prev) =>
+            prev ? prev : getErrorMessage(ragLogResult.reason, 'Failed to load RAG logs'),
+          );
         });
       }
     } finally {
@@ -118,7 +140,10 @@ export default function AdminDashboardPage() {
 
   const formatTimestamp = (iso: string) =>
     new Date(iso).toLocaleString('en-GB', {
-      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
     });
 
   const activeUsersSummary = stats
@@ -151,139 +176,165 @@ export default function AdminDashboardPage() {
           <div className="flex justify-center py-20">
             <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
           </div>
-        ) : stats && (
-          <>
-            {/* Stat cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard
-                label="Total AI Responses"
-                value={stats.total_ai_responses}
-                icon={MessageSquare}
-                colour="bg-[var(--nhs-blue)]"
-              />
-              <StatCard
-                label="RAG-Grounded"
-                value={`${ragPct}%`}
-                sub={`${stats.rag_grounded_responses} of ${stats.total_ai_responses} responses`}
-                icon={Activity}
-                colour="bg-emerald-500"
-              />
-              <StatCard
-                label="Active Consultations"
-                value={stats.active_consultations}
-                icon={ClipboardList}
-                colour="bg-violet-500"
-              />
-              <StatCard
-                label="Active Users"
-                value={activeUsers}
-                sub={activeUsersSummary}
-                icon={Users}
-                colour="bg-amber-500"
-              />
-            </div>
-
-            {/* Bar + Pie row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Consultations by status */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="text-sm font-medium text-gray-700 mb-4">Consultations by Status</h2>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={statusData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                      {statusData.map((entry) => (
-                        <Cell key={entry.name} fill={STATUS_COLOURS[entry.name] ?? '#94a3b8'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+        ) : (
+          stats && (
+            <>
+              {/* Stat cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard
+                  label="Total AI Responses"
+                  value={stats.total_ai_responses}
+                  icon={MessageSquare}
+                  colour="bg-[var(--nhs-blue)]"
+                />
+                <StatCard
+                  label="RAG-Grounded"
+                  value={`${ragPct}%`}
+                  sub={`${stats.rag_grounded_responses} of ${stats.total_ai_responses} responses`}
+                  icon={Activity}
+                  colour="bg-emerald-500"
+                />
+                <StatCard
+                  label="Active Consultations"
+                  value={stats.active_consultations}
+                  icon={ClipboardList}
+                  colour="bg-violet-500"
+                />
+                <StatCard
+                  label="Active Users"
+                  value={activeUsers}
+                  sub={activeUsersSummary}
+                  icon={Users}
+                  colour="bg-amber-500"
+                />
               </div>
 
-              {/* Consultations by specialty */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="text-sm font-medium text-gray-700 mb-4">Consultations by Specialty</h2>
-                {specialtyData.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-16">No data</p>
-                ) : (
+              {/* Bar + Pie row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Consultations by status */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h2 className="text-sm font-medium text-gray-700 mb-4">
+                    Consultations by Status
+                  </h2>
                   <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie
-                        data={specialtyData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={3}
-                      >
-                        {specialtyData.map((entry, i) => (
-                          <Cell key={entry.name} fill={SPECIALTY_COLOURS[i % SPECIALTY_COLOURS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
-
-            {/* Daily AI queries area chart */}
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="text-sm font-medium text-gray-700 mb-4">AI Queries — Last 30 Days</h2>
-                {stats.daily_ai_queries.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-12">No query data in the last 30 days</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={stats.daily_ai_queries} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+                    <BarChart data={statusData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip labelFormatter={(d) => `Date: ${d}`} />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke="var(--nhs-blue)"
-                        strokeWidth={2}
-                        fill="rgba(0, 94, 184, 0.16)"
-                        name="AI Queries"
-                      />
-                    </AreaChart>
+                      <Tooltip />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {statusData.map((entry) => (
+                          <Cell key={entry.name} fill={STATUS_COLOURS[entry.name] ?? '#94a3b8'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
                   </ResponsiveContainer>
-                )}
+                </div>
+
+                {/* Consultations by specialty */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h2 className="text-sm font-medium text-gray-700 mb-4">
+                    Consultations by Specialty
+                  </h2>
+                  {specialtyData.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-16">No data</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={specialtyData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={85}
+                          paddingAngle={3}
+                        >
+                          {specialtyData.map((entry, i) => (
+                            <Cell
+                              key={entry.name}
+                              fill={SPECIALTY_COLOURS[i % SPECIALTY_COLOURS.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-medium text-gray-700">Recent RAG Logs</h2>
-                  <span className="text-xs text-gray-400">Last 8 events</span>
+              {/* Daily AI queries area chart */}
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h2 className="text-sm font-medium text-gray-700 mb-4">
+                    AI Queries — Last 30 Days
+                  </h2>
+                  {stats.daily_ai_queries.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-12">
+                      No query data in the last 30 days
+                    </p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <AreaChart
+                        data={stats.daily_ai_queries}
+                        margin={{ top: 0, right: 8, left: -20, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 10 }}
+                          tickFormatter={(d) => d.slice(5)}
+                        />
+                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <Tooltip labelFormatter={(d) => `Date: ${d}`} />
+                        <Area
+                          type="monotone"
+                          dataKey="count"
+                          stroke="var(--nhs-blue)"
+                          strokeWidth={2}
+                          fill="rgba(0, 94, 184, 0.16)"
+                          name="AI Queries"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-                {ragLogs.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-12">No recent RAG activity</p>
-                ) : (
-                  <div className="space-y-3">
-                    {ragLogs.map((log) => (
-                      <div key={log.id} className="rounded-lg border border-gray-200 px-3 py-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
-                            {log.action}
-                          </span>
-                          <span className="text-xs text-gray-400">{formatTimestamp(log.timestamp)}</span>
-                        </div>
-                        <p className="mt-2 text-sm text-gray-600 break-words">{log.details || '—'}</p>
-                      </div>
-                    ))}
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-medium text-gray-700">Recent RAG Logs</h2>
+                    <span className="text-xs text-gray-400">Last 8 events</span>
                   </div>
-                )}
+                  {ragLogs.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-12">
+                      No recent RAG activity
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {ragLogs.map((log) => (
+                        <div key={log.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
+                              {log.action}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {formatTimestamp(log.timestamp)}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm text-gray-600 break-words">
+                            {log.details || '—'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </>
+            </>
+          )
         )}
       </div>
     </AdminLayout>

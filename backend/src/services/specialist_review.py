@@ -74,8 +74,12 @@ def review(
     allowing any review action. Rejects approve/reject while AI is generating.
     """
     if body.action not in (
-        "approve", "reject", "request_changes", "manual_response",
-        "send_comment", "unassign",
+        "approve",
+        "reject",
+        "request_changes",
+        "manual_response",
+        "send_comment",
+        "unassign",
     ):
         raise HTTPException(
             status_code=400,
@@ -611,10 +615,14 @@ def _do_revise(
         rag_response.raise_for_status()
         rag_json = rag_response.json()
         if not isinstance(rag_json, dict):
-            raise ValueError(f"Expected dict from RAG /revise, got {type(rag_json).__name__}")
+            raise ValueError(
+                f"Expected dict from RAG /revise, got {type(rag_json).__name__}"
+            )
         revised_content = rag_json.get("answer", "")
         if not isinstance(revised_content, str):
-            raise ValueError(f"Expected 'answer' string from RAG, got {type(revised_content).__name__}")
+            raise ValueError(
+                f"Expected 'answer' string from RAG, got {type(revised_content).__name__}"
+            )
         citations = _select_rag_citations(rag_json) or []
     except Exception as exc:
         logger.warning("RAG /revise failed for chat %s: %s", placeholder.chat_id, exc)

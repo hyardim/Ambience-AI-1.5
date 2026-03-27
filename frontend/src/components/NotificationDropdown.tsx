@@ -1,11 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bell, CheckCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import {
-  getNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-} from '../services/api';
+import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../services/api';
 import type { NotificationResponse } from '../types/api';
 
 const POLL_INTERVAL = 15_000; // 15 seconds
@@ -20,7 +16,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   // Fetch notifications from backend
   const fetchNotifications = useCallback(async () => {
@@ -62,8 +58,8 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
     if (!notification.is_read) {
       try {
         await markNotificationRead(notification.id);
-        setNotifications(prev =>
-          prev.map(n => (n.id === notification.id ? { ...n, is_read: true } : n)),
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n)),
         );
       } catch {
         // Leave the notification unread when the request fails.
@@ -81,7 +77,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
   const handleMarkAllRead = async () => {
     try {
       await markAllNotificationsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     } catch {
       // Keep existing unread states if mark-all fails.
     }
@@ -129,9 +125,7 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-500">
-                No notifications
-              </div>
+              <div className="px-4 py-8 text-center text-gray-500">No notifications</div>
             ) : (
               notifications.map((notification) => (
                 <button
@@ -142,17 +136,17 @@ export function NotificationDropdown({ userRole }: NotificationDropdownProps) {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                      !notification.is_read ? 'bg-[var(--nhs-blue)]' : 'bg-gray-300'
-                    }`} />
+                    <div
+                      className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
+                        !notification.is_read ? 'bg-[var(--nhs-blue)]' : 'bg-gray-300'
+                      }`}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 text-sm truncate">
                         {notification.title}
                       </p>
                       {notification.body && (
-                        <p className="text-gray-600 text-sm truncate">
-                          {notification.body}
-                        </p>
+                        <p className="text-gray-600 text-sm truncate">{notification.body}</p>
                       )}
                       <p className="text-gray-400 text-xs mt-1">
                         {formatTime(notification.created_at)}

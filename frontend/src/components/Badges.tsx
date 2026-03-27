@@ -5,8 +5,14 @@ import type { Severity, QueryStatus } from '../types';
 // ---------------------------------------------------------------------------
 
 type ChatStatusString =
-  | 'open' | 'submitted' | 'assigned' | 'reviewing'
-  | 'approved' | 'rejected' | 'closed' | 'flagged';
+  | 'open'
+  | 'submitted'
+  | 'assigned'
+  | 'reviewing'
+  | 'approved'
+  | 'rejected'
+  | 'closed'
+  | 'flagged';
 
 interface StatusBadgeProps {
   status: QueryStatus | ChatStatusString | string;
@@ -44,11 +50,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const style = STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-800';
   const label = STATUS_LABELS[status] ?? status;
 
-  return (
-    <span className={`px-3 py-1 rounded-full text-sm font-medium ${style}`}>
-      {label}
-    </span>
-  );
+  return <span className={`px-3 py-1 rounded-full text-sm font-medium ${style}`}>{label}</span>;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,9 +83,5 @@ export function SeverityBadge({ severity }: SeverityBadgeProps) {
   const style = SEVERITY_STYLES[severity] ?? 'text-gray-600';
   const label = SEVERITY_LABELS[severity] ?? severity;
 
-  return (
-    <span className={`font-medium ${style}`}>
-      {label}
-    </span>
-  );
+  return <span className={`font-medium ${style}`}>{label}</span>;
 }

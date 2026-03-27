@@ -44,7 +44,9 @@ export function ResetPasswordPage() {
       return;
     }
     if (!isStrongPassword(newPassword)) {
-      setError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+      setError(
+        'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.',
+      );
       return;
     }
 
@@ -86,9 +88,7 @@ export function ResetPasswordPage() {
               </div>
             ) : (
               <>
-                <p className="text-gray-600 text-center mb-8">
-                  Set your new password below.
-                </p>
+                <p className="text-gray-600 text-center mb-8">Set your new password below.</p>
 
                 {!token && (
                   <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
@@ -97,14 +97,21 @@ export function ResetPasswordPage() {
                 )}
 
                 {error && (
-                  <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  <div
+                    role="alert"
+                    aria-live="polite"
+                    className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+                  >
                     {error}
                   </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
-                    <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label
+                      htmlFor="newPassword"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
                       New password
                     </label>
                     <div className="relative">
@@ -123,14 +130,21 @@ export function ResetPasswordPage() {
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                       >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        {showPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
                       </button>
                     </div>
                     <PasswordStrengthMeter password={newPassword} />
                   </div>
 
                   <div>
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label
+                      htmlFor="confirmPassword"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
                       Confirm new password
                     </label>
                     <div className="relative">
@@ -148,9 +162,15 @@ export function ResetPasswordPage() {
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                        aria-label={
+                          showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'
+                        }
                       >
-                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
                       </button>
                     </div>
                   </div>

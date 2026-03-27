@@ -155,7 +155,7 @@ async function handleResponse<T>(res: Response, url?: string): Promise<T> {
       } else if (Array.isArray(parsed?.detail)) {
         // FastAPI 422 validation errors — array of {msg, loc, type}
         const msgs = (parsed.detail as { msg?: string }[])
-          .map(e => e.msg)
+          .map((e) => e.msg)
           .filter(Boolean)
           .join('; ');
         errorMessage = msgs || `Request failed (${res.status})`;
@@ -362,10 +362,7 @@ export async function deleteChat(chatId: number): Promise<void> {
   return handleResponse<void>(res);
 }
 
-export async function updateChat(
-  chatId: number,
-  payload: ChatUpdateRequest,
-): Promise<BackendChat> {
+export async function updateChat(chatId: number, payload: ChatUpdateRequest): Promise<BackendChat> {
   const res = await apiFetch(apiUrl(`/chats/${chatId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -382,10 +379,7 @@ export async function submitForReview(chatId: number): Promise<BackendChat> {
   return handleResponse<BackendChat>(res);
 }
 
-export async function sendMessage(
-  chatId: number,
-  content: string,
-): Promise<GPMessageResponse> {
+export async function sendMessage(chatId: number, content: string): Promise<GPMessageResponse> {
   const body: MessageCreateRequest = { content };
   const res = await apiFetch(apiUrl(`/chats/${chatId}/message`), {
     method: 'POST',
@@ -498,9 +492,7 @@ export async function getNotifications(unreadOnly = false): Promise<Notification
   return handleResponse<NotificationResponse[]>(res);
 }
 
-export async function markNotificationRead(
-  notificationId: number,
-): Promise<{ is_read: boolean }> {
+export async function markNotificationRead(notificationId: number): Promise<{ is_read: boolean }> {
   const res = await apiFetch(apiUrl(`/notifications/${notificationId}/read`), {
     method: 'PATCH',
     headers: authHeaders(),
@@ -551,7 +543,10 @@ export async function adminGetUser(userId: number): Promise<UserProfile> {
   return handleResponse<UserProfile>(res);
 }
 
-export async function adminUpdateUser(userId: number, payload: UserUpdateAdmin): Promise<UserProfile> {
+export async function adminUpdateUser(
+  userId: number,
+  payload: UserUpdateAdmin,
+): Promise<UserProfile> {
   const res = await apiFetch(apiUrl(`/admin/users/${userId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -569,15 +564,18 @@ export async function adminDeactivateUser(userId: number): Promise<UserProfile> 
   return payload ?? ({ id: userId, is_active: false } as UserProfile);
 }
 
-export async function adminGetChats(params: {
-  status?: string;
-  specialty?: string;
-  owner_q?: string;
-  user_id?: number;
-  specialist_id?: number;
-  skip?: number;
-  limit?: number;
-} = {}, options: RequestOptions = {}): Promise<AdminChatResponse[]> {
+export async function adminGetChats(
+  params: {
+    status?: string;
+    specialty?: string;
+    owner_q?: string;
+    user_id?: number;
+    specialist_id?: number;
+    skip?: number;
+    limit?: number;
+  } = {},
+  options: RequestOptions = {},
+): Promise<AdminChatResponse[]> {
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'status', params.status);
   setOptionalSearchParam(query, 'specialty', params.specialty);
@@ -611,7 +609,10 @@ export async function adminGetChat(
   };
 }
 
-export async function adminUpdateChat(chatId: number, payload: ChatUpdateRequest): Promise<AdminChatResponse> {
+export async function adminUpdateChat(
+  chatId: number,
+  payload: ChatUpdateRequest,
+): Promise<AdminChatResponse> {
   const res = await apiFetch(apiUrl(`/admin/chats/${chatId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -636,15 +637,18 @@ export async function adminGetStats(options: RequestOptions = {}): Promise<Admin
   return handleResponse<AdminStatsResponse>(res);
 }
 
-export async function adminGetLogs(params: {
-  action?: string;
-  category?: string;
-  search?: string;
-  user_id?: number;
-  date_from?: string;
-  date_to?: string;
-  limit?: number;
-} = {}, options: RequestOptions = {}): Promise<AuditLogResponse[]> {
+export async function adminGetLogs(
+  params: {
+    action?: string;
+    category?: string;
+    search?: string;
+    user_id?: number;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+  } = {},
+  options: RequestOptions = {},
+): Promise<AuditLogResponse[]> {
   const query = new URLSearchParams();
   setOptionalSearchParam(query, 'action', params.action);
   setOptionalSearchParam(query, 'category', params.category);
@@ -686,7 +690,10 @@ export async function adminGetRagStatus(options: RequestOptions = {}): Promise<R
   return handleResponse<RagStatusResponse>(res);
 }
 
-export async function adminUploadGuideline(file: File, sourceName: string): Promise<IngestionReport> {
+export async function adminUploadGuideline(
+  file: File,
+  sourceName: string,
+): Promise<IngestionReport> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('source_name', sourceName);
@@ -740,7 +747,7 @@ export function subscribeToChatStream(
     handlers.onOpen?.();
   };
 
-  const parsePayload = <T,>(event: MessageEvent<string>): T | null => {
+  const parsePayload = <T>(event: MessageEvent<string>): T | null => {
     try {
       return JSON.parse(event.data) as T;
     } catch {
@@ -780,11 +787,7 @@ export function subscribeToChatStream(
       if (payload.file_context_truncated === true) {
         handlers.onFileContextTruncated?.();
       }
-      handlers.onComplete?.(
-        payload.message_id,
-        payload.content ?? '',
-        payload.citations ?? null,
-      );
+      handlers.onComplete?.(payload.message_id, payload.content ?? '', payload.citations ?? null);
       closeSource();
     }
   });

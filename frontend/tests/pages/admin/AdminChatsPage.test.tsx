@@ -34,7 +34,8 @@ describe('AdminChatsPage', () => {
             id: Number(params.chatId),
             ...body,
           }),
-        )),
+        ),
+      ),
       http.delete('/admin/chats/:chatId', () => new HttpResponse(null, { status: 204 })),
     );
 
@@ -61,9 +62,13 @@ describe('AdminChatsPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/patient has a headache/i)).toBeInTheDocument();
     });
-    await user.click(screen.getAllByRole('button').find((button) =>
-      button.querySelector('svg') && button.closest('[class*="fixed"]'),
-    ) as HTMLButtonElement);
+    await user.click(
+      screen
+        .getAllByRole('button')
+        .find(
+          (button) => button.querySelector('svg') && button.closest('[class*="fixed"]'),
+        ) as HTMLButtonElement,
+    );
 
     await user.click(screen.getByRole('button', { name: /edit/i }));
     const titleInput = screen.getByDisplayValue(/headache consultation/i);
@@ -106,9 +111,11 @@ describe('AdminChatsPage', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     server.use(
       http.get('/admin/chats/:chatId', () =>
-        HttpResponse.json({ detail: 'Detail failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Detail failed' }, { status: 500 }),
+      ),
       http.patch('/admin/chats/:chatId', () =>
-        HttpResponse.json({ detail: 'Update failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Update failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -145,9 +152,11 @@ describe('AdminChatsPage', () => {
             id: Number(params.chatId),
             ...body,
           }),
-        )),
+        ),
+      ),
       http.delete('/admin/chats/:chatId', () =>
-        HttpResponse.json({ detail: 'Delete failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Delete failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -168,9 +177,11 @@ describe('AdminChatsPage', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /edit/i }));
-    const closeButton = screen.getAllByRole('button').find((button) =>
-      button.className.includes('text-gray-400 hover:text-gray-600'),
-    ) as HTMLButtonElement;
+    const closeButton = screen
+      .getAllByRole('button')
+      .find((button) =>
+        button.className.includes('text-gray-400 hover:text-gray-600'),
+      ) as HTMLButtonElement;
     await user.click(closeButton);
     expect(screen.queryByRole('heading', { name: /edit chat/i })).not.toBeInTheDocument();
 
@@ -187,7 +198,8 @@ describe('AdminChatsPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           messages: [],
-        })),
+        }),
+      ),
     );
 
     renderPage();

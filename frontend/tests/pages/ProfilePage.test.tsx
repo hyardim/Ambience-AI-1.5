@@ -85,7 +85,9 @@ describe('ProfilePage', () => {
     await user.type(screen.getByLabelText(/^New Password$/i), 'short');
     await user.type(screen.getByLabelText(/^Confirm New Password$/i), 'short');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
-    expect(screen.getAllByText(/password must be at least 8 characters/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/password must be at least 8 characters/i).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it('rejects weak passwords and overly long names', async () => {
@@ -104,11 +106,17 @@ describe('ProfilePage', () => {
 
     fireEvent.change(fullNameInput, { target: { value: 'Valid User' } });
     fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: 'oldpass' } });
-    fireEvent.change(screen.getByLabelText(/^New Password$/i), { target: { value: 'password123' } });
-    fireEvent.change(screen.getByLabelText(/^Confirm New Password$/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText(/^New Password$/i), {
+      target: { value: 'password123' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Confirm New Password$/i), {
+      target: { value: 'password123' },
+    });
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    expect(screen.getByText(/include uppercase, lowercase, a number, and a special character/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/include uppercase, lowercase, a number, and a special character/i),
+    ).toBeInTheDocument();
   });
 
   it('shows specialist specialty field, toggles passwords, and navigates back', async () => {
@@ -128,9 +136,9 @@ describe('ProfilePage', () => {
       expect(screen.getByLabelText(/specialty/i)).toBeInTheDocument();
     });
 
-    const toggleButtons = screen.getAllByRole('button').filter((button) =>
-      button.className.includes('absolute right-4 top-9'),
-    );
+    const toggleButtons = screen
+      .getAllByRole('button')
+      .filter((button) => button.className.includes('absolute right-4 top-9'));
     await user.click(toggleButtons[0]);
     await user.click(toggleButtons[1]);
     await user.click(screen.getByRole('button', { name: /show confirm password/i }));
@@ -143,7 +151,7 @@ describe('ProfilePage', () => {
     server.use(
       http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
       http.patch('/auth/profile', async ({ request }) => {
-        const body = await request.json() as { specialty?: string | null };
+        const body = (await request.json()) as { specialty?: string | null };
         expect(body.specialty).toBeNull();
         return HttpResponse.json({
           ...mockSpecialistUser,
@@ -182,7 +190,8 @@ describe('ProfilePage', () => {
           ...mockSpecialistUser,
           full_name: null,
           specialty: null,
-        })),
+        }),
+      ),
     );
 
     seedAuth({ role: 'specialist' });
@@ -202,7 +211,9 @@ describe('ProfilePage', () => {
 
   it('shows save errors and gp back navigation path', async () => {
     server.use(
-      http.patch('/auth/profile', () => HttpResponse.json({ detail: 'Save failed' }, { status: 500 })),
+      http.patch('/auth/profile', () =>
+        HttpResponse.json({ detail: 'Save failed' }, { status: 500 }),
+      ),
     );
 
     renderProfile();

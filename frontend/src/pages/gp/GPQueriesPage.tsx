@@ -22,10 +22,7 @@ const TAB_STATUSES: Record<TabKey, string[]> = {
   closed: ['approved', 'rejected'],
 };
 
-const SPECIALTY_OPTIONS = [
-  'neurology',
-  'rheumatology',
-];
+const SPECIALTY_OPTIONS = ['neurology', 'rheumatology'];
 
 type SortKey = 'created_at' | 'title' | 'specialty' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -107,12 +104,7 @@ export function GPQueriesPage() {
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
     const searchFetcher = createGpQueriesSearchFetcher(fetchChats, buildFilters);
-    resetTimeoutWithValue(
-      debounceRef,
-      searchFetcher,
-      value,
-      300,
-    );
+    resetTimeoutWithValue(debounceRef, searchFetcher, value, 300);
   };
 
   /**
@@ -121,9 +113,14 @@ export function GPQueriesPage() {
    */
   const handleArchive = async (e: React.MouseEvent, chatId: number) => {
     e.stopPropagation();
-    if (!confirm('Archive this consultation? It will be hidden from your list but the record will be preserved.')) return;
+    if (
+      !confirm(
+        'Archive this consultation? It will be hidden from your list but the record will be preserved.',
+      )
+    )
+      return;
     const prevChats = chats;
-    setChats(prev => prev.filter(c => c.id !== chatId));
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
     try {
       await deleteChat(chatId);
     } catch {
@@ -140,8 +137,7 @@ export function GPQueriesPage() {
     void fetchChats({});
   };
 
-  const tabChats = (key: TabKey) =>
-    chats.filter(c => TAB_STATUSES[key].includes(c.status));
+  const tabChats = (key: TabKey) => chats.filter((c) => TAB_STATUSES[key].includes(c.status));
 
   const filteredChats = [...tabChats(tab)].sort((a, b) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
@@ -195,9 +191,7 @@ export function GPQueriesPage() {
               key={key}
               onClick={() => setTab(key)}
               className={`flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                tab === key
-                  ? 'bg-[var(--nhs-blue)] text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
+                tab === key ? 'bg-[var(--nhs-blue)] text-white' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               {label} ({tabChats(key).length})
@@ -242,7 +236,10 @@ export function GPQueriesPage() {
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
-                  <label htmlFor="filter-specialty" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="filter-specialty"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Specialty
                   </label>
                   <select
@@ -252,13 +249,18 @@ export function GPQueriesPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--nhs-blue)] focus:border-transparent text-sm"
                   >
                     <option value="">All specialties</option>
-                    {SPECIALTY_OPTIONS.map(s => (
-                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                    {SPECIALTY_OPTIONS.map((s) => (
+                      <option key={s} value={s}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="filter-date-from" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="filter-date-from"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     From date
                   </label>
                   <input
@@ -270,7 +272,10 @@ export function GPQueriesPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="filter-date-to" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="filter-date-to"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     To date
                   </label>
                   <input
@@ -282,7 +287,10 @@ export function GPQueriesPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="sort-key" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="sort-key"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Sort by
                   </label>
                   <select
@@ -298,7 +306,10 @@ export function GPQueriesPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="sort-direction" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="sort-direction"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Direction
                   </label>
                   <select
@@ -331,7 +342,9 @@ export function GPQueriesPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={() => fetchChats()} className="ml-3 underline font-medium">Retry</button>
+            <button onClick={() => fetchChats()} className="ml-3 underline font-medium">
+              Retry
+            </button>
           </div>
         )}
 
@@ -346,7 +359,7 @@ export function GPQueriesPage() {
         {!loading && (
           <div className="space-y-4">
             {filteredChats.length > 0 ? (
-              filteredChats.map(chat => (
+              filteredChats.map((chat) => (
                 <div
                   key={chat.id}
                   onClick={() => navigate(`/gp/query/${chat.id}`)}
@@ -356,7 +369,9 @@ export function GPQueriesPage() {
                     <h3 className="font-semibold text-gray-900 text-base sm:text-lg flex-1 min-w-0">
                       {chat.title || 'Untitled Consultation'}
                     </h3>
-                    <span className="text-xs text-gray-500 shrink-0">{formatDate(chat.created_at)}</span>
+                    <span className="text-xs text-gray-500 shrink-0">
+                      {formatDate(chat.created_at)}
+                    </span>
                   </div>
                   <div className="flex items-end justify-between gap-4">
                     <div className="flex-1 min-w-0">

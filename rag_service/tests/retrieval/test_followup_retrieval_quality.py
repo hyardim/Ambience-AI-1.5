@@ -7,7 +7,8 @@ Tests that:
 3. Results are consistent across repeated runs (each test runs retrieval twice)
 4. Clinical accuracy: correct guidelines are surfaced for each condition
 
-Covers guidelines across all ingested sources: BSR, NICE, NICE_NEURO, OTHER_RHEUMATOLOGY.
+Covers guidelines across all ingested sources:
+BSR, NICE, NICE_NEURO, OTHER_RHEUMATOLOGY.
 
 Runs purely against the retrieval layer — no LLM generation — so results are
 deterministic and fast.
@@ -15,13 +16,15 @@ deterministic and fast.
 Run with:
     .venv312/bin/python3 -m pytest tests/retrieval/test_followup_retrieval_quality.py -v
 """
+
 from __future__ import annotations
 
-import pytest
+from typing import ClassVar
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _augment(query: str, history: str | None) -> str:
     """Call the live _augment_query_with_history from routes.py."""
@@ -47,17 +50,17 @@ def _retrieve(query: str, top_k: int = 5) -> list[dict]:
 
 def _merge(primary: list[dict], secondary: list[dict]) -> list[dict]:
     from src.api.routes import _merge_retrieved
+
     return _merge_retrieved(primary, secondary)
 
 
 def _filter(query: str, chunks: list[dict]) -> list[dict]:
     from src.api.services import filter_chunks
+
     return filter_chunks(query, chunks)
 
 
-def _full_pipeline(
-    current_query: str, history: str | None
-) -> list[dict]:
+def _full_pipeline(current_query: str, history: str | None) -> list[dict]:
     """Full pipeline: augment → dual-retrieve → merge → filter."""
     augmented = _augment(current_query, history)
     was_augmented = augmented != current_query
@@ -139,7 +142,7 @@ class TestStandalonePMR:
         "with morning stiffness >1 hour and raised ESR. "
         "Should polymyalgia rheumatica be started on steroids in primary care?"
     )
-    KEYWORDS = {"polymyalgia", "pmr", "prednisolone", "shoulder"}
+    KEYWORDS: ClassVar[set[str]] = {"polymyalgia", "pmr", "prednisolone", "shoulder"}
 
     def test_no_augmentation_without_history(self):
         assert _augment(self.QUERY, None) == self.QUERY
@@ -162,7 +165,7 @@ class TestStandaloneRheumatoidArthritis:
         "positive rheumatoid factor and anti-CCP, raised CRP. "
         "What is the first-line DMARD for rheumatoid arthritis?"
     )
-    KEYWORDS = {"rheumatoid", "dmard", "methotrexate", "arthritis"}
+    KEYWORDS: ClassVar[set[str]] = {"rheumatoid", "dmard", "methotrexate", "arthritis"}
 
     def test_no_augmentation_without_history(self):
         assert _augment(self.QUERY, None) == self.QUERY
@@ -178,7 +181,13 @@ class TestStandaloneGout:
         "45-year-old male presenting with acute monoarthritis of the first MTP "
         "joint, raised serum urate. How should acute gout be managed?"
     )
-    KEYWORDS = {"gout", "urate", "colchicine", "nsaid", "allopurinol"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "gout",
+        "urate",
+        "colchicine",
+        "nsaid",
+        "allopurinol",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -192,7 +201,14 @@ class TestStandaloneOsteoarthritis:
         "morning stiffness <30 minutes, crepitus on examination. "
         "What are the recommended treatments for osteoarthritis of the knee?"
     )
-    KEYWORDS = {"osteoarthritis", "exercise", "weight", "knee", "paracetamol", "nsaid"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "osteoarthritis",
+        "exercise",
+        "weight",
+        "knee",
+        "paracetamol",
+        "nsaid",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -206,7 +222,13 @@ class TestStandaloneAxialSpondyloarthritis:
         "worse at night and with morning stiffness >30 minutes, HLA-B27 positive. "
         "Should this patient be referred for suspected axial spondyloarthritis?"
     )
-    KEYWORDS = {"spondyloarthritis", "axial", "hla-b27", "back pain", "biologic"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "spondyloarthritis",
+        "axial",
+        "hla-b27",
+        "back pain",
+        "biologic",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -220,7 +242,13 @@ class TestStandaloneOsteoporosis:
         "T-score -2.8 at lumbar spine. "
         "What bisphosphonate should be started for osteoporosis?"
     )
-    KEYWORDS = {"osteoporosis", "bisphosphonate", "fracture", "alendronate", "bone"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "osteoporosis",
+        "bisphosphonate",
+        "fracture",
+        "alendronate",
+        "bone",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -233,7 +261,13 @@ class TestStandaloneLowBackPain:
         "40-year-old with 8 weeks of non-specific low back pain, no red flags. "
         "What does NICE recommend for management of non-specific low back pain?"
     )
-    KEYWORDS = {"back pain", "sciatica", "exercise", "physiotherapy", "imaging"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "back pain",
+        "sciatica",
+        "exercise",
+        "physiotherapy",
+        "imaging",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -247,7 +281,13 @@ class TestStandaloneMigraine:
         "nausea and photophobia lasting 4-72 hours. "
         "What is the acute treatment for migraine?"
     )
-    KEYWORDS = {"migraine", "headache", "triptan", "acute", "nausea"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "migraine",
+        "headache",
+        "triptan",
+        "acute",
+        "nausea",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -261,7 +301,14 @@ class TestStandaloneMultipleSclerosis:
         "white matter lesions on MRI. "
         "What disease-modifying therapies are recommended for relapsing-remitting MS?"
     )
-    KEYWORDS = {"multiple sclerosis", "relapsing", "disease-modifying", "interferon", "fingolimod", "ocrelizumab"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "multiple sclerosis",
+        "relapsing",
+        "disease-modifying",
+        "interferon",
+        "fingolimod",
+        "ocrelizumab",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -274,7 +321,14 @@ class TestStandaloneEpilepsy:
         "22-year-old with two unprovoked generalised tonic-clonic seizures. "
         "What is the first-line treatment for generalised epilepsy?"
     )
-    KEYWORDS = {"epilepsy", "seizure", "valproate", "lamotrigine", "antiepileptic", "generalised"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "epilepsy",
+        "seizure",
+        "valproate",
+        "lamotrigine",
+        "antiepileptic",
+        "generalised",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -287,7 +341,13 @@ class TestStandaloneParkinsons:
         "67-year-old man with resting tremor, bradykinesia and rigidity. "
         "What is the initial pharmacological treatment for Parkinson's disease?"
     )
-    KEYWORDS = {"parkinson", "levodopa", "dopamine", "tremor", "bradykinesia"}
+    KEYWORDS: ClassVar[set[str]] = {
+        "parkinson",
+        "levodopa",
+        "dopamine",
+        "tremor",
+        "bradykinesia",
+    }
 
     def test_relevant_chunks_retrieved_consistently(self):
         _assert_consistent(self.QUERY, None, self.KEYWORDS)
@@ -384,8 +444,15 @@ class TestFollowupRaSideEffects:
 
     def test_turn2_side_effects_consistent(self):
         history = _history(RA_QUERY)
-        kw = {"methotrexate", "side effect", "nausea", "mouth ulcer", "folic acid",
-              "toxicity", "adverse"}
+        kw = {
+            "methotrexate",
+            "side effect",
+            "nausea",
+            "mouth ulcer",
+            "folic acid",
+            "toxicity",
+            "adverse",
+        }
         _assert_consistent(RA_SIDE_EFFECTS_FOLLOWUP, history, kw)
 
 
@@ -414,7 +481,14 @@ class TestFollowupGoutChronic:
 
     def test_turn2_ult_consistent(self):
         history = _history(GOUT_QUERY)
-        kw = {"allopurinol", "urate", "ult", "urate-lowering", "febuxostat", "prophylaxis"}
+        kw = {
+            "allopurinol",
+            "urate",
+            "ult",
+            "urate-lowering",
+            "febuxostat",
+            "prophylaxis",
+        }
         _assert_consistent(GOUT_FOLLOWUP, history, kw)
 
 
@@ -444,8 +518,17 @@ class TestFollowupLbpCaudaEquina:
 
     def test_turn2_cauda_equina_consistent(self):
         history = _history(LBP_QUERY)
-        kw = {"cauda equina", "emergency", "bilateral", "weakness", "urinary",
-              "neurosurgical", "spinal", "decompression", "red flag"}
+        kw = {
+            "cauda equina",
+            "emergency",
+            "bilateral",
+            "weakness",
+            "urinary",
+            "neurosurgical",
+            "spinal",
+            "decompression",
+            "red flag",
+        }
         _assert_consistent(LBP_RED_FLAG_FOLLOWUP, history, kw)
 
 
@@ -465,8 +548,15 @@ class TestFollowupHeadacheToTia:
     """Secondary headache → TIA suspicion follow-up."""
 
     def test_turn1_headache_red_flags_consistent(self):
-        kw = {"headache", "secondary", "red flag", "sudden", "thunderclap",
-              "subarachnoid", "neurological"}
+        kw = {
+            "headache",
+            "secondary",
+            "red flag",
+            "sudden",
+            "thunderclap",
+            "subarachnoid",
+            "neurological",
+        }
         _assert_consistent(HEADACHE_QUERY, None, kw)
 
     def test_turn2_augmentation_triggered(self):
@@ -476,8 +566,16 @@ class TestFollowupHeadacheToTia:
 
     def test_turn2_tia_consistent(self):
         history = _history(HEADACHE_QUERY)
-        kw = {"transient", "tia", "stroke", "ischaemic", "weakness",
-              "neurological", "aspirin", "referral"}
+        kw = {
+            "transient",
+            "tia",
+            "stroke",
+            "ischaemic",
+            "weakness",
+            "neurological",
+            "aspirin",
+            "referral",
+        }
         _assert_consistent(HEADACHE_TIA_FOLLOWUP, history, kw)
 
 
@@ -496,8 +594,15 @@ class TestFollowupOsteoporosisFracture:
     """Osteoporosis management → treatment failure / fracture follow-up."""
 
     def test_turn1_osteoporosis_consistent(self):
-        kw = {"osteoporosis", "bisphosphonate", "alendronate", "bone", "fracture",
-              "t-score", "denosumab"}
+        kw = {
+            "osteoporosis",
+            "bisphosphonate",
+            "alendronate",
+            "bone",
+            "fracture",
+            "t-score",
+            "denosumab",
+        }
         _assert_consistent(OSTEO_QUERY, None, kw)
 
     def test_turn2_augmentation_triggered(self):
@@ -507,6 +612,13 @@ class TestFollowupOsteoporosisFracture:
 
     def test_turn2_fracture_consistent(self):
         history = _history(OSTEO_QUERY)
-        kw = {"fracture", "vertebral", "osteoporosis", "denosumab", "teriparatide",
-              "treatment", "bisphosphonate"}
+        kw = {
+            "fracture",
+            "vertebral",
+            "osteoporosis",
+            "denosumab",
+            "teriparatide",
+            "treatment",
+            "bisphosphonate",
+        }
         _assert_consistent(OSTEO_FRACTURE_FOLLOWUP, history, kw)

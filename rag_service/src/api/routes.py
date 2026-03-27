@@ -127,7 +127,9 @@ def _retrieve_for_answer_request(
     # instead of request.specialty.  This allows cross-specialty retrieval
     # for the bare follow-up query without affecting the primary retrieval.
     specialty = (
-        request.specialty if specialty_override is _SENTINEL_UNSET else specialty_override
+        request.specialty
+        if specialty_override is _SENTINEL_UNSET
+        else specialty_override
     )
     advanced_retriever = getattr(api_services, "retrieve_chunks_advanced", None)
     if callable(advanced_retriever):
@@ -201,7 +203,10 @@ def _augment_query_with_history(
     # in conversation_history.  We must exclude it to avoid doubling the query.
     # Drop any trailing GP lines that are identical (or nearly identical) to
     # the current query so we always anchor on the PRIOR clinical context.
-    filtered = [l for l in gp_lines if l[:200].lower() != stripped[:200].lower()]
+    filtered = [
+        line for line in gp_lines
+        if line[:200].lower() != stripped[:200].lower()
+    ]
     if not filtered:
         # All lines were the current message — no useful prior context available
         return query

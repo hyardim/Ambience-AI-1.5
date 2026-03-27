@@ -57,7 +57,8 @@ export function SpecialistQueryDetailPage() {
   const [showSendCommentModal, setShowSendCommentModal] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   const [showUnassignConfirm, setShowUnassignConfirm] = useState(false);
-  const [showConsultationManualResponseModal, setShowConsultationManualResponseModal] = useState(false);
+  const [showConsultationManualResponseModal, setShowConsultationManualResponseModal] =
+    useState(false);
   const [consultationManualContent, setConsultationManualContent] = useState('');
   const [consultationManualSources, setConsultationManualSources] = useState('');
   const [consultationManualFiles, setConsultationManualFiles] = useState<File[]>([]);
@@ -86,52 +87,68 @@ export function SpecialistQueryDetailPage() {
       ]);
       setMyUserId(profile.id);
       setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
-    } catch { /* silent refresh */ }
-  }, [chatId, username]);
-
-  const { phase: streamPhase, isStreaming: streamConnected, connectStream, startPolling, stopPolling } = useChatStream(
-    setMessages,
-    {
-      chatId: chat?.id ?? null,
-      onRefresh: refreshData,
-      onFileContextTruncated: () => {
-        setError(
-          'Attached file context was truncated before AI revision. Ask for a shorter upload if key details are missing.',
-        );
-      },
-    },
-  );
-
-  const loadData = useCallback(async (options?: { silent?: boolean }) => {
-    const isSilent = options?.silent;
-    requestControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestControllerRef.current = controller;
-    runUnlessSilent(isSilent, () => {
-      setLoading(true);
-      setError('');
-    });
-    try {
-      const [profile, chatData] = await Promise.all([
-        getProfile({ signal: controller.signal }),
-        getSpecialistChatDetail(chatId, { signal: controller.signal }),
-      ]);
-      setMyUserId(profile.id);
-      setChat(chatData);
-      setMessages(chatData.messages.map(m => toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist')));
-    } catch (err) {
-      ifNotAbortError(err, () => {
-        runUnlessSilent(isSilent, () => {
-          setError(getErrorMessage(err, 'Failed to load consultation'));
-        });
-      });
-    } finally {
-      runUnlessSilent(isSilent, () => {
-        setLoading(false);
-      });
+      setMessages(
+        chatData.messages.map((m) =>
+          toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist'),
+        ),
+      );
+    } catch {
+      /* silent refresh */
     }
   }, [chatId, username]);
+
+  const {
+    phase: streamPhase,
+    isStreaming: streamConnected,
+    connectStream,
+    startPolling,
+    stopPolling,
+  } = useChatStream(setMessages, {
+    chatId: chat?.id ?? null,
+    onRefresh: refreshData,
+    onFileContextTruncated: () => {
+      setError(
+        'Attached file context was truncated before AI revision. Ask for a shorter upload if key details are missing.',
+      );
+    },
+  });
+
+  const loadData = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const isSilent = options?.silent;
+      requestControllerRef.current?.abort();
+      const controller = new AbortController();
+      requestControllerRef.current = controller;
+      runUnlessSilent(isSilent, () => {
+        setLoading(true);
+        setError('');
+      });
+      try {
+        const [profile, chatData] = await Promise.all([
+          getProfile({ signal: controller.signal }),
+          getSpecialistChatDetail(chatId, { signal: controller.signal }),
+        ]);
+        setMyUserId(profile.id);
+        setChat(chatData);
+        setMessages(
+          chatData.messages.map((m) =>
+            toFrontendMessage(m, orFallback(username, 'Specialist User'), 'specialist'),
+          ),
+        );
+      } catch (err) {
+        ifNotAbortError(err, () => {
+          runUnlessSilent(isSilent, () => {
+            setError(getErrorMessage(err, 'Failed to load consultation'));
+          });
+        });
+      } finally {
+        runUnlessSilent(isSilent, () => {
+          setLoading(false);
+        });
+      }
+    },
+    [chatId, username],
+  );
 
   // Fetch profile (for specialist ID) + chat detail
   useEffect(() => {
@@ -169,13 +186,16 @@ export function SpecialistQueryDetailPage() {
   // Auto-connect SSE when there's pending AI work and no active stream
   useEffect(() => {
     if (!chat) return;
-    if (!shouldAutoConnectSpecialistStream({
-      hasChat: true,
-      streamConnected,
-      streamPhase,
-      hasPendingAIResponse,
-      hasRevisionInProgress,
-    })) return;
+    if (
+      !shouldAutoConnectSpecialistStream({
+        hasChat: true,
+        streamConnected,
+        streamPhase,
+        hasPendingAIResponse,
+        hasRevisionInProgress,
+      })
+    )
+      return;
 
     void connectStream(chat.id);
   }, [
@@ -410,7 +430,13 @@ export function SpecialistQueryDetailPage() {
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean);
-      await reviewChat(currentChat.id, 'manual_response', undefined, consultationManualContent.trim(), sources);
+      await reviewChat(
+        currentChat.id,
+        'manual_response',
+        undefined,
+        consultationManualContent.trim(),
+        sources,
+      );
       setShowConsultationManualResponseModal(false);
       setConsultationManualContent('');
       setConsultationManualSources('');
@@ -435,18 +461,22 @@ export function SpecialistQueryDetailPage() {
       content,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, optimistic]);
+    setMessages((prev) => [...prev, optimistic]);
 
     const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
     try {
       if (files && files.length > 0) {
-        const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+        const oversized = files.filter((f) => f.size > MAX_FILE_SIZE);
         if (oversized.length > 0) {
-          setMessages(prev => prev.filter(m => m.id !== tempId));
-          setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          setError(
+            `File(s) too large: ${oversized.map((f) => f.name).join(', ')}. Maximum size is 3 MB.`,
+          );
           return;
         }
-        const uploadResults = await Promise.allSettled(files.map(f => uploadChatFile(currentChat.id, f)));
+        const uploadResults = await Promise.allSettled(
+          files.map((f) => uploadChatFile(currentChat.id, f)),
+        );
         const failures = formatUploadFailures(uploadResults, files);
         if (failures) {
           setError(`Message sent, but some files failed to upload: ${failures}`);
@@ -455,7 +485,7 @@ export function SpecialistQueryDetailPage() {
       await sendSpecialistMessage(currentChat.id, content);
     } catch (err) {
       // Remove the optimistic message on failure
-      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setError(getErrorMessage(err, 'Failed to send message'));
     }
   };
@@ -472,13 +502,15 @@ export function SpecialistQueryDetailPage() {
   // IDs of all unreviewed AI messages (specialist can act on any of them)
   // Exclude messages still being generated — no actions should be shown on those.
   const unreviewedAIIds = new Set(
-    messages.filter(m => m.senderType === 'ai' && !m.reviewStatus && !m.isGenerating).map(m => m.id)
+    messages
+      .filter((m) => m.senderType === 'ai' && !m.reviewStatus && !m.isGenerating)
+      .map((m) => m.id),
   );
 
   // Whether every AI message has been reviewed (approved or rejected)
   // Also prevent closing if any message is still being generated.
-  const aiMessages = messages.filter(m => m.senderType === 'ai');
-  const anyGenerating = aiMessages.some(m => m.isGenerating);
+  const aiMessages = messages.filter((m) => m.senderType === 'ai');
+  const anyGenerating = aiMessages.some((m) => m.isGenerating);
   const allAIReviewed = aiMessages.length > 0 && unreviewedAIIds.size === 0 && !anyGenerating;
   const closeReviewTitle = getCloseReviewTitle(anyGenerating, allAIReviewed) ?? '';
   const terminalState = getTerminalConsultationState(chatStatus);

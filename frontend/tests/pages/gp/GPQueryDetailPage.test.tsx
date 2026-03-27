@@ -105,10 +105,7 @@ vi.mock('@/components/ChatInput', () => ({
   ),
 }));
 
-function renderPage(
-  route = '/gp/query/1',
-  state?: { draftMessage?: string },
-) {
+function renderPage(route = '/gp/query/1', state?: { draftMessage?: string }) {
   seedAuth({ role: 'gp', username: 'Dr GP' });
   window.history.pushState(state ?? {}, '', route);
   return renderWithProviders(
@@ -140,7 +137,8 @@ describe('GPQueryDetailPage', () => {
           id: Number(params.chatId),
           status: 'submitted',
           severity: 'urgent',
-        })),
+        }),
+      ),
       http.patch('/chats/:chatId', ({ params, request }) =>
         request.json().then((body) =>
           HttpResponse.json({
@@ -152,7 +150,8 @@ describe('GPQueryDetailPage', () => {
             user_id: mockChatWithMessages.user_id,
             messages: mockChatWithMessages.messages,
           }),
-        )),
+        ),
+      ),
     );
 
     renderPage();
@@ -162,7 +161,9 @@ describe('GPQueryDetailPage', () => {
       expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/this consultation has been submitted for specialist review/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/this consultation has been submitted for specialist review/i),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(mockStartPolling).toHaveBeenCalled();
     });
@@ -185,7 +186,9 @@ describe('GPQueryDetailPage', () => {
   }, 15000);
 
   it('shows not-found and send validation errors', async () => {
-    server.use(http.get('/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })));
+    server.use(
+      http.get('/chats/:chatId', () => HttpResponse.json({ detail: 'Missing' }, { status: 404 })),
+    );
     renderPage('/gp/query/999');
     const user = userEvent.setup();
 
@@ -207,9 +210,11 @@ describe('GPQueryDetailPage', () => {
           id: Number(params.chatId),
           status: 'open',
           severity: 'high',
-        })),
+        }),
+      ),
       http.patch('/chats/:chatId', () =>
-        HttpResponse.json({ detail: 'Save failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Save failed' }, { status: 500 }),
+      ),
       http.post('/chats/:chatId/files', () => new HttpResponse(null, { status: 204 })),
     );
 
@@ -241,7 +246,8 @@ describe('GPQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'assigned',
-        })),
+        }),
+      ),
     );
     renderPage();
 
@@ -257,7 +263,8 @@ describe('GPQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'approved',
-        })),
+        }),
+      ),
     );
     renderPage();
 
@@ -273,7 +280,8 @@ describe('GPQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'rejected',
-        })),
+        }),
+      ),
     );
     renderPage();
 
@@ -293,7 +301,8 @@ describe('GPQueryDetailPage', () => {
           status: 'approved',
           severity: null,
           messages: [],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -313,9 +322,11 @@ describe('GPQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'open',
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/message', () =>
-        HttpResponse.json({ detail: 'Send failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Send failed' }, { status: 500 }),
+      ),
     );
 
     renderPage();
@@ -344,7 +355,8 @@ describe('GPQueryDetailPage', () => {
             ...mockChatWithMessages.messages,
             { id: 999, content: 'Persisted AI', sender: 'ai', created_at: '2025-01-15T10:02:00Z' },
           ],
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/files', () => HttpResponse.json({ id: 'f1' })),
     );
 
@@ -379,7 +391,8 @@ describe('GPQueryDetailPage', () => {
               created_at: '2025-01-15T10:00:00Z',
             },
           ],
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/files', () => {
         uploadCount += 1;
         if (uploadCount === 1) {
@@ -415,7 +428,8 @@ describe('GPQueryDetailPage', () => {
             ...mockChatWithMessages.messages,
             { id: 999, content: 'Persisted AI', sender: 'ai', created_at: '2025-01-15T10:02:00Z' },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage('/gp/query/1', { draftMessage: 'Draft from previous page' });
@@ -438,9 +452,15 @@ describe('GPQueryDetailPage', () => {
           id: Number(params.chatId),
           status: 'open',
           messages: [
-            { id: 1, content: 'Patient follow-up', sender: 'user', created_at: '2025-01-15T10:05:00Z' },
+            {
+              id: 1,
+              content: 'Patient follow-up',
+              sender: 'user',
+              created_at: '2025-01-15T10:05:00Z',
+            },
           ],
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -451,14 +471,16 @@ describe('GPQueryDetailPage', () => {
   });
 
   it('does not auto-connect when the stream is already in fallback polling', () => {
-    expect(shouldAutoConnectGpStream({
-      hasChat: true,
-      streamConnected: false,
-      sending: false,
-      streamPhase: 'fallback_polling',
-      hasPendingAIResponse: true,
-      hasRevisionInProgress: false,
-    })).toBe(false);
+    expect(
+      shouldAutoConnectGpStream({
+        hasChat: true,
+        streamConnected: false,
+        sending: false,
+        streamPhase: 'fallback_polling',
+        hasPendingAIResponse: true,
+        hasRevisionInProgress: false,
+      }),
+    ).toBe(false);
   });
 
   it('shows file truncation warning when onFileContextTruncated is called', async () => {
@@ -478,14 +500,16 @@ describe('GPQueryDetailPage', () => {
   });
 
   it('does not auto-connect while a send is already in progress', () => {
-    expect(shouldAutoConnectGpStream({
-      hasChat: true,
-      streamConnected: false,
-      sending: true,
-      streamPhase: 'idle',
-      hasPendingAIResponse: true,
-      hasRevisionInProgress: false,
-    })).toBe(false);
+    expect(
+      shouldAutoConnectGpStream({
+        hasChat: true,
+        streamConnected: false,
+        sending: true,
+        streamPhase: 'idle',
+        hasPendingAIResponse: true,
+        hasRevisionInProgress: false,
+      }),
+    ).toBe(false);
   });
 
   it('shows draft send failure when the backend rejects the initial draft message', async () => {
@@ -496,9 +520,11 @@ describe('GPQueryDetailPage', () => {
           id: Number(params.chatId),
           status: 'open',
           severity: 'high',
-        })),
+        }),
+      ),
       http.post('/chats/:chatId/message', () =>
-        HttpResponse.json({ detail: 'Draft send failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Draft send failed' }, { status: 500 }),
+      ),
     );
 
     renderPage('/gp/query/1', { draftMessage: 'Draft from previous page' });
@@ -516,7 +542,8 @@ describe('GPQueryDetailPage', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           status: 'open',
-        })),
+        }),
+      ),
     );
 
     renderPage();
@@ -546,9 +573,10 @@ describe('GPQueryDetailPage', () => {
           status: 'open',
           specialty: 'neurology',
           severity: 'urgent',
-        })),
+        }),
+      ),
       http.patch('/chats/:chatId', async ({ params, request }) => {
-        const body = await request.json() as { specialty?: string; severity?: string };
+        const body = (await request.json()) as { specialty?: string; severity?: string };
         expect(body.specialty).toBeUndefined();
         expect(body.severity).toBeUndefined();
         return HttpResponse.json({

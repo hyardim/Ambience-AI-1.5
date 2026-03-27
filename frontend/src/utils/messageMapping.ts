@@ -8,11 +8,7 @@ type RawCitation = Record<string, unknown> & {
 
 /** Safely map raw citation objects coming from the backend to the frontend Citation shape. */
 export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null): Citation[] {
-  const list = Array.isArray(raw) && raw.length > 0
-    ? raw
-    : Array.isArray(fallback)
-      ? fallback
-      : [];
+  const list = Array.isArray(raw) && raw.length > 0 ? raw : Array.isArray(fallback) ? fallback : [];
 
   return list
     .map((entry) => {
@@ -30,16 +26,16 @@ export function mapCitations(raw?: unknown[] | null, fallback?: unknown[] | null
       return {
         doc_id: typeof docId === 'string' ? docId : undefined,
         title:
-          readString(citation.title)
-          || readString(meta.title)
-          || readString(meta.filename)
-          || readString(citation.source)
-          || 'Source',
+          readString(citation.title) ||
+          readString(meta.title) ||
+          readString(meta.filename) ||
+          readString(citation.source) ||
+          'Source',
         source_name:
-          readString(citation.source_name)
-          || readString(meta.source_name)
-          || readString(citation.source)
-          || 'Source',
+          readString(citation.source_name) ||
+          readString(meta.source_name) ||
+          readString(citation.source) ||
+          'Source',
         specialty: readString(citation.specialty) || readString(meta.specialty),
         section_path: readSectionPath(sectionPath),
         page_start: typeof pageStart === 'number' ? pageStart : undefined,
@@ -70,7 +66,11 @@ function readSectionPath(value: unknown): string | string[] | undefined {
 
 /** Map a backend message to the frontend Message shape.
  *  @param viewerRole - 'gp' shows currentUser for GP messages, 'specialist' shows currentUser for specialist messages. */
-export function toFrontendMessage(msg: BackendMessage, currentUser: string, viewerRole: 'gp' | 'specialist' = 'gp'): Message {
+export function toFrontendMessage(
+  msg: BackendMessage,
+  currentUser: string,
+  viewerRole: 'gp' | 'specialist' = 'gp',
+): Message {
   const isAI = msg.sender === 'ai';
   const isSpecialist = msg.sender === 'specialist';
 

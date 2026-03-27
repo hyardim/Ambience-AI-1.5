@@ -30,7 +30,12 @@ describe('app integration flows', () => {
           ...mockChatWithMessages,
           id: Number(params.chatId),
           messages: [
-            { id: 1, content: 'Patient context', sender: 'user', created_at: '2025-01-15T10:01:00Z' },
+            {
+              id: 1,
+              content: 'Patient context',
+              sender: 'user',
+              created_at: '2025-01-15T10:01:00Z',
+            },
             {
               id: 2,
               content: 'Grounded answer [1]',
@@ -72,11 +77,15 @@ describe('app integration flows', () => {
       expect(screen.getByRole('heading', { name: /new consultation/i })).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByLabelText(/consultation title/i), { target: { value: 'New MS consult' } });
+    fireEvent.change(screen.getByLabelText(/consultation title/i), {
+      target: { value: 'New MS consult' },
+    });
     fireEvent.change(screen.getByLabelText(/^patient age/i), { target: { value: '42' } });
     fireEvent.change(screen.getByLabelText(/^sex/i), { target: { value: 'female' } });
     fireEvent.change(screen.getByLabelText(/specialty/i), { target: { value: 'neurology' } });
-    fireEvent.change(screen.getByLabelText(/clinical question/i), { target: { value: 'Should we escalate DMT?' } });
+    fireEvent.change(screen.getByLabelText(/clinical question/i), {
+      target: { value: 'Should we escalate DMT?' },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /submit consultation/i }));
 
@@ -95,7 +104,9 @@ describe('app integration flows', () => {
       expect(screen.getByText(mockChat.title)).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/search consultations/i), { target: { value: 'joint pain' } });
+    fireEvent.change(screen.getByPlaceholderText(/search consultations/i), {
+      target: { value: 'joint pain' },
+    });
 
     await waitFor(() => {
       expect(screen.queryByText(mockChat.title)).not.toBeInTheDocument();
@@ -185,7 +196,11 @@ describe('app integration flows', () => {
       http.get('/notifications/', () => HttpResponse.json(mockNotifications)),
       http.patch('/notifications/:notificationId/read', ({ params }) => {
         markReadSpy(Number(params.notificationId));
-        return HttpResponse.json({ ...mockNotifications[0], id: Number(params.notificationId), is_read: true });
+        return HttpResponse.json({
+          ...mockNotifications[0],
+          id: Number(params.notificationId),
+          is_read: true,
+        });
       }),
     );
     window.history.pushState({}, '', '/gp/queries');
@@ -220,9 +235,13 @@ describe('app integration flows', () => {
 
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: 'Test' } });
     fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: 'User' } });
-    fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'new.gp@example.com' } });
+    fireEvent.change(screen.getByLabelText(/email address/i), {
+      target: { value: 'new.gp@example.com' },
+    });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'Password123!' } });
-    fireEvent.change(screen.getByLabelText(/^confirm password$/i), { target: { value: 'Password123!' } });
+    fireEvent.change(screen.getByLabelText(/^confirm password$/i), {
+      target: { value: 'Password123!' },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
@@ -246,7 +265,9 @@ describe('app integration flows', () => {
   it('api error shows fallback ui', async () => {
     seedAuth({ role: 'gp', username: 'Dr GP', email: 'gp@example.com' });
     server.use(
-      http.get('/chats/:chatId', () => HttpResponse.json({ detail: 'Server error' }, { status: 500 })),
+      http.get('/chats/:chatId', () =>
+        HttpResponse.json({ detail: 'Server error' }, { status: 500 }),
+      ),
     );
     window.history.pushState({}, '', '/gp/query/1');
 
@@ -260,7 +281,9 @@ describe('app integration flows', () => {
   it('redirects a protected route to login when refresh and profile recovery fail', async () => {
     seedAuth({ role: 'gp', username: 'Dr GP', email: 'gp@example.com' });
     server.use(
-      http.post('/auth/refresh', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
+      http.post('/auth/refresh', () =>
+        HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 }),
+      ),
       http.get('/auth/me', () => HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })),
     );
     window.history.pushState({}, '', '/profile');

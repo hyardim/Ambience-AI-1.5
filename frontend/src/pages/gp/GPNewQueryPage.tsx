@@ -21,22 +21,26 @@ export function GPNewQueryPage() {
     specialty: '',
     severity: 'medium' as Severity,
     patientNotes: '',
-    message: ''
+    message: '',
   });
 
   const formatUploadFailures = (results: PromiseSettledResult<unknown>[], files: File[]) => {
     const failures = results.flatMap((result, index) =>
       result.status === 'rejected'
-        ? [`${files[index]?.name ?? 'Unknown file'}: ${result.reason instanceof Error ? result.reason.message : 'Upload failed'}`]
+        ? [
+            `${files[index]?.name ?? 'Unknown file'}: ${result.reason instanceof Error ? result.reason.message : 'Upload failed'}`,
+          ]
         : [],
     );
     return failures;
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     }));
   };
 
@@ -56,12 +60,14 @@ export function GPNewQueryPage() {
     }
 
     if (!formData.specialty) {
-      setError('Please select a specialty before submitting. Without it, the consultation cannot be routed to a specialist.');
+      setError(
+        'Please select a specialty before submitting. Without it, the consultation cannot be routed to a specialist.',
+      );
       return;
     }
 
     if (!formData.patientAge) {
-      setError('Please enter the patient\'s age.');
+      setError("Please enter the patient's age.");
       return;
     }
 
@@ -72,7 +78,7 @@ export function GPNewQueryPage() {
     }
 
     if (!formData.sex) {
-      setError('Please select the patient\'s sex.');
+      setError("Please select the patient's sex.");
       return;
     }
 
@@ -112,7 +118,9 @@ export function GPNewQueryPage() {
       //    sending the first GP message. Attachments are already persisted.
       navigate(`/gp/query/${chat.id}`, { state: { draftMessage: formData.message } });
     } catch {
-      setError('Unable to create consultation. Please try again or contact support if the issue persists.');
+      setError(
+        'Unable to create consultation. Please try again or contact support if the issue persists.',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -139,7 +147,11 @@ export function GPNewQueryPage() {
           </div>
 
           {error && (
-            <div role="alert" aria-live="polite" className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+            >
               {error}
             </div>
           )}
@@ -162,12 +174,19 @@ export function GPNewQueryPage() {
                   maxLength={200}
                   required
                 />
-                <span className={`text-xs ${formData.title.length > 180 ? 'text-red-500' : 'text-gray-400'}`}>{formData.title.length}/200</span>
+                <span
+                  className={`text-xs ${formData.title.length > 180 ? 'text-red-500' : 'text-gray-400'}`}
+                >
+                  {formData.title.length}/200
+                </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <label htmlFor="patientAge" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="patientAge"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Patient Age <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -201,7 +220,10 @@ export function GPNewQueryPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="specialty" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="specialty"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Specialty <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -218,7 +240,10 @@ export function GPNewQueryPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="severity"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Urgency <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -238,7 +263,10 @@ export function GPNewQueryPage() {
               </div>
 
               <div>
-                <label htmlFor="patientNotes" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="patientNotes"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Additional clinical context
                 </label>
                 <textarea
@@ -251,7 +279,11 @@ export function GPNewQueryPage() {
                   placeholder="Relevant comorbidities, current medications, allergies, recent investigations..."
                   maxLength={2000}
                 />
-                <span className={`text-xs ${formData.patientNotes.length > 1800 ? 'text-red-500' : 'text-gray-400'}`}>{formData.patientNotes.length}/2000</span>
+                <span
+                  className={`text-xs ${formData.patientNotes.length > 1800 ? 'text-red-500' : 'text-gray-400'}`}
+                >
+                  {formData.patientNotes.length}/2000
+                </span>
               </div>
 
               <div>
@@ -273,9 +305,12 @@ export function GPNewQueryPage() {
               {/* File attachments */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Attach files <span className="text-gray-400 font-normal">(optional — PDFs or text files)</span>
+                  Attach files{' '}
+                  <span className="text-gray-400 font-normal">(optional — PDFs or text files)</span>
                 </label>
-                <p className="text-xs text-gray-500 mb-2">Max 3MB per file · PDF, TXT, MD, DOC, DOCX</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Max 3MB per file · PDF, TXT, MD, DOC, DOCX
+                </p>
                 <label className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                   <Paperclip className="w-4 h-4" />
                   Choose files
@@ -288,19 +323,23 @@ export function GPNewQueryPage() {
                       if (!e.target.files) return;
                       const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
                       const selected = Array.from(e.target.files);
-                      const oversized = selected.filter(f => f.size > MAX_FILE_SIZE);
+                      const oversized = selected.filter((f) => f.size > MAX_FILE_SIZE);
                       if (oversized.length > 0) {
-                        setError(`File(s) too large: ${oversized.map(f => f.name).join(', ')}. Maximum size is 3 MB.`);
+                        setError(
+                          `File(s) too large: ${oversized.map((f) => f.name).join(', ')}. Maximum size is 3 MB.`,
+                        );
                         e.target.value = '';
                         return;
                       }
                       setError('');
-                      setAttachedFiles(prev => {
-                        const existingNames = new Set(prev.map(f => f.name));
-                        const duplicates = selected.filter(f => existingNames.has(f.name));
-                        const newFiles = selected.filter(f => !existingNames.has(f.name));
+                      setAttachedFiles((prev) => {
+                        const existingNames = new Set(prev.map((f) => f.name));
+                        const duplicates = selected.filter((f) => existingNames.has(f.name));
+                        const newFiles = selected.filter((f) => !existingNames.has(f.name));
                         if (duplicates.length > 0) {
-                          setFileNotice(`Already added: ${duplicates.map(f => f.name).join(', ')}`);
+                          setFileNotice(
+                            `Already added: ${duplicates.map((f) => f.name).join(', ')}`,
+                          );
                           setTimeout(() => setFileNotice(''), 4000);
                         } else {
                           setFileNotice('');
@@ -324,7 +363,9 @@ export function GPNewQueryPage() {
                         <span className="truncate">{f.name}</span>
                         <button
                           type="button"
-                          onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          onClick={() =>
+                            setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i))
+                          }
                           className="ml-auto text-gray-400 hover:text-red-500"
                         >
                           <X className="w-3 h-3" />

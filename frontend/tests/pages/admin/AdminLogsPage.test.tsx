@@ -44,7 +44,9 @@ describe('AdminLogsPage', () => {
       expect(screen.getByText(/No audit logs found/i)).toBeInTheDocument();
     });
 
-    server.use(http.get('/admin/logs', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })));
+    server.use(
+      http.get('/admin/logs', () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })),
+    );
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /refresh/i }));
 
@@ -101,17 +103,19 @@ describe('AdminLogsPage', () => {
 
   it('falls back to user-id labels when no user identifier is present', async () => {
     server.use(
-      http.get('/admin/logs', () => HttpResponse.json([
-        {
-          id: 3,
-          user_id: 42,
-          user_identifier: null,
-          action: 'LOGIN',
-          category: 'AUTH',
-          details: 'Signed in',
-          timestamp: '2025-01-15T10:00:00Z',
-        },
-      ])),
+      http.get('/admin/logs', () =>
+        HttpResponse.json([
+          {
+            id: 3,
+            user_id: 42,
+            user_identifier: null,
+            action: 'LOGIN',
+            category: 'AUTH',
+            details: 'Signed in',
+            timestamp: '2025-01-15T10:00:00Z',
+          },
+        ]),
+      ),
     );
 
     renderPage();

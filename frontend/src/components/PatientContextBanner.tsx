@@ -20,20 +20,20 @@ export function PatientContextBanner({
   specialty,
   urgency,
   notes,
-  className = "",
+  className = '',
 }: PatientContextBannerProps) {
   const chips: Array<{ label: string; value: string }> = [];
   if (age !== null && age !== undefined) {
-    chips.push({ label: "Age", value: String(age) });
+    chips.push({ label: 'Age', value: String(age) });
   }
   if (sex) {
-    chips.push({ label: "Sex", value: toTitleCase(sex) });
+    chips.push({ label: 'Sex', value: toTitleCase(sex) });
   }
   if (specialty) {
-    chips.push({ label: "Specialty", value: toTitleCase(specialty) });
+    chips.push({ label: 'Specialty', value: toTitleCase(specialty) });
   }
   if (urgency) {
-    chips.push({ label: "Urgency", value: toTitleCase(urgency) });
+    chips.push({ label: 'Urgency', value: toTitleCase(urgency) });
   }
 
   const hasNotes = Boolean(notes && notes.trim());

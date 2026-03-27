@@ -221,7 +221,11 @@ export function SpecialistQueryDetailView({
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-        <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
+        <Header
+          userRole="specialist"
+          userName={orFallback(username, 'Specialist User')}
+          onLogout={logout}
+        />
         <main className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-[var(--nhs-blue)] animate-spin" />
         </main>
@@ -232,7 +236,11 @@ export function SpecialistQueryDetailView({
   if (!chat) {
     return (
       <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-        <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
+        <Header
+          userRole="specialist"
+          userName={orFallback(username, 'Specialist User')}
+          onLogout={logout}
+        />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Query not found</h1>
@@ -253,7 +261,11 @@ export function SpecialistQueryDetailView({
 
   return (
     <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
-      <Header userRole="specialist" userName={orFallback(username, 'Specialist User')} onLogout={logout} />
+      <Header
+        userRole="specialist"
+        userName={orFallback(username, 'Specialist User')}
+        onLogout={logout}
+      />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
         <button
@@ -276,7 +288,9 @@ export function SpecialistQueryDetailView({
                   <span>·</span>
                   <span>
                     {new Date(chat.created_at).toLocaleDateString('en-GB', {
-                      day: 'numeric', month: 'short', year: 'numeric',
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
                     })}
                   </span>
                 </div>
@@ -359,7 +373,9 @@ export function SpecialistQueryDetailView({
               )}
 
               {isTerminal && (
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${terminalState.className}`}>
+                <div
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${terminalState.className}`}
+                >
                   <TerminalStatusIcon className="w-5 h-5" />
                   {terminalState.label}
                 </div>
@@ -419,7 +435,9 @@ export function SpecialistQueryDetailView({
                   </div>
                 </div>
                 <div className="flex-1 max-w-3xl">
-                  <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">NHS AI Assistant</div>
+                  <div className="font-semibold text-gray-900 text-sm sm:text-base mb-2">
+                    NHS AI Assistant
+                  </div>
                   <div className="rounded-2xl px-4 sm:px-5 py-3 sm:py-4 bg-white border-l-4 border-[var(--nhs-blue)] shadow-sm">
                     <div className="flex items-center gap-1.5 py-1">
                       <span className="w-2 h-2 rounded-full bg-[var(--nhs-blue)] animate-bounce [animation-delay:-0.3s]"></span>

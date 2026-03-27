@@ -46,7 +46,9 @@ describe('AdminGuidelinesPage', () => {
     await user.upload(input, new File(['%PDF'], 'guideline.pdf', { type: 'application/pdf' }));
     await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
 
-    expect(screen.getByText(/please choose where this guideline belongs before uploading/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/please choose where this guideline belongs before uploading/i),
+    ).toBeInTheDocument();
   });
 
   it('clears the selected file when the file picker is reset to empty', async () => {
@@ -77,7 +79,8 @@ describe('AdminGuidelinesPage', () => {
   it('shows upload errors', async () => {
     server.use(
       http.post('/admin/guidelines/upload', () =>
-        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 }),
+      ),
     );
 
     const { container } = renderPage();
@@ -105,7 +108,8 @@ describe('AdminGuidelinesPage', () => {
           embeddings_succeeded: 8,
           embeddings_failed: 2,
           db: { inserted: 6, updated: 1, failed: 1 },
-        })),
+        }),
+      ),
     );
 
     const { container } = renderPage();
@@ -118,7 +122,11 @@ describe('AdminGuidelinesPage', () => {
     await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/warning: 1 file\(s\) failed, 2 embedding\(s\) failed, 1 db write\(s\) failed/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /warning: 1 file\(s\) failed, 2 embedding\(s\) failed, 1 db write\(s\) failed/i,
+        ),
+      ).toBeInTheDocument();
     });
   });
 });

@@ -20,9 +20,7 @@ function renderRagPage() {
 }
 
 function overrideRagStatus(data: Partial<RagStatusResponse>) {
-  server.use(
-    http.get('/admin/rag/status', () => HttpResponse.json(data)),
-  );
+  server.use(http.get('/admin/rag/status', () => HttpResponse.json(data)));
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +36,9 @@ describe('AdminRagPage — initial load', () => {
 
   it('renders page heading', async () => {
     renderRagPage();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'RAG Pipeline' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'RAG Pipeline' })).toBeInTheDocument(),
+    );
   });
 
   it('renders Indexed Documents section after load', async () => {
@@ -77,7 +77,9 @@ describe('AdminRagPage — initial load', () => {
 
   it('renders Refresh button', async () => {
     renderRagPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument(),
+    );
   });
 });
 
@@ -150,7 +152,9 @@ describe('AdminRagPage — timestamp formatting', () => {
   it('renders dash for null latest_ingestion', async () => {
     overrideRagStatus({
       service_status: 'healthy',
-      documents: [{ doc_id: 'doc-null', source_name: 'Source', chunk_count: 1, latest_ingestion: null }],
+      documents: [
+        { doc_id: 'doc-null', source_name: 'Source', chunk_count: 1, latest_ingestion: null },
+      ],
       jobs: null,
     });
     renderRagPage();
@@ -161,7 +165,14 @@ describe('AdminRagPage — timestamp formatting', () => {
   it('renders formatted timestamp for valid latest_ingestion', async () => {
     overrideRagStatus({
       service_status: 'healthy',
-      documents: [{ doc_id: 'doc-ts', source_name: 'Source', chunk_count: 5, latest_ingestion: '2025-06-15T14:30:00Z' }],
+      documents: [
+        {
+          doc_id: 'doc-ts',
+          source_name: 'Source',
+          chunk_count: 5,
+          latest_ingestion: '2025-06-15T14:30:00Z',
+        },
+      ],
       jobs: null,
     });
     renderRagPage();
@@ -244,9 +255,7 @@ describe('AdminRagPage — error state', () => {
 
   it('does not show documents section when errored', async () => {
     server.use(
-      http.get('/admin/rag/status', () =>
-        HttpResponse.json({ detail: 'down' }, { status: 503 }),
-      ),
+      http.get('/admin/rag/status', () => HttpResponse.json({ detail: 'down' }, { status: 503 })),
     );
     renderRagPage();
     await waitFor(() => expect(screen.getByText(/down/i)).toBeInTheDocument());
@@ -270,7 +279,14 @@ describe('AdminRagPage — refresh', () => {
       http.get('/admin/rag/status', () =>
         HttpResponse.json({
           service_status: 'healthy',
-          documents: [{ doc_id: 'doc-refreshed', source_name: 'New Source', chunk_count: 99, latest_ingestion: null }],
+          documents: [
+            {
+              doc_id: 'doc-refreshed',
+              source_name: 'New Source',
+              chunk_count: 99,
+              latest_ingestion: null,
+            },
+          ],
           jobs: { pending: 0, running: 0, failed: 0 },
         }),
       ),
@@ -319,9 +335,7 @@ describe('AdminRagPage — refresh', () => {
 
     await user.click(screen.getByRole('button', { name: /refresh/i }));
 
-    await waitFor(() =>
-      expect(screen.queryByText(/service down/i)).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText(/service down/i)).not.toBeInTheDocument());
     expect(screen.getByText(/ingestion jobs/i)).toBeInTheDocument();
   });
 });
@@ -331,9 +345,24 @@ describe('AdminRagPage — search, filter, and sort', () => {
     overrideRagStatus({
       service_status: 'healthy',
       documents: [
-        { doc_id: 'doc-a', source_name: 'NICE', chunk_count: 10, latest_ingestion: '2025-06-15T14:30:00Z' },
-        { doc_id: 'doc-b', source_name: 'BSR', chunk_count: 30, latest_ingestion: '2025-06-16T14:30:00Z' },
-        { doc_id: 'match-doc', source_name: 'NICE', chunk_count: 20, latest_ingestion: '2025-06-17T14:30:00Z' },
+        {
+          doc_id: 'doc-a',
+          source_name: 'NICE',
+          chunk_count: 10,
+          latest_ingestion: '2025-06-15T14:30:00Z',
+        },
+        {
+          doc_id: 'doc-b',
+          source_name: 'BSR',
+          chunk_count: 30,
+          latest_ingestion: '2025-06-16T14:30:00Z',
+        },
+        {
+          doc_id: 'match-doc',
+          source_name: 'NICE',
+          chunk_count: 20,
+          latest_ingestion: '2025-06-17T14:30:00Z',
+        },
       ],
       jobs: null,
     });

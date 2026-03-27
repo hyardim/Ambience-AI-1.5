@@ -6,12 +6,7 @@ import type { Message } from '../types';
 
 // ── Stream lifecycle states ──────────────────────────────────────────────
 
-export type StreamPhase =
-  | 'idle'
-  | 'connecting'
-  | 'streaming'
-  | 'completed'
-  | 'fallback_polling';
+export type StreamPhase = 'idle' | 'connecting' | 'streaming' | 'completed' | 'fallback_polling';
 
 export interface UseChatStreamOptions {
   /** Current chat ID (null when chat not yet loaded). */
@@ -200,9 +195,7 @@ export function useChatStream(
             }
             // Insert placeholder AI message if not already present
             setMessages((prev) => {
-              const existingGenerating = prev.find(
-                (m) => m.isGenerating && m.senderType === 'ai',
-              );
+              const existingGenerating = prev.find((m) => m.isGenerating && m.senderType === 'ai');
               if (existingGenerating) {
                 return existingGenerating.id === String(messageId)
                   ? prev
@@ -228,9 +221,7 @@ export function useChatStream(
             if (!mountedRef.current) return;
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === String(messageId)
-                  ? { ...m, content, isGenerating: true }
-                  : m,
+                m.id === String(messageId) ? { ...m, content, isGenerating: true } : m,
               ),
             );
           },

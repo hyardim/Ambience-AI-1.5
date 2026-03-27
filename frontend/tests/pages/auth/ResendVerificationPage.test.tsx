@@ -27,7 +27,9 @@ describe('ResendVerificationPage', () => {
     renderResendVerification();
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /resend verification email/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: /resend verification email/i }),
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
@@ -43,7 +45,9 @@ describe('ResendVerificationPage', () => {
   it('shows error when submitting empty email', async () => {
     renderResendVerification();
 
-    const form = screen.getByRole('button', { name: /resend verification email/i }).closest('form')!;
+    const form = screen
+      .getByRole('button', { name: /resend verification email/i })
+      .closest('form')!;
     fireEvent.submit(form);
 
     expect(screen.getByText(/email is required/i)).toBeInTheDocument();
@@ -66,7 +70,8 @@ describe('ResendVerificationPage', () => {
   it('shows error on API failure', async () => {
     server.use(
       http.post('/auth/resend-verification', () =>
-        HttpResponse.json({ detail: 'Too many requests' }, { status: 429 })),
+        HttpResponse.json({ detail: 'Too many requests' }, { status: 429 }),
+      ),
     );
 
     renderResendVerification();
@@ -82,8 +87,7 @@ describe('ResendVerificationPage', () => {
 
   it('shows fallback error for non-Error exceptions', async () => {
     server.use(
-      http.post('/auth/resend-verification', () =>
-        new HttpResponse(null, { status: 500 })),
+      http.post('/auth/resend-verification', () => new HttpResponse(null, { status: 500 })),
     );
 
     renderResendVerification();

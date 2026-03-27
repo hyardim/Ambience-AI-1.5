@@ -149,7 +149,9 @@ def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_id == current_user.id and payload.is_active is False:
-        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+        raise HTTPException(
+            status_code=400, detail="Cannot deactivate your own account"
+        )
     if user_id == current_user.id and payload.role is not None:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
 
@@ -177,7 +179,9 @@ def update_user(
 def deactivate_user(db: Session, user_id: int, *, current_user: User) -> UserOut:
     """Deactivate a user account. Admins cannot deactivate themselves."""
     if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+        raise HTTPException(
+            status_code=400, detail="Cannot deactivate your own account"
+        )
     user = user_repository.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

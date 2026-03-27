@@ -25,14 +25,21 @@ export function ApproveConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="approve-confirm-title">
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approve-confirm-title"
+      >
         <div className="flex items-center gap-3 text-[#007f3b] mb-4">
           <CheckCircle className="w-8 h-8" />
-          <h2 id="approve-confirm-title" className="text-xl font-bold">Approve Response</h2>
+          <h2 id="approve-confirm-title" className="text-xl font-bold">
+            Approve Response
+          </h2>
         </div>
         <p className="text-gray-600 mb-6">
-          By approving, you confirm that the AI-generated response is clinically accurate
-          and appropriate to send to the GP.
+          By approving, you confirm that the AI-generated response is clinically accurate and
+          appropriate to send to the GP.
         </p>
         <div className="flex gap-3 justify-end">
           <button
@@ -77,10 +84,17 @@ export function ApproveWithCommentModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="approve-comment-title">
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approve-comment-title"
+      >
         <div className="flex items-center gap-3 text-[var(--nhs-blue)] mb-4">
           <MessageSquare className="w-8 h-8" />
-          <h2 id="approve-comment-title" className="text-xl font-bold">Approve with Comment</h2>
+          <h2 id="approve-comment-title" className="text-xl font-bold">
+            Approve with Comment
+          </h2>
         </div>
         <p className="text-gray-600 mb-4">
           Your comment will be sent as a message to the GP before the consultation is approved.
@@ -136,10 +150,17 @@ export function RequestChangesModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="request-changes-title">
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="request-changes-title"
+      >
         <div className="flex items-center gap-3 text-amber-600 mb-4">
           <AlertTriangle className="w-8 h-8" />
-          <h2 id="request-changes-title" className="text-xl font-bold">Request Changes</h2>
+          <h2 id="request-changes-title" className="text-xl font-bold">
+            Request Changes
+          </h2>
         </div>
         <p className="text-gray-600 mb-4">
           Please describe what changes are needed to the AI response:
@@ -204,27 +225,36 @@ export function ManualResponseModal({
   }
 
   const handleFilesChange = (files: File[]) => {
-    const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+    const oversized = files.filter((f) => f.size > MAX_FILE_SIZE);
     if (oversized.length > 0) {
-      setFileError(`File(s) exceed the ${MAX_FILE_SIZE_MB} MB limit: ${oversized.map(f => f.name).join(', ')}`);
+      setFileError(
+        `File(s) exceed the ${MAX_FILE_SIZE_MB} MB limit: ${oversized.map((f) => f.name).join(', ')}`,
+      );
       return;
     }
     setFileError('');
-    const existingNames = new Set(manualResponseFiles.map(f => f.name));
-    const newFiles = files.filter(f => !existingNames.has(f.name));
+    const existingNames = new Set(manualResponseFiles.map((f) => f.name));
+    const newFiles = files.filter((f) => !existingNames.has(f.name));
     onFilesChange([...manualResponseFiles, ...newFiles]);
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="manual-response-title">
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-response-title"
+      >
         <div className="flex items-center gap-3 text-purple-600 mb-4">
           <PenLine className="w-8 h-8" />
-          <h2 id="manual-response-title" className="text-xl font-bold">Manual Response</h2>
+          <h2 id="manual-response-title" className="text-xl font-bold">
+            Manual Response
+          </h2>
         </div>
         <p className="text-gray-600 mb-4">
-          The AI response will be rejected. Type your replacement response below —
-          it will be sent to the GP as a specialist message.
+          The AI response will be rejected. Type your replacement response below — it will be sent
+          to the GP as a specialist message.
         </p>
         <textarea
           value={manualResponseContent}
@@ -248,7 +278,10 @@ export function ManualResponseModal({
         </div>
         <div className="mt-4 mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Attach files <span className="text-gray-400 font-normal">(optional — max {MAX_FILE_SIZE_MB} MB each)</span>
+            Attach files{' '}
+            <span className="text-gray-400 font-normal">
+              (optional — max {MAX_FILE_SIZE_MB} MB each)
+            </span>
           </label>
           <input
             type="file"
@@ -257,17 +290,20 @@ export function ManualResponseModal({
             onChange={(e) => handleFilesChange(filesFromInput(e.target.files))}
             className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:font-medium file:text-purple-700 hover:file:bg-purple-100"
           />
-          {fileError && (
-            <p className="mt-2 text-sm text-red-600">{fileError}</p>
-          )}
+          {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
           {manualResponseFiles.length > 0 && (
             <ul className="mt-2 space-y-1">
               {manualResponseFiles.map((f) => (
-                <li key={f.name} className="flex items-center justify-between text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5">
+                <li
+                  key={f.name}
+                  className="flex items-center justify-between text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5"
+                >
                   <span className="truncate">{f.name}</span>
                   <button
                     type="button"
-                    onClick={() => onFilesChange(manualResponseFiles.filter(x => x.name !== f.name))}
+                    onClick={() =>
+                      onFilesChange(manualResponseFiles.filter((x) => x.name !== f.name))
+                    }
                     className="ml-2 text-gray-400 hover:text-red-500 shrink-0"
                     aria-label={`Remove ${f.name}`}
                   >
@@ -317,14 +353,21 @@ export function CloseApproveModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="close-approve-title">
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="close-approve-title"
+      >
         <div className="flex items-center gap-3 text-[#007f3b] mb-4">
           <Lock className="w-8 h-8" />
-          <h2 id="close-approve-title" className="text-xl font-bold">Close &amp; Approve Consultation</h2>
+          <h2 id="close-approve-title" className="text-xl font-bold">
+            Close &amp; Approve Consultation
+          </h2>
         </div>
         <p className="text-gray-600 mb-6">
-          This will close the consultation and mark it as approved. The GP will be
-          notified that the review is complete. This action cannot be undone.
+          This will close the consultation and mark it as approved. The GP will be notified that the
+          review is complete. This action cannot be undone.
         </p>
         <div className="flex gap-3 justify-end">
           <button
@@ -430,7 +473,8 @@ export function UnassignConfirmModal({
           <h2 className="text-xl font-bold">Unassign Consultation</h2>
         </div>
         <p className="text-gray-600 mb-6">
-          This will release the consultation back to the queue. Another specialist will be able to pick it up.
+          This will release the consultation back to the queue. Another specialist will be able to
+          pick it up.
         </p>
         <div className="flex gap-3 justify-end">
           <button
@@ -483,14 +527,21 @@ export function EditResponseModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" role="dialog" aria-modal="true" aria-labelledby="edit-response-title">
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-response-title"
+      >
         <div className="flex items-center gap-3 text-indigo-600 mb-4">
           <Edit2 className="w-8 h-8" />
-          <h2 id="edit-response-title" className="text-xl font-bold">Edit Response</h2>
+          <h2 id="edit-response-title" className="text-xl font-bold">
+            Edit Response
+          </h2>
         </div>
         <p className="text-gray-600 mb-4">
-          Edit the AI-generated response below. Your changes will replace the
-          original content and be sent to the GP.
+          Edit the AI-generated response below. Your changes will replace the original content and
+          be sent to the GP.
         </p>
         <textarea
           value={editedContent}
@@ -501,9 +552,7 @@ export function EditResponseModal({
           placeholder="Edit the response..."
         />
         <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Sources
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Sources</label>
           <textarea
             value={editedSources}
             onChange={(e) => onSourcesChange(e.target.value)}
@@ -513,9 +562,7 @@ export function EditResponseModal({
           />
         </div>
         <div className="mt-4 mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Feedback
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Feedback</label>
           <textarea
             value={feedback}
             onChange={(e) => onFeedbackChange(e.target.value)}

@@ -36,9 +36,13 @@ function renderLanding(route = '/', authOverride?: Partial<AuthContextValue>) {
   );
 
   return renderWithProviders(
-    authOverride
-      ? <AuthContext.Provider value={{ ...defaultAuth, ...authOverride }}>{content}</AuthContext.Provider>
-      : content,
+    authOverride ? (
+      <AuthContext.Provider value={{ ...defaultAuth, ...authOverride }}>
+        {content}
+      </AuthContext.Provider>
+    ) : (
+      content
+    ),
     { routes: [route] },
   );
 }
@@ -60,7 +64,10 @@ describe('LandingPage', () => {
       expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Admin User/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open Portal/i })).toHaveAttribute('href', '/admin/users');
+    expect(screen.getByRole('link', { name: /Open Portal/i })).toHaveAttribute(
+      'href',
+      '/admin/users',
+    );
 
     await user.click(screen.getByRole('link', { name: 'Open Portal' }));
     expect(screen.getByText('Admin Portal')).toBeInTheDocument();
@@ -106,7 +113,10 @@ describe('LandingPage', () => {
 
     return waitFor(() => {
       expect(screen.getByText(/\(Unknown\)/i)).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /open portal/i })).toHaveAttribute('href', '/gp/queries');
+      expect(screen.getByRole('link', { name: /open portal/i })).toHaveAttribute(
+        'href',
+        '/gp/queries',
+      );
     });
   });
 

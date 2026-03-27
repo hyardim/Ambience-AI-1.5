@@ -12,7 +12,10 @@ function LoginStub() {
   return <div>Login</div>;
 }
 
-function renderHeader(props: { userRole: 'gp' | 'specialist' | 'admin'; userName?: string; onLogout?: () => void }, route = '/gp/queries') {
+function renderHeader(
+  props: { userRole: 'gp' | 'specialist' | 'admin'; userName?: string; onLogout?: () => void },
+  route = '/gp/queries',
+) {
   seedAuth({ role: props.userRole });
   return renderWithProviders(
     <Routes>
@@ -59,7 +62,9 @@ describe('Header', () => {
 
   it('does not mark the admin link active outside admin routes', () => {
     renderHeader({ userRole: 'admin' }, '/settings');
-    expect(screen.getByText('Admin Panel').closest('a')?.className).not.toContain('bg-[var(--nhs-dark-blue)]');
+    expect(screen.getByText('Admin Panel').closest('a')?.className).not.toContain(
+      'bg-[var(--nhs-dark-blue)]',
+    );
   });
 
   it('shows logout button when onLogout is provided', () => {
