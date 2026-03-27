@@ -55,6 +55,28 @@ describe('Header', () => {
     expect(screen.getByText('Queries')).toBeInTheDocument();
   });
 
+  it('shows Help link for GP role', () => {
+    renderHeader({ userRole: 'gp' });
+    expect(screen.getByRole('link', { name: /help/i })).toBeInTheDocument();
+  });
+
+  it('shows Help link for specialist role', () => {
+    renderHeader({ userRole: 'specialist' }, '/specialist/queries');
+    expect(screen.getByRole('link', { name: /help/i })).toBeInTheDocument();
+  });
+
+  it('does not show Help link for admin role', () => {
+    renderHeader({ userRole: 'admin' }, '/admin/users');
+    expect(screen.queryByRole('link', { name: /help/i })).not.toBeInTheDocument();
+  });
+
+  it('marks Help link active on the help route', () => {
+    renderHeader({ userRole: 'gp' }, '/help');
+    expect(screen.getByRole('link', { name: /help/i }).className).toContain(
+      'bg-[var(--nhs-dark-blue)]',
+    );
+  });
+
   it('shows Admin Panel link for admin role', () => {
     renderHeader({ userRole: 'admin' }, '/admin/users');
     expect(screen.getByText('Admin Panel')).toBeInTheDocument();

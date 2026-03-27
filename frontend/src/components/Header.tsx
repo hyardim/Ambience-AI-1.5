@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { User, LogOut, Shield } from 'lucide-react';
+import { User, LogOut, Shield, CircleHelp } from 'lucide-react';
 import { NHSLogo } from './NHSLogo';
 import { NotificationDropdown } from './NotificationDropdown';
 
@@ -16,6 +16,7 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
 
   const isQueriesActive =
     location.pathname.includes('/queries') || location.pathname.includes('/query/');
+  const isHelpActive = location.pathname === '/help';
   const isAdminActive = location.pathname.startsWith('/admin');
 
   const handleLogout = () => {
@@ -46,6 +47,20 @@ export function Header({ userRole, userName, onLogout }: HeaderProps) {
                 }`}
               >
                 Queries
+              </Link>
+            )}
+
+            {userRole !== 'admin' && (
+              <Link
+                to="/help"
+                className={`text-white font-medium hover:text-white/80 transition-colors px-3 py-2 rounded ${
+                  isHelpActive ? 'bg-[var(--nhs-dark-blue)]' : ''
+                }`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <CircleHelp className="w-4 h-4" />
+                  Help
+                </span>
               </Link>
             )}
 

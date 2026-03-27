@@ -22,6 +22,25 @@ describe('app integration flows', () => {
     });
   });
 
+  it('gp can open the help page from the header', async () => {
+    seedAuth({ role: 'gp', username: 'Dr GP', email: 'gp@example.com' });
+    window.history.pushState({}, '', '/gp/queries');
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /my consultations/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: /help/i }));
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/help');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /gp workflow/i })).toBeInTheDocument();
+    });
+  });
+
   it('gp chat detail shows messages and citations', async () => {
     seedAuth({ role: 'gp', username: 'Dr GP', email: 'gp@example.com' });
     server.use(
@@ -127,6 +146,25 @@ describe('app integration flows', () => {
     expect(screen.getByText(/queue \(/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /my assigned/i }));
     expect(screen.getByText(/my assigned/i)).toBeInTheDocument();
+  });
+
+  it('specialist can open the help page from the header', async () => {
+    seedAuth({ role: 'specialist', username: 'Dr Specialist', email: 'specialist@example.com' });
+    window.history.pushState({}, '', '/specialist/queries');
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /queries for review/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: /help/i }));
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/help');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /specialist workflow/i })).toBeInTheDocument();
+    });
   });
 
   it('specialist chat detail shows review controls', async () => {
