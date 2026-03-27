@@ -126,9 +126,7 @@ def build_canonical_retrieval_query(
             return None
         if (
             specialty_norm == RHEUMATOLOGY
-            and _is_rheumatology_inflammatory_referral_query(
-                query
-            )
+            and _is_rheumatology_inflammatory_referral_query(query)
         ):
             return RHEUMATOLOGY_CANONICAL_QUERY
         if specialty_norm == RHEUMATOLOGY and _is_rheumatology_sle_renal_referral_query(
@@ -146,9 +144,7 @@ def build_canonical_retrieval_query(
     # rule trigger for enabled specialties rather than failing closed on null.
     if (
         RHEUMATOLOGY in allowed_specialties
-        and _is_rheumatology_inflammatory_referral_query(
-            query
-        )
+        and _is_rheumatology_inflammatory_referral_query(query)
     ):
         return RHEUMATOLOGY_CANONICAL_QUERY
     if (

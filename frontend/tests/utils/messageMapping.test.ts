@@ -72,6 +72,22 @@ describe('mapCitations', () => {
     expect(result[0].creation_date).toBe('2023-12-01');
     expect(result[0].last_updated_date).toBe('2024-02-01');
   });
+
+  it('infers source_url when source text is a URL', () => {
+    const raw = [{ source: 'https://example.org/guideline' }];
+
+    const result = mapCitations(raw);
+
+    expect(result[0].source_url).toBe('https://example.org/guideline');
+  });
+
+  it('keeps explicit document_url when doc_id is absent', () => {
+    const raw = [{ metadata: { document_url: 'https://example.org/doc.pdf' } }];
+
+    const result = mapCitations(raw);
+
+    expect(result[0].document_url).toBe('https://example.org/doc.pdf');
+  });
 });
 
 describe('toFrontendMessage', () => {

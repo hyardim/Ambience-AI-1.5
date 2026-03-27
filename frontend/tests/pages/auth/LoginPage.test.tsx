@@ -85,20 +85,6 @@ describe('LoginPage', () => {
     expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
   });
 
-  it('fills demo credentials when the button is clicked', async () => {
-    renderLogin();
-    const user = userEvent.setup();
-
-    await waitFor(() => {
-      expect(screen.getByText(/fill demo credentials/i)).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText(/fill demo credentials/i));
-
-    expect(screen.getByLabelText(/username/i)).toHaveValue('gp@example.com');
-    expect(screen.getByLabelText(/password/i)).toHaveValue('Password123');
-  });
-
   it('logs in and navigates to GP queries on success', async () => {
     renderLogin();
     const user = userEvent.setup();

@@ -6,10 +6,6 @@ import { useAuth } from '../../contexts/useAuth';
 import type { UserRole } from '../../types';
 import { getErrorMessage } from '../../utils/errors';
 
-const DEMO_LOGIN = {
-  email: 'gp@example.com',
-  password: 'Password123',
-} as const;
 
 function routeForRole(role: UserRole | null): string {
   if (role === 'specialist') return '/specialist/queries';
@@ -85,11 +81,6 @@ export function LoginPage() {
     }
   };
 
-  const fillDemoCredentials = () => {
-    setEmail(DEMO_LOGIN.email);
-    setPassword(DEMO_LOGIN.password);
-  };
-
   return (
     <div className="min-h-screen bg-[var(--nhs-page-bg)] flex flex-col">
       <AuthHeader />
@@ -100,21 +91,6 @@ export function LoginPage() {
             <h1 className="text-2xl font-bold text-gray-900 text-center mb-8">
               Login to your Account
             </h1>
-
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials</p>
-              <p className="text-sm text-blue-700">
-                Username: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.email}</code> &nbsp;
-                Password: <code className="bg-blue-100 px-1 rounded">{DEMO_LOGIN.password}</code>
-              </p>
-              <button
-                type="button"
-                onClick={fillDemoCredentials}
-                className="mt-2 text-xs text-[var(--nhs-blue)] hover:text-[var(--nhs-dark-blue)] font-medium underline"
-              >
-                Fill demo credentials
-              </button>
-            </div>
 
             {error && (
               <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

@@ -9,6 +9,7 @@ import { renderWithProviders, seedAuth } from '@test/utils';
 import { server } from '@test/mocks/server';
 import { mockChatWithMessages } from '@test/mocks/handlers';
 import type { Message } from '@/types';
+import * as api from '@/services/api';
 
 const mockConnectStream = vi.fn(() => Promise.resolve());
 const mockStartPolling = vi.fn();
@@ -441,6 +442,59 @@ describe('GPQueryDetailPage', () => {
     await waitFor(() => {
       expect(mockConnectStream).toHaveBeenCalled();
     });
+  });
+
+  it('shows generic upload failure text when upload rejects with non-Error reason', async () => {
+    vi.spyOn(api, 'uploadChatFile').mockRejectedValueOnce('upload-problem');
+
+    server.use(
+      http.get('/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'open',
+        })),
+    );
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByText(/headache consultation/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /send small file stub/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/upload failed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('renders consultation files without size badges when file_size is missing', async () => {
+    server.use(
+      http.get('/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'open',
+          files: [
+            {
+              id: 22,
+              filename: 'no-size.pdf',
+              file_type: 'application/pdf',
+              file_size: null,
+              created_at: '2025-01-15T10:00:00Z',
+            },
+          ],
+        })),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('no-size.pdf').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/kb/i)).not.toBeInTheDocument();
   });
 
   it('refreshes through the stream hook callback and preserves a draft streaming placeholder', async () => {

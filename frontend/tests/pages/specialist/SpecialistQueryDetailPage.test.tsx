@@ -198,6 +198,7 @@ describe('SpecialistQueryDetailPage', () => {
 
   it('handles consultation-level request revision, comments, and manual response flows', async () => {
     const reviewActions: string[] = [];
+    const manualResponseSources: string[][] = [];
     let currentStatus = 'assigned';
     server.use(
       http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
@@ -217,8 +218,14 @@ describe('SpecialistQueryDetailPage', () => {
           ],
         })),
       http.post('/specialist/chats/:chatId/review', async ({ request }) => {
-        const body = await request.json() as { action: string };
+        const body = await request.json() as {
+          action: string;
+          replacement_sources?: string[] | null;
+        };
         reviewActions.push(body.action);
+        if (body.action === 'manual_response') {
+          manualResponseSources.push(body.replacement_sources ?? []);
+        }
         if (body.action === 'request_changes') {
           currentStatus = 'reviewing';
         } else if (body.action === 'manual_response') {
@@ -260,6 +267,12 @@ describe('SpecialistQueryDetailPage', () => {
     await waitFor(() => {
       expect(reviewActions).toContain('manual_response');
     });
+    expect(manualResponseSources[0]).toEqual(
+      expect.arrayContaining([
+        'NICE NG228',
+        expect.objectContaining({ name: 'source.txt' }),
+      ]),
+    );
   }, 15000);
 
   it('unassigns a consultation from the consultation-level controls', async () => {
@@ -487,6 +500,54 @@ describe('SpecialistQueryDetailPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/manual response sent, but some files failed to upload/i)).toBeInTheDocument();
+    });
+  }, 15000);
+
+  it('shows consultation-level manual response upload warning when a file fails', async () => {
+    const reviewActions: string[] = [];
+    server.use(
+      http.get('/auth/me', () => HttpResponse.json(mockSpecialistUser)),
+      http.get('/specialist/chats/:chatId', ({ params }) =>
+        HttpResponse.json({
+          ...mockChatWithMessages,
+          id: Number(params.chatId),
+          status: 'assigned',
+          specialist_id: mockSpecialistUser.id,
+          messages: [
+            {
+              id: 2,
+              content: 'AI answer',
+              sender: 'ai',
+              created_at: '2025-01-15T10:01:05Z',
+            },
+          ],
+        })),
+      http.post('/chats/:chatId/files', () =>
+        HttpResponse.json({ detail: 'Upload failed' }, { status: 500 })),
+      http.post('/specialist/chats/:chatId/review', async ({ request }) => {
+        const body = await request.json() as { action: string };
+        reviewActions.push(body.action);
+        return HttpResponse.json({ ...mockChatWithMessages, status: 'approved' });
+      }),
+    );
+
+    renderPage();
+    const user = userEvent.setup({ applyAccept: false });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /replace with manual response/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /replace with manual response/i }));
+    await user.type(screen.getByPlaceholderText(/type your replacement response/i), 'Use this instead');
+    const fileInput = screen
+      .getByText(/attach files/i)
+      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['hello'], 'source.txt', { type: 'text/plain' }));
+    await user.click(screen.getByRole('button', { name: /send manual response/i }));
+
+    await waitFor(() => {
+      expect(reviewActions).toContain('manual_response');
     });
   }, 15000);
 

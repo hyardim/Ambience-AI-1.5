@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { server } from '@test/mocks/server';
 import { renderWithProviders, seedAuth } from '@test/utils';
 import { GPNewQueryPage } from '@/pages/gp/GPNewQueryPage';
+import * as api from '@/services/api';
 
 function QueriesStub() {
   return <div>Queries List</div>;
@@ -432,5 +433,46 @@ describe('GPNewQueryPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Query Detail')).toBeInTheDocument();
     });
+  });
+
+  it('shows generic upload-failed text when a file upload rejects with a non-Error reason', async () => {
+    captureLocationState.mockClear();
+    vi.spyOn(api, 'uploadChatFile').mockRejectedValueOnce('bad-upload-reason');
+
+    renderNewQuery();
+    const user = userEvent.setup({ applyAccept: false });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['a'], 'scan.pdf', { type: 'application/pdf' }));
+
+    await user.type(screen.getByLabelText(/consultation title/i), 'Upload fallback branch');
+    await user.type(screen.getByLabelText(/patient age/i), '40');
+    await user.selectOptions(screen.getByLabelText(/sex/i), 'female');
+    await user.selectOptions(screen.getByLabelText(/specialty/i), 'neurology');
+    await user.type(screen.getByLabelText(/clinical question/i), 'Branch coverage question');
+    await user.click(screen.getByRole('button', { name: /submit consultation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Query Detail')).toBeInTheDocument();
+    });
+    expect(captureLocationState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ draftMessage: 'Branch coverage question' }),
+    );
+  });
+
+  it('turns title and patient-notes counters red at high character counts', async () => {
+    renderNewQuery();
+
+    fireEvent.change(screen.getByLabelText(/consultation title/i), {
+      target: { value: 'x'.repeat(181) },
+    });
+    fireEvent.change(screen.getByLabelText(/additional clinical context/i), {
+      target: { value: 'y'.repeat(1801) },
+    });
+
+    const titleCounter = screen.getByText('181/200');
+    const notesCounter = screen.getByText('1801/2000');
+    expect(titleCounter.className).toContain('text-red-500');
+    expect(notesCounter.className).toContain('text-red-500');
   });
 });

@@ -131,8 +131,6 @@ def test_is_allowed_origin_rejects_empty_and_malformed_inputs(monkeypatch):
 
 def test_enforce_cookie_request_origin_allows_valid_referer(monkeypatch):
     monkeypatch.setattr(settings, "ALLOWED_ORIGINS", ["https://app.example.com"])
-    request = SimpleNamespace(
-        headers={"referer": "https://app.example.com/chats/1"}
-    )
+    request = SimpleNamespace(headers={"referer": "https://app.example.com/chats/1"})
 
     _enforce_cookie_request_origin(request)

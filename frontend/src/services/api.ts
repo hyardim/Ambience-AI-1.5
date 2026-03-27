@@ -12,6 +12,7 @@ import type {
   UserProfile,
   AssignRequest,
   ReviewRequest,
+  SourceEntry,
   NotificationResponse,
   UserUpdateAdmin,
   AdminChatResponse,
@@ -437,7 +438,7 @@ export async function reviewChat(
   decision: string,
   feedback?: string,
   replacementContent?: string,
-  replacementSources?: string[],
+  replacementSources?: (string | SourceEntry)[],
 ): Promise<BackendChat> {
   const body: ReviewRequest = {
     action: decision as ReviewRequest['action'],
@@ -459,7 +460,7 @@ export async function reviewMessage(
   decision: string,
   feedback?: string,
   manualContent?: string,
-  manualSources?: string[],
+  manualSources?: (string | SourceEntry)[],
   editedContent?: string,
 ): Promise<BackendChat> {
   const body: ReviewRequest = {

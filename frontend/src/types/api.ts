@@ -136,11 +136,16 @@ export interface AssignRequest {
   specialist_id: number;
 }
 
+export interface SourceEntry {
+  name: string;
+  url?: string;
+}
+
 export interface ReviewRequest {
   action: 'approve' | 'reject' | 'request_changes' | 'manual_response' | 'edit_response' | 'send_comment' | 'unassign';
   feedback?: string | null;
   replacement_content?: string | null;
-  replacement_sources?: string[] | null;
+  replacement_sources?: (string | SourceEntry)[] | null;
   edited_content?: string | null;
 }
 

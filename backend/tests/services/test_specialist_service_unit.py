@@ -85,6 +85,44 @@ def test_build_manual_citations_handles_empty_sources():
     assert specialist_service._build_manual_citations(["", "  "]) is None
 
 
+def test_build_manual_citations_detects_url_sources():
+    result = specialist_service._build_manual_citations(
+        ["https://nice.org.uk/guidance/ng228", "NICE NG228"]
+    )
+    assert result is not None
+    assert len(result) == 2
+    # URL source should have source_url set
+    assert result[0]["title"] == "https://nice.org.uk/guidance/ng228"
+    assert result[0]["source_url"] == "https://nice.org.uk/guidance/ng228"
+    assert result[0]["metadata"]["source_url"] == "https://nice.org.uk/guidance/ng228"
+    # Plain string source should NOT have source_url
+    assert result[1]["title"] == "NICE NG228"
+    assert "source_url" not in result[1]
+
+
+def test_build_manual_citations_accepts_source_entry_objects():
+    from src.schemas.chat import SourceEntry
+
+    result = specialist_service._build_manual_citations(
+        [
+            SourceEntry(name="guideline.pdf", url="/chats/1/files/5"),
+            SourceEntry(name="Plain source"),
+            "Legacy string source",
+        ]
+    )
+    assert result is not None
+    assert len(result) == 3
+    # SourceEntry with URL
+    assert result[0]["title"] == "guideline.pdf"
+    assert result[0]["source_url"] == "/chats/1/files/5"
+    # SourceEntry without URL
+    assert result[1]["title"] == "Plain source"
+    assert "source_url" not in result[1]
+    # Legacy string
+    assert result[2]["title"] == "Legacy string source"
+    assert "source_url" not in result[2]
+
+
 def test_specialist_service_reexports_expected_helpers():
     assert specialist_service.assign is not None
     assert specialist_service.review is not None
@@ -346,7 +384,9 @@ def test_review_rejects_unknown_action_when_called_directly(db_session):
     assert exc.value.status_code == 400
 
 
-def test_review_send_comment_creates_trimmed_specialist_message(monkeypatch, db_session):
+def test_review_send_comment_creates_trimmed_specialist_message(
+    monkeypatch, db_session
+):
     owner = _user(db_session, email="gp-comment@example.com", role=UserRole.GP)
     specialist = _user(
         db_session,
